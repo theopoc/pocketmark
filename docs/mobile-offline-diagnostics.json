@@ -1,0 +1,43 @@
+{
+  "captured_when": "Offline reader stuck after inactive single-link query was evicted; before reconnecting",
+  "queries": [
+    {
+      "family": "config",
+      "single_link_id": null,
+      "status": "success"
+    },
+    {
+      "family": "user",
+      "single_link_id": null,
+      "status": "success"
+    },
+    {
+      "family": "dashboardData",
+      "single_link_id": null,
+      "status": "success"
+    },
+    {
+      "family": "collections",
+      "single_link_id": null,
+      "status": "success"
+    },
+    {
+      "family": "links",
+      "single_link_id": null,
+      "status": "success"
+    },
+    {
+      "family": "tags",
+      "single_link_id": null,
+      "status": "success"
+    }
+  ],
+  "single_link_query_present": false,
+  "cached_readable_bytes": {
+    "1": 10875,
+    "2": 167
+  },
+  "cache_read_only": true,
+  "credentials_or_query_values_retained": false,
+  "inference": "The cache contains library lists and article files but no individual-link query. The reader requires that query; online reopening repopulates it and immediate offline reopening succeeds."
+}

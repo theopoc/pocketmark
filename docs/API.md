@@ -1,0 +1,154 @@
+# Pocketmark HTTP API
+
+Base URL: `http://127.0.0.1:8090`. API endpoints require an owner session, recovery token or named API key unless explicitly public. Login and compatibility configuration/login discovery are public. `/healthz` is unauthenticated and returns `{"status":"ok"}` when SQLite is reachable. Named keys cannot access account/key management or full backups.
+
+For these examples, load your local token without putting its value directly in the command:
+
+```sh
+POCKETMARK_ACCESS_TOKEN="$(cat ./data/access-token)"
+POCKETMARK_URL=http://127.0.0.1:8090
+curl --fail-with-body -H "Authorization: Bearer $POCKETMARK_ACCESS_TOKEN" "$POCKETMARK_URL/api/stats"
+```
+
+For Docker, use `POCKETMARK_ACCESS_TOKEN="$(docker compose exec -T pocketmark cat /data/access-token)"` instead. JSON mutation requests use `Content-Type: application/json`. Responses use JSON except archive downloads; errors have the shape `{"error":"message"}`. Unknown JSON fields are rejected for normal create/update/login requests; migration accepts extra source fields.
+
+## Endpoints
+
+| Method and path | Request / result |
+| --- | --- |
+| `POST /api/login` | `{"token":"…"}` → `{"authenticated":true}` and a seven-day HttpOnly, SameSite=Strict cookie. |
+| `POST /api/logout` | Clears the session cookie; returns `{"ok":true}`. Does not revoke the access token. |
+| `GET /api/session` | `{"authenticated":true}` or HTTP 401. |
+| `GET /api/stats` | Counts: `links`, `collections`, `pending` (includes processing), `failed`. |
+| `GET /api/tags` | Up to 200 `{"name":"go","count":3}` objects, ordered by count descending then name. |
+| `GET /api/collections` | Array of collections with `id`, `name`, `parentId` and optional `description`. |
+| `POST /api/collections` | `{"name":"Reading","parentId":null,"description":"Optional text"}` → collection, HTTP 201. Description: at most 8 KiB; JSON envelope: 64 KiB. |
+| `DELETE /api/collections/{id}` | Moves direct bookmarks to the inbox and makes child collections roots; `{"ok":true}`. |
+| `GET /api/links` | Paginated result; filters described below. |
+| `POST /api/links` | Bookmark fields below → created record, HTTP 201. |
+| `GET /api/links/{id}` | Bookmark record, including captured `content` when available. |
+| `PUT /api/links/{id}` | Replaces editable fields → updated record. Send every field you want to retain. |
+| `DELETE /api/links/{id}` | Deletes the bookmark and its capture; `{"ok":true}`. |
+| `POST /api/links/{id}/capture` | Queues/retries capture; `{"ok":true}`, HTTP 202. A processing record returns 404. |
+| `GET /api/links/{id}/archive` | Downloads original HTML as `page.html`; 404 if unavailable. |
+| `POST /api/import` | Raw export JSON → `{"imported":12,"skipped":2}`. |
+| `GET /api/export` | Downloads `pocketmark-export.json`. |
+
+New and imported links start with `status:"pending"`. The worker advances them through `processing` to `ready` or `failed`. Capture requests still queue work when the worker is disabled; they do not run until capture is enabled. A URL change clears the old capture and queues the new URL. Editing other fields preserves the capture.
+
+## Create and edit bookmarks
+
+```sh
+curl --fail-with-body -X POST "$POCKETMARK_URL/api/links" \
+  -H "Authorization: Bearer $POCKETMARK_ACCESS_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data '{"url":"https://go.dev/doc/","title":"Go documentation","description":"Language reference","notes":"Read the concurrency section","collectionId":null,"tags":["go","reference"],"favorite":true,"read":false}'
+```
+
+Editable fields are `url`, `title`, `description`, `notes`, `collectionId`, `tags`, `favorite`, `read`. `tags` is an array of strings. An empty title defaults to the URL. `collectionId:null` puts a bookmark in the inbox. IDs, timestamps, status, errors and capture fields are server-managed.
+
+`PUT` uses the same body as `POST`; it is not a partial patch. For example, omitting tags clears them, omitting `favorite` makes it false, and omitting `url` rejects the request. Delete and retry requests need no JSON body:
+
+```sh
+curl --fail-with-body -X POST -H "Authorization: Bearer $POCKETMARK_ACCESS_TOKEN" "$POCKETMARK_URL/api/links/1/capture"
+curl --fail-with-body -H "Authorization: Bearer $POCKETMARK_ACCESS_TOKEN" "$POCKETMARK_URL/api/links/1/archive" --output page.html
+```
+
+## Search and filters
+
+```sh
+curl --fail-with-body --get "$POCKETMARK_URL/api/links" \
+  -H "Authorization: Bearer $POCKETMARK_ACCESS_TOKEN" \
+  --data-urlencode 'q=concurrency go' --data-urlencode 'tag=reference' \
+  --data-urlencode 'favorite=1' --data-urlencode 'unread=1' --data-urlencode 'page=1'
+```
+
+Query parameters combine with AND:
+
+| Parameter | Meaning |
+| --- | --- |
+| `q` | Space-separated literal prefix terms; case/diacritic insensitive. Searches title, URL, description, notes, tags and captured text. |
+| `collection` | Exact collection ID; `0` selects the inbox. Does not include descendant collections automatically. |
+| `tag` | Exact tag string. |
+| `favorite=1` | Favorites only. |
+| `unread=1` | Unread only. |
+| `page` | One-based page; omitted or nonpositive values become 1. |
+
+The result is `{"links":[…],"total":123,"page":1,"pageSize":40}`. `sort=newest|oldest|title|title_desc|updated` selects ordering; default is newest. List records omit captured text to keep responses small. `fuzzy=1` enables edit-distance-one matching of metadata terms (plus prefix matches), using bounded row-by-row scanning; it does not fuzzy-scan captured bodies. `url=<exact URL>` performs an exact duplicate lookup and bypasses other filters.
+
+## Import and export
+
+Send the file itself, not multipart form data or legacy client's `{format:0,data:"…"}` API envelope:
+
+```sh
+curl --fail-with-body -X POST "$POCKETMARK_URL/api/import" \
+  -H "Authorization: Bearer $POCKETMARK_ACCESS_TOKEN" \
+  -H 'Content-Type: application/json' --data-binary @backup.json
+curl --fail-with-body -H "Authorization: Bearer $POCKETMARK_ACCESS_TOKEN" \
+  "$POCKETMARK_URL/api/export" --output pocketmark-export.json
+```
+
+Accepted inputs are raw legacy client JSON (`collections[].links`, object tags, `parentId`, `pinnedLinks`) and Pocketmark exports (`format:"pocketmark"`, `version:1`, `collections`, top-level `links`). Duplicate URLs and unsupported legacy client uploaded-file types are skipped; other invalid records roll back the transaction. Matching collection names under the same parent are reused and IDs remapped. Valid RFC3339 source timestamps are preserved. Captured assets/text and annotations require a full backup rather than metadata JSON. Pocketmark exports preserve notes, read flags, favorites, tags and collection hierarchy; they do not use legacy client's exact format.
+
+## Additional personal-library endpoints
+
+| Method and path | Contract |
+| --- | --- |
+| `PUT /api/collections/{id}` | `{name,parentId,description?}`; rejects self-parenting and cycles. Omitted description is preserved; empty string clears it. Description: 8 KiB; JSON envelope: 64 KiB. |
+| `POST /api/links/bulk` | `{ids:[...],action,collectionId,tags,value}`; max 500 IDs. Actions: `delete`, `move`, `tags` (replace), `favorite`, `read`, `capture`. Move uses nullable `collectionId`; flags use boolean `value`. One transaction; errors roll back all changes. |
+| `GET /api/links/{id}/annotations` | Annotation array with quote, Unicode offsets, note, color and `stale`. |
+| `POST /api/links/{id}/annotations` | `{quote,start,end,note,color}` → `{id}`. Offsets count Unicode code points, not UTF-16 code units. Quote must match the current content. |
+| `PUT /api/links/{id}/annotations/{annotationId}` | Same fields; replaces the annotation. |
+| `DELETE /api/links/{id}/annotations/{annotationId}` | Deletes one annotation. |
+| `POST /api/import/html` | Raw Netscape bookmark HTML, max 8 MiB, transactional nested import. |
+| `GET /api/export/html` | Browser bookmark HTML download. |
+| `GET /api/links/{id}/assets` | List attachments. |
+| `POST /api/files?name=filename&collection=id` | Raw PDF/image/HTML body → `{link,asset}`; optional collection, max 20 MiB. Creates a standalone file atomically, without a website URL. |
+| `POST /api/links/{id}/assets?name=filename` | Raw PDF/image/HTML body, max 20 MiB and 32 attachments per bookmark. Content is sniffed. HTML is indexed for reading/search. |
+| `GET /api/assets/{assetId}` | Streaming original-byte download, always an attachment with restrictive CSP. |
+| `DELETE /api/assets/{assetId}` | Removes attachment chunks atomically. |
+| `POST /api/links/{id}/preserve` | Manual resource-embedded passive HTML capture; returns `{asset,embedded,omitted}`. |
+| `GET /api/links/{id}/reader?asset=id` | Sandboxed structural reader; optional HTML attachment ID, otherwise captured HTML. Max 2 MiB input, 1 MiB output. |
+| `GET /api/backup` | Owner-only ZIP stream with consistent SQLite snapshot and restore instructions. |
+
+Annotation colors: `yellow`, `green`, `blue`, `pink`. Each bookmark supports up to 200 annotations. After content changes, old anchors are reported stale rather than being silently moved. See [archive limits](ARCHIVES.md) for network and resource budgets.
+
+## Account and client keys
+
+`POST /api/login` accepts either `{token}` for the recovery token, or `{username,password}` for optional personal credentials. Named API keys cannot log in as the owner. Password verification is serialized and uses PBKDF2-SHA256 with 600,000 iterations; login attempts are globally limited to ten per minute. Changing credential settings invalidates older cookies; named keys remain individually revocable.
+
+| Endpoint | Contract |
+| --- | --- |
+| `GET /api/account` | Owner-only `{username,passwordEnabled}`. |
+| `PUT /api/account` | Owner-only `{username,password}`. Password 12–1024 bytes, username 1–120 bytes. Empty password disables optional password login; recovery-token login remains. Issues a replacement owner cookie. |
+| `GET /api/tokens` | Owner-only array `{id,name,createdAt}`; never returns secrets. |
+| `POST /api/tokens` | Owner-only `{name}` → `{id,name,createdAt,token}`; raw key appears once. Max 32 keys. |
+| `DELETE /api/tokens/{id}` | Owner-only immediate revocation. |
+
+The included extension uses bearer authentication with narrowly recognized `chrome-extension://`/`moz-extension://` CORS origins; no credentialed cross-origin cookies are allowed. Ordinary cross-site browser mutations remain rejected. The Client compatibility credential endpoint also accepts extension-origin password requests, protected by the same rate limit.
+
+## Compatibility and synchronization
+
+The `/api/v1/` adapter supports private-library Compatibility client request shapes: config, logins, password session, users/me, collections, links, tags, search, highlights and archives. `/api/v2/dashboard` supplies the mobile dashboard shape. Search uses `{data:{links,nextCursor}}`; clients must return the supplied cursor unchanged. The adapter has its own upstream-compatible response envelopes. Protocol tests do not certify every official client workflow. Unsupported operations are rejected; scope and limits are listed in [FEATURES.md](FEATURES.md).
+
+The mobile tag-upsert shape `{tags:[{label:"name",value:existingId}]}` accepts 1–100 validated options with optional `value` and returns a corresponding array; legacy `{name:"name"}` creation remains supported. Tag detail is available at `GET /api/v1/tags/{id}`. Compatibility collections/tags expose stable persisted `createdAt` dates. Collection descriptions round-trip through list/detail/create/update and JSON import/export; omitted descriptions survive rename/move, while `""` clears them. Old databases receive creation-date backfills on first upgrade, not recovered historical dates.
+
+Banner uploads use `/api/v1/archives/{id}?format=0|1&preview=true`. PNG/JPEG preview bytes are sniffed independently of the client's declared type, retained without re-encoding and returned with their actual MIME type. Previews do not replace preserved image archives. See the [actual Android test record and offline limitation](REAL_CLIENTS.md#official-android-application--20-october-2026).
+
+WebDAV supports `OPTIONS`, `PROPFIND`, `GET`, `HEAD`, `PUT`, `DELETE` and `MOVE` for the fixed `/dav/` collection and its `bookmarks.xbel`, `bookmarks.xbel.temp` and `bookmarks.xbel.lock` resources. Resource-specific methods are restricted; primary XML deletion is not supported. Authenticate using Basic with any username and a dedicated API key/recovery token as password, or use bearer authentication. Extension-origin Basic authentication is accepted only after normal credential verification. ETag conditional `If-Match` writes and stale locked snapshots return 412; competing lock owners receive 423. Acquire a lock, GET the primary XML, upload the temporary resource, then MOVE it to the same server's primary XML. XML is limited to 8 MiB and persisted as bounded SQLite chunks. Uploads apply an authoritative bookmark tree including deletions and preserve personal fields for retained IDs/URLs. There is no scheduled server synchronizer. See [Floccus instructions](FEATURES.md#floccus-setup-and-data-semantics) and [protocol details](CLIENT_FLOCCUS_NOTES.md).
+
+## Limits and failures
+
+| Limit | Value |
+| --- | --- |
+| Bookmark create/update JSON | 100 KiB |
+| URL | HTTP(S), no embedded credentials, at most 4096 bytes |
+| Title / description / notes | 1 KiB / 8 KiB / 64 KiB |
+| Tags | At most 32 input entries, each at most 80 bytes after trimming |
+| Collection name | 1–120 bytes after trimming |
+| Search query | 512 bytes; page must not exceed 1,000,000 |
+| Import | 8 MiB, 10,000 links, 2,000 collections; one import at a time |
+| Concurrent HTTP requests | Eight; excess requests receive 503 |
+| Login attempts | Ten per minute across the instance; excess requests receive 429 |
+
+Common errors: 400 for invalid JSON/limits/duplicate URLs or references, 401 for missing/invalid authentication, 403 for rejected browser origin, 404 for missing records or an already-processing capture, 409 for concurrent imports, 415 for a missing/wrong JSON content type, and 503 when busy. Oversized import bodies currently return 400. For a reverse proxy, set `POCKETMARK_ORIGIN` to the exact public origin; cross-site browser mutations are rejected.

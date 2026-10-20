@@ -1,0 +1,22 @@
+services:
+  pocketmark:
+    build: .
+    ports:
+      - "127.0.0.1:8090:8090"
+    volumes:
+      - pocketmark-data:/data
+    environment:
+      GOMEMLIMIT: 32MiB
+    mem_limit: 128m
+    cpus: 1.0
+    pids_limit: 64
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+volumes:
+  pocketmark-data:

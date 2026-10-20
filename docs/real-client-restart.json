@@ -1,0 +1,19 @@
+{
+  "dav_order": [
+    "Floccus real native",
+    "DAV server roundtrip",
+    "Pocketmark real client fixture"
+  ],
+  "highest_id": 6,
+  "snapshot_sha256": "febc948e0720953b470ff3fd4889dd18d4c7a0fc13c0ef3fcf1264f62d1366ad",
+  "snapshot_identical_after_restart": true,
+  "asset_sha256": {
+    "1": "3d5a712de2ab374988a7b41617852f69cb2382e204f9c38e91b6b8c2f0be548d",
+    "2": "c3e92c92ca6bf28395845b8b2246e6bd7e11ba0de10fabb67e270fb1f2483aed",
+    "3": "a01fda98379a5cd2355d42fc7829460dbf28651a0bf0ca7ebaff35d641593950",
+    "4": "3490fad3823b6eb9b5eaed465f5e88955e86de2fde5a75726b9b5e479a577baa",
+    "5": "d1d865bc4a35a55e86f47e1fb81aa8b91470e8913f6096b21a0755aa98385112"
+  },
+  "all_assets_identical_after_restart": true,
+  "personal_metadata_preserved": true
+}

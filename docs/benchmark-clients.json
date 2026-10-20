@@ -1,0 +1,160 @@
+{
+  "measured_at_utc": "2026-10-19T22:05:03.019381+00:00",
+  "host": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "container_kernel": "Linux 7.2.9-orbstack-00391-g2b298d05fbd4 aarch64 Linux",
+  "image_id": "sha256:4f2ceb38f842edd6ed5e1e3c6b159601bb6e07bb0ed7cf51c34b5be2cfc93b60",
+  "image_architecture": "arm64",
+  "image_size_mib": 17.59,
+  "binary_sha256": "e3b8aa7bbefbe16161361a53aafc25d368732d546ce0e42c723efde9c9b7313b",
+  "capture_enabled": true,
+  "memory_limit_mib": 128.0,
+  "go_memory_limit": "32MiB",
+  "capture_concurrency": 1,
+  "requests": 200,
+  "request_concurrency": 4,
+  "capture_and_search_seconds": 3.144,
+  "stats": {
+    "collections": 1,
+    "failed": 0,
+    "links": 7,
+    "pending": 0
+  },
+  "captures": [
+    {
+      "url": "https://www.rfc-editor.org/rfc/rfc9110.html",
+      "status": "ready",
+      "text_bytes": 262144,
+      "error": "",
+      "archive_bytes": 1187554,
+      "archive_sha256": "d431760660ea44e130f6e919dab216df2d0b3a490567a98089267523368fe1e5"
+    },
+    {
+      "url": "https://docs.python.org/3/tutorial/index.html",
+      "status": "ready",
+      "text_bytes": 6996,
+      "error": "",
+      "archive_bytes": 37315,
+      "archive_sha256": "9929e6e0037d0668eabced8ee00962580707526ee80b49f64611f6debb1d7924"
+    },
+    {
+      "url": "https://www.sqlite.org/lang_select.html",
+      "status": "ready",
+      "text_bytes": 36435,
+      "error": "",
+      "archive_bytes": 2033807,
+      "archive_sha256": "f850d5a0e9441d348535494f9c647ea90548a03a1c7bd51cdac6c7943e6dc785"
+    },
+    {
+      "url": "https://www.sqlite.org/lang.html",
+      "status": "ready",
+      "text_bytes": 1560,
+      "error": "",
+      "archive_bytes": 34250,
+      "archive_sha256": "553c24101f0d975f1af72161806475ed71b1401363794f0a67dfdd500a1c2737"
+    },
+    {
+      "url": "https://go.dev/ref/spec",
+      "status": "ready",
+      "text_bytes": 222813,
+      "error": "",
+      "archive_bytes": 341473,
+      "archive_sha256": "57831a144955cd605f8a9989938e692cbc683a272fd1f741371b60a76e3169eb"
+    },
+    {
+      "url": "https://go.dev/doc/",
+      "status": "ready",
+      "text_bytes": 10756,
+      "error": "",
+      "archive_bytes": 47874,
+      "archive_sha256": "63b6d9acdfd3759cbd0ed7547f1c44fd62a5aeb8fd70ad9cf7ea0c70c1d0a509"
+    }
+  ],
+  "extended_features": {
+    "offline": {
+      "bytes": 637820,
+      "embedded": 4,
+      "omitted": 33
+    },
+    "large_upload_bytes": 19922944,
+    "standalone_file_id": 7,
+    "collection_bulk_annotation_html_xbel": true,
+    "floccus_basic_lock_temp_move_exact_bytes": true,
+    "backup_zip_bytes": 25612981,
+    "full_backup_valid": true
+  },
+  "overall": {
+    "rss_peak_mib": 19.61,
+    "rss_kernel_high_water_mib": 22.93,
+    "cgroup_current_peak_mib": 58.26,
+    "cgroup_kernel_peak_mib": 84.04,
+    "samples": 154
+  },
+  "phases": {
+    "idle_empty": {
+      "rss_peak_mib": 10.47,
+      "rss_kernel_high_water_mib": 10.47,
+      "cgroup_current_peak_mib": 4.05,
+      "cgroup_kernel_peak_mib": 7.36,
+      "samples": 29
+    },
+    "capture_and_search": {
+      "rss_peak_mib": 19.5,
+      "rss_kernel_high_water_mib": 22.88,
+      "cgroup_current_peak_mib": 23.71,
+      "cgroup_kernel_peak_mib": 25.39,
+      "samples": 30
+    },
+    "extended_features": {
+      "rss_peak_mib": 19.61,
+      "rss_kernel_high_water_mib": 22.93,
+      "cgroup_current_peak_mib": 24.36,
+      "cgroup_kernel_peak_mib": 26.83,
+      "samples": 44
+    },
+    "large_upload": {
+      "rss_peak_mib": 18.71,
+      "rss_kernel_high_water_mib": 22.93,
+      "cgroup_current_peak_mib": 58.26,
+      "cgroup_kernel_peak_mib": 76.63,
+      "samples": 2
+    },
+    "floccus_staged_dav": {
+      "rss_peak_mib": 18.11,
+      "rss_kernel_high_water_mib": 22.93,
+      "cgroup_current_peak_mib": 57.52,
+      "cgroup_kernel_peak_mib": 76.63,
+      "samples": 1
+    },
+    "idle_captured": {
+      "rss_peak_mib": 18.1,
+      "rss_kernel_high_water_mib": 22.93,
+      "cgroup_current_peak_mib": 57.73,
+      "cgroup_kernel_peak_mib": 84.04,
+      "samples": 48
+    }
+  },
+  "memory_events_before_restart": {
+    "low": "0",
+    "high": "0",
+    "max": "0",
+    "oom": "0",
+    "oom_kill": "0",
+    "oom_group_kill": "0",
+    "sock_throttled": "0"
+  },
+  "validation": {
+    "healthy_startup": true,
+    "non_root": true,
+    "read_only_root": true,
+    "dropped_capabilities": true,
+    "resource_limits": true,
+    "token_permissions": true,
+    "unauthenticated_api_denied": true,
+    "embedded_ui": true,
+    "archive_headers": true,
+    "metadata_export": true,
+    "restart_persistence": true,
+    "oom_killed": false
+  },
+  "limits": "Six live public HTML pages, not 10000 captured pages or worst-case stress. RSS is PID 1 only. Cgroup includes page cache, healthcheck and small shell/sleep sampler. Kernel peaks are lifetime values; phase current peaks are sampled about every100ms. Docker VM/host/browser excluded. Remote content/timings can change; no upstream comparison."
+}
