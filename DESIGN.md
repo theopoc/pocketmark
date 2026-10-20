@@ -184,6 +184,13 @@ The slate-tinted rail combines outline icons, sentence-case labels and compact c
 ### Tag directory
 All tags has a primary navigation entry. Keep up to 12 most-used tags as quick filters at the bottom of the sidebar, including while browsing the directory. The directory groups names under letter headings in three columns on wide screens, two on medium screens and one on phones. Compact counts sit beside each name. A sticky vertical A–Z rail (plus `#` for other initials) jumps across the paginated directory, disables unavailable letters and moves keyboard focus to the selected heading. Search narrows both the index and available letters. Fetch at most 40 tag rows and 27 group totals per request.
 
+### Navigation, scope and drafts
+Library destination, search, sorting, pagination and tag-directory state are represented in the URL. Back/Forward and reload restore that context; browser history also records the page scroll position. Tag destinations consistently retain the bookmark search and show removable filter chips. Selection summaries disclose bookmarks outside the current results; bulk dialogs show the selected titles and require a fresh action choice each time.
+
+Bookmark and annotation drafts stay in the current tab's memory. Reopening a form restores them; reader notes carry into the bookmark editor. Notices name this lifetime, explicit discard controls remove drafts, and leaving/reloading warns while drafts remain. Drafts are not stored in localStorage, URLs or on the server. Saving notes retains unrelated unfinished editor changes.
+
+The reader keeps a compact close/highlight header and section shortcuts visible while scrolling. Formatted and printable views require a suitable HTML capture or attachment; unavailable modes explain the next step. Text size and highlighting follow the active mode. Highlights and saved-file loading errors remain local to their sections. On phones, row action targets are 44px and a 44px letter picker complements the A–Z rail.
+
 ### Reader and dialogs
 Dialogs use theme-matched panels, a dimmed backdrop, labeled headings and separated footer actions. The reader widens to (920px), uses the reader type role and a generous text measure, with highlights, assets and notes below its tools. Highlight colors describe user annotations rather than application status. On phones, the reader becomes an edge-to-edge reading surface.
 

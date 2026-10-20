@@ -8,6 +8,7 @@ build:
 	go build -tags '$(GO_TAGS)' -trimpath -ldflags='$(LDFLAGS)' -o bin/pocketmark ./cmd/pocketmark
 test:
 	go test $(TEST_FLAGS) -tags '$(GO_TAGS)' ./...
+	node --test internal/webui/workspace.test.cjs
 test-extension:
 	node --test extension/popup.test.cjs
 fmt-check:
@@ -15,6 +16,7 @@ fmt-check:
 check: fmt-check
 	go vet -tags '$(GO_TAGS)' ./...
 	node --check internal/webui/static/theme.js
+	node --check internal/webui/static/workspace.js
 	node --check internal/webui/static/app.js
 	node --check internal/webui/static/sw.js
 	node --check extension/popup.js
