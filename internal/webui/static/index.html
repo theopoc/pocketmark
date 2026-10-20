@@ -102,7 +102,7 @@
       <label for="bookmark-url">URL <span class="required">*</span></label><input id="bookmark-url" type="url" placeholder="https://example.com/article" required>
       <label for="bookmark-title">Title</label><input id="bookmark-title" placeholder="Page title" maxlength="1000">
       <label for="bookmark-description">Description</label><textarea id="bookmark-description" rows="2" placeholder="What makes this worth saving?"></textarea>
-      <div class="form-columns"><div><label for="bookmark-collection">Collection</label><select id="bookmark-collection"></select></div><div><label for="bookmark-tags">Tags <span class="label-hint">comma separated</span></label><input id="bookmark-tags" placeholder="design, inspiration"></div></div>
+      <div class="form-columns bookmark-organization"><div><label for="bookmark-collection">Collection</label><select id="bookmark-collection"></select></div><div><label for="bookmark-tags">Tags</label><input id="bookmark-tags" placeholder="Choose or create tags" autocomplete="off" spellcheck="false"><p id="bookmark-tags-hint" class="field-hint">Choose a tag or type a new one, then press Enter. Use commas to add several.</p></div></div>
       <label for="bookmark-notes">Personal notes</label><textarea id="bookmark-notes" rows="3" placeholder="Your thoughts, in your words…"></textarea>
       <div class="checkbox-row"><label><input id="bookmark-favorite" type="checkbox"> Favorite</label><label><input id="bookmark-read" type="checkbox"> Already read</label></div>
       <div id="bookmark-draft" class="draft-notice" hidden><span>Draft kept in this tab until you save it.</span><button id="discard-bookmark-draft" type="button" class="text-button">Discard draft</button></div>
@@ -120,7 +120,7 @@
   <p id="bulk-scope" class="small muted"></p><details id="bulk-review"><summary>Review selected bookmarks</summary><ul id="bulk-items" class="bulk-items"></ul></details>
   <label for="bulk-action">Action</label><select id="bulk-action" required><option value="">Choose an action</option><option value="move">Move to collection</option><option value="tags">Replace tags</option><option value="favorite">Favorite status</option><option value="read">Read status</option><option value="capture">Refresh captures</option><option value="delete">Delete bookmarks</option></select>
   <div id="bulk-move-fields" hidden><label for="bulk-collection">Collection</label><select id="bulk-collection"></select></div>
-  <div id="bulk-tags-fields" hidden><label for="bulk-tags">Tags (comma separated)</label><input id="bulk-tags"><p class="small muted">These tags will replace the existing tags on every selected bookmark.</p></div>
+  <div id="bulk-tags-fields" hidden><label for="bulk-tags">Tags</label><input id="bulk-tags"><p class="small muted">These tags will replace the existing tags on every selected bookmark.</p></div>
   <div id="bulk-value-fields" hidden><label id="bulk-value-label" for="bulk-value">Set status</label><select id="bulk-value"><option value="true">Yes</option><option value="false">No</option></select></div>
   <p id="bulk-error" class="form-error" role="alert"></p><div class="dialog-actions"><button type="button" class="button subtle close-dialog">Cancel</button><button id="bulk-apply" class="button primary" type="submit" disabled>Choose an action</button></div>
 </form></dialog>

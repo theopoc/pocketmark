@@ -52,7 +52,10 @@
     if (link.archiveAvailable) return { url: `/api/links/${link.id}/reader`, message: "Formatted view uses your saved HTML capture." };
     return { url: "", message: "Formatted view needs an HTML capture or attachment. You can read the text or add an HTML snapshot under Files." };
   }
-  const workspace = { readRoute, routeSearch, createDrafts, readerSnapshot };
+  function tagValues(selected, pending = "") {
+    return [...new Set([...selected, ...pending.split(",")].map((name) => name.trim()).filter(Boolean))];
+  }
+  const workspace = { readRoute, routeSearch, createDrafts, readerSnapshot, tagValues };
   if (typeof module !== "undefined" && module.exports) module.exports = workspace;
   else root.PocketmarkWorkspace = workspace;
 })(globalThis);

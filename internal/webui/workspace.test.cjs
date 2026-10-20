@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { readRoute, routeSearch, createDrafts, readerSnapshot } = require('./static/workspace.js');
+const { readRoute, routeSearch, createDrafts, readerSnapshot, tagValues } = require('./static/workspace.js');
 
 test('collection/search/sort/page survive a reload and a history round trip', () => {
   const first = readRoute('?filter=favorite&q=design');
@@ -59,4 +59,20 @@ test('saving reader notes preserves unrelated unfinished editor changes', () => 
   assert.deepEqual(drafts.get('bookmark:1'), { title: 'Revised title', notes: 'New note' });
   drafts.delete('bookmark:1');
   assert.equal(drafts.get('bookmark:1'), null);
+});
+
+test('tag chips retain selected tags when typing or pasting more names', () => {
+  const selected = ['design', 'reference'];
+  assert.deepEqual(tagValues(selected, ' web, design, été & 読書, '), ['design', 'reference', 'web', 'été & 読書']);
+  assert.deepEqual(selected, ['design', 'reference']);
+  assert.deepEqual(tagValues([], ' , , '), []);
+});
+
+test('many selected tags and pending text survive draft serialization without truncation', () => {
+  const tags = Array.from({ length: 100 }, (_, i) => `tag-${i}`);
+  const values = tagValues(tags, 'a-very-long-tag-name, tag-99');
+  const drafts = createDrafts();
+  drafts.put('bookmark:new', { tags: values }, { tags: [] });
+  assert.deepEqual(drafts.get('bookmark:new').tags, [...tags, 'a-very-long-tag-name']);
+  assert.equal(tagValues(values).join(', ').split(', ').length, 101);
 });

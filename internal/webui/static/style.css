@@ -413,6 +413,27 @@ body:has(dialog[open]) { overflow: hidden; }
 }
 
 /* Tag directory shares the workspace's controls and theme tokens. */
+.field-hint { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.bookmark-organization { grid-template-columns: minmax(0,1fr); }
+.tag-picker { position: relative; }
+.tag-picker-field { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 44px; padding: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); cursor: text; }
+.tag-picker-field:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+.tag-picker .tag-picker-query { flex: 1 1 125px; width: auto; min-width: min(125px,100%); max-width: 100%; padding: 5px 6px; border: 0; outline: none; background: transparent; border-radius: 0; font-size: 13px; }
+.tag-picker-chip { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; padding: 2px 3px 2px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--accent-soft); color: var(--ink); font-size: 12px; line-height: 1.5; }
+.tag-picker-chip-name { min-width: 0; overflow-wrap: anywhere; }
+.tag-picker-remove { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 24px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: var(--ink); }
+.tag-picker-remove:hover { background: var(--paper); color: var(--ink); }
+.tag-picker-remove .icon { width: 12px; height: 12px; }
+.tag-picker-panel { position: absolute; z-index: 5; inset-inline: 0; top: calc(100% + 4px); padding: 6px; background: var(--paper); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 10px 24px rgb(0 0 0 / .18); }
+.tag-picker-panel[data-side="above"] { top: auto; bottom: calc(100% + 4px); }
+.tag-picker-panel[data-side="inline"] { position: static; margin-top: 4px; }
+.tag-picker-status { margin: 4px 6px 8px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.tag-picker-options { max-height: 216px; overflow-y: auto; overscroll-behavior: contain; }
+.tag-picker-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 36px; padding: 8px; border: 0; border-radius: 4px; background: transparent; color: var(--ink); text-align: start; font-size: 12px; }
+.tag-picker-option:hover, .tag-picker-option[aria-selected="true"] { background: var(--accent-soft); }
+.tag-picker-name { min-width: 0; overflow-wrap: anywhere; }
+.tag-picker-count { flex-shrink: 0; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.tag-picker-retry { margin: 4px 6px; }
 .active-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-bottom: 14px; }
 .filter-chip { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; overflow-wrap: anywhere; border: 1px solid var(--line); border-radius: 5px; padding: 5px 8px; background: var(--surface); color: var(--ink); font-size: 12px; text-align: left; }
 .filter-chip .icon { width: 12px; height: 12px; }
@@ -449,6 +470,9 @@ body:has(dialog[open]) { overflow: hidden; }
   .tags-directory, .tag-index-group:only-child .tag-group-rows { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 @media (max-width: 600px) {
+  .tag-picker-chip { font-size: 14px; }
+  .tag-picker-remove { flex-basis: 44px; width: 44px; height: 44px; }
+  .tag-picker-option { min-height: 44px; font-size: 14px; }
   .tags-letter-picker { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; margin: 0 0 16px; }
   .tags-letter-picker select { width: auto; min-height: 44px; font-size: 16px; }
   .card-action, .view-list .card-action, .view-button { width: 44px; height: 44px; }
