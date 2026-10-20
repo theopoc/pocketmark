@@ -14,6 +14,10 @@
   --green: var(--accent);
   --green-light: var(--accent-soft);
   --focus: #7067ef;
+  --motion-fast: 120ms;
+  --motion-enter: 220ms;
+  --motion-exit: 140ms;
+  --ease-ui: cubic-bezier(.16,1,.3,1);
   font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: var(--ink);
   background: var(--paper);
@@ -401,12 +405,41 @@ body:has(dialog[open]) { overflow: hidden; }
   .login-message p, .login-footnote { display: none; }
   .login-panel { padding: 36px 24px; }
 }
+/* Motion follows state: controls acknowledge, overlays establish depth. */
+.nav-item, .tag-button, .card-action, .view-button, .icon-button, .filter-chip, .tag-picker-option, .tag-picker-remove {
+  transition: background-color var(--motion-fast) ease-out, border-color var(--motion-fast) ease-out, color var(--motion-fast) ease-out;
+}
+@supports (transition-behavior: allow-discrete) {
+  .modal, .navigation-dialog {
+    opacity: 0;
+    transition: opacity var(--motion-exit) ease-out, transform var(--motion-exit) var(--ease-ui), display var(--motion-exit) allow-discrete, overlay var(--motion-exit) allow-discrete;
+  }
+  .modal { transform: translateY(6px) scale(.99); }
+  .navigation-dialog { transform: translateX(-14px); }
+  .modal[open], .navigation-dialog[open] { opacity: 1; transform: none; transition-duration: var(--motion-enter); }
+  .modal::backdrop, .navigation-dialog::backdrop {
+    opacity: 0;
+    transition: opacity var(--motion-exit) ease-out, display var(--motion-exit) allow-discrete, overlay var(--motion-exit) allow-discrete;
+  }
+  .modal[open]::backdrop, .navigation-dialog[open]::backdrop { opacity: 1; transition-duration: var(--motion-enter); }
+  .tag-picker-panel, #toast {
+    opacity: 1;
+    transition: opacity var(--motion-fast) ease-out, display var(--motion-fast) allow-discrete;
+  }
+  .tag-picker-panel[hidden], #toast[hidden] { opacity: 0; }
+  @starting-style {
+    .modal[open] { opacity: 0; transform: translateY(6px) scale(.99); }
+    .navigation-dialog[open] { opacity: 0; transform: translateX(-14px); }
+    .modal[open]::backdrop, .navigation-dialog[open]::backdrop, .tag-picker-panel, #toast { opacity: 0; }
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; scroll-behavior: auto !important; }
+  .nav-item, .tag-button, .card-action, .view-button, .icon-button, .filter-chip, .tag-picker-option, .tag-picker-remove { transition-duration: 80ms !important; }
 }
 @media print {
   body > .app-shell, body > #login-view, body > #toast, dialog:not(#reader-dialog) { display: none !important; }
-  #reader-dialog { position: static; display: block; width: 100%; max-width: none; max-height: none; overflow: visible; border: 0; box-shadow: none; }
+  #reader-dialog { position: static; display: block; width: 100%; max-width: none; max-height: none; overflow: visible; border: 0; box-shadow: none; opacity: 1; transform: none; transition: none; }
   #reader-dialog .reader-actions, #reader-dialog .reader-tools, #reader-dialog .reader-assets, #reader-dialog .dialog-heading, #reader-dialog .reader-notes, #annotations-section { display: none; }
   #reader-dialog { color-scheme: light; color: #000; background: #fff; }
   [data-theme] .reader-content { color: #000; }

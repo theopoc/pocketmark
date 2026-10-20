@@ -169,6 +169,8 @@ Controls use restrained rounded corners; smaller tags and action buttons use the
 ### Buttons
 Compact and direct. Primary actions use indigo and white, subtle actions use white with a cool gray border, and icon actions use transparent backgrounds. Primary and subtle controls use the shared control radius and label type. Hover changes background or border with (160ms ease-out) transitions. Keyboard focus has a (2px) outline and (3px) offset; disabled buttons use (.48) opacity. Phone actions increase their target dimensions where the layout requires it.
 
+Motion preserves context: selected tags settle into their new positions over 180ms, while new tags receive a 150ms entrance. Collection, search and layout changes use a short 180ms content fade; background refreshes stay still. Native dialogs establish depth in 220ms and exit in 140ms, with a matching backdrop; tag suggestions use a 120ms fade. Actions and focus changes never wait for motion. Repeated actions replace in-flight animations. Reduced motion removes spatial transitions and content fades while retaining 80ms control-color feedback. Native overlay transitions progressively enhance the browser's immediate default behavior.
+
 ### Chips
 Small rectangular tags use neutral fill, short padding and compact type. Hover or active filter states use the soft accent and indigo text. Long labels truncate rather than widening the navigation rail.
 
@@ -202,7 +204,7 @@ Dialogs use theme-matched panels, a dimmed backdrop, labeled headings and separa
 - Do preserve visible keyboard focus and text labels for capture states.
 - Do use authored outline SVG icons with accessible names on icon-only controls.
 - Do reflow rows and keep their actions available on phones.
-- Do honor reduced motion and keep transitions limited to control state.
+- Do honor reduced motion, keep transitions brief and leave actions immediately available.
 
 ### Don't:
 - Don’t add team or public-sharing visual concepts to this personal workspace.

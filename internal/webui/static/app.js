@@ -12,6 +12,9 @@
   const workspace = globalThis.PocketmarkWorkspace;
   const drafts = workspace.createDrafts();
   const tagPickers = new Map();
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+  const activeMotion = new Map();
+  let renderedLibraryRoute = null;
   const selectionLabels = new Map();
   const sharedParams = new URLSearchParams(location.search);
   let editorBaseline = null;
@@ -76,6 +79,18 @@
     return node;
   }
 
+  // Feedback never blocks an action; a new transition replaces any earlier one.
+  function move(element, frames, duration = 180) {
+    activeMotion.get(element)?.cancel();
+    if (reducedMotion.matches || document.hidden || !element.animate) return;
+    const animation = element.animate(frames, { duration, easing: "cubic-bezier(0.16, 1, 0.3, 1)" });
+    activeMotion.set(element, animation);
+    animation.finished.catch(() => {}).then(() => { if (activeMotion.get(element) === animation) activeMotion.delete(element); });
+  }
+  reducedMotion.addEventListener("change", () => {
+    if (reducedMotion.matches) { activeMotion.forEach((animation) => animation.cancel()); activeMotion.clear(); }
+  });
+
   // Small, authored SVG icons keep the embedded UI independent of icon libraries.
   const iconPaths = {
     sun: ["M12 3v1M12 20v1M3 12h1M20 12h1M5.6 5.6l.7.7M17.7 17.7l.7.7M5.6 18.4l.7-.7M17.7 6.3l.7-.7", "M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0"],
@@ -136,10 +151,12 @@
   let libraryView = "list";
   try { if (localStorage.getItem("pocketmark-view") === "grid") libraryView = "grid"; } catch { /* Storage is optional. */ }
   function setLibraryView(view) {
+    const changed = $("bookmark-grid").classList.contains("view-list") !== (view === "list");
     libraryView = view;
     $("bookmark-grid").classList.toggle("view-list", view === "list");
     for (const value of ["list", "grid"]) $("view-" + value).setAttribute("aria-pressed", String(view === value));
     try { localStorage.setItem("pocketmark-view", view); } catch { /* Private browsing may disallow storage. */ }
+    if (changed && state.signedIn) move($("bookmark-grid"), [{ opacity: .8 }, { opacity: 1 }]);
   }
   $("view-list").addEventListener("click", () => setLibraryView("list"));
   $("view-grid").addEventListener("click", () => setLibraryView("grid"));
@@ -445,6 +462,7 @@
       $("tags-page-label").textContent = `Page ${tagsPage} of ${pages}`;
       $("tags-previous").disabled = tagsPage <= 1;
       $("tags-next").disabled = tagsPage >= pages;
+      if (!jump && showingTags) move($("tags-list"), [{ opacity: .75 }, { opacity: 1 }]);
       if (jump && sections.has(jump)) {
         const heading = sections.get(jump).previousElementSibling;
         heading.focus({ preventScroll: true });
@@ -472,6 +490,7 @@
     commitRoute();
     $("tags-view").hidden = true; $("library-view").hidden = false;
     updateHeading(); renderCollections(); $("page-title").focus();
+    move($("bookmark-grid"), [{ opacity: .75 }, { opacity: 1 }]);
   });
   $("tags-search").addEventListener("input", () => {
     clearTimeout(tagsTimer);
@@ -632,6 +651,9 @@
       renderCollections();
       renderTags(tags || []);
       renderLinks();
+      const destination = params.toString();
+      if (!quiet && !showingTags && renderedLibraryRoute !== null && destination !== renderedLibraryRoute) move($("bookmark-grid"), [{ opacity: .75 }, { opacity: 1 }]);
+      renderedLibraryRoute = destination;
       if (stats.pending && !document.hidden) state.timer = setTimeout(() => refresh(true), 5000);
     } catch (error) {
       if (request !== state.request) return;
@@ -719,10 +741,16 @@
       if (emit) source.dispatchEvent(new Event("input", { bubbles: true }));
     }
     function renderTags() {
+      const previous = new Map();
+      const animateTags = !reducedMotion.matches && input.closest("dialog").open;
+      if (animateTags) {
+        field.querySelectorAll(".tag-picker-chip").forEach((chip) => previous.set(chip.dataset.tagName, chip.getBoundingClientRect()));
+      }
       rendering = true;
-      field.querySelectorAll(".tag-picker-chip").forEach((chip) => chip.remove());
+      field.querySelectorAll(".tag-picker-chip").forEach((chip) => { activeMotion.get(chip)?.cancel(); chip.remove(); });
       selected.forEach((name, index) => {
         const chip = el("span", "tag-picker-chip"), remove = el("button", "tag-picker-remove");
+        chip.dataset.tagName = name;
         remove.type = "button"; remove.setAttribute("aria-label", `Remove tag ${name}`); remove.append(icon("close"));
         remove.addEventListener("click", (event) => {
           selected.splice(index, 1); renderTags(); sync(); close();
@@ -737,6 +765,18 @@
       input.placeholder = selected.length ? "Add a tag…" : "Choose or create tags";
       rendering = false;
       position();
+      if (animateTags) {
+        // Read every destination before starting animations to avoid layout thrashing.
+        const destinations = [...field.querySelectorAll(".tag-picker-chip")].map((chip) => [chip, chip.getBoundingClientRect()]);
+        for (const [chip, bounds] of destinations) {
+          const before = previous.get(chip.dataset.tagName);
+          if (!before) move(chip, [{ opacity: .6, transform: "scale(.97)" }, { opacity: 1, transform: "scale(1)" }], 150);
+          else {
+            const x = before.left - bounds.left, y = before.top - bounds.top;
+            if (Math.abs(x) + Math.abs(y) > 1) move(chip, [{ transform: `translate(${x}px,${y}px)` }, { transform: "translate(0,0)" }]);
+          }
+        }
+      }
     }
     function commitTyped() {
       if (!input.value.trim()) return;
