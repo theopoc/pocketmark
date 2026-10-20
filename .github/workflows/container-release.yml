@@ -85,7 +85,7 @@ jobs:
         with:
           context: release-source
           platforms: linux/${{ matrix.arch }}
-          outputs: type=image,name=${{ needs.prepare.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ needs.prepare.outputs.image }},push-by-digest=true,name-canonical=true,push=true,oci-mediatypes=true
           provenance: false
           sbom: false
           labels: |
