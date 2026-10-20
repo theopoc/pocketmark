@@ -29,6 +29,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", required=True)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--platform", choices=("linux/amd64", "linux/arm64"))
+    parser.add_argument("--revision", help="Require this OCI source revision label")
+    parser.add_argument("--version", help="Require this OCI version label")
     args = parser.parse_args()
     project = "pocketmark-smoke-" + secrets.token_hex(6)
     config = json.loads(docker("compose", "-f", str(ROOT / "compose.yaml"), "config", "--format", "json"))
@@ -36,6 +39,8 @@ def main():
     service = config["services"]["pocketmark"]
     service.pop("build", None)
     service["image"] = args.image
+    if args.platform:
+        service["platform"] = args.platform
     service["ports"] = [{"target": 8090, "published": "0", "host_ip": "127.0.0.1", "protocol": "tcp"}]
     for category in ("volumes", "networks"):
         for entry in config.get(category, {}).values():
@@ -49,6 +54,14 @@ def main():
             docker(*compose, "up", "-d", "--wait", "--wait-timeout", "90")
             cid = docker(*compose, "ps", "-q", "pocketmark")
             details = json.loads(docker("inspect", cid))[0]
+            image = json.loads(docker("image", "inspect", details["Image"]))[0]
+            platform = image["Os"] + "/" + image["Architecture"]
+            if args.platform:
+                require(platform == args.platform, "wrong image architecture")
+            labels = details["Config"].get("Labels") or {}
+            for key, expected in (("revision", args.revision), ("version", args.version)):
+                if expected:
+                    require(labels.get("org.opencontainers.image." + key) == expected, "wrong image " + key)
             host = details["HostConfig"]
             require(details["Config"]["User"] == "10001:10001", "runtime must be non-root")
             require(host["ReadonlyRootfs"] and "ALL" in host["CapDrop"], "container hardening changed")
@@ -119,7 +132,10 @@ def main():
             require(before == hashlib.sha256(call("/api/export", raw=True)).hexdigest(), "library changed across restart")
             require(token == docker("exec", cid, "cat", "/data/access-token"), "token changed across restart")
             checks["restart_persistence_and_no_oom"] = True
-            report = {"image": args.image, "checks": checks, "memory_events_before_restart": events,
+            report = {"image": args.image, "image_id": details["Image"], "platform": platform,
+                      "revision": labels.get("org.opencontainers.image.revision"),
+                      "version": labels.get("org.opencontainers.image.version"),
+                      "checks": checks, "memory_events_before_restart": events,
                       "scope": "Synthetic isolated Compose smoke; not a live-page or RAM benchmark"}
             if args.output:
                 args.output.parent.mkdir(parents=True, exist_ok=True)

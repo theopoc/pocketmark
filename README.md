@@ -33,6 +33,8 @@ docker compose exec pocketmark cat /data/access-token
 
 Open the same local URL. Compose stores data in a named volume and publishes port 8090 on host loopback only. The image runs as UID/GID `10001:10001`; a custom bind-mounted data directory must be writable by that user.
 
+Tagged releases also publish a private multiarchitecture image at `ghcr.io/theopoc/pocketmark:vMAJOR.MINOR.PATCH` for Linux AMD64/ARM64. After authenticating Docker with read access to the package, use that image in place of `build: .` in your Compose configuration. Keep the same volume, port binding and resource/security settings. See [GHCR publication and verification](docs/CI.md#ghcr-images).
+
 The supplied Compose configuration sets a **128 MiB container memory limit** and one CPU. This is a deployment limit, not a guarantee that every workload completes within it. See [benchmark methodology and results](docs/BENCHMARK.md) for measured behavior.
 
 ## What is included

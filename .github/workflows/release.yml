@@ -129,3 +129,15 @@ jobs:
           args: release --config .goreleaser-publish.yaml --skip=archive --clean
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+  container:
+    name: Publish and verify GHCR image
+    needs: publish
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/container-release.yml
+    with:
+      tag: ${{ github.ref_name }}
+    permissions:
+      contents: read
+      checks: read
+      packages: write
