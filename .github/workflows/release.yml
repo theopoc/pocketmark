@@ -43,45 +43,45 @@ jobs:
       contents: read
 
   assemble:
-    name: Assemble verified assets
+    name: Package and verify with GoReleaser
     needs: verify
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: release-*
-          merge-multiple: true
-          path: dist
+          pattern: linux-*
+          path: artifacts
           digest-mismatch: error
-      - name: Check the complete asset set and generate SHA256SUMS
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          version: v2.18.3
+          install-only: true
+      - name: Package tested binaries and allowlisted extension files
+        env:
+          EVENT_NAME: ${{ github.event_name }}
         shell: bash
         run: |
-          python3 - <<'PY'
-          import hashlib
-          from pathlib import Path
-          root = Path('dist')
-          expected = {
-              'pocketmark-linux-amd64.tar.gz', 'pocketmark-linux-arm64.tar.gz',
-              'pocketmark-linux-amd64.buildinfo.txt', 'pocketmark-linux-arm64.buildinfo.txt',
-              'pocketmark-extension.zip', 'pocketmark-extension-advanced.zip',
-          }
-          actual = {p.name for p in root.iterdir()}
-          if actual != expected:
-              raise SystemExit(f'Unexpected release assets: {actual ^ expected}')
-          lines = []
-          for name in sorted(expected):
-              path = root / name
-              if path.is_symlink() or not path.is_file() or path.stat().st_size == 0:
-                  raise SystemExit(f'Invalid release asset: {name}')
-              lines.append(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {name}\n')
-          (root / 'SHA256SUMS').write_text(''.join(lines))
-          PY
-          (cd dist && sha256sum --check SHA256SUMS)
+          if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
+            goreleaser release --snapshot --clean --config .goreleaser.yaml
+          else
+            goreleaser release --skip=publish --clean --config .goreleaser.yaml
+          fi
+          python3 scripts/verify_release.py --directory dist --metadata artifacts \
+            --commit "$GITHUB_SHA" --output artifacts/verified
+      - name: Exercise publication configuration without publishing
+        run: goreleaser release --snapshot --skip=archive --clean --config .goreleaser-publish.yaml
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: verified-release
-          path: dist/*
+          path: artifacts/verified/*
           if-no-files-found: error
           retention-days: 7
 
@@ -94,17 +94,38 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: verified-release
-          path: dist
+          path: artifacts/verified
           digest-mismatch: error
-      - name: Publish exactly the verified artifacts
+      - name: Recheck assets and require an unpublished version
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         shell: bash
         run: |
-          (cd dist && sha256sum --check SHA256SUMS)
-          gh release create "$RELEASE_TAG" dist/* --verify-tag --generate-notes --title "Pocketmark $RELEASE_TAG"
+          python3 scripts/verify_release.py --directory artifacts/verified --commit "$GITHUB_SHA"
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > "$RUNNER_TEMP/release-state.json"; then
+            echo 'Refusing to overwrite an existing release.' >&2
+            exit 1
+          fi
+          python3 - "$RUNNER_TEMP/release-state.json" <<'PY'
+          import json, sys
+          if str(json.load(open(sys.argv[1])).get('status')) != '404':
+              raise SystemExit('Could not establish that this release does not exist.')
+          PY
+      - name: Publish exactly the verified artifacts with GoReleaser
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          version: v2.18.3
+          args: release --config .goreleaser-publish.yaml --skip=archive --clean
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

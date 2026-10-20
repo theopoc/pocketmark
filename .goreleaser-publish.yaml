@@ -1,0 +1,24 @@
+version: 2
+project_name: pocketmark
+
+# No rebuild or repackaging during publication.
+builds:
+  - skip: true
+checksum:
+  disable: true
+release:
+  github:
+    owner: theopoc
+    name: pocketmark
+  name_template: 'Pocketmark {{ .Tag }}'
+  replace_existing_artifacts: false
+  extra_files:
+    - glob: artifacts/verified/pocketmark-linux-amd64.tar.gz
+    - glob: artifacts/verified/pocketmark-linux-arm64.tar.gz
+    - glob: artifacts/verified/pocketmark-linux-amd64.buildinfo.txt
+    - glob: artifacts/verified/pocketmark-linux-arm64.buildinfo.txt
+    - glob: artifacts/verified/pocketmark-extension.zip
+    - glob: artifacts/verified/pocketmark-extension-advanced.zip
+    - glob: artifacts/verified/SHA256SUMS
+changelog:
+  sort: asc

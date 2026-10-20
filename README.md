@@ -108,7 +108,7 @@ make check
 
 `make test` runs Go tests with the race detector. `make check` runs `go vet` and JavaScript syntax checking, which requires Node.js as a development tool. Build and runtime do not require Node.js. See `python3 scripts/benchmark.py --help` and the [benchmark report](docs/BENCHMARK.md) for the reproducible memory workload.
 
-GitHub Actions also checks formatting, dependency integrity, secrets, reachable vulnerabilities, extension tests and release packaging. Native Linux AMD64/ARM64 jobs run race tests, build static binaries and validate the hardened Docker/Compose runtime. Version tags publish verified binary/extension packages and SHA-256 checksums; manual release runs only verify/assemble. See [CI and release](docs/CI.md) and [contributor instructions](AGENTS.md).
+GitHub Actions also checks formatting, dependency integrity, secrets, reachable vulnerabilities, extension tests and release packaging. Native Linux AMD64/ARM64 jobs run race tests, build static binaries and validate the hardened Docker/Compose runtime. GoReleaser OSS packages the tested binaries and extensions, generates SHA-256 checksums and publishes version tags; manual release runs exercise packaging and verification without publishing. See [CI and release](docs/CI.md) and [contributor instructions](AGENTS.md).
 
 For capture-enabled Docker validation, run `docker build -t pocketmark:validation .`, then `python3 scripts/benchmark_capture.py`. It captures six public documentation pages, measures process/container memory, checks restart persistence, and removes its isolated test deployment.
 

@@ -1,4 +1,4 @@
-.PHONY: build test run check fmt-check test-extension package-extensions
+.PHONY: build test run check fmt-check test-extension release-check release-snapshot
 GO_TAGS := sqlite_fts5 sqlite_omit_load_extension
 LDFLAGS ?= -s -w
 TEST_FLAGS ?= -race -p 1
@@ -18,7 +18,10 @@ check: fmt-check
 	node --check internal/webui/static/sw.js
 	node --check extension/popup.js
 	python3 -m py_compile scripts/*.py extension/build_advanced.py
-package-extensions:
-	python3 scripts/package_release.py extensions --output dist
+release-check:
+	goreleaser check --config .goreleaser.yaml
+	goreleaser check --config .goreleaser-publish.yaml
+release-snapshot:
+	goreleaser release --snapshot --clean --config .goreleaser.yaml
 run: build
 	./bin/pocketmark

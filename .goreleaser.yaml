@@ -1,0 +1,67 @@
+version: 2
+project_name: pocketmark
+
+# Native CI jobs compile/test CGO. OSS meta archives package those exact files.
+builds:
+  - skip: true
+
+before:
+  hooks:
+    - python3 extension/build_advanced.py --reuse artifacts/extension-advanced
+
+archives:
+  - id: linux-amd64
+    meta: true
+    formats: [tar.gz]
+    name_template: pocketmark-linux-amd64
+    files:
+      - src: artifacts/linux-amd64/pocketmark
+        dst: pocketmark
+        info:
+          mode: 0755
+      - src: docs/RELEASE_INSTALL.md
+        dst: README.md
+  - id: linux-arm64
+    meta: true
+    formats: [tar.gz]
+    name_template: pocketmark-linux-arm64
+    files:
+      - src: artifacts/linux-arm64/pocketmark
+        dst: pocketmark
+        info:
+          mode: 0755
+      - src: docs/RELEASE_INSTALL.md
+        dst: README.md
+  - id: extension
+    meta: true
+    formats: [zip]
+    name_template: pocketmark-extension
+    files:
+      - {src: extension/manifest.json, dst: manifest.json}
+      - {src: extension/popup.html, dst: popup.html}
+      - {src: extension/popup.js, dst: popup.js}
+      - {src: extension/popup.css, dst: popup.css}
+      - {src: extension/README.md, dst: README.md}
+  - id: extension-advanced
+    meta: true
+    formats: [zip]
+    name_template: pocketmark-extension-advanced
+    files:
+      - {src: artifacts/extension-advanced/manifest.json, dst: manifest.json}
+      - {src: artifacts/extension-advanced/popup.html, dst: popup.html}
+      - {src: artifacts/extension-advanced/popup.js, dst: popup.js}
+      - {src: artifacts/extension-advanced/popup.css, dst: popup.css}
+      - {src: artifacts/extension-advanced/README.md, dst: README.md}
+
+checksum:
+  name_template: SHA256SUMS
+  algorithm: sha256
+  extra_files:
+    - glob: artifacts/linux-amd64/pocketmark-linux-amd64.buildinfo.txt
+    - glob: artifacts/linux-arm64/pocketmark-linux-arm64.buildinfo.txt
+
+# Packaging is read-only; a separate config publishes the verified bundle.
+release:
+  disable: true
+changelog:
+  disable: true

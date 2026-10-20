@@ -24,7 +24,7 @@ env:
 
 jobs:
   quality:
-    name: Quality and extension packages
+    name: Quality and release configuration
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -45,13 +45,11 @@ jobs:
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
       - name: Test release packaging
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
-      - run: make package-extensions
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
-          name: release-extensions
-          path: dist/*.zip
-          if-no-files-found: error
-          retention-days: 7
+          version: v2.18.3
+          install-only: true
+      - run: make release-check
 
   security:
     name: Secrets and reachable Go vulnerabilities
@@ -108,20 +106,21 @@ jobs:
           CC=musl-gcc make build LDFLAGS='-s -w -linkmode external -extldflags "-static"'
           file bin/pocketmark | grep 'statically linked'
           ./bin/pocketmark -h
-      - name: Package the tested architecture
+      - name: Preserve the tested executable and build metadata
         env:
           RELEASE_ARCH: ${{ matrix.arch }}
         run: |
-          python3 scripts/package_release.py linux --arch "$RELEASE_ARCH" --output dist
-          go version -m bin/pocketmark > "dist/pocketmark-linux-$RELEASE_ARCH.buildinfo.txt"
+          mkdir -p "artifacts/linux-$RELEASE_ARCH"
+          cp bin/pocketmark "artifacts/linux-$RELEASE_ARCH/pocketmark"
+          go version -m bin/pocketmark > "artifacts/linux-$RELEASE_ARCH/pocketmark-linux-$RELEASE_ARCH.buildinfo.txt"
       - name: Build and test the native container
         run: |
           docker build --tag pocketmark:ci .
           python3 scripts/smoke_docker.py --image pocketmark:ci --output reports/docker-smoke.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: release-linux-${{ matrix.arch }}
-          path: dist/*
+          name: linux-${{ matrix.arch }}
+          path: artifacts/linux-${{ matrix.arch }}/*
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
