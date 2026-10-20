@@ -1,0 +1,198 @@
+---
+name: Pocketmark
+description: A precise workspace for a personal bookmark library.
+colors:
+  ink: "#20232c"
+  muted: "#626978"
+  paper: "#fff"
+  sidebar: "#f6f7f9"
+  surface: "#f8f9fb"
+  line: "#e3e5eb"
+  accent: "#4f46e5"
+  accent-hover: "#4038c5"
+  accent-soft: "#eeedff"
+  danger: "#b12e35"
+  success: "#23714a"
+  focus: "#7067ef"
+typography:
+  headline:
+    fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
+    fontSize: "26px"
+    fontWeight: 650
+    lineHeight: 1.3
+    letterSpacing: "-.7px"
+  title:
+    fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
+    fontSize: "14px"
+    fontWeight: 600
+    lineHeight: 1.5
+  body:
+    fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
+    fontSize: "14px"
+    lineHeight: 1.5
+  label:
+    fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
+    fontSize: "12px"
+    fontWeight: 550
+    lineHeight: 1.5
+  reader:
+    fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
+    fontSize: "17px"
+    lineHeight: 1.95
+rounded:
+  small: "4px"
+  control: "6px"
+  utility: "8px"
+  panel: "12px"
+spacing:
+  compact: "8px"
+  row: "12px"
+  standard: "16px"
+  section: "24px"
+  workspace: "32px"
+components:
+  button-primary:
+    backgroundColor: "{colors.accent}"
+    textColor: "{colors.paper}"
+    rounded: "{rounded.control}"
+    padding: "8px 12px"
+    typography: "{typography.label}"
+  button-primary-hover:
+    backgroundColor: "{colors.accent-hover}"
+  button-subtle:
+    backgroundColor: "{colors.paper}"
+    textColor: "#4b5263"
+    rounded: "{rounded.control}"
+    padding: "8px 12px"
+    typography: "{typography.label}"
+  input:
+    backgroundColor: "{colors.paper}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.control}"
+    padding: "10px 12px"
+  bookmark-card:
+    backgroundColor: "{colors.paper}"
+    rounded: "{rounded.panel}"
+  tag:
+    backgroundColor: "#f0f1f6"
+    textColor: "#5b6272"
+    rounded: "{rounded.small}"
+    padding: "2px 6px"
+---
+
+# Design System: Pocketmark
+
+## Overview
+
+**Creative North Star: "The Personal Library Workspace"**
+
+A precise technology workspace for a strictly personal library. Cool white content, a slate-tinted navigation rail and indigo controls keep attention on saved material and practical actions. The interface uses the operating system’s sans serif, authored outline SVG icons and restrained borders.
+
+Density serves finding and organizing; reading deliberately opens into a larger type size and generous measure. The embedded HTML, CSS and JavaScript need no frontend runtime or remote fonts.
+
+**Key Characteristics:**
+- Compact library rows with visible actions and labeled capture states.
+- Indigo selection and action cues over cool neutral surfaces.
+- Responsive navigation and a comfortable reader in the same visual language.
+
+## Colors
+
+The palette is cool and restrained; the frontmatter records the reusable CSS color properties without the legacy green aliases.
+
+### Primary
+- **Indigo:** accent identifies primary actions and selected controls; accent-hover darkens interactive emphasis, accent-soft supports selected or hovered surfaces, and focus supplies keyboard outlines. The same accent anchors the bookmark mark and installable app theme.
+
+### Neutral
+- **Ink and muted slate:** ink carries titles and body text; muted carries secondary descriptions and metadata.
+- **White paper and cool surfaces:** paper is the content canvas, sidebar distinguishes navigation, and surface supports result headers and secondary containers. Line defines quiet dividers.
+- **Semantic status:** success marks ready/read states; danger marks failed states and destructive affordances. Pending and processing states use amber text with explicit labels.
+
+**The Action Accent Rule.** Use indigo for primary actions, selection and focus; retain semantic green and red for success and failure.
+
+## Themes
+
+Dark is the default for new browsers. A toggle in the workspace header and on the sign-in screen switches between dark and light; `pocketmark-theme` stores the explicit choice locally. `/theme.js` applies it before the stylesheet loads. Blocked storage falls back to dark without preventing use.
+
+The frontmatter colors describe the light palette. Dark mode overrides the same semantic CSS properties:
+
+| Token | Dark value |
+| --- | --- |
+| `ink` | `#e8e9ef` |
+| `muted` | `#a3a7b6` |
+| `paper` | `#15161b` |
+| `sidebar` | `#191a21` |
+| `surface` | `#1e2029` |
+| `line` | `#30323e` |
+| `accent` | `#6359ed` |
+| `accent-hover` | `#5a50df` |
+| `accent-soft` | `#2b2750` |
+| `danger` | `#f58a96` |
+| `success` | `#80c9a3` |
+| `focus` | `#a39aff` |
+
+Dark controls, dialogs, cards, metadata, highlights and selection share the theme; original saved-page layouts keep their source appearance. Primary-button foregrounds remain white in both modes. Native controls follow `color-scheme`; browser theme color follows the selected page ground. Print uses a white reader surface and black text.
+
+## Typography
+
+**Body and interface font:** the system sans stack in the frontmatter. There is no separately loaded display face. Monospace is limited to generated token fields.
+
+The hierarchy is compact: headline for library headings, title for bookmark names, body for the base interface, and label for buttons and field labels. Secondary metadata commonly uses (11px–13px). Dialog headings use (20px); the reader title uses (28px). The sign-in introduction uses (42px) on desktop and (30px) on phones; this is an entrance-specific treatment, not a general display scale.
+
+**The Reading Measure Rule.** Keep reading text within 70ch and give it more leading than workspace metadata.
+
+## Layout
+
+Desktop uses a sticky full-height navigation rail (232px) and a flexible main column. The workspace header is (64px) tall; library content has (32px) horizontal padding and a maximum width of (1680px). Between (901px) and (1150px), the rail becomes (212px) and horizontal padding becomes (24px).
+
+At (900px) and below, navigation moves into a native dialog drawer, up to (320px) wide. At (600px) and below, search spans its own row, header actions expand, fields use (16px) text, forms become one column, and bookmark actions move beneath metadata. The reader becomes a full-height edge-to-edge dialog. The sign-in split layout stacks on phones.
+
+List rows use leading selection/domain controls, flexible metadata and trailing state/actions. Grid uses auto-filled columns with a minimum target of (260px), a (16px) gap and one column on phones. Switching view retains the same bookmark structure and state. Reuse the compact spacing rhythm recorded in the frontmatter rather than introducing spacious promotional sections.
+
+## Elevation & Depth
+
+Borders and tonal layers organize the workspace. The selected view toggle has a small inset surface lift; dialogs, drawer and toast carry ambient shadows. Focus uses an outline, not an elevation effect.
+
+### Shadow Vocabulary
+- **Selected view:** `0 1px 3px #20232c20`.
+- **Toast:** `0 6px 24px #20232c25`.
+- **Dialog:** `0 20px 80px #171a3433`.
+- **Navigation drawer:** `12px 0 40px #20232c20`.
+
+**The Flat Workspace Rule.** Separate resting library surfaces with borders and tones; reserve substantial shadows for dialogs and transient feedback.
+
+## Shapes
+
+Controls use restrained rounded corners; smaller tags and action buttons use the small radius, controls the control radius, and grid cards/dialogs the panel radius. Dense list rows have square internal edges within a shared softly rounded results container. Borders are generally (1px). Outline SVG icons use rounded caps and joins with a shared (24 × 24) viewBox and (1.7) stroke width; most visible icons are (15px–18px).
+
+## Components
+
+### Buttons
+Compact and direct. Primary actions use indigo and white, subtle actions use white with a cool gray border, and icon actions use transparent backgrounds. Primary and subtle controls use the shared control radius and label type. Hover changes background or border with (160ms ease-out) transitions. Keyboard focus has a (2px) outline and (3px) offset; disabled buttons use (.48) opacity. Phone actions increase their target dimensions where the layout requires it.
+
+### Chips
+Small rectangular tags use neutral fill, short padding and compact type. Hover or active filter states use the soft accent and indigo text. Long labels truncate rather than widening the navigation rail.
+
+### Cards / Containers
+Grid bookmark cards use the panel radius, white background and a line border; selection changes both fill and border. List mode removes individual card rounding, separates rows with dividers and retains the same selection, tags, capture labels and actions. Do not add permanent card shadows.
+
+### Inputs / Fields
+White fields use a cool gray border, the control radius and (10px 12px) padding. Focus has a (2px) outline and (2px) offset. Search applies its outline around the complete search container. Read-only fields use the surface fill; form errors appear inline in danger text.
+
+### Navigation
+The slate-tinted rail combines outline icons, sentence-case labels and compact counts. Active navigation uses pale indigo and stronger text. On smaller screens, the same navigation element moves into the native dialog drawer; its controls gain height rather than losing functions.
+
+### Reader and dialogs
+Dialogs use theme-matched panels, a dimmed backdrop, labeled headings and separated footer actions. The reader widens to (920px), uses the reader type role and a generous text measure, with highlights, assets and notes below its tools. Highlight colors describe user annotations rather than application status. On phones, the reader becomes an edge-to-edge reading surface.
+
+## Do's and Don'ts
+
+### Do:
+- Do preserve visible keyboard focus and text labels for capture states.
+- Do use authored outline SVG icons with accessible names on icon-only controls.
+- Do reflow rows and keep their actions available on phones.
+- Do honor reduced motion and keep transitions limited to control state.
+
+### Don't:
+- Don’t add team or public-sharing visual concepts to this personal workspace.
+- Don’t add remote fonts, icon packages or frontend runtime dependencies.
+- Don’t use color alone to communicate capture status.

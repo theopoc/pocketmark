@@ -13,6 +13,95 @@
     return node;
   }
 
+  // Small, authored SVG icons keep the embedded UI independent of icon libraries.
+  const iconPaths = {
+    sun: ["M12 3v1M12 20v1M3 12h1M20 12h1M5.6 5.6l.7.7M17.7 17.7l.7.7M5.6 18.4l.7-.7M17.7 6.3l.7-.7", "M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0"],
+    moon: ["M20.5 14.5A9 9 0 0 1 9.5 3.5a9 9 0 1 0 11 11Z"],
+    bookmark: ["M6 3h12v18l-6-4-6 4V3Z"],
+    library: ["M4 4v16M9 4v16M14 4v16M18 4l3 16"],
+    inbox: ["M4 4h16l2 10v6H2v-6L4 4Z", "M2 14h6l2 3h4l2-3h6"],
+    star: ["m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z"],
+    clock: ["M12 8v4l3 2", "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"],
+    plus: ["M12 5v14M5 12h14"], close: ["m6 6 12 12M6 18 18 6"],
+    search: ["M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0", "m15 15 6 6"],
+    refresh: ["M20 7a9 9 0 1 0 1 9", "M20 2v6h-6"],
+    grid: ["M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"],
+    list: ["M9 5h12M9 12h12M9 19h12M3 5h.01M3 12h.01M3 19h.01"],
+    folder: ["M3 7V4h6l2 3h10v13H3V7Z"],
+    edit: ["m16 3 5 5-12 12-6 1 1-6L16 3Z", "m13 6 5 5"],
+    trash: ["M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"],
+    external: ["M14 3h7v7M21 3 10 14", "M10 3H3v18h18v-7"],
+    check: ["m5 12 4 4L19 6"], warning: ["m12 3 10 18H2L12 3Z", "M12 9v5M12 17h.01"],
+    download: ["M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"],
+    upload: ["M12 16V4m-5 5 5-5 5 5M4 16v5h16v-5"],
+    settings: ["M4 7h16M4 17h16M8 4v6M16 14v6"],
+    logout: ["M10 4H3v16h7M8 12h13m-5-5 5 5-5 5"],
+    menu: ["M4 6h16M4 12h16M4 18h16"], lock: ["M5 10h14v11H5V10Z", "M8 10V6a4 4 0 0 1 8 0v4"],
+    "chevron-right": ["m9 5 7 7-7 7"], "arrow-right": ["M4 12h16m-6-6 6 6-6 6"],
+    "arrow-left": ["M20 12H4m6-6-6 6 6 6"],
+    book: ["M12 5C8 2 4 3 2 4v16c3-2 7-2 10 0 3-2 7-2 10 0V4c-2-1-6-2-10 1ZM12 5v15"],
+  };
+  function icon(name) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    for (const [key, value] of Object.entries({ viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "1.7", "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true", focusable: "false", class: "icon" })) svg.setAttribute(key, value);
+    for (const d of iconPaths[name] || iconPaths.bookmark) {
+      const path = document.createElementNS(svg.namespaceURI, "path"); path.setAttribute("d", d); svg.append(path);
+    }
+    return svg;
+  }
+  document.querySelectorAll("[data-icon]").forEach((node) => node.replaceChildren(icon(node.dataset.icon)));
+
+  function applyTheme(theme) {
+    const dark = theme === "dark";
+    document.documentElement.dataset.theme = theme;
+    document.querySelector('meta[name="theme-color"]').content = dark ? "#15161b" : "#ffffff";
+    document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+      button.setAttribute("aria-pressed", String(dark));
+      button.title = dark ? "Switch to light mode" : "Switch to dark mode";
+      button.querySelector("[data-theme-icon]").replaceChildren(icon(dark ? "moon" : "sun"));
+      button.querySelector("[data-theme-label]").textContent = dark ? "Dark" : "Light";
+    });
+  }
+  applyTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
+  document.querySelectorAll("[data-theme-toggle]").forEach((button) => button.addEventListener("click", () => {
+    const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    applyTheme(theme);
+    try { localStorage.setItem("pocketmark-theme", theme); } catch { /* Keep the session choice when storage is unavailable. */ }
+  }));
+
+  let libraryView = "list";
+  try { if (localStorage.getItem("pocketmark-view") === "grid") libraryView = "grid"; } catch { /* Storage is optional. */ }
+  function setLibraryView(view) {
+    libraryView = view;
+    $("bookmark-grid").classList.toggle("view-list", view === "list");
+    for (const value of ["list", "grid"]) $("view-" + value).setAttribute("aria-pressed", String(view === value));
+    try { localStorage.setItem("pocketmark-view", view); } catch { /* Private browsing may disallow storage. */ }
+  }
+  $("view-list").addEventListener("click", () => setLibraryView("list"));
+  $("view-grid").addEventListener("click", () => setLibraryView("grid"));
+  setLibraryView(libraryView);
+
+  const mobileNavigation = matchMedia("(max-width: 900px)");
+  const navigation = $("navigation-dialog");
+  function closeNavigation() { if (navigation.open) navigation.close(); }
+  function placeNavigation() {
+    closeNavigation();
+    (mobileNavigation.matches ? navigation : $("sidebar-slot")).append($("sidebar"));
+  }
+  mobileNavigation.addEventListener("change", placeNavigation);
+  placeNavigation();
+  $("open-navigation").addEventListener("click", () => {
+    navigation.showModal();
+    $("open-navigation").setAttribute("aria-expanded", "true");
+    $("close-navigation").focus();
+  });
+  $("close-navigation").addEventListener("click", closeNavigation);
+  navigation.addEventListener("close", () => $("open-navigation").setAttribute("aria-expanded", "false"));
+  navigation.addEventListener("click", (event) => { if (event.target === navigation) closeNavigation(); });
+  $("sidebar").addEventListener("click", (event) => {
+    if (event.target.closest("button") && event.target.closest("button").id !== "close-navigation") closeNavigation();
+  }, true);
+
   function toast(message, error = false) {
     clearTimeout(toastTimer);
     $("toast").textContent = message;
@@ -73,11 +162,15 @@
 
   function updateHeading() {
     const title = currentTitle();
-    $("page-title").replaceChildren(document.createTextNode(title), el("span", "title-dot", "."));
+    $("page-title").textContent = title;
     $("breadcrumb-current").textContent = title;
-    const descriptions = { all: "Good reads, useful tools, and your next big idea.", inbox: "A few good finds, waiting for their place.", favorite: "The links you come back to, again and again.", unread: "Something interesting for your next quiet moment.", collection: "A curated corner of your personal library." };
-    $("page-subtitle").textContent = state.tag ? `Finds filed under #${state.tag}.` : descriptions[state.filter];
-    document.querySelectorAll("[data-filter]").forEach((button) => button.classList.toggle("active", !state.tag && button.dataset.filter === state.filter));
+    const descriptions = { all: "Everything you save, in one place.", inbox: "Saved links waiting to be organized.", favorite: "The bookmarks you want to keep close.", unread: "Your reading list, ready when you are.", collection: "Bookmarks organized in this collection." };
+    $("page-subtitle").textContent = state.tag ? `Bookmarks tagged #${state.tag}.` : descriptions[state.filter];
+    document.querySelectorAll("[data-filter]").forEach((button) => {
+      const active = !state.tag && button.dataset.filter === state.filter;
+      button.classList.toggle("active", active);
+      if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
+    });
   }
 
   function selectFilter(filter, collection = null, tag = "") {
@@ -118,16 +211,17 @@
 
   function renderCollections() {
     $("collections").replaceChildren();
-    if (!state.collections.length) $("collections").append(el("p", "small muted", "Make room for a new interest."));
+    if (!state.collections.length) $("collections").append(el("p", "small muted", "No collections yet."));
     for (const collection of orderedCollections()) {
       const row = el("div", "collection-row");
       row.style.marginLeft = `${Math.min(collection.depth, 5) * 9}px`;
       const button = el("button", "nav-item");
       button.classList.toggle("active", state.filter === "collection" && String(state.collection) === String(collection.id));
-      button.append(el("span", "collection-icon"), el("span", "collection-name", collection.name));
+      button.append(icon("folder"), el("span", "collection-name", collection.name));
+      if (button.classList.contains("active")) button.setAttribute("aria-current", "page");
       if (collection.parentId != null) button.title = `Inside ${collectionLabel(collection.parentId)}`;
       button.addEventListener("click", () => selectFilter("collection", collection.id));
-      const remove = el("button", "icon-button delete-collection", "×");
+      const remove = el("button", "icon-button delete-collection"); remove.append(icon("trash"));
       remove.title = `Delete ${collection.name}`;
       remove.setAttribute("aria-label", remove.title);
       remove.addEventListener("click", async () => {
@@ -140,7 +234,7 @@
           toast("Collection deleted. Bookmarks kept.");
         } catch (error) { toast(error.message, true); remove.disabled = false; }
       });
-      const edit = el("button", "icon-button delete-collection", "✎");
+      const edit = el("button", "icon-button delete-collection"); edit.append(icon("edit"));
       edit.title = `Rename or move ${collection.name}`;
       edit.setAttribute("aria-label", edit.title);
       edit.addEventListener("click", () => openCollectionEditor(collection));
@@ -154,6 +248,7 @@
     for (const tag of tags) {
       const button = el("button", "tag-button", `#${tag.name}`);
       button.classList.toggle("active", state.tag === tag.name);
+      button.setAttribute("aria-pressed", String(state.tag === tag.name));
       button.title = `${tag.count} bookmark${tag.count === 1 ? "" : "s"}`;
       button.addEventListener("click", () => selectFilter("all", null, state.tag === tag.name ? "" : tag.name));
       $("tags").append(button);
@@ -161,7 +256,8 @@
   }
 
   function actionButton(symbol, label, callback, extraClass = "") {
-    const button = el("button", `card-action ${extraClass}`, symbol);
+    const button = el("button", `card-action ${extraClass}`);
+    button.append(icon(symbol));
     button.title = label;
     button.setAttribute("aria-label", label);
     button.addEventListener("click", callback);
@@ -183,9 +279,11 @@
       const card = el("article", "bookmark-card");
       const top = el("div", "card-top");
       const host = link.type === "file" ? "Saved file" : domain(link.url);
-      const avatar = el("span", "domain-avatar", host.slice(0, 1).toUpperCase());
+      const avatar = el("span", "domain-avatar");
+      avatar.append(icon(link.type === "file" ? "book" : "bookmark"));
       avatar.setAttribute("aria-hidden", "true");
-      const favorite = el("button", `favorite-button${link.favorite ? " is-favorite" : ""}`, link.favorite ? "★" : "☆");
+      const favorite = el("button", `card-action favorite-button${link.favorite ? " is-favorite" : ""}`);
+      favorite.append(icon("star"));
       favorite.title = link.favorite ? "Remove from favorites" : "Add to favorites";
       favorite.setAttribute("aria-label", favorite.title);
       favorite.setAttribute("aria-pressed", String(!!link.favorite));
@@ -197,15 +295,18 @@
       select.addEventListener("change", () => {
         if (select.checked && state.selected.size >= 500) { select.checked = false; toast("Select up to 500 bookmarks at a time.", true); return; }
         if (select.checked) state.selected.add(link.id); else state.selected.delete(link.id);
+        card.classList.toggle("is-selected", select.checked);
         updateSelection();
       });
-      top.append(select, avatar, el("span", "card-domain", host), favorite);
+      card.classList.toggle("is-selected", select.checked);
+      top.append(select, avatar);
       const body = el("div", "card-body");
       const heading = el("h2", "card-title");
       const open = el("button", "", link.title || link.url);
       open.addEventListener("click", () => openReader(link.id));
       heading.append(open);
-      body.append(heading, el("p", "card-description", link.description || "A good find, saved for later."));
+      body.append(heading, el("p", "card-domain", host));
+      if (link.description) body.append(el("p", "card-description", link.description));
       const tags = el("div", "card-tags");
       for (const name of (link.tags || []).slice(0, 5)) {
         const tag = el("button", "card-tag", `#${name}`);
@@ -214,12 +315,16 @@
       }
       body.append(tags);
       const footer = el("div", "card-footer");
-      const statuses = { pending: "◷ Queued", processing: "◷ Saving…", ready: "✓ Captured", failed: "! Capture failed" };
-      footer.append(el("span", `card-state ${link.status || ""}`, statuses[link.status] || "Saved link"));
+      const statuses = { pending: "Queued", processing: "Saving…", ready: "Captured", failed: "Capture failed" };
+      const status = el("span", "card-state", statuses[link.status] || "Saved link");
+      status.classList.add(["pending", "processing", "ready", "failed"].includes(link.status) ? link.status : "saved");
+      status.prepend(icon(link.status === "ready" ? "check" : link.status === "failed" ? "warning" : "clock"));
+      footer.append(status);
       const actions = el("div", "card-actions");
-      actions.append(actionButton(link.read ? "✓" : "◷", link.read ? "Mark unread" : "Mark as read", (event) => updateLink(link, { read: !link.read }, event.currentTarget), link.read ? "read" : ""));
-      actions.append(actionButton("✎", "Edit bookmark", () => openEditor(link)));
-      actions.append(actionButton("×", "Delete bookmark", async (event) => {
+      actions.append(favorite);
+      actions.append(actionButton(link.read ? "check" : "clock", link.read ? "Mark unread" : "Mark as read", (event) => updateLink(link, { read: !link.read }, event.currentTarget), link.read ? "read" : ""));
+      actions.append(actionButton("edit", "Edit bookmark", () => openEditor(link)));
+      actions.append(actionButton("trash", "Delete bookmark", async (event) => {
         if (!confirm(`Delete “${link.title || link.url}” and its saved content?`)) return;
         const button = event.currentTarget;
         button.disabled = true;
@@ -232,7 +337,7 @@
       }));
       const url = safeURL(link.url);
       if (url) {
-        const original = el("a", "card-action", "↗");
+        const original = el("a", "card-action"); original.append(icon("external"));
         original.href = url;
         original.target = "_blank";
         original.rel = "noopener noreferrer";
@@ -247,8 +352,9 @@
     updateSelection();
     $("empty-state").hidden = state.links.length > 0;
     const filtered = !!state.query || state.filter !== "all" || !!state.tag;
-    $("empty-title").textContent = filtered ? "Nothing here just yet." : "A little space for discovery.";
-    $("empty-message").textContent = filtered ? "Try another search, or save something new to this corner." : "Save a link you love. Your library starts here.";
+    $("empty-title").textContent = filtered ? "No bookmarks found" : "Your library starts here";
+    $("empty-message").textContent = filtered ? "Try a different search or clear your filters to see all bookmarks." : "Save your first bookmark, or import an existing library from the navigation.";
+    $("empty-reset").hidden = !filtered;
     $("empty-add").textContent = filtered ? "Add a bookmark" : "Add your first bookmark";
     const pages = Math.max(1, Math.ceil(state.total / state.pageSize));
     $("pagination").hidden = pages <= 1;
@@ -281,7 +387,7 @@
       state.pageSize = result.pageSize || 40;
       state.collections = collections || [];
       $("total-count").textContent = stats.links;
-      $("capture-label").textContent = stats.pending ? `${stats.pending} capture${stats.pending === 1 ? "" : "s"} in progress` : stats.failed ? `${stats.failed} capture${stats.failed === 1 ? "" : "s"} need attention` : "";
+      $("capture-label").textContent = stats.pending ? `${stats.pending} capture${stats.pending === 1 ? "" : "s"} in progress` : stats.failed ? `${stats.failed} capture${stats.failed === 1 ? " needs" : "s need"} attention` : "";
       updateHeading();
       renderCollections();
       renderTags(tags || []);
@@ -395,6 +501,10 @@
   document.querySelectorAll(".close-dialog").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
   $("add-bookmark").addEventListener("click", () => openEditor());
   $("empty-add").addEventListener("click", () => openEditor());
+  $("empty-reset").addEventListener("click", () => {
+    clearTimeout(searchTimer); state.query = ""; $("search").value = "";
+    selectFilter("all"); $("search").focus();
+  });
   $("refresh-button").addEventListener("click", () => refresh());
   $("search").addEventListener("input", () => {
     clearTimeout(searchTimer);
@@ -413,7 +523,7 @@
       if (state.editing?.type !== "file" && !safeURL(body.url)) throw new Error("Please enter a complete http:// or https:// URL.");
       await api(state.editing ? `/api/links/${state.editing.id}` : "/api/links", { method: state.editing ? "PUT" : "POST", body: JSON.stringify(body) });
       $("bookmark-dialog").close();
-      toast(state.editing ? "Bookmark updated." : "A good find, safely saved.");
+      toast(state.editing ? "Bookmark updated." : "Bookmark saved.");
       await refresh();
     } catch (error) { $("bookmark-error").textContent = error.message; } finally { button.disabled = false; }
   });
@@ -485,10 +595,9 @@
   });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "/" && state.signedIn && !document.querySelector("dialog[open]") && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) {
-      event.preventDefault();
-      $("search").focus();
-    }
+    if (!state.signedIn || event.ctrlKey || event.metaKey || event.altKey || document.querySelector("dialog[open]") || document.activeElement.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
+    if (event.key === "/") { event.preventDefault(); $("search").focus(); }
+    if (event.key.toLowerCase() === "n") { event.preventDefault(); openEditor(); }
   });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) clearTimeout(state.timer);
@@ -515,6 +624,8 @@
 
   function updateSelection() {
     $("selected-count").textContent = `${state.selected.size} selected`;
+    $("selected-count").hidden = !state.selected.size;
+    $("bulk-open").hidden = !state.selected.size;
     $("bulk-open").disabled = !state.selected.size;
     $("clear-selection").hidden = !state.selected.size;
     const count = state.links.filter((link) => state.selected.has(link.id)).length;

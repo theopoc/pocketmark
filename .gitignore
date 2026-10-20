@@ -8,6 +8,11 @@
 /.claude/
 /.codex/
 /.agents/
+/.impeccable/review/
+/.impeccable/questions/
+/.impeccable/mocks/
+/.impeccable/build/
+/.impeccable/live/
 /.idea/
 /.vscode/
 .DS_Store

@@ -14,6 +14,7 @@ fmt-check:
 	@test -z "$$(gofmt -l cmd internal)" || { gofmt -l cmd internal; exit 1; }
 check: fmt-check
 	go vet -tags '$(GO_TAGS)' ./...
+	node --check internal/webui/static/theme.js
 	node --check internal/webui/static/app.js
 	node --check internal/webui/static/sw.js
 	node --check extension/popup.js
