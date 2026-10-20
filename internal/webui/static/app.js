@@ -5,6 +5,10 @@
   const state = { filter: "all", collection: null, tag: "", query: "", page: 1, pageSize: 40, total: 0, links: [], collections: [], editing: null, reading: null, readerRequest: 0, request: 0, timer: null, signedIn: false, sort: "newest", fuzzy: false, selected: new Set(), editingCollection: null, annotations: [], annotationDraft: null, readerSelection: null };
   let toastTimer;
   let searchTimer;
+  let tagsTimer;
+  let tagsPage = 1;
+  let tagsRequest = 0;
+  let showingTags = false;
 
   function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -28,6 +32,7 @@
     grid: ["M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"],
     list: ["M9 5h12M9 12h12M9 19h12M3 5h.01M3 12h.01M3 19h.01"],
     folder: ["M3 7V4h6l2 3h10v13H3V7Z"],
+    tag: ["M3 3h8l10 10-8 8L3 11V3Z", "M7 7h.01"],
     edit: ["m16 3 5 5-12 12-6 1 1-6L16 3Z", "m13 6 5 5"],
     trash: ["M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"],
     external: ["M14 3h7v7M21 3 10 14", "M10 3H3v18h18v-7"],
@@ -111,6 +116,8 @@
   }
 
   function showLogin() {
+    clearTimeout(tagsTimer);
+    tagsRequest++;
     state.signedIn = false;
     state.request++;
     clearTimeout(state.timer);
@@ -163,17 +170,24 @@
   function updateHeading() {
     const title = currentTitle();
     $("page-title").textContent = title;
-    $("breadcrumb-current").textContent = title;
+    $("breadcrumb-current").textContent = showingTags ? "All tags" : title;
+    $("all-tags").classList.toggle("active", showingTags);
+    if (showingTags) $("all-tags").setAttribute("aria-current", "page"); else $("all-tags").removeAttribute("aria-current");
     const descriptions = { all: "Everything you save, in one place.", inbox: "Saved links waiting to be organized.", favorite: "The bookmarks you want to keep close.", unread: "Your reading list, ready when you are.", collection: "Bookmarks organized in this collection." };
     $("page-subtitle").textContent = state.tag ? `Bookmarks tagged #${state.tag}.` : descriptions[state.filter];
     document.querySelectorAll("[data-filter]").forEach((button) => {
-      const active = !state.tag && button.dataset.filter === state.filter;
+      const active = !showingTags && !state.tag && button.dataset.filter === state.filter;
       button.classList.toggle("active", active);
       if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
     });
   }
 
   function selectFilter(filter, collection = null, tag = "") {
+    clearTimeout(tagsTimer);
+    tagsRequest++;
+    showingTags = false;
+    $("tags-view").hidden = true;
+    $("library-view").hidden = false;
     state.filter = filter;
     state.collection = collection;
     state.tag = tag;
@@ -216,7 +230,7 @@
       const row = el("div", "collection-row");
       row.style.marginLeft = `${Math.min(collection.depth, 5) * 9}px`;
       const button = el("button", "nav-item");
-      button.classList.toggle("active", state.filter === "collection" && String(state.collection) === String(collection.id));
+      button.classList.toggle("active", !showingTags && state.filter === "collection" && String(state.collection) === String(collection.id));
       button.append(icon("folder"), el("span", "collection-name", collection.name));
       if (button.classList.contains("active")) button.setAttribute("aria-current", "page");
       if (collection.parentId != null) button.title = `Inside ${collectionLabel(collection.parentId)}`;
@@ -245,7 +259,7 @@
 
   function renderTags(tags) {
     $("tags").replaceChildren();
-    for (const tag of tags) {
+    for (const tag of tags.slice(0, 12)) {
       const button = el("button", "tag-button", `#${tag.name}`);
       button.classList.toggle("active", state.tag === tag.name);
       button.setAttribute("aria-pressed", String(state.tag === tag.name));
@@ -254,6 +268,111 @@
       $("tags").append(button);
     }
   }
+
+  function disableTagAlphabet() {
+    $("tags-alphabet").querySelectorAll("button").forEach((button) => { button.disabled = true; });
+  }
+
+  function renderTagAlphabet(groups, activeLetter) {
+    const available = new Map(groups.map((group) => [group.letter, group.count]));
+    $("tags-alphabet").replaceChildren();
+    for (const letter of "ABCDEFGHIJKLMNOPQRSTUVWXYZ#") {
+      const button = el("button", "tag-letter-link", letter);
+      const count = available.get(letter) || 0;
+      button.disabled = !count;
+      button.setAttribute("aria-label", `${letter === "#" ? "Other characters" : letter}: ${count} tag${count === 1 ? "" : "s"}`);
+      if (letter === activeLetter) button.setAttribute("aria-current", "location");
+      button.addEventListener("click", () => { clearTimeout(tagsTimer); loadTagDirectory(letter); });
+      $("tags-alphabet").append(button);
+    }
+  }
+
+  async function loadTagDirectory(jump = "") {
+    const request = ++tagsRequest;
+    const query = $("tags-search").value.trim();
+    $("tags-list").setAttribute("aria-busy", "true");
+    $("tags-results").textContent = "Loading tags…";
+    $("tags-error").hidden = true;
+    $("tags-empty").hidden = true;
+    $("tags-list").replaceChildren();
+    disableTagAlphabet();
+    $("tags-pagination").hidden = true;
+    try {
+      const params = new URLSearchParams({ q: query, page: String(tagsPage) });
+      if (jump) params.set("jump", jump);
+      const result = await api(`/api/tags/browse?${params}`);
+      if (request !== tagsRequest) return;
+      tagsPage = result.page;
+      const pages = Math.max(1, Math.ceil(result.total / result.pageSize));
+      if (tagsPage > pages) { tagsPage = pages; return loadTagDirectory(); }
+      const sections = new Map();
+      for (const tag of result.tags) {
+        if (!sections.has(tag.letter)) {
+          const section = el("section", "tag-index-group");
+          const heading = el("h2", "tag-index-letter", tag.letter);
+          heading.id = `tags-letter-${tag.letter === "#" ? "other" : tag.letter}`;
+          heading.tabIndex = -1;
+          if (tag.letter === "#") heading.setAttribute("aria-label", "Other characters");
+          section.setAttribute("aria-labelledby", heading.id);
+          const rows = el("div", "tag-group-rows");
+          section.append(heading, rows);
+          sections.set(tag.letter, rows);
+          $("tags-list").append(section);
+        }
+        const button = el("button", "tag-directory-row");
+        const name = el("span", "tag-directory-name", `#${tag.name}`);
+        const count = el("span", "tag-directory-count", String(tag.count));
+        count.setAttribute("aria-label", `${tag.count} bookmark${tag.count === 1 ? "" : "s"}`);
+        button.append(name, count, icon("chevron-right"));
+        button.addEventListener("click", () => {
+          clearTimeout(searchTimer);
+          state.query = ""; $("search").value = "";
+          selectFilter("all", null, tag.name);
+          $("page-title").focus();
+        });
+        sections.get(tag.letter).append(button);
+      }
+      renderTagAlphabet(result.groups, jump || result.tags[0]?.letter);
+      $("tags-results").textContent = `${result.total} tag${result.total === 1 ? "" : "s"}${query ? ` matching “${query}”` : " in your library"}`;
+      $("tags-empty").hidden = result.total > 0;
+      $("tags-empty").textContent = query ? "No tags match your search. Try a different name." : "No tags yet. Add tags when saving or editing a bookmark.";
+      $("tags-pagination").hidden = pages <= 1;
+      $("tags-page-label").textContent = `Page ${tagsPage} of ${pages}`;
+      $("tags-previous").disabled = tagsPage <= 1;
+      $("tags-next").disabled = tagsPage >= pages;
+      if (jump && sections.has(jump)) {
+        const heading = sections.get(jump).previousElementSibling;
+        heading.focus({ preventScroll: true });
+        heading.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      }
+    } catch (error) {
+      if (request !== tagsRequest) return;
+      $("tags-error").textContent = error.message;
+      $("tags-error").hidden = false;
+      $("tags-results").textContent = "Could not load tags. Use Refresh tags to try again.";
+    } finally {
+      if (request === tagsRequest) $("tags-list").setAttribute("aria-busy", "false");
+    }
+  }
+  $("all-tags").addEventListener("click", () => {
+    showingTags = true;
+    $("library-view").hidden = true; $("tags-view").hidden = false;
+    updateHeading(); renderCollections(); loadTagDirectory(); $("tags-search").focus();
+  });
+  $("tags-back").addEventListener("click", () => {
+    clearTimeout(tagsTimer); tagsRequest++;
+    showingTags = false; $("tags-view").hidden = true; $("library-view").hidden = false;
+    updateHeading(); renderCollections(); $("page-title").focus();
+  });
+  $("tags-search").addEventListener("input", () => {
+    clearTimeout(tagsTimer);
+    tagsRequest++; // Invalidate an older query immediately, before the debounce.
+    disableTagAlphabet();
+    tagsTimer = setTimeout(() => { tagsPage = 1; loadTagDirectory(); }, 250);
+  });
+  $("tags-retry").addEventListener("click", () => { clearTimeout(tagsTimer); loadTagDirectory(); });
+  $("tags-previous").addEventListener("click", () => { tagsPage--; loadTagDirectory(); });
+  $("tags-next").addEventListener("click", () => { tagsPage++; loadTagDirectory(); });
 
   function actionButton(symbol, label, callback, extraClass = "") {
     const button = el("button", `card-action ${extraClass}`);
@@ -596,7 +715,7 @@
 
   document.addEventListener("keydown", (event) => {
     if (!state.signedIn || event.ctrlKey || event.metaKey || event.altKey || document.querySelector("dialog[open]") || document.activeElement.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
-    if (event.key === "/") { event.preventDefault(); $("search").focus(); }
+    if (event.key === "/") { event.preventDefault(); $(showingTags ? "tags-search" : "search").focus(); }
     if (event.key.toLowerCase() === "n") { event.preventDefault(); openEditor(); }
   });
   document.addEventListener("visibilitychange", () => {

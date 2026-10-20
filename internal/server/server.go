@@ -52,6 +52,7 @@ func New(s *store.Store, token, origin string, secure bool) *Server {
 	a.mux.HandleFunc("GET /api/session", func(w http.ResponseWriter, r *http.Request) { respond(w, 200, map[string]bool{"authenticated": true}) })
 	a.mux.HandleFunc("GET /api/stats", a.stats)
 	a.mux.HandleFunc("GET /api/tags", a.tags)
+	a.mux.HandleFunc("GET /api/tags/browse", a.browseTags)
 	a.mux.HandleFunc("GET /api/collections", a.collections)
 	a.mux.HandleFunc("POST /api/collections", a.createCollection)
 	a.mux.HandleFunc("DELETE /api/collections/{id}", a.deleteCollection)

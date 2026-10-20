@@ -181,6 +181,9 @@ White fields use a cool gray border, the control radius and (10px 12px) padding.
 ### Navigation
 The slate-tinted rail combines outline icons, sentence-case labels and compact counts. Active navigation uses pale indigo and stronger text. On smaller screens, the same navigation element moves into the native dialog drawer; its controls gain height rather than losing functions.
 
+### Tag directory
+All tags has a primary navigation entry. Keep up to 12 most-used tags as quick filters at the bottom of the sidebar, including while browsing the directory. The directory groups names under letter headings in three columns on wide screens, two on medium screens and one on phones. Compact counts sit beside each name. A sticky vertical A–Z rail (plus `#` for other initials) jumps across the paginated directory, disables unavailable letters and moves keyboard focus to the selected heading. Search narrows both the index and available letters. Fetch at most 40 tag rows and 27 group totals per request.
+
 ### Reader and dialogs
 Dialogs use theme-matched panels, a dimmed backdrop, labeled headings and separated footer actions. The reader widens to (920px), uses the reader type role and a generous text measure, with highlights, assets and notes below its tools. Highlight colors describe user annotations rather than application status. On phones, the reader becomes an edge-to-edge reading surface.
 

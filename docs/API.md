@@ -152,3 +152,9 @@ WebDAV supports `OPTIONS`, `PROPFIND`, `GET`, `HEAD`, `PUT`, `DELETE` and `MOVE`
 | Login attempts | Ten per minute across the instance; excess requests receive 429 |
 
 Common errors: 400 for invalid JSON/limits/duplicate URLs or references, 401 for missing/invalid authentication, 403 for rejected browser origin, 404 for missing records or an already-processing capture, 409 for concurrent imports, 415 for a missing/wrong JSON content type, and 503 when busy. Oversized import bodies currently return 400. For a reverse proxy, set `POCKETMARK_ORIGIN` to the exact public origin; cross-site browser mutations are rejected.
+
+## Tag directory
+
+`GET /api/tags/browse?q=<substring>&page=1` lists all tags currently used by bookmarks, in alphabetical order. Returns `{tags:[{name,count,letter}],groups:[{letter,count}],total,page,pageSize}` with 40 tags per page and global bookmark counts. Groups contain the distinct tag count for each available initial across all matching pages (at most 27 groups). ASCII initials are grouped under A–Z; numbers, symbols and other scripts follow under `#`. Names within a group use SQLite's ASCII case-insensitive order, with exact name as a tie-breaker.
+
+Optional `jump=A` (A–Z, case-insensitive, or URL-encoded `#`) resolves the page containing the first matching tag under that initial; the response's `page` reports the resolved page. If that initial has no matches, the requested page is retained. Search is a literal substring (ASCII case-insensitive); `%` and `_` have no wildcard meaning. `q` is limited to 512 bytes and page to 1–1,000,000; invalid values return 400. Authentication is required. The existing `/api/tags` array remains limited to the 200 most-used tags; the web sidebar shows the first 12 as frequent-tag shortcuts.

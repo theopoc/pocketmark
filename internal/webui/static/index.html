@@ -44,12 +44,13 @@
         <button class="nav-item" data-filter="inbox"><span data-icon="inbox" aria-hidden="true"></span>Inbox</button>
         <button class="nav-item" data-filter="favorite"><span data-icon="star" aria-hidden="true"></span>Favorites</button>
         <button class="nav-item" data-filter="unread"><span data-icon="clock" aria-hidden="true"></span>To read</button>
+        <button id="all-tags" class="nav-item"><span data-icon="tag" aria-hidden="true"></span>All tags</button>
       </nav>
       <div class="sidebar-section-title"><h2>Collections</h2><button id="add-collection" class="icon-button" title="New collection" aria-label="New collection"><span data-icon="plus" aria-hidden="true"></span></button></div>
       <div id="collections" class="collection-list"></div>
-      <div class="sidebar-section-title"><h2>Tags</h2></div>
-      <div id="tags" class="tag-cloud"></div>
       <div class="sidebar-bottom">
+        <div class="sidebar-section-title"><h2>Frequent tags</h2></div>
+        <div id="tags" class="tag-cloud"></div>
         <div class="sidebar-tools"><button id="import-button" class="nav-item"><span data-icon="download" aria-hidden="true"></span>Import</button><button id="export-button" class="nav-item"><span data-icon="upload" aria-hidden="true"></span>Export</button><button id="settings-button" class="nav-item"><span data-icon="settings" aria-hidden="true"></span>Settings</button><button id="logout-button" class="nav-item"><span data-icon="logout" aria-hidden="true"></span>Sign out</button></div>
         <input id="import-file" type="file" accept="application/json,text/html,.json,.html,.htm" hidden>
       </div>
@@ -58,8 +59,21 @@
     <main id="main-content" class="main-content" tabindex="-1">
       <header class="topbar"><div class="topbar-location"><button id="open-navigation" class="icon-button mobile-only" aria-label="Open navigation" aria-controls="navigation-dialog" aria-expanded="false"><span data-icon="menu" aria-hidden="true"></span></button><span class="breadcrumb"><span class="breadcrumb-root">Workspace</span><span data-icon="chevron-right" aria-hidden="true"></span><span id="breadcrumb-current">All bookmarks</span></span></div><div class="topbar-actions"><button class="button subtle theme-toggle" data-theme-toggle aria-label="Dark mode" aria-pressed="true" title="Switch to light mode"><span data-theme-icon aria-hidden="true"></span><span data-theme-label>Dark</span></button><span class="workspace-badge"><span data-icon="lock" aria-hidden="true"></span>Personal library</span></div></header>
       <div class="library-content">
+      <section id="tags-view" hidden aria-labelledby="tags-title">
+        <div class="library-header"><div><h1 id="tags-title" tabindex="-1">All tags</h1><p class="muted">Browse your tags. Select one to see its bookmarks.</p></div><button id="tags-back" class="button subtle"><span data-icon="arrow-left" aria-hidden="true"></span>Back to library</button></div>
+        <label class="search-box"><span data-icon="search" aria-hidden="true"></span><span class="sr-only">Search tags</span><input id="tags-search" type="search" placeholder="Search tags…" autocomplete="off" maxlength="512"></label>
+        <div class="tags-summary"><span id="tags-results" aria-live="polite"></span><button id="tags-retry" class="text-button">Refresh tags</button></div>
+        <div id="tags-error" class="error-banner" role="alert" hidden></div>
+        <div class="tags-index-layout">
+          <div id="tags-list" class="tags-directory" aria-label="All tags" aria-busy="false"></div>
+          <nav id="tags-alphabet" class="tags-alphabet" aria-label="Jump to tag letter"></nav>
+        </div>
+        <p id="tags-empty" class="empty-state muted" hidden></p>
+        <nav id="tags-pagination" class="pagination" aria-label="Tag pages" hidden><button id="tags-previous" class="button subtle">Previous</button><span id="tags-page-label"></span><button id="tags-next" class="button subtle">Next</button></nav>
+      </section>
+      <div id="library-view">
       <section class="library-header" aria-labelledby="page-title">
-        <div><h1 id="page-title">All bookmarks</h1><p id="page-subtitle" class="muted">Everything you save, in one place.</p></div>
+        <div><h1 id="page-title" tabindex="-1">All bookmarks</h1><p id="page-subtitle" class="muted">Everything you save, in one place.</p></div>
         <div class="reader-actions"><button id="upload-file-button" class="button subtle"><span data-icon="upload" aria-hidden="true"></span>Upload file</button><input id="library-file" type="file" accept="application/pdf,image/png,image/jpeg,image/gif,image/webp,text/html,.html,.htm" hidden><button id="add-bookmark" class="button primary"><span data-icon="plus" aria-hidden="true"></span>Add bookmark<kbd>N</kbd></button></div>
       </section>
       <div class="library-toolbar">
@@ -73,6 +87,7 @@
       <section id="bookmark-grid" class="bookmark-grid view-list" aria-label="Bookmarks" aria-busy="true"></section>
       <section id="empty-state" class="empty-state" hidden><div class="empty-art" data-icon="bookmark" aria-hidden="true"></div><h2 id="empty-title">Your library starts here</h2><p id="empty-message" class="muted">Save your first bookmark, or import an existing library.</p><div class="reader-actions"><button id="empty-add" class="button primary"><span data-icon="plus" aria-hidden="true"></span>Add bookmark</button><button id="empty-reset" class="button subtle" hidden>Clear filters</button></div></section>
       <nav id="pagination" class="pagination" aria-label="Results pages" hidden><button id="previous-page" class="button subtle"><span data-icon="arrow-left" aria-hidden="true"></span>Previous</button><span id="page-label"></span><button id="next-page" class="button subtle">Next<span data-icon="arrow-right" aria-hidden="true"></span></button></nav>
+      </div>
       <footer class="main-footer"><span>Pocketmark</span><span><kbd>/</kbd> Search <span class="shortcut-divider">·</span> <kbd>N</kbd> New bookmark</span></footer>
       </div>
     </main>
