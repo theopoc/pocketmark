@@ -1,6 +1,14 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { readRoute, routeSearch, createDrafts, readerSnapshot, tagValues } = require('./static/workspace.js');
+const { readRoute, routeSearch, createDrafts, readerSnapshot, tagValues, searchExcerpt } = require('./static/workspace.js');
+
+test('search excerpts preserve untrusted HTML as literal text and truncated matches', () => {
+  assert.deepEqual(searchExcerpt('<img src=x> before \x1ecafé\x1f after'), [
+    { text: '<img src=x> before ', match: false }, { text: 'café', match: true }, { text: ' after', match: false },
+  ]);
+  assert.deepEqual(searchExcerpt('…\x1etruncated'), [{ text: '…', match: false }, { text: 'truncated', match: true }]);
+  assert.deepEqual(searchExcerpt(''), []);
+});
 
 test('collection/search/sort/page survive a reload and a history round trip', () => {
   const first = readRoute('?filter=favorite&q=design');

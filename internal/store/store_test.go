@@ -83,6 +83,10 @@ func TestCRUDPersistsAcrossReopen(t *testing.T) {
 	if got := getLink(t, s, id); !reflect.DeepEqual(got, want) {
 		t.Fatalf("reopen changed link:\ngot  %+v\nwant %+v", got, want)
 	}
+	page, err := s.List(ctx, Filter{Query: "notes"})
+	if err != nil || len(page.Links) != 1 || page.Links[0].SearchSnippet != "My \x1enotes\x1f" || page.Links[0].Content != "" {
+		t.Fatalf("search excerpt after restart: %+v, %v", page, err)
+	}
 	if _, err := s.Create(ctx, Link{URL: created.URL}); err == nil {
 		t.Fatal("duplicate URL was accepted")
 	}
@@ -120,6 +124,9 @@ func TestSearchTracksAllIndexedFieldsAndMutations(t *testing.T) {
 			if page.Links[0].Content != "" {
 				t.Fatal("list loaded captured content")
 			}
+			if !strings.Contains(page.Links[0].SearchSnippet, "\x1e") || !strings.Contains(page.Links[0].SearchSnippet, "\x1f") {
+				t.Fatalf("query %q has no highlighted excerpt: %q", query, page.Links[0].SearchSnippet)
+			}
 		})
 	}
 	for _, query := range []string{`"`, `OR`, `cafe OR nonexistent`, `*`, `cafe" OR "*`} {
@@ -146,6 +153,32 @@ func TestSearchTracksAllIndexedFieldsAndMutations(t *testing.T) {
 	page, err := s.List(ctx, Filter{Query: "replacement"})
 	if err != nil || page.Total != 0 {
 		t.Fatalf("deleted FTS entry remains: %+v, %v", page, err)
+	}
+}
+
+func TestSearchExcerptBoundsAndOrdinaryLists(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	id := createLink(t, s, Link{URL: "https://example.com/snippet", Title: "Compact result"})
+	if _, err := s.DB.Exec("UPDATE links SET content=? WHERE id=?", "<script>not executable</script> needle "+strings.Repeat("界", 1200), id); err != nil {
+		t.Fatal(err)
+	}
+	for _, filter := range []Filter{{Query: "needle"}, {Query: "Compact", Fuzzy: true}, {}} {
+		page, err := s.List(ctx, filter)
+		if err != nil || len(page.Links) != 1 {
+			t.Fatalf("list: %+v, %v", page, err)
+		}
+		link := page.Links[0]
+		if link.Content != "" || len([]rune(link.SearchSnippet)) > 600 {
+			t.Fatal("library response includes unbounded captured content")
+		}
+		if filter.Query == "needle" {
+			if !strings.Contains(link.SearchSnippet, "\x1eneedle\x1f") {
+				t.Fatalf("missing content match: %q", link.SearchSnippet)
+			}
+		} else if link.SearchSnippet != "" {
+			t.Fatal("ordinary/fuzzy list should not carry an FTS excerpt")
+		}
 	}
 }
 

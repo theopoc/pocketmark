@@ -73,6 +73,17 @@
     if (drafts.size) { event.preventDefault(); event.returnValue = ""; }
   });
 
+  const compactLibrary = window.matchMedia("(max-width: 600px)");
+  let viewOptionsOpen = false;
+  function syncViewOptions() {
+    const visible = !compactLibrary.matches || viewOptionsOpen;
+    $("library-view-options").hidden = !visible;
+    $("view-options-toggle").setAttribute("aria-expanded", String(visible));
+  }
+  $("view-options-toggle").addEventListener("click", () => { viewOptionsOpen = !viewOptionsOpen; syncViewOptions(); });
+  compactLibrary.addEventListener("change", syncViewOptions);
+  syncViewOptions();
+
   function el(tag, className, text) {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -555,7 +566,7 @@
       const favorite = el("button", `card-action favorite-button${link.favorite ? " is-favorite" : ""}`);
       favorite.append(icon("star"));
       favorite.title = link.favorite ? "Remove from favorites" : "Add to favorites";
-      favorite.setAttribute("aria-label", favorite.title);
+      favorite.setAttribute("aria-label", `${favorite.title}: ${link.title || link.url}`);
       favorite.setAttribute("aria-pressed", String(!!link.favorite));
       favorite.addEventListener("click", () => updateLink(link, { favorite: !link.favorite }, favorite));
       const select = el("input", "bookmark-select");
@@ -571,7 +582,9 @@
         updateSelection();
       });
       card.classList.toggle("is-selected", select.checked);
-      top.append(select, avatar);
+      const selectTarget = el("label", "bookmark-select-target");
+      selectTarget.append(select);
+      top.append(selectTarget, avatar);
       const body = el("div", "card-body");
       const heading = el("h2", "card-title");
       const open = el("button", "", link.title || link.url);
@@ -580,11 +593,32 @@
       heading.append(open);
       body.append(heading, el("p", "card-domain", host));
       if (link.description) body.append(el("p", "card-description", link.description));
+      if (state.query && link.searchSnippet) {
+        const excerpt = el("p", "search-excerpt");
+        excerpt.append(el("span", "search-match-label", "Match: "));
+        for (const part of workspace.searchExcerpt(link.searchSnippet)) {
+          excerpt.append(part.match ? el("mark", "", part.text) : document.createTextNode(part.text));
+        }
+        body.append(excerpt);
+      }
       const tags = el("div", "card-tags");
       for (const name of (link.tags || []).slice(0, 5)) {
         const tag = el("button", "card-tag", `#${name}`);
         tag.addEventListener("click", () => selectFilter("all", null, name));
         tags.append(tag);
+      }
+      if ((link.tags || []).length > 5) {
+        const more = el("button", "card-tag", `+${link.tags.length - 5}`);
+        more.setAttribute("aria-label", `Show all ${link.tags.length} tags for ${link.title || link.url}`);
+        more.addEventListener("click", () => {
+          more.remove();
+          for (const name of link.tags.slice(5)) {
+            const tag = el("button", "card-tag", `#${name}`);
+            tag.addEventListener("click", () => selectFilter("all", null, name));
+            tags.append(tag);
+          }
+        });
+        tags.append(more);
       }
       body.append(tags);
       const footer = el("div", "card-footer");
@@ -620,7 +654,10 @@
         actions.append(original);
       }
       footer.append(actions);
-      actions.querySelectorAll("button,a").forEach((button, i) => { button.dataset.focusKey = `link:${link.id}:action:${i}`; });
+      actions.querySelectorAll("button,a").forEach((button, i) => {
+        button.dataset.focusKey = `link:${link.id}:action:${i}`;
+        button.setAttribute("aria-label", `${button.title}: ${link.title || link.url}`);
+      });
       card.append(top, body, footer);
       grid.append(card);
     }
@@ -631,6 +668,10 @@
     $("empty-message").textContent = filtered ? "Try a different search or clear your filters to see all bookmarks." : "Save your first bookmark, or import an existing library from the navigation.";
     $("empty-reset").hidden = !filtered;
     $("empty-add").textContent = filtered ? "Add a bookmark" : "Add your first bookmark";
+    $("empty-add").classList.toggle("primary", !filtered);
+    $("empty-add").classList.toggle("subtle", filtered);
+    $("empty-reset").classList.toggle("primary", filtered);
+    $("empty-reset").classList.toggle("subtle", !filtered);
     const pages = Math.max(1, Math.ceil(state.total / state.pageSize));
     $("pagination").hidden = pages <= 1;
     $("page-label").textContent = `Page ${state.page} of ${pages}`;
@@ -952,7 +993,7 @@
       $("reader-archive").href = `/api/links/${id}/archive`;
       $("reader-archive").setAttribute("download", "");
       $("reader-content").textContent = link.content || link.description || "No readable content captured yet. Visit the original page, or try refreshing the capture.";
-      $("reader-status").textContent = { ready: "Captured text · Some pages may require the original site.", failed: "Capture failed. Your original link and saved content are still available. Try Refresh capture or attach a browser snapshot under Files.", pending: "Capture is queued. Check its status here without closing the reader.", processing: "Capture is in progress. Check its status here without closing the reader." }[link.status] || "";
+      $("reader-status").textContent = { ready: "Captured text", failed: "Capture failed. Open Reading options to retry, or attach a snapshot under Files.", pending: "Capture queued. You can check its status here.", processing: "Capture in progress. You can check its status here." }[link.status] || "";
       $("reader-recheck").hidden = !["pending", "processing"].includes(link.status);
       const draft = drafts.get(draftKey(link));
       $("reader-notes").value = draft?.notes ?? link.notes ?? "";

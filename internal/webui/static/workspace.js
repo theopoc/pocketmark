@@ -55,7 +55,19 @@
   function tagValues(selected, pending = "") {
     return [...new Set([...selected, ...pending.split(",")].map((name) => name.trim()).filter(Boolean))];
   }
-  const workspace = { readRoute, routeSearch, createDrafts, readerSnapshot, tagValues };
+  // FTS uses control characters, never HTML. Keep untrusted page markup literal,
+  // including a final match whose closing marker was cut by the excerpt limit.
+  function searchExcerpt(value) {
+    const parts = [];
+    let match = false;
+    for (const part of value.split(/([\u001e\u001f])/)) {
+      if (part === "\u001e") match = true;
+      else if (part === "\u001f") match = false;
+      else if (part) parts.push({ text: part, match });
+    }
+    return parts;
+  }
+  const workspace = { readRoute, routeSearch, createDrafts, readerSnapshot, tagValues, searchExcerpt };
   if (typeof module !== "undefined" && module.exports) module.exports = workspace;
   else root.PocketmarkWorkspace = workspace;
 })(globalThis);
