@@ -171,6 +171,8 @@ Compact and direct. Primary actions use indigo and white, subtle actions use whi
 
 Motion preserves context: selected tags settle into their new positions over 180ms, while new tags receive a 150ms entrance. Collection, search and layout changes use a short 180ms content fade; background refreshes stay still. Native dialogs establish depth in 220ms and exit in 140ms, with a matching backdrop; tag suggestions use a 120ms fade. Actions and focus changes never wait for motion. Repeated actions replace in-flight animations. Reduced motion removes spatial transitions and content fades while retaining 80ms control-color feedback. Native overlay transitions progressively enhance the browser's immediate default behavior.
 
+Manual light/dark changes crossfade the complete view over 240ms using native browser snapshots, keeping text and surfaces synchronized. The first render uses the saved theme immediately. Repeated toggles interrupt the fade and preserve the latest choice; reduced motion and browsers without View Transitions switch immediately. The snapshot overlay does not intercept pointer input.
+
 ### Chips
 Small rectangular tags use neutral fill, short padding and compact type. Hover or active filter states use the soft accent and indigo text. Long labels truncate rather than widening the navigation rail.
 

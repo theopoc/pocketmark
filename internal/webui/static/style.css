@@ -406,6 +406,11 @@ body:has(dialog[open]) { overflow: hidden; }
   .login-panel { padding: 36px 24px; }
 }
 /* Motion follows state: controls acknowledge, overlays establish depth. */
+:root.theme-transition::view-transition { pointer-events: none; }
+:root.theme-transition::view-transition-group(root) { animation: none; }
+:root.theme-transition::view-transition-old(root) { animation: none; mix-blend-mode: normal; }
+:root.theme-transition::view-transition-new(root) { animation: theme-crossfade 240ms ease-in-out both; mix-blend-mode: normal; }
+@keyframes theme-crossfade { from { opacity: 0; } to { opacity: 1; } }
 .nav-item, .tag-button, .card-action, .view-button, .icon-button, .filter-chip, .tag-picker-option, .tag-picker-remove {
   transition: background-color var(--motion-fast) ease-out, border-color var(--motion-fast) ease-out, color var(--motion-fast) ease-out;
 }
@@ -436,6 +441,7 @@ body:has(dialog[open]) { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; scroll-behavior: auto !important; }
   .nav-item, .tag-button, .card-action, .view-button, .icon-button, .filter-chip, .tag-picker-option, .tag-picker-remove { transition-duration: 80ms !important; }
+  :root.theme-transition::view-transition-new(root) { animation: none !important; }
 }
 @media print {
   body > .app-shell, body > #login-view, body > #toast, dialog:not(#reader-dialog) { display: none !important; }

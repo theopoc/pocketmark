@@ -14,6 +14,7 @@
   const tagPickers = new Map();
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
   const activeMotion = new Map();
+  let themeTransition = null;
   let renderedLibraryRoute = null;
   const selectionLabels = new Map();
   const sharedParams = new URLSearchParams(location.search);
@@ -88,7 +89,7 @@
     animation.finished.catch(() => {}).then(() => { if (activeMotion.get(element) === animation) activeMotion.delete(element); });
   }
   reducedMotion.addEventListener("change", () => {
-    if (reducedMotion.matches) { activeMotion.forEach((animation) => animation.cancel()); activeMotion.clear(); }
+    if (reducedMotion.matches) { activeMotion.forEach((animation) => animation.cancel()); activeMotion.clear(); themeTransition?.skipTransition(); }
   });
 
   // Small, authored SVG icons keep the embedded UI independent of icon libraries.
@@ -141,10 +142,28 @@
       button.querySelector("[data-theme-label]").textContent = dark ? "Dark" : "Light";
     });
   }
-  applyTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
+  let requestedTheme = document.documentElement.dataset.theme === "light" ? "light" : "dark";
+  applyTheme(requestedTheme);
+  function changeTheme(theme) {
+    requestedTheme = theme;
+    // Repeated clicks always apply the latest choice, even before a snapshot is ready.
+    if (themeTransition) { themeTransition.skipTransition(); applyTheme(theme); return; }
+    if (reducedMotion.matches || document.hidden || !document.startViewTransition) { applyTheme(theme); return; }
+    document.documentElement.classList.add("theme-transition");
+    try {
+      const transition = document.startViewTransition(() => applyTheme(requestedTheme));
+      themeTransition = transition;
+      transition.ready.catch(() => {}); // Skipped or unsupported snapshots still apply the theme.
+      transition.finished.catch(() => applyTheme(requestedTheme)).then(() => {
+        if (themeTransition === transition) { themeTransition = null; document.documentElement.classList.remove("theme-transition"); }
+      });
+    } catch {
+      document.documentElement.classList.remove("theme-transition"); applyTheme(theme);
+    }
+  }
   document.querySelectorAll("[data-theme-toggle]").forEach((button) => button.addEventListener("click", () => {
-    const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-    applyTheme(theme);
+    const theme = requestedTheme === "dark" ? "light" : "dark";
+    changeTheme(theme);
     try { localStorage.setItem("pocketmark-theme", theme); } catch { /* Keep the session choice when storage is unavailable. */ }
   }));
 
