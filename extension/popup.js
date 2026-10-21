@@ -104,7 +104,7 @@ async function snapshotPage() {
 }
 async function finishConnection(candidate) {
   const connection = { server: origin(candidate.server), token: candidate.token };
-  if (typeof connection.token !== "string" || !connection.token.trim()) throw new Error("Enter a named API key from your Pocketmark settings.");
+  if (typeof connection.token !== "string" || !connection.token.trim()) throw new Error("Enter a named API key from the Pocketmark API keys menu.");
   const session = await request("/api/session", {}, connection);
   if (session?.authenticated !== true) throw new Error("The server did not confirm an authenticated connection.");
   // Promote only after server validation; pending credentials never become active.
@@ -118,7 +118,7 @@ $("settings-form").addEventListener("submit", async (event) => {
   connecting = true; $("save").disabled = true;
   try {
     const server = origin($("server").value.trim()), token = $("token").value.trim();
-    if (!token) throw new Error("Enter a named API key from your Pocketmark settings.");
+    if (!token) throw new Error("Enter a named API key from the Pocketmark API keys menu.");
     const candidate = { server, token };
     settings = {};
     status("Waiting for server permission… Reopen this popup after approving if it closes.");

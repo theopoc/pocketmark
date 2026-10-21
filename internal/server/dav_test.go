@@ -50,7 +50,7 @@ func TestFloccusDAVLockTempMoveExactBytesAndInvalidation(t *testing.T) {
 	requireStatus(t, request(a, "OPTIONS", "/dav/", "", false, map[string]string{"Origin": h["Origin"], "Access-Control-Request-Method": "PROPFIND"}), 204)
 	requireStatus(t, request(a, "PROPFIND", "/dav/", "", false, h), 207)
 	requireStatus(t, request(a, "PROPFIND", "/dav/", "", false, map[string]string{"Origin": h["Origin"]}), 403)
-	login := request(a, "POST", "/api/login", `{"token":"`+testToken+`"}`, false, nil)
+	login := passwordLogin(t, a)
 	requireStatus(t, login, 200)
 	requireStatus(t, request(a, "PROPFIND", "/dav/", "", false, map[string]string{"Origin": h["Origin"], "Authorization": "Basic invalid-base64", "Cookie": login.Result().Cookies()[0].String()}), 401)
 	w := request(a, "GET", "/dav/bookmarks.xbel", "", false, h)

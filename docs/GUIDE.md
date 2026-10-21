@@ -12,13 +12,11 @@ make build
 ./bin/pocketmark
 ```
 
-Open [http://127.0.0.1:8090](http://127.0.0.1:8090). In another terminal, read the generated access token and paste it into the sign-in screen:
+Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account. On later visits, sign in with your username and password. Once signed in, open **API keys** to create or revoke a key for each extension or client.
 
-```sh
-cat ./data/access-token
-```
+Existing installations keep their credentials and keys. If no password was configured before upgrading, follow [account recovery](API.md#existing-installations-and-account-recovery); public account creation cannot claim an existing library.
 
-The token file is created with mode `0600`. The default data directory is `./data`, containing the token and `pocketmark.db`. Stop with Ctrl+C. To run without fetching bookmarked pages:
+The default data directory is `./data`, containing `pocketmark.db` and the private `access-token` file (mode `0600`). This file remains an administrative API recovery credential and session-signing secret; it is not a browser login method. Stop with Ctrl+C. To run without fetching bookmarked pages:
 
 ```sh
 ./bin/pocketmark -no-capture
@@ -28,7 +26,6 @@ The token file is created with mode `0600`. The default data directory is `./dat
 
 ```sh
 docker compose up --build -d
-docker compose exec pocketmark cat /data/access-token
 ```
 
 Open the same local URL. Compose stores data in a named volume and publishes port 8090 on host loopback only. The image runs as UID/GID `10001:10001`; a custom bind-mounted data directory must be writable by that user.
@@ -49,7 +46,7 @@ The supplied Compose configuration sets a **128 MiB container memory limit** and
 - Anchored highlights and annotations, with stale highlights identified after a page changes; a separate structural reader preserves headings, lists, code and tables.
 - Browser bookmarks HTML import/export and WebDAV/XBEL synchronization for Floccus.
 - PDF, image and SingleFile/HTML files (standalone or attached) streamed in 64 KiB SQLite chunks; manual offline snapshots with embedded resources.
-- Optional personal username/password login, named revocable API keys and an owner-only full ZIP backup while the app runs.
+- Personal username/password login, named revocable API keys and an owner-only full ZIP backup while the app runs.
 - Installable mobile web interface, share target, and a small [browser extension](../extension/README.md). A [compatibility adapter](FEATURES.md) implements core legacy client extension/mobile API contracts.
 
 Default capture fetches one HTML response, with a 20-second timeout, at most five redirects, a 2 MiB response/decompressed-body limit and up to 256 KiB of extracted text. Choose **Save with resources** for bounded resource embedding, or use the extension for an already-rendered page and a visible-tab PNG screenshot. Its separate advanced Chromium variant generates PDF and full-page screenshots on demand, using an explicit debugger permission; [installation and limits](../extension/README.md). Other browsers can use **Print / PDF**, then upload the file. No Chromium instance runs on the server. Private, loopback and reserved network destinations can be bookmarked, but server capture refuses them. See [archive limits](ARCHIVES.md).
@@ -64,7 +61,7 @@ The unmodified official **legacy client Android 1.4.4** app was also tested in a
 | --- | --- | --- |
 | `POCKETMARK_DATA` / `-data` | `./data` | Database and generated token directory. |
 | `POCKETMARK_LISTEN` / `-listen` | `127.0.0.1:8090` | HTTP bind address; Docker uses `0.0.0.0:8090` internally. |
-| `POCKETMARK_TOKEN` | Generated token file | Override the access token; at least 24 characters. |
+| `POCKETMARK_TOKEN` | Generated token file | Override the administrative API recovery/session-signing secret; at least 24 characters. |
 | `POCKETMARK_ORIGIN` | Request origin | Public origin such as `https://bookmarks.example.com`, without a path. |
 | `POCKETMARK_SECURE_COOKIE` | `false` | Set `true` for HTTPS session cookies; an HTTPS origin enables this automatically. |
 | `POCKETMARK_CAPTURE` / `-no-capture` | Capture enabled | Set the environment variable to `false`, or pass the flag, to disable capture. |

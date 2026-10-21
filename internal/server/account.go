@@ -33,10 +33,19 @@ func randomSecret() string {
 	return hex.EncodeToString(b)
 }
 func (a *Server) registerAccount(mux *http.ServeMux) {
-	if _, err := a.Store.DB.Exec(`CREATE TABLE IF NOT EXISTS account(id INTEGER PRIMARY KEY CHECK(id=1),username TEXT NOT NULL,salt TEXT NOT NULL,hash TEXT NOT NULL);
+	// Persist eligibility before creating account tables, so an upgrade never
+	// makes an existing installation anonymously claimable.
+	if _, err := a.Store.DB.Exec(`CREATE TABLE IF NOT EXISTS account_setup(id INTEGER PRIMARY KEY CHECK(id=1), allowed INTEGER NOT NULL);
+ INSERT INTO account_setup(id,allowed) SELECT 1,
+ NOT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name IN ('account','api_tokens'))
+ AND NOT EXISTS(SELECT 1 FROM links) AND NOT EXISTS(SELECT 1 FROM collections)
+ WHERE NOT EXISTS(SELECT 1 FROM account_setup);
+ CREATE TABLE IF NOT EXISTS account(id INTEGER PRIMARY KEY CHECK(id=1),username TEXT NOT NULL,salt TEXT NOT NULL,hash TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS api_tokens(id INTEGER PRIMARY KEY,name TEXT NOT NULL,hash TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL);`); err != nil {
 		panic(err)
 	}
+	mux.HandleFunc("GET /api/setup", a.setupStatus)
+	mux.HandleFunc("POST /api/setup", a.setup)
 	mux.HandleFunc("GET /api/account", a.account)
 	mux.HandleFunc("PUT /api/account", a.setAccount)
 	mux.HandleFunc("GET /api/tokens", a.tokens)
@@ -64,6 +73,63 @@ func (a *Server) account(w http.ResponseWriter, r *http.Request) {
 	_ = a.Store.DB.QueryRowContext(r.Context(), "SELECT username,hash FROM account WHERE id=1").Scan(&username, &hash)
 	respond(w, 200, map[string]any{"username": username, "passwordEnabled": hash != ""})
 }
+
+func (a *Server) setupStatus(w http.ResponseWriter, r *http.Request) {
+	var allowed, passwordEnabled bool
+	err := a.Store.DB.QueryRowContext(r.Context(), `SELECT
+ EXISTS(SELECT 1 FROM account_setup WHERE allowed=1) AND NOT EXISTS(SELECT 1 FROM account)
+ AND NOT EXISTS(SELECT 1 FROM links) AND NOT EXISTS(SELECT 1 FROM collections) AND NOT EXISTS(SELECT 1 FROM api_tokens),
+ EXISTS(SELECT 1 FROM account WHERE hash!='')`).Scan(&allowed, &passwordEnabled)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+	respond(w, 200, map[string]bool{"setupRequired": allowed, "passwordEnabled": passwordEnabled})
+}
+
+func (a *Server) setup(w http.ResponseWriter, r *http.Request) {
+	if !a.allowLogin() {
+		w.Header().Set("Retry-After", "60")
+		fail(w, 429, "too many login attempts; retry in a minute")
+		return
+	}
+	var b struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if !decode(w, r, &b, 4096) {
+		return
+	}
+	b.Username = strings.TrimSpace(b.Username)
+	if b.Username == "" || len(b.Username) > 120 || len(b.Password) < 12 || len(b.Password) > 1024 {
+		fail(w, 400, "choose a username and a password of 12–1024 bytes")
+		return
+	}
+	a.passwordMu.Lock()
+	defer a.passwordMu.Unlock()
+	salt := randomSecret()
+	// One conditional write also protects against another server creating the
+	// owner concurrently. Never overwrite an account, even a disabled legacy one.
+	result, err := a.Store.DB.ExecContext(r.Context(), `INSERT INTO account(id,username,salt,hash)
+ SELECT 1,?,?,? WHERE EXISTS(SELECT 1 FROM account_setup WHERE allowed=1)
+ AND NOT EXISTS(SELECT 1 FROM account) AND NOT EXISTS(SELECT 1 FROM links)
+ AND NOT EXISTS(SELECT 1 FROM collections) AND NOT EXISTS(SELECT 1 FROM api_tokens)`, b.Username, salt, passwordHash(b.Password, salt))
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+	if n != 1 {
+		fail(w, 409, "account creation is unavailable; sign in or ask the server administrator to configure your password")
+		return
+	}
+	a.issueSession(w)
+	respond(w, 201, map[string]bool{"authenticated": true})
+}
 func (a *Server) setAccount(w http.ResponseWriter, r *http.Request) {
 	if !a.requireOwner(w, r) {
 		return
@@ -76,16 +142,14 @@ func (a *Server) setAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	b.Username = strings.TrimSpace(b.Username)
-	if len(b.Username) > 120 || (b.Password != "" && (b.Username == "" || len(b.Password) < 12 || len(b.Password) > 1024)) {
+	if b.Username == "" || len(b.Username) > 120 || len(b.Password) < 12 || len(b.Password) > 1024 {
 		fail(w, 400, "choose a username and a password of 12–1024 bytes")
 		return
 	}
 	a.passwordMu.Lock()
 	defer a.passwordMu.Unlock()
-	salt, hash := randomSecret(), ""
-	if b.Password != "" {
-		hash = passwordHash(b.Password, salt)
-	}
+	salt := randomSecret()
+	hash := passwordHash(b.Password, salt)
 	if _, err := a.Store.DB.ExecContext(r.Context(), "INSERT INTO account(id,username,salt,hash) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET username=excluded.username,salt=excluded.salt,hash=excluded.hash", b.Username, salt, hash); err != nil {
 		handleError(w, err)
 		return

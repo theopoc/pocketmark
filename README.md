@@ -33,10 +33,9 @@ With Git and Docker Compose installed:
 git clone https://github.com/theopoc/pocketmark.git
 cd pocketmark
 docker compose up --build -d
-docker compose exec pocketmark cat /data/access-token
 ```
 
-Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and sign in with the token. Data persists in a Docker volume. Compose sets a 128 MiB memory limit; see [measured RAM usage](docs/BENCHMARK.md) for workload results.
+Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account. On later visits, sign in with your username and password. Data persists in a Docker volume. Compose sets a 128 MiB memory limit; see [measured RAM usage](docs/BENCHMARK.md) for workload results.
 
 For HTTPS access, set `POCKETMARK_ORIGIN` to your public URL. See the [guide](docs/GUIDE.md#configuration) for configuration.
 

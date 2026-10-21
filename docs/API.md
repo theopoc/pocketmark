@@ -1,6 +1,6 @@
 # Pocketmark HTTP API
 
-Base URL: `http://127.0.0.1:8090`. API endpoints require an owner session, recovery token or named API key unless explicitly public. Login and compatibility configuration/login discovery are public. `/healthz` is unauthenticated and returns `{"status":"ok"}` when SQLite is reachable. Named keys cannot access account/key management or full backups.
+Base URL: `http://127.0.0.1:8090`. API endpoints require an owner session, recovery token or named API key unless explicitly public. First-run setup, login and compatibility configuration/login discovery are public. `/healthz` is unauthenticated and returns `{"status":"ok"}` when SQLite is reachable. Named keys cannot access account/key management or full backups.
 
 For these examples, load your local token without putting its value directly in the command:
 
@@ -16,7 +16,7 @@ For Docker, use `POCKETMARK_ACCESS_TOKEN="$(docker compose exec -T pocketmark ca
 
 | Method and path | Request / result |
 | --- | --- |
-| `POST /api/login` | `{"token":"…"}` → `{"authenticated":true}` and a seven-day HttpOnly, SameSite=Strict cookie. |
+| `POST /api/login` | `{"username":"…","password":"…"}` → `{"authenticated":true}` and a seven-day HttpOnly, SameSite=Strict cookie. |
 | `POST /api/logout` | Clears the session cookie; returns `{"ok":true}`. Does not revoke the access token. |
 | `GET /api/session` | `{"authenticated":true}` or HTTP 401. |
 | `GET /api/stats` | Counts: `links`, `collections`, `pending` (includes processing), `failed`. |
@@ -115,17 +115,34 @@ Annotation colors: `yellow`, `green`, `blue`, `pink`. Each bookmark supports up 
 
 ## Account and client keys
 
-`POST /api/login` accepts either `{token}` for the recovery token, or `{username,password}` for optional personal credentials. Named API keys cannot log in as the owner. Password verification is serialized and uses PBKDF2-SHA256 with 600,000 iterations; login attempts are globally limited to ten per minute. Changing credential settings invalidates older cookies; named keys remain individually revocable.
+`POST /api/login` accepts only `{username,password}`. Token-based browser login is not supported. Named API keys cannot log in as the owner. Password verification is serialized and uses PBKDF2-SHA256 with 600,000 iterations; login attempts are globally limited to ten per minute. Changing credential settings invalidates older cookies; named keys remain individually revocable.
 
 | Endpoint | Contract |
 | --- | --- |
+| `GET /api/setup` | Public `{setupRequired,passwordEnabled}`; no account name or secret. |
+| `POST /api/setup` | Public first-run `{username,password}` → 201 and an owner cookie. Only a new, empty instance can create its single account; later attempts return 409. Same password limits and shared login rate limit. |
 | `GET /api/account` | Owner-only `{username,passwordEnabled}`. |
-| `PUT /api/account` | Owner-only `{username,password}`. Password 12–1024 bytes, username 1–120 bytes. Empty password disables optional password login; recovery-token login remains. Issues a replacement owner cookie. |
+| `PUT /api/account` | Owner-only `{username,password}`. Password 12–1024 bytes, username 1–120 bytes. Empty passwords are rejected; password sign-in cannot be disabled. Issues a replacement owner cookie. |
 | `GET /api/tokens` | Owner-only array `{id,name,createdAt}`; never returns secrets. |
 | `POST /api/tokens` | Owner-only `{name}` → `{id,name,createdAt,token}`; raw key appears once. Max 32 keys. |
 | `DELETE /api/tokens/{id}` | Owner-only immediate revocation. |
 
 The included extension uses bearer authentication with narrowly recognized `chrome-extension://`/`moz-extension://` CORS origins; no credentialed cross-origin cookies are allowed. Ordinary cross-site browser mutations remain rejected. The Client compatibility credential endpoint also accepts extension-origin password requests, protected by the same rate limit.
+
+### Existing installations and account recovery
+
+Existing credentials and named API keys are preserved. An older installation without a password cannot be claimed through public setup, even if its library is empty. Configure a password before upgrading in Settings, or use the owner-only `PUT /api/account` endpoint with the existing administrative recovery token. The same endpoint allows recovery after a forgotten password. Named API keys cannot perform this operation.
+
+On the server, prepare a private JSON file containing `{"username":"your-name","password":"your-new-password"}` with permissions `0600`, then use:
+
+```sh
+curl --fail-with-body -X PUT \
+  -H "Authorization: Bearer $POCKETMARK_ACCESS_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data-binary @/private/path/account.json "$POCKETMARK_URL/api/account"
+```
+
+Use the local server address or HTTPS, delete the private JSON file afterward, and sign in normally with the new credentials. The server's `access-token` file / `POCKETMARK_TOKEN` remains an administrative API recovery credential and session-signing secret; it is never accepted by `/api/login`. Keep it private and preserve it with server backups. Ordinary integrations should use named keys from the signed-in **API keys** menu.
 
 ## Compatibility and synchronization
 

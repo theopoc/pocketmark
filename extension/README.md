@@ -2,12 +2,12 @@
 
 A small Manifest V3 companion for Chromium browsers (Chrome, Edge, Brave). It has no background worker and does no work until opened.
 
-1. In Pocketmark, open **Settings** and create a named API key.
+1. In Pocketmark, open **API keys** and create a named API key.
 2. Open your browser’s extensions page, enable developer mode, choose **Load unpacked**, and select this `extension` directory.
 3. Open a web page, click Pocketmark, enter your Pocketmark server origin and API key, then click **Connect**. Grant access only to that server.
 4. Save the bookmark, a rendered HTML snapshot, a screenshot of the visible page, or both. Keep the popup open until saving finishes.
 
-The server URL and API key stay in local extension storage, not synchronized browser storage. Revoke the key from Pocketmark settings to disconnect it. For remote servers use HTTPS. `activeTab` grants temporary access to the current page after you click the extension; optional host access is requested for the configured server only.
+The server URL and API key stay in local extension storage, not synchronized browser storage. Revoke the key from Pocketmark’s API keys menu to disconnect it. For remote servers use HTTPS. `activeTab` grants temporary access to the current page after you click the extension; optional host access is requested for the configured server only.
 
 Chrome may close the popup while asking for first-time server permission. Reopen it after approving: the pending settings are recovered and authenticated before saving is enabled.
 
