@@ -19,7 +19,7 @@ A personal bookmark manager built for low RAM usage: one Go process, SQLite and 
 - Save pages for offline reading, attach files and annotate text.
 - Import JSON or browser bookmarks; sync with Floccus.
 - Capture rendered pages and screenshots with the [browser extension](extension/README.md).
-- Use the mobile web interface or compatible third-party clients ([tested clients and limits](docs/REAL_CLIENTS.md)).
+- Use the mobile web interface; sync browser bookmarks with Floccus over WebDAV.
 
 Personal use only: collaboration, public sharing, SSO and automations are outside the supported scope.
 

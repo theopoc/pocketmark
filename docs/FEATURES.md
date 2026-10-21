@@ -14,26 +14,23 @@ This implementation retains Go + SQLite and no resident browser/database/search 
 | File archive | PDF/raster image/HTML/SingleFile uploads, standalone or attached to a bookmark, 20 MiB each, 32 per record. Original bytes stream in 64 KiB SQLite chunks. Upload HTML becomes searchable. Standalone files use internal opaque identifiers and never enter the network capture queue. |
 | Offline page | Manual passive server snapshot with bounded CSS/image/font embedding. Limits and omissions: [ARCHIVES.md](ARCHIVES.md). |
 | JavaScript page | The included MV3 extension captures the page after JavaScript has run in the user's browser. It uploads passive rendered HTML. Cross-origin images/styles may be unavailable for embedding. |
-| Screenshot | Default extension captures the visible tab as PNG. An explicitly installed advanced Chromium variant captures a full page, bounded to 16 megapixels and 16,384 pixels per axis, including Retina pixel density. |
-| PDF | Advanced Chromium extension generates and uploads PDF from the current rendered page, using a bounded stream. The default extension/other browsers can use Print → Save as PDF followed by upload. No server PDF renderer. |
+| Screenshot | The Chrome extension captures the visible area or a full page as PNG. Full-page output is bounded to 16 megapixels and 16,384 pixels per axis, including Retina pixel density. |
+| PDF | The Chrome extension generates and uploads PDF from the current rendered page, using a bounded stream. Other browsers can use Print → Save as PDF followed by upload. No server PDF renderer. |
 | Personal authentication | First-run creation of one personal account, username/password (PBKDF2-SHA256, 600,000 iterations), seven-day signed cookie. Changing password settings invalidates older cookies. No additional registration or multi-user accounts. No token-based browser login; existing administrative token retained for API recovery. |
 | API keys | Up to 32 named keys, revealed once, stored hashed, individually revocable. Library access only; account/key management and full backups require the owner session or recovery token. |
 | Backup | Manual, owner-only ZIP of a transactionally consistent SQLite snapshot, streamed from disk. Includes archives, attachments, annotations and credential hashes; excludes the recovery-token file. |
 | Mobile web | Responsive installable manifest, minimal static-only service worker, share target. Installation/share support depends on browser/OS. Private pages and API data are never cached by the service worker. |
-| Floccus | Native API backend and WebDAV/XBEL, verified with Floccus 5.11.1. DAV includes API-key authentication, lock/temp/MOVE, exact bytes, stable numeric IDs and ordering. No recurring server sync process. |
-| Compatibility clients | Core API adapter based on inspected official client source: password session issuance, configuration, private collections/links/tags, search, dashboard, archives and highlights. Integration tests exercise request/response shapes. Actual official apps are not certified as fully compatible. Unsupported endpoints return errors. |
+| Floccus | WebDAV/XBEL; previously verified with Floccus 5.11.1. The Linkwarden API backend has been removed. DAV includes API-key authentication, lock/temp/MOVE, exact bytes, stable numeric IDs and ordering. No recurring server sync process. |
 
 ## Browser integration
 
-The [extension](../extension/README.md) uses only the active tab, stores a named API key locally, and asks for access to the configured server origin. Saving, screenshots and HTML capture happen only on a user click. It does not run a background capture worker. Browser RAM belongs to the client, not the Go server budget. No extension is silently installed into an existing user profile.
+The [personal Chrome extension](../extension/README.md) adds or edits the current page's title, collection and tags through the native API. Collections can be selected or created; new tags are saved with the bookmark. Exact URLs reuse the existing bookmark and preserve unrelated personal fields.
 
-PDF and full-page capture require the separate advanced Chromium package, built with `python3 extension/build_advanced.py /your/chosen/folder`. Chrome does not allow the `debugger` permission to be optional, so the default package excludes it entirely. The advanced package declares that permission and attaches only to the tab chosen for capture, then detaches before uploading. Install it only if you accept that broader browser permission. Actual Chrome tests verified PDF, full-page PNG, rendered HTML and recovery after a permission dialog closes the popup. See [runtime evidence and regression tests](REAL_CLIENTS.md).
+HTML, visible PNG, full-page PNG and PDF are independently selectable and off by default. One bounded background task continues after the popup closes. Captured files remain locally in IndexedDB until uploaded or explicitly discarded; failures require a manual retry. Earlier server attachments are retained. Chrome's `debugger` permission is declared at installation and used for the chosen source tab while capture/upload work runs. Rendering consumes client resources, not server RAM. See [installation and limits](../extension/README.md).
 
-For a compatible third-party client, use the Pocketmark server origin and the username/password created at first run or updated in Settings, or a named API token if the client offers token configuration. Successful credential login creates a revocable named key; revoke it from Pocketmark’s API keys menu. The adapter advertises `2.14.1-pocketmark-compat` for version-gated client shapes and `POCKETMARK_COMPAT:true`; this is a protocol compatibility level, not the server's product version. Billing, public collections, user administration, OAuth and NextAuth flows are not implemented.
+Linkwarden's `/api/v1/` and `/api/v2/` compatibility interfaces, third-party extension/mobile support and the Floccus Linkwarden API backend have been removed. WebDAV remains available, and no library data is deleted. Older client observations remain historical evidence in [REAL_CLIENTS.md](REAL_CLIENTS.md).
 
 ## Floccus setup and data semantics
-
-The native API backend also supports synchronization: enter the Pocketmark origin, a descriptive username and a dedicated API key as the access token. Choose a server collection and local bookmark folder. Real Floccus tests verified creation, bidirectional edits, nested folders, moves and deletion. This backend does not preserve bookmark ordering, as documented by Floccus.
 
 Choose the WebDAV backend with **XBEL**, server URL `https://your-pocketmark/dav/`, file `bookmarks.xbel`. Leave Floccus file encryption disabled: Pocketmark needs readable XBEL to integrate the bookmark tree. Use any username plus a separate dedicated API key per client as the password. Personal account passwords are not accepted for WebDAV, avoiding password derivation on every request. HTTPS is required outside localhost. Set the server's exact `POCKETMARK_ORIGIN` for its web interface.
 
@@ -43,8 +40,8 @@ The staged upload/MOVE sequence preserves exact uploaded bytes. Native changes d
 
 ## Remaining qualification, not implemented guarantees
 
-- No server-side Chromium or perfect arbitrary-site offline reproduction. Full-page/PDF generation uses the advanced extension in the user's browser.
-- Real Chrome and third-party Android 1.4.4 emulator qualification cover the workflows in [REAL_CLIENTS.md](REAL_CLIENTS.md). Prolonged offline opening has a client cache limitation. iOS, physical phones, Firefox and Safari remain untested.
+- No server-side Chromium or perfect arbitrary-site offline reproduction. Full-page/PDF generation uses the Chrome extension in the user's browser.
+- Chrome runtime evidence is recorded in [REAL_CLIENTS.md](REAL_CLIENTS.md). Historical third-party Android and extension results no longer describe supported clients. iOS, physical phones, Firefox and Safari remain untested.
 - Uploaded PDF/image bytes are preserved; PDF text extraction and image OCR are not provided.
 - A server snapshot cannot log into websites; the user's browser can capture a page they have opened, subject to its permissions and resource restrictions.
 - RAM measurements exclude the user's browser and Docker VM; see [BENCHMARK.md](BENCHMARK.md) for measured workloads rather than a universal memory guarantee.

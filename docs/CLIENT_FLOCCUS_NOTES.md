@@ -37,9 +37,11 @@ The [caching adapter](https://github.com/floccusaddon/floccus/blob/944fc3eadccc4
 
 Floccus also requires the exact UTF-8 XML declaration produced by its serializer. Go's standard `xml.Header` matches this requirement. Original uploaded XML must remain retrievable unchanged through the immediate upload verification; later regenerated snapshots require stable numeric mappings and ordering.
 
-## Native API backend
+## Historical Linkwarden API backend (removed)
 
-The native API adapter is separate from WebDAV. Configure the Pocketmark origin, a dedicated API key in the password field, and a server folder such as `Floccus`. It sends Bearer authentication directly; it does not log in with a personal password.
+This backend is no longer served by Pocketmark. The notes below describe the historical protocol inspection only; configure Floccus with WebDAV instead.
+
+The former API adapter was separate from WebDAV. Its configuration used the Pocketmark origin, a dedicated API key in the password field, and a server folder such as `Floccus`. It sends Bearer authentication directly; it does not log in with a personal password.
 
 It fetches `/api/v1/search?searchQueryString=` with cursor pagination, expecting `data.links` and `data.nextCursor`, then `/api/v1/collections`, expecting `response`. It creates a missing server folder, supports nested collection CRUD and link CRUD, and submits up to five concurrent requests. Bookmark updates read existing tags when tag synchronization is disabled. Its declared capabilities explicitly do not preserve custom ordering. Only HTTP(S) URLs should be used in Pocketmark validation; the client additionally accepts schemes Pocketmark intentionally rejects.
 

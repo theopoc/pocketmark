@@ -49,7 +49,7 @@ rendered markup. Larger files remain downloadable.
 | `GET /api/backup` | Owner-only ZIP containing a consistent complete SQLite database and restore instructions |
 
 Native attachment uploads, manual preservation, rich-reader generation and backup
-share one work slot; standalone/compatibility uploads share the import slot.
+share one work slot; standalone uploads share the import slot.
 A competing operation on the same slot receives HTTP 409. Untrusted archives
 are always downloaded as attachments and never rendered on the application's
 origin. The API does not upload to a third-party service.

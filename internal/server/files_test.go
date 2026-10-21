@@ -58,11 +58,7 @@ func TestStandaloneFileUploadEditAndExport(t *testing.T) {
 	if p.Total != 1 || p.Links[0].Type != "file" || p.Links[0].Status != "ready" {
 		t.Fatalf("%+v", p)
 	}
-	w = request(a, "GET", fmt.Sprintf("/api/v1/links/%d", saved.Link.ID), "", true, nil)
-	requireStatus(t, w, 200)
-	if !strings.Contains(w.Body.String(), `"url":null`) || !strings.Contains(w.Body.String(), `"type":"pdf"`) {
-		t.Fatal(w.Body.String())
-	}
+
 }
 func TestStandaloneHTMLIndexedAndRejectedUploadLeavesNoRecord(t *testing.T) {
 	a := newTestServer(t, "", false)
@@ -77,16 +73,5 @@ func TestStandaloneHTMLIndexedAndRejectedUploadLeavesNoRecord(t *testing.T) {
 	_ = a.Store.DB.QueryRow("SELECT count(*) FROM links").Scan(&count)
 	if count != 1 {
 		t.Fatal("invalid upload left record")
-	}
-}
-func TestCompatFilePlaceholder(t *testing.T) {
-	a := newTestServer(t, "", false)
-	w := request(a, "POST", "/api/v1/links", `{"type":"pdf","name":"Uploaded document","tags":[]}`, true, nil)
-	requireStatus(t, w, 200)
-	if !strings.Contains(w.Body.String(), `"type":"pdf"`) || !strings.Contains(w.Body.String(), `"url":null`) {
-		t.Fatal(w.Body.String())
-	}
-	if _, e := a.Store.Next(context.Background()); e == nil {
-		t.Fatal("file placeholder queued for network capture")
 	}
 }

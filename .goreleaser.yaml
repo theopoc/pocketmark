@@ -5,10 +5,6 @@ project_name: pocketmark
 builds:
   - skip: true
 
-before:
-  hooks:
-    - python3 extension/build_advanced.py --reuse artifacts/extension-advanced
-
 archives:
   - id: linux-amd64
     meta: true
@@ -42,16 +38,10 @@ archives:
       - {src: extension/popup.js, dst: popup.js}
       - {src: extension/popup.css, dst: popup.css}
       - {src: extension/README.md, dst: README.md}
-  - id: extension-advanced
-    meta: true
-    formats: [zip]
-    name_template: pocketmark-extension-advanced
-    files:
-      - {src: artifacts/extension-advanced/manifest.json, dst: manifest.json}
-      - {src: artifacts/extension-advanced/popup.html, dst: popup.html}
-      - {src: artifacts/extension-advanced/popup.js, dst: popup.js}
-      - {src: artifacts/extension-advanced/popup.css, dst: popup.css}
-      - {src: artifacts/extension-advanced/README.md, dst: README.md}
+      - {src: extension/background.js, dst: background.js}
+      - {src: extension/common.js, dst: common.js}
+      - {src: extension/capture.js, dst: capture.js}
+      - {src: extension/job-store.js, dst: job-store.js}
 
 checksum:
   name_template: SHA256SUMS
