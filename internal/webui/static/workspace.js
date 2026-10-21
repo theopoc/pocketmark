@@ -82,6 +82,12 @@
   // FTS uses control characters, never HTML. Keep untrusted page markup literal,
   // including a final match whose closing marker was cut by the excerpt limit.
   function searchExcerpt(value) {
+    // Tags are indexed as JSON. Show their names, not storage punctuation,
+    // while preserving both decoded names and the FTS highlight markers.
+    try {
+      const names = JSON.parse(value.replace(/\u001e/g, "\\u001e").replace(/\u001f/g, "\\u001f"));
+      if (Array.isArray(names) && names.every((name) => typeof name === "string")) value = names.join(" · ");
+    } catch { /* A regular text excerpt is not JSON. */ }
     const parts = [];
     let match = false;
     for (const part of value.split(/([\u001e\u001f])/)) {

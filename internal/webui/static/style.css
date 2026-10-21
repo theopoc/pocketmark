@@ -590,3 +590,7 @@ body:has(dialog[open]) { overflow: hidden; }
 @media (max-width: 600px) {
   .card-footer:has(.card-overflow-actions.is-open) .card-actions { flex-basis: 100%; }
 }
+
+#toast { display: flex; align-items: center; gap: 16px; }
+.toast-action { flex-shrink: 0; min-height: 44px; padding: 6px 12px; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 5px; font-size: 12px; }
+.toast-action:hover { text-decoration: underline; }

@@ -119,3 +119,11 @@ test('capture recovery distinguishes blocked access, absent pages, timeout and p
   assert.match(captureFailure('page too large'), /size limit/);
   assert.ok(captureFailure('x'.repeat(1000)).length < 260);
 });
+
+
+test('tag search excerpts show decoded names without JSON punctuation', () => {
+  assert.deepEqual(searchExcerpt('["frontend","\x1edesign\x1f"]'), [
+    { text: 'frontend · ', match: false }, { text: 'design', match: true },
+  ]);
+  assert.deepEqual(searchExcerpt('["a\\\"b","c\\\\d"]'), [{ text: 'a"b · c\\d', match: false }]);
+});

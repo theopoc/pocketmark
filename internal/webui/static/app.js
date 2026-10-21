@@ -216,13 +216,36 @@
     if (event.target.closest("button") && event.target.closest("button").id !== "close-navigation") closeNavigation();
   }, true);
 
-  function toast(message, error = false) {
+  function toast(message, error = false, action = null) {
     clearTimeout(toastTimer);
-    $("toast").textContent = message;
-    $("toast").className = error ? "error" : "";
-    $("toast").hidden = false;
-    toastTimer = setTimeout(() => { $("toast").hidden = true; }, 5000);
+    const notice = $("toast");
+    // Native dialogs live in the top layer. Feedback must be in that same
+    // layer to be visible and exposed to assistive technology.
+    const dialogs = [...document.querySelectorAll("dialog[open]")];
+    (dialogs.at(-1) || document.body).append(notice);
+    notice.replaceChildren(el("span", "", message));
+    notice.className = error ? "error" : "";
+    notice.setAttribute("role", error ? "alert" : "status");
+    if (action) {
+      const button = el("button", "toast-action", action.label);
+      button.type = "button";
+      button.addEventListener("click", async () => {
+        clearTimeout(toastTimer);
+        button.disabled = true;
+        try { await action.run(); } catch (error) { toast(error.message, true); }
+      });
+      notice.append(button);
+    }
+    notice.hidden = false;
+    toastTimer = setTimeout(() => { notice.hidden = true; }, action || error ? 12000 : 5000);
   }
+  document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("close", () => {
+    if (dialog.contains($("toast"))) {
+      clearTimeout(toastTimer);
+      $("toast").hidden = true;
+      document.body.append($("toast"));
+    }
+  }));
 
   let setupRequired = false;
   function showLogin() {
@@ -316,7 +339,8 @@
   function focusedKey(root) { return root.contains(document.activeElement) ? document.activeElement.dataset.focusKey : null; }
   function restoreFocus(root, key) {
     if (!key || document.activeElement !== document.body || document.querySelector("dialog[open]")) return;
-    [...root.querySelectorAll("[data-focus-key]")].find((node) => node.dataset.focusKey === key)?.focus({ preventScroll: true });
+    const target = [...root.querySelectorAll("[data-focus-key]")].find((node) => node.dataset.focusKey === key);
+    (target || root.querySelector(".card-title button") || $("page-title")).focus({ preventScroll: true });
   }
 
   function selectFilter(filter, collection = null, tag = "") {
@@ -552,6 +576,16 @@
     try {
       await api(`/api/links/${link.id}`, { method: "PUT", body: JSON.stringify({ ...editable(link), ...changes }) });
       await refresh();
+      const field = Object.hasOwn(changes, "favorite") ? "favorite" : "read";
+      const message = field === "favorite" ? (changes.favorite ? "Added to favorites." : "Removed from favorites.") : (changes.read ? "Marked as read." : "Marked unread.");
+      toast(message, false, { label: "Undo", run: async () => {
+        // Restore only the toggled field, preserving any newer notes or tags.
+        const latest = await api(`/api/links/${link.id}`);
+        if (latest[field] !== changes[field]) { toast("This bookmark has changed. Its current state was kept."); return; }
+        await api(`/api/links/${link.id}`, { method: "PUT", body: JSON.stringify({ ...editable(latest), [field]: link[field] }) });
+        await refresh();
+        toast("Change undone.");
+      } });
     } catch (error) { toast(error.message, true); if (button) button.disabled = false; }
   }
 
