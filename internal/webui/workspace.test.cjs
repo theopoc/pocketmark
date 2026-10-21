@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { readRoute, routeSearch, createDrafts, readerSnapshot, tagValues, searchExcerpt } = require('./static/workspace.js');
+const { readRoute, routeSearch, createDrafts, readerSnapshot, tagValues, searchExcerpt, captureFailure } = require('./static/workspace.js');
 
 test('search excerpts preserve untrusted HTML as literal text and truncated matches', () => {
   assert.deepEqual(searchExcerpt('<img src=x> before \x1ecafé\x1f after'), [
@@ -83,4 +83,39 @@ test('many selected tags and pending text survive draft serialization without tr
   drafts.put('bookmark:new', { tags: values }, { tags: [] });
   assert.deepEqual(drafts.get('bookmark:new').tags, [...tags, 'a-very-long-tag-name']);
   assert.equal(tagValues(values).join(', ').split(', ').length, 101);
+});
+
+
+test('drafts recover after reload and saving or signing out removes the stored copy', () => {
+  const values = new Map();
+  const storage = { getItem: key => values.get(key), setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+  const first = createDrafts(storage);
+  first.put('bookmark:7', { notes: 'Unfinished note', tags: ['café'] }, { notes: '', tags: [] });
+  const reloaded = createDrafts(storage);
+  assert.equal(reloaded.get('bookmark:7').notes, 'Unfinished note');
+  reloaded.delete('bookmark:7');
+  assert.equal(createDrafts(storage).size, 0);
+  reloaded.put('bookmark:new', { title: 'Draft' }, { title: '' });
+  reloaded.clear();
+  assert.equal(createDrafts(storage).size, 0);
+});
+
+test('corrupt or denied browser storage does not prevent editing and stale drafts are removed after quota failure', () => {
+  let saved = 'not JSON';
+  const storage = { getItem: () => saved, setItem() { throw new Error('quota'); }, removeItem() { saved = null; } };
+  const drafts = createDrafts(storage);
+  assert.equal(drafts.size, 0);
+  drafts.put('bookmark:new', { title: 'Retained in memory' }, {});
+  assert.equal(drafts.get('bookmark:new').title, 'Retained in memory');
+  assert.equal(drafts.persisted, false);
+  assert.equal(saved, null);
+});
+
+test('capture recovery distinguishes blocked access, absent pages, timeout and protected destinations', () => {
+  assert.match(captureFailure('HTTP 403'), /refused access/);
+  assert.match(captureFailure('HTTP 404'), /not found/);
+  assert.match(captureFailure('context deadline exceeded'), /too long/);
+  assert.match(captureFailure('private address rejected'), /network protection/);
+  assert.match(captureFailure('page too large'), /size limit/);
+  assert.ok(captureFailure('x'.repeat(1000)).length < 260);
 });

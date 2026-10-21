@@ -4,13 +4,16 @@
   const $ = (id) => document.getElementById(id);
   const state = { filter: "all", collection: null, tag: "", query: "", page: 1, pageSize: 40, total: 0, links: [], collections: [], editing: null, reading: null, readerRequest: 0, request: 0, timer: null, signedIn: false, sort: "newest", fuzzy: false, selected: new Set(), editingCollection: null, annotations: [], annotationDraft: null, readerSelection: null };
   let toastTimer;
+  let expandedBookmarkActions = null;
   let searchTimer;
   let tagsTimer;
   let tagsPage = 1;
   let tagsRequest = 0;
   let showingTags = false;
   const workspace = globalThis.PocketmarkWorkspace;
-  const drafts = workspace.createDrafts();
+  let draftStorage;
+  try { draftStorage = window.sessionStorage; } catch { /* Private browsing may deny storage. */ }
+  const drafts = workspace.createDrafts(draftStorage);
   const tagPickers = new Map();
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
   const activeMotion = new Map();
@@ -628,10 +631,25 @@
       status.prepend(icon(link.status === "ready" ? "check" : link.status === "failed" ? "warning" : "clock"));
       footer.append(status);
       const actions = el("div", "card-actions");
-      actions.append(favorite);
-      actions.append(actionButton(link.read ? "check" : "clock", link.read ? "Mark unread" : "Mark as read", (event) => updateLink(link, { read: !link.read }, event.currentTarget), link.read ? "read" : ""));
-      actions.append(actionButton("edit", "Edit bookmark", () => openEditor(link)));
-      actions.append(actionButton("trash", "Delete bookmark", async (event) => {
+      favorite.append(el("span", "mobile-action-label", "Favorite"));
+      const moreActions = el("button", "card-actions-toggle button subtle", "Actions");
+      moreActions.type = "button";
+      moreActions.dataset.focusKey = `link:${link.id}:more`;
+      moreActions.setAttribute("aria-label", `Actions for ${link.title || link.url}`);
+      const overflow = el("div", "card-overflow-actions");
+      overflow.id = `link-${link.id}-actions`;
+      const expanded = expandedBookmarkActions === link.id;
+      overflow.classList.toggle("is-open", expanded);
+      moreActions.setAttribute("aria-controls", overflow.id);
+      moreActions.setAttribute("aria-expanded", String(expanded));
+      moreActions.addEventListener("click", () => {
+        expandedBookmarkActions = expandedBookmarkActions === link.id ? null : link.id;
+        renderLinks();
+      });
+      actions.append(favorite, moreActions, overflow);
+      overflow.append(actionButton(link.read ? "check" : "clock", link.read ? "Mark unread" : "Mark as read", (event) => updateLink(link, { read: !link.read }, event.currentTarget), link.read ? "read" : ""));
+      overflow.append(actionButton("edit", "Edit bookmark", () => openEditor(link)));
+      overflow.append(actionButton("trash", "Delete bookmark", async (event) => {
         if (!confirm(`Delete “${link.title || link.url}” and its saved content?`)) return;
         const button = event.currentTarget;
         button.disabled = true;
@@ -651,11 +669,13 @@
         original.rel = "noopener noreferrer";
         original.title = "Visit original";
         original.setAttribute("aria-label", `Visit ${host}`);
-        actions.append(original);
+        overflow.append(original);
       }
       footer.append(actions);
       actions.querySelectorAll("button,a").forEach((button, i) => {
-        button.dataset.focusKey = `link:${link.id}:action:${i}`;
+        if (button === moreActions) return;
+        button.dataset.focusKey = `link:${link.id}:action:${button === favorite ? 0 : i - 1}`;
+        if (button !== favorite) button.append(el("span", "mobile-action-label", button.title));
         button.setAttribute("aria-label", `${button.title}: ${link.title || link.url}`);
       });
       card.append(top, body, footer);
@@ -946,6 +966,7 @@
   async function openReader(id, recheck = false) {
     const scroll = recheck ? $("reader-dialog").scrollTop : 0;
     const request = ++state.readerRequest;
+    if (!recheck) $("reader-options").open = false;
     layoutRequest++;
     state.reading = null;
     readerAssets = []; readerLayoutURL = "";
@@ -993,7 +1014,7 @@
       $("reader-archive").href = `/api/links/${id}/archive`;
       $("reader-archive").setAttribute("download", "");
       $("reader-content").textContent = link.content || link.description || "No readable content captured yet. Visit the original page, or try refreshing the capture.";
-      $("reader-status").textContent = { ready: "Captured text", failed: "Capture failed. Open Reading options to retry, or attach a snapshot under Files.", pending: "Capture queued. You can check its status here.", processing: "Capture in progress. You can check its status here." }[link.status] || "";
+      $("reader-status").textContent = { ready: "Captured text", failed: `Capture failed. ${workspace.captureFailure(link.error)} Open Reading options to retry, or attach a snapshot under Files.`, pending: "Capture queued. You can check its status here.", processing: "Capture in progress. You can check its status here." }[link.status] || "";
       $("reader-recheck").hidden = !["pending", "processing"].includes(link.status);
       const draft = drafts.get(draftKey(link));
       $("reader-notes").value = draft?.notes ?? link.notes ?? "";
@@ -1493,6 +1514,22 @@
       await loadAssets(id); toast(`Page saved with ${result.embedded || 0} resources.${result.omitted ? ` ${result.omitted} resources could not be embedded.` : ""}`);
     } catch (error) { toast(error.message, true); } finally { $("preserve-page").disabled = false; }
   });
+
+  function updateHelp() {
+    const query = $("help-search").value.trim().toLocaleLowerCase();
+    let matches = 0;
+    document.querySelectorAll("#help-topics > details").forEach((topic) => {
+      const match = !query || topic.textContent.toLocaleLowerCase().includes(query);
+      topic.hidden = !match;
+      topic.open = !!query && match;
+      if (match) matches++;
+    });
+    $("help-results").textContent = `${matches} help topic${matches === 1 ? "" : "s"}`;
+    $("help-empty").hidden = matches > 0;
+  }
+  $("help-search").addEventListener("input", updateHelp);
+  $("help-clear").addEventListener("click", () => { $("help-search").value = ""; updateHelp(); $("help-search").focus(); });
+  $("help-button").addEventListener("click", () => { $("help-search").value = ""; updateHelp(); $("help-dialog").showModal(); });
 
   function configureLogin(passwordEnabled = true) {
     $("login-title").textContent = setupRequired ? "Create your account" : "Welcome back";
