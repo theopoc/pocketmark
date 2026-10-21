@@ -107,7 +107,34 @@
     if (/no such host|lookup|DNS/i.test(message)) return "The site’s address could not be reached.";
     return message ? `Details: ${message.slice(0, 240)}` : "The site did not provide a readable capture.";
   }
-  const workspace = { readRoute, routeSearch, createDrafts, readerSnapshot, tagValues, searchExcerpt, captureFailure };
+  function bookmarkIssues(value) {
+    const issues = {};
+    const bytes = (text) => new TextEncoder().encode(text || "").length;
+    const url = (value.url || "").trim(), title = (value.title || "").trim();
+    if (value.type !== "file") {
+      try {
+        const parsed = new URL(url);
+        if (!["http:", "https:"].includes(parsed.protocol) || !parsed.hostname || parsed.username || parsed.password || /[\u0000-\u001f\u007f]/.test(url)) throw new Error("invalid URL");
+      } catch { issues.url = "Enter a complete http:// or https:// URL without a username or password."; }
+      if (bytes(url) > 4096) issues.url = "This URL is too long. Use a URL shorter than 4 KiB.";
+    }
+    if (bytes(title) > 1024 && title !== url) issues.title = "Shorten the title to 1 KiB or less. Accented characters and emoji can use several bytes.";
+    if (bytes((value.description || "").trim()) > 8192) issues.description = "Shorten the description to 8 KiB or less.";
+    if (bytes(value.notes) > 65536) issues.notes = "Shorten the notes to 64 KiB or less, or attach the full text as a file.";
+    const tags = tagValues(value.tags || []);
+    if (tags.length > 32) issues.tags = "Choose up to 32 tags. Remove a tag before adding another.";
+    else if (tags.some((tag) => bytes(tag) > 80)) issues.tags = "Shorten each tag to 80 bytes or less. Accented characters and emoji can use several bytes.";
+    return issues;
+  }
+  function requestFailure(status, message = "") {
+    if (!status) return "Could not reach Pocketmark. Check your connection and that the server is running, then try again. Unsaved changes stay in this tab.";
+    if (status === 401) return "Your sign-in has expired. Sign in again to continue. Your drafts are kept in this tab.";
+    if (status === 404) return "This item is no longer available. Refresh the library before trying again.";
+    if (status === 429) return message || "Too many requests. Wait a moment, then try again.";
+    if (status >= 500) return "The server could not complete this action. Check that Pocketmark is running correctly, then try again. Unsaved changes stay in this tab.";
+    return message || "This action could not be completed. Check the details and try again.";
+  }
+  const workspace = { readRoute, routeSearch, createDrafts, readerSnapshot, tagValues, searchExcerpt, captureFailure, bookmarkIssues, requestFailure };
   if (typeof module !== "undefined" && module.exports) module.exports = workspace;
   else root.PocketmarkWorkspace = workspace;
 })(globalThis);

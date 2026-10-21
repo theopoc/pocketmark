@@ -6,6 +6,7 @@
   --sidebar: #f6f7f9;
   --surface: #f8f9fb;
   --line: #e3e5eb;
+  --control-line: #818896;
   --accent: #4f46e5;
   --accent-hover: #4038c5;
   --accent-soft: #eeedff;
@@ -294,6 +295,7 @@ body:has(dialog[open]) { overflow: hidden; }
   --sidebar: #191a21;
   --surface: #1e2029;
   --line: #30323e;
+  --control-line: #747b92;
   --accent: #6359ed;
   --accent-hover: #5a50df;
   --accent-soft: #2b2750;
@@ -594,3 +596,10 @@ body:has(dialog[open]) { overflow: hidden; }
 #toast { display: flex; align-items: center; gap: 16px; }
 .toast-action { flex-shrink: 0; min-height: 44px; padding: 6px 12px; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 5px; font-size: 12px; }
 .toast-action:hover { text-decoration: underline; }
+
+/* Field boundaries must remain identifiable without relying on focus. */
+[data-theme] input, [data-theme] select, [data-theme] textarea,
+[data-theme] .search-box, [data-theme] .tag-picker-field { border-color: var(--control-line); }
+.search-scope { display: block; max-width: 32ch; font-size: 12px; line-height: 1.5; }
+.library-options { flex-wrap: wrap; }
+@media (max-width: 600px) { .library-options > .inline-check { align-items: flex-start; padding-block: 8px; } .library-options > .inline-check input { margin-top: 2px; } }

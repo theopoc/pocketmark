@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { readRoute, routeSearch, createDrafts, readerSnapshot, tagValues, searchExcerpt, captureFailure } = require('./static/workspace.js');
+const { readRoute, routeSearch, createDrafts, readerSnapshot, tagValues, searchExcerpt, captureFailure, bookmarkIssues, requestFailure } = require('./static/workspace.js');
 
 test('search excerpts preserve untrusted HTML as literal text and truncated matches', () => {
   assert.deepEqual(searchExcerpt('<img src=x> before \x1ecafé\x1f after'), [
@@ -126,4 +126,27 @@ test('tag search excerpts show decoded names without JSON punctuation', () => {
     { text: 'frontend · ', match: false }, { text: 'design', match: true },
   ]);
   assert.deepEqual(searchExcerpt('["a\\\"b","c\\\\d"]'), [{ text: 'a"b · c\\d', match: false }]);
+});
+
+
+test('bookmark validation catches UTF-8 limits and unsafe URLs before submission', () => {
+  const bookmark = { url: 'https://example.com', title: 'Saved page', tags: [] };
+  assert.deepEqual(bookmarkIssues(bookmark), {});
+  assert.ok(bookmarkIssues({ ...bookmark, url: 'https://user:secret@example.com' }).url);
+  assert.ok(bookmarkIssues({ ...bookmark, title: '界'.repeat(342) }).title);
+  assert.ok(bookmarkIssues({ ...bookmark, tags: ['界'.repeat(27)] }).tags);
+  assert.ok(bookmarkIssues({ ...bookmark, tags: Array.from({ length: 33 }, (_, i) => 'tag' + i) }).tags);
+  assert.ok(bookmarkIssues({ ...bookmark, notes: 'x'.repeat(65537) }).notes);
+  const longURL = 'https://example.com/' + 'a'.repeat(1500);
+  assert.deepEqual(bookmarkIssues({ ...bookmark, url: longURL, title: longURL }), {});
+  assert.deepEqual(bookmarkIssues({ ...bookmark, type: 'file', url: 'pocketmark-file:' + 'a'.repeat(64) }), {});
+});
+
+test('request failures offer specific recovery while preserving useful validation details', () => {
+  assert.match(requestFailure(0), /connection.*server.*Unsaved changes/);
+  assert.match(requestFailure(401), /Sign in again.*drafts/);
+  assert.match(requestFailure(404), /no longer available.*Refresh/);
+  assert.match(requestFailure(500), /server.*try again.*Unsaved changes/);
+  assert.equal(requestFailure(400, 'Choose up to 32 tags.'), 'Choose up to 32 tags.');
+  assert.equal(requestFailure(429, 'Retry in one minute.'), 'Retry in one minute.');
 });

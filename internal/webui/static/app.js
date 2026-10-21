@@ -263,17 +263,26 @@
   async function api(path, options = {}) {
     const headers = new Headers(options.headers || {});
     if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-    const response = await fetch(path, { ...options, headers, credentials: "same-origin" });
+    let response;
+    try { response = await fetch(path, { ...options, headers, credentials: "same-origin" }); }
+    catch { throw new Error(workspace.requestFailure(0)); }
     let body = null;
     if (response.status !== 204) {
-      const text = await response.text();
+      let text;
+      try { text = await response.text(); }
+      catch { throw new Error(workspace.requestFailure(0)); }
       if (text) {
         try { body = JSON.parse(text); } catch { throw new Error("The server returned an unexpected response. Please try again."); }
       }
     }
     if (!response.ok) {
-      if (response.status === 401 && path !== "/api/login" && path !== "/api/setup") showLogin();
-      const error = new Error(body?.error || `Request failed (${response.status}).`);
+      if (response.status === 401 && path !== "/api/login" && path !== "/api/setup") {
+        const expired = state.signedIn;
+        showLogin();
+        if (expired) $("login-error").textContent = workspace.requestFailure(401);
+      }
+      const message = response.status === 401 && ["/api/login", "/api/setup"].includes(path) ? (body?.error || "Check your username and password, then try again.") : workspace.requestFailure(response.status, body?.error);
+      const error = new Error(message);
       error.status = response.status;
       throw error;
     }
@@ -802,6 +811,7 @@
     const draft = drafts.get(draftKey(link));
     if (draft) fillEditor(draft);
     $("bookmark-draft").hidden = !draft;
+    validateBookmarkFields();
     $("bookmark-dialog").showModal();
     $("bookmark-url").focus();
   }
@@ -810,14 +820,23 @@
   function editorValues() {
     return { url: $("bookmark-url").value, title: $("bookmark-title").value, description: $("bookmark-description").value, notes: $("bookmark-notes").value, collectionId: $("bookmark-collection").value ? Number($("bookmark-collection").value) : null, tags: [...new Set($("bookmark-tags").value.split(",").map((tag) => tag.trim()).filter(Boolean))], favorite: $("bookmark-favorite").checked, read: $("bookmark-read").checked };
   }
+  function validateBookmarkFields() {
+    const issues = workspace.bookmarkIssues({ ...editorValues(), type: state.editing?.type });
+    for (const field of ["url", "title", "description", "notes", "tags"]) {
+      $("bookmark-" + field + (field === "tags" ? "-query" : "")).setCustomValidity(issues[field] || "");
+    }
+    return issues;
+  }
   function fillEditor(value) {
     for (const field of ["url", "title", "description", "notes"]) $("bookmark-" + field).value = value[field] || "";
     tagPickers.get("bookmark-tags").set(value.tags || []);
     fillCollections($("bookmark-collection"), value.collectionId);
     $("bookmark-favorite").checked = !!value.favorite; $("bookmark-read").checked = !!value.read;
+    validateBookmarkFields();
   }
   $("bookmark-form").addEventListener("input", () => {
     if (!editorBaseline) return;
+    validateBookmarkFields();
     drafts.put(draftKey(state.editing), editorValues(), editorBaseline);
     $("bookmark-draft").hidden = !drafts.get(draftKey(state.editing));
   });
@@ -1148,6 +1167,7 @@
 
   $("bookmark-form").addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (Object.keys(validateBookmarkFields()).length) { $("bookmark-form").reportValidity(); return; }
     const button = event.submitter;
     const session = editorSession, editing = state.editing, key = draftKey(editing), submitted = editorValues();
     button.disabled = true;
