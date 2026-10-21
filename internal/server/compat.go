@@ -1,7 +1,7 @@
 package server
 
-// This adapter implements the private-library HTTP shapes used by legacy client's
-// extension and mobile client. It does not implement collaboration or NextAuth.
+// This adapter implements private-library HTTP shapes used by compatible
+// extensions and mobile clients. It does not implement collaboration or NextAuth.
 import (
 	"bufio"
 	"bytes"
@@ -119,7 +119,7 @@ func (a *Server) registerCompat(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/archives/{id}", a.compatArchive)
 	mux.HandleFunc("POST /api/v1/archives/{id}", a.compatUploadArchive)
 	mux.HandleFunc("GET /api/v1/", func(w http.ResponseWriter, r *http.Request) {
-		compatRespond(w, 501, "This legacy client API operation is not supported by Pocketmark")
+		compatRespond(w, 501, "This compatibility API operation is not supported by Pocketmark")
 	})
 }
 func (a *Server) compatSession(w http.ResponseWriter, r *http.Request) {

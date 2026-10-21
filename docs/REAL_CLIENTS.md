@@ -7,10 +7,11 @@
 | Client | Artifact | Runtime result |
 | --- | --- | --- |
 | Pocketmark Advanced | Local package, 1.0.0 | PDF, full-page PNG and rendered HTML uploaded successfully; two bugs corrected and retested |
-| Official legacy client extension | Unmodified Chrome Web Store package, 1.5.6 | Password login, collection selection, tags, description, screenshot upload and existing-link detection passed |
-| Official Floccus | Unmodified Chromium release, 5.11.1 | Native legacy client and WebDAV backends passed the workflows below, including restart |
-| Official legacy client Android | Unmodified official APK, 1.4.4 | Password login, dashboard, bookmark/tag/collection edits, search and archive views passed in an ARM64 emulator; offline limitation documented below |
+| Third-party extension | Unmodified Chrome Web Store package, 1.5.6 | Password login, collection selection, tags, description, screenshot upload and existing-link detection passed |
+| Official Floccus | Unmodified Chromium release, 5.11.1 | Native API and WebDAV backends passed the workflows below, including restart |
+| Third-party Android app | Unmodified official APK, 1.4.4 | Password login, dashboard, bookmark/tag/collection edits, search and archive views passed in an ARM64 emulator; offline limitation documented below |
 
+Floccus artifact provenance is recorded in [Floccus notes](CLIENT_FLOCCUS_NOTES.md). All client tests used unmodified packages.
 
 ## Advanced capture
 
@@ -25,15 +26,15 @@ The fixture is served by `scripts/real_clients_fixture.py`. JavaScript adds five
 
 Evidence: [capture completed](real-advanced-capture.png), [connection recovered](real-advanced-reconnect.png).
 
-## Official legacy client extension
+## Third-party extension
 
 The unmodified extension sent real requests through a local logging proxy. Password authentication returned a session token; collection/config/tag reads succeeded. Saving a synthetic page created its name, description and `real-client` tag, followed by a 577,724-byte PNG through `/api/v1/archives/2?format=0`. Reopening displayed “You've already saved this link”.
 
-Evidence: existing-link recognition (screenshot omitted). This qualifies the exercised extension workflows, not every legacy client endpoint or mobile application.
+This qualifies only the exercised extension workflows.
 
-## Floccus native legacy client backend
+## Floccus native API backend
 
-Use the **legacy client** backend, the Pocketmark origin, any descriptive username and a dedicated API key as the access token. The tested server collection is `Floccus real native`; the local folder belongs only to the temporary Chrome profile. Automatic synchronization was disabled for controlled manual tests.
+For native API synchronization, use the Pocketmark origin, any descriptive username and a dedicated API key as the access token. The tested server collection is `Floccus real native`; the local folder belongs only to the temporary Chrome profile. Automatic synchronization was disabled for controlled manual tests.
 
 Passed through the real Floccus UI:
 
@@ -79,8 +80,9 @@ After validation, the temporary Chrome profile, downloaded test clients, synthet
 
 ## Official Android application — 20 October 2026
 
-The actual release APK, **legacy client for Android 1.4.4**, was installed without modification into a disposable AOSP Android 11/API 30 ARM64 emulator. Native UI actions operated the application, not a rebuilt client or an HTTP-only imitation. No physical phone or personal browser profile was used. The emulator used a private SDK/AVD and ADB port, with a synthetic Pocketmark account and separate database. Its server address was `http://10.0.2.2:18094`, forwarding to the isolated instance on port 18092. This cleartext address was restricted to the local test environment; normal remote use needs HTTPS.
+The actual release APK, the third-party Android client (1.4.4), was installed without modification into a disposable AOSP Android 11/API 30 ARM64 emulator. Native UI actions operated the application, not a rebuilt client or an HTTP-only imitation. No physical phone or personal browser profile was used. The emulator used a private SDK/AVD and ADB port, with a synthetic Pocketmark account and separate database. Its server address was `http://10.0.2.2:18094`, forwarding to the isolated instance on port 18092. This cleartext address was restricted to the local test environment; normal remote use needs HTTPS.
 
+The tested Android APK was version 1.4.4, 142,604,910 bytes, SHA-256 `94171eef0975f2d650119ac2baf0dadcd3113892a320e03713d2c36e9bbe473c`. This run does not qualify iOS.
 
 ### Exercised workflows
 
