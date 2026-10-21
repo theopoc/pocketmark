@@ -130,7 +130,7 @@ func (a *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	publicAPI := r.URL.Path == "/api/login" || r.URL.Path == "/api/v1/session" || r.URL.Path == "/api/v1/config" || r.URL.Path == "/api/v1/logins"
+	publicAPI := r.URL.Path == "/api/login" || r.URL.Path == "/api/setup" || r.URL.Path == "/api/v1/session" || r.URL.Path == "/api/v1/config" || r.URL.Path == "/api/v1/logins"
 	if strings.HasPrefix(r.URL.Path, "/api/") && !publicAPI && !a.authenticated(r) {
 		fail(w, 401, "sign in required")
 		return
@@ -181,14 +181,13 @@ func (a *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Token    string `json:"token"`
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
 	if !decode(w, r, &body, 4096) {
 		return
 	}
-	if !secretEqual(body.Token, a.token) && !a.verifyPassword(r, body.Username, body.Password) {
+	if !a.verifyPassword(r, body.Username, body.Password) {
 		fail(w, 401, "invalid credentials")
 		return
 	}

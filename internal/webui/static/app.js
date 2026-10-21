@@ -210,6 +210,7 @@
     toastTimer = setTimeout(() => { $("toast").hidden = true; }, 5000);
   }
 
+  let setupRequired = false;
   function showLogin() {
     clearTimeout(tagsTimer);
     tagsRequest++;
@@ -219,7 +220,7 @@
     document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
     $("app-view").hidden = true;
     $("login-view").hidden = false;
-    $( $("login-method").value === "password" ? "login-username" : "login-token").focus();
+    $("login-username").focus();
   }
 
   async function api(path, options = {}) {
@@ -234,7 +235,7 @@
       }
     }
     if (!response.ok) {
-      if (response.status === 401 && path !== "/api/login") showLogin();
+      if (response.status === 401 && path !== "/api/login" && path !== "/api/setup") showLogin();
       const error = new Error(body?.error || `Request failed (${response.status}).`);
       error.status = response.status;
       throw error;
@@ -1012,8 +1013,11 @@
     button.disabled = true;
     $("login-error").textContent = "";
     try {
-      await api("/api/login", { method: "POST", body: JSON.stringify($("login-method").value === "password" ? { username: $("login-username").value, password: $("login-password").value } : { token: $("login-token").value }) });
-      $("login-token").value = "";
+      if (setupRequired && $("login-password").value !== $("login-confirm").value) throw new Error("The passwords do not match.");
+      await api(setupRequired ? "/api/setup" : "/api/login", { method: "POST", body: JSON.stringify({ username: $("login-username").value.trim(), password: $("login-password").value }) });
+      setupRequired = false;
+      configureLogin();
+      $("login-confirm").value = "";
       $("login-password").value = "";
       state.signedIn = true;
       $("login-view").hidden = true;
@@ -1449,14 +1453,21 @@
     } catch (error) { toast(error.message, true); } finally { $("preserve-page").disabled = false; }
   });
 
-  $("login-method").addEventListener("change", () => {
-    const password = $("login-method").value === "password";
-    $("login-password-fields").hidden = !password; $("login-token-fields").hidden = password;
-    $("login-token").required = !password; $("login-username").required = password; $("login-password").required = password;
-  });
+  function configureLogin(passwordEnabled = true) {
+    $("login-title").textContent = setupRequired ? "Create your account" : "Welcome back";
+    $("login-description").textContent = setupRequired ? "Set up your personal Pocketmark library." : "Sign in to your Pocketmark library.";
+    $("login-submit-label").textContent = setupRequired ? "Create account" : "Sign in";
+    $("login-confirm-fields").hidden = !setupRequired;
+    $("login-confirm").required = setupRequired;
+    $("login-password").autocomplete = setupRequired ? "new-password" : "current-password";
+    $("login-password").minLength = setupRequired ? 12 : 1;
+    $("login-help").textContent = setupRequired ? "Choose a password of at least 12 characters. This instance has one personal account." : passwordEnabled ? "Use your Pocketmark username and password." : "Your existing library needs a password. Ask the server administrator to configure it using the account recovery instructions.";
+    $("login-submit").disabled = !setupRequired && !passwordEnabled;
+  }
   async function loadTokens() {
     const tokens = await api("/api/tokens");
     $("token-list").replaceChildren();
+    if (!tokens?.length) $("token-list").append(el("p", "small muted", "No API keys yet."));
     for (const token of tokens || []) {
       const row = el("div", "asset-item"); row.append(el("span", "", token.name));
       const revoke = el("button", "text-button", "Revoke");
@@ -1464,11 +1475,17 @@
         if (!confirm(`Revoke “${token.name}”? Apps using it will lose access.`)) return;
         revoke.disabled = true;
         try { await api(`/api/tokens/${token.id}`, { method: "DELETE" }); await loadTokens(); }
-        catch (error) { $("settings-error").textContent = error.message; revoke.disabled = false; }
+        catch (error) { $("tokens-error").textContent = error.message; revoke.disabled = false; }
       });
       row.append(revoke); $("token-list").append(row);
     }
   }
+  $("api-keys-button").addEventListener("click", async () => {
+    $("tokens-error").textContent = "";
+    $("new-token-value").value = ""; $("new-token").hidden = true;
+    $("api-keys-dialog").showModal();
+    try { await loadTokens(); } catch (error) { $("tokens-error").textContent = error.message; }
+  });
   $("settings-button").addEventListener("click", async () => {
     $("settings-error").textContent = "";
     $("new-token-value").value = ""; $("new-token").hidden = true;
@@ -1478,7 +1495,6 @@
       const account = await api("/api/account");
       $("account-username").value = account.username || "";
       $("account-status").textContent = account.passwordEnabled ? "Password sign-in is enabled." : "Password sign-in is not configured.";
-      await loadTokens();
     } catch (error) { $("settings-error").textContent = error.message; }
   });
   $("account-form").addEventListener("submit", async (event) => {
@@ -1488,24 +1504,17 @@
       $("account-password").value = ""; $("account-status").textContent = "Password sign-in is enabled."; toast("Password updated.");
     } catch (error) { $("settings-error").textContent = error.message; } finally { event.submitter.disabled = false; }
   });
-  $("disable-password").addEventListener("click", async () => {
-    if (!confirm("Disable password sign-in? Keep your master access token for future sign-ins.")) return;
-    $("disable-password").disabled = true;
-    try {
-      await api("/api/account", { method: "PUT", body: JSON.stringify({ username: $("account-username").value.trim(), password: "" }) });
-      $("account-status").textContent = "Password sign-in is disabled."; toast("Password sign-in disabled.");
-    } catch (error) { $("settings-error").textContent = error.message; } finally { $("disable-password").disabled = false; }
-  });
   $("token-form").addEventListener("submit", async (event) => {
-    event.preventDefault(); event.submitter.disabled = true; $("settings-error").textContent = "";
+    event.preventDefault(); event.submitter.disabled = true; $("tokens-error").textContent = "";
     try {
       const token = await api("/api/tokens", { method: "POST", body: JSON.stringify({ name: $("token-name").value.trim() }) });
       $("new-token-value").value = token.token; $("new-token").hidden = false; $("token-name").value = "";
       await loadTokens();
-    } catch (error) { $("settings-error").textContent = error.message; } finally { event.submitter.disabled = false; }
+    } catch (error) { $("tokens-error").textContent = error.message; } finally { event.submitter.disabled = false; }
   });
   $("copy-token").addEventListener("click", async () => { try { await navigator.clipboard.writeText($("new-token-value").value); toast("Key copied."); } catch { $("new-token-value").select(); toast("Select and copy the key."); } });
-  $("settings-dialog").addEventListener("close", () => { $("new-token-value").value = ""; $("new-token").hidden = true; $("account-password").value = ""; });
+  $("settings-dialog").addEventListener("close", () => { $("account-password").value = ""; });
+  $("api-keys-dialog").addEventListener("close", () => { $("new-token-value").value = ""; $("new-token").hidden = true; });
   $("export-button").addEventListener("click", () => $("export-dialog").showModal());
   $("reader-dialog").addEventListener("close", () => { state.readerRequest++; layoutRequest++; $("reader-layout").removeAttribute("src"); });
 
@@ -1526,6 +1535,10 @@
 
   async function init() {
     try {
+      const setup = await api("/api/setup");
+      setupRequired = setup.setupRequired;
+      configureLogin(setup.passwordEnabled);
+      if (setupRequired || !setup.passwordEnabled) { showLogin(); return; }
       const session = await api("/api/session");
       if (!session?.authenticated) { showLogin(); return; }
       state.signedIn = true;

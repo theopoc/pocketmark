@@ -7,7 +7,7 @@ Pocketmark is a personal bookmark manager whose primary constraint is low server
 - Read the owning implementation and nearby tests. Preserve existing library data and unrelated edits.
 - For storage changes, read `internal/store/` migrations and add a legacy-database/restart regression. SQLite runs through CGO with the build tags defined in `Makefile`; a plain `CGO_ENABLED=0` build is unsupported.
 - For authentication, network fetching or archives, read [API limits](docs/API.md) and [archive boundaries](docs/ARCHIVES.md). Preserve origin checks, SSRF filtering, request limits, bounded queues and streamed asset I/O.
-- For legacy client/Floccus changes, consult [feature coverage](docs/FEATURES.md) and [actual client evidence](docs/REAL_CLIENTS.md). Distinguish protocol tests, real-client observations and untested clients; Android's prolonged-offline cache limitation is unresolved upstream.
+- For client compatibility or Floccus changes, consult [feature coverage](docs/FEATURES.md) and [actual client evidence](docs/REAL_CLIENTS.md). Distinguish protocol tests, real-client observations and untested clients; Android's prolonged-offline cache limitation is unresolved upstream.
 - Prefer standard-library solutions and bounded disk-backed work. Justify any new resident process, in-memory index, cache or dependency against the RAM goal.
 
 ## Verification and delivery

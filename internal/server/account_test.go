@@ -9,7 +9,7 @@ import (
 
 func TestPasswordKeysAndRevocation(t *testing.T) {
 	a := newTestServer(t, "", false)
-	login := request(a, "POST", "/api/login", `{"token":"`+testToken+`"}`, false, nil)
+	login := passwordLogin(t, a)
 	oldCookie := login.Result().Cookies()[0].String()
 	requireStatus(t, request(a, "PUT", "/api/account", `{"username":"me","password":"short"}`, true, nil), 400)
 	w := request(a, "PUT", "/api/account", `{"username":"me","password":"correct horse battery"}`, true, nil)
@@ -28,7 +28,7 @@ func TestPasswordKeysAndRevocation(t *testing.T) {
 	requireStatus(t, request(a, "GET", "/api/links", "", false, h), 200)
 	requireStatus(t, request(a, "GET", "/api/account", "", false, h), 403)
 	requireStatus(t, request(a, "POST", "/api/tokens", `{"name":"escalate"}`, false, h), 403)
-	requireStatus(t, request(a, "POST", "/api/login", `{"token":"`+key.Token+`"}`, false, nil), 401)
+	requireStatus(t, request(a, "POST", "/api/login", `{"token":"`+key.Token+`"}`, false, nil), 400)
 	w = request(a, "GET", "/api/tokens", "", true, nil)
 	if strings.Contains(w.Body.String(), key.Token) {
 		t.Fatal("listed raw key")

@@ -32,6 +32,12 @@ func newTestServer(t *testing.T, origin string, secure bool) *Server {
 	return New(s, testToken, origin, secure)
 }
 
+func passwordLogin(t *testing.T, a *Server) *httptest.ResponseRecorder {
+	t.Helper()
+	requireStatus(t, request(a, "PUT", "/api/account", `{"username":"me","password":"test-only-password"}`, true, nil), 200)
+	return request(a, "POST", "/api/login", `{"username":"me","password":"test-only-password"}`, false, nil)
+}
+
 func request(a *Server, method, path, body string, bearer bool, headers map[string]string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(method, "http://pocketmark.test"+path, strings.NewReader(body))
 	if body != "" {
@@ -61,8 +67,8 @@ func TestAuthenticationCookieAndBearer(t *testing.T) {
 		requireStatus(t, request(a, "GET", path, "", false, nil), 401)
 		requireStatus(t, request(a, "GET", path, "", true, nil), 200)
 	}
-	requireStatus(t, request(a, "POST", "/api/login", `{"token":"wrong"}`, false, nil), 401)
-	w := request(a, "POST", "/api/login", `{"token":"`+testToken+`"}`, false, nil)
+	requireStatus(t, request(a, "POST", "/api/login", `{"username":"me","password":"wrong"}`, false, nil), 401)
+	w := passwordLogin(t, a)
 	requireStatus(t, w, 200)
 	cookies := w.Result().Cookies()
 	if len(cookies) != 1 {
@@ -90,15 +96,15 @@ func TestAuthenticationCookieAndBearer(t *testing.T) {
 func TestLoginRateLimitAndReset(t *testing.T) {
 	a := newTestServer(t, "", false)
 	for i := 0; i < 10; i++ {
-		requireStatus(t, request(a, "POST", "/api/login", `{"token":"wrong"}`, false, nil), 401)
+		requireStatus(t, request(a, "POST", "/api/login", `{"username":"me","password":"wrong"}`, false, nil), 401)
 	}
-	w := request(a, "POST", "/api/login", `{"token":"`+testToken+`"}`, false, nil)
+	w := passwordLogin(t, a)
 	requireStatus(t, w, 429)
 	if w.Header().Get("Retry-After") == "" {
 		t.Fatal("missing retry guidance")
 	}
 	a.loginAt = time.Now().Add(-2 * time.Minute)
-	requireStatus(t, request(a, "POST", "/api/login", `{"token":"`+testToken+`"}`, false, nil), 200)
+	requireStatus(t, passwordLogin(t, a), 200)
 }
 
 func TestOriginAndFetchSiteProtection(t *testing.T) {

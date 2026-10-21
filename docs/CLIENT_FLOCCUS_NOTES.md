@@ -37,8 +37,9 @@ The [caching adapter](https://github.com/floccusaddon/floccus/blob/944fc3eadccc4
 
 Floccus also requires the exact UTF-8 XML declaration produced by its serializer. Go's standard `xml.Header` matches this requirement. Original uploaded XML must remain retrievable unchanged through the immediate upload verification; later regenerated snapshots require stable numeric mappings and ordering.
 
-## Native legacy client backend
+## Native API backend
 
+The native API adapter is separate from WebDAV. Configure the Pocketmark origin, a dedicated API key in the password field, and a server folder such as `Floccus`. It sends Bearer authentication directly; it does not log in with a personal password.
 
 It fetches `/api/v1/search?searchQueryString=` with cursor pagination, expecting `data.links` and `data.nextCursor`, then `/api/v1/collections`, expecting `response`. It creates a missing server folder, supports nested collection CRUD and link CRUD, and submits up to five concurrent requests. Bookmark updates read existing tags when tag synchronization is disabled. Its declared capabilities explicitly do not preserve custom ordering. Only HTTP(S) URLs should be used in Pocketmark validation; the client additionally accepts schemes Pocketmark intentionally rejects.
 
@@ -59,4 +60,3 @@ Go regressions cover authenticated extension requests, invalid credentials with 
 | `WebDav.ts` | `b5a767b18d17fe57c7c18af8926547e6063e11d44f6da5e8c0fefd73c1d09458` |
 | `Xbel.ts` | `2c8dbe59a88070ef41bf602a12575c78f02bb19ae5dfadeed695a5d07df55a82` |
 | `Caching.ts` | `1bdc3cbb459012be68fe1b664172895fa30f757529c6eeae40d79276a6229039` |
-| `legacy client.ts` | `cbee634fcea4a6378114cf0b853d8438b8d491d7931e46f917b827626716f53a` |
