@@ -37,6 +37,7 @@ type Link struct {
 	Status           string   `json:"status"`
 	Error            string   `json:"error,omitempty"`
 	Content          string   `json:"content,omitempty"`
+	SearchSnippet    string   `json:"searchSnippet,omitempty"`
 	ArchiveAvailable bool     `json:"archiveAvailable"`
 	CreatedAt        string   `json:"createdAt"`
 	UpdatedAt        string   `json:"updatedAt"`
@@ -228,13 +229,14 @@ const columns = `l.id,l.url,l.title,l.description,l.notes,l.collection_id,l.tags
 
 type scanner interface{ Scan(...any) error }
 
-func scan(row scanner, withContent bool) (Link, error) {
+func scan(row scanner, withContent bool, extra ...any) (Link, error) {
 	var l Link
 	var tags string
 	dst := []any{&l.ID, &l.URL, &l.Title, &l.Description, &l.Notes, &l.CollectionID, &tags, &l.Favorite, &l.Read, &l.Status, &l.Error, &l.ArchiveAvailable, &l.CreatedAt, &l.UpdatedAt}
 	if withContent {
 		dst = append(dst, &l.Content)
 	}
+	dst = append(dst, extra...)
 	err := row.Scan(dst...)
 	if err == nil {
 		err = json.Unmarshal([]byte(tags), &l.Tags)
@@ -255,6 +257,7 @@ func (s *Store) List(ctx context.Context, f Filter) (Page, error) {
 	p := Page{Links: []Link{}, Page: f.Page, PageSize: 40}
 	where := " WHERE 1=1"
 	args := []any{}
+	ftsQuery := ""
 	if len(f.Query) > 512 {
 		return p, errors.New("query exceeds 512 bytes")
 	}
@@ -267,8 +270,9 @@ func (s *Store) List(ctx context.Context, f Filter) (Page, error) {
 			terms[i] = `"` + strings.ReplaceAll(t, `"`, `""`) + `"*`
 		}
 		if len(terms) > 0 {
+			ftsQuery = strings.Join(terms, " AND ")
 			where += " AND l.id IN (SELECT rowid FROM links_fts WHERE links_fts MATCH ?)"
-			args = append(args, strings.Join(terms, " AND "))
+			args = append(args, ftsQuery)
 		}
 	}
 	if f.Collection == "0" {
@@ -295,16 +299,26 @@ func (s *Store) List(ctx context.Context, f Filter) (Page, error) {
 	if order == "" {
 		return p, errors.New("invalid sort")
 	}
-	rows, err := s.DB.QueryContext(ctx, "SELECT "+columns+" FROM links l"+where+" ORDER BY "+order+" LIMIT ? OFFSET ?", args...)
+	// Only search results carry an excerpt, bounded to 24 tokens and 600
+	// characters. Never send the captured document in a library response.
+	// Control-character markers are rendered as text nodes/marks by the UI.
+	snippet := ",''"
+	if ftsQuery != "" {
+		snippet = ",(SELECT substr(snippet(links_fts,-1,char(30),char(31),'…',24),1,600) FROM links_fts WHERE rowid=l.id AND links_fts MATCH ?)"
+		args = append([]any{ftsQuery}, args...)
+	}
+	rows, err := s.DB.QueryContext(ctx, "SELECT "+columns+snippet+" FROM links l"+where+" ORDER BY "+order+" LIMIT ? OFFSET ?", args...)
 	if err != nil {
 		return p, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		l, err := scan(rows, false)
+		var excerpt string
+		l, err := scan(rows, false, &excerpt)
 		if err != nil {
 			return p, err
 		}
+		l.SearchSnippet = excerpt
 		p.Links = append(p.Links, l)
 	}
 	return p, rows.Err()

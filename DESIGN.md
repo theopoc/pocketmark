@@ -8,6 +8,8 @@ colors:
   sidebar: "#f6f7f9"
   surface: "#f8f9fb"
   line: "#e3e5eb"
+  control-line: "#818896"
+  control-line-dark: "#747b92"
   accent: "#4f46e5"
   accent-hover: "#4038c5"
   accent-soft: "#eeedff"
@@ -180,7 +182,7 @@ Small rectangular tags use neutral fill, short padding and compact type. Hover o
 Grid bookmark cards use the panel radius, white background and a line border; selection changes both fill and border. List mode removes individual card rounding, separates rows with dividers and retains the same selection, tags, capture labels and actions. Do not add permanent card shadows.
 
 ### Inputs / Fields
-White fields use a cool gray border, the control radius and (10px 12px) padding. Focus has a (2px) outline and (2px) offset. Search applies its outline around the complete search container. Read-only fields use the surface fill; form errors appear inline in danger text.
+Field boundaries use control-line (#818896) in light mode and #747b92 in dark mode, providing at least 3:1 against their adjacent field surfaces. Quiet separators keep the line token. Fields retain the control radius and (10px 12px) padding. Focus has a (2px) outline and (2px) offset. Search applies its outline around the complete search container. Read-only fields use the surface fill; form errors appear inline in danger text. Bookmark fields validate the server’s UTF-8 size limits before submission and identify the field to correct. Network/session failures give recovery instructions while retaining unsaved work.
 
 ### Navigation
 The slate-tinted rail combines outline icons, sentence-case labels and compact counts. Active navigation uses pale indigo and stronger text. On smaller screens, the same navigation element moves into the native dialog drawer; its controls gain height rather than losing functions.
@@ -193,7 +195,9 @@ Bookmark and bulk tag fields show each selected tag in a compact bordered chip w
 
 Library destination, search, sorting, pagination and tag-directory state are represented in the URL. Back/Forward and reload restore that context; browser history also records the page scroll position. Tag destinations consistently retain the bookmark search and show removable filter chips. Selection summaries disclose bookmarks outside the current results; bulk dialogs show the selected titles and require a fresh action choice each time.
 
-Bookmark and annotation drafts stay in the current tab's memory. Reopening a form restores them; reader notes carry into the bookmark editor. Notices name this lifetime, explicit discard controls remove drafts, and leaving/reloading warns while drafts remain. Drafts are not stored in localStorage, URLs or on the server. Saving notes retains unrelated unfinished editor changes.
+Bookmark, reader-note and annotation drafts stay in the current tab. A bounded sessionStorage cache restores them after reload; denied storage or quota failures fall back to memory without preventing edits. Reopening a form restores drafts, and reader notes carry into the bookmark editor. Notices name the tab lifetime, discard removes unsaved changes, and leaving/reloading warns while drafts remain. Signing out clears the cache. Drafts are not stored in localStorage, URLs or on the server. Saving notes retains unrelated unfinished editor changes.
+
+Mobile bookmark actions retain a named Favorite control and disclose the other labeled commands under Actions. Quick favorite/read changes confirm with an Undo action; feedback appears inside any active native dialog so its message is visible and announced. Search-only excerpts highlight matches and display decoded tag names. Near-match scope is visible beside its checkbox: titles, URLs, descriptions and tags only. Task-based Help is searchable from the navigation.
 
 The reader keeps a compact close/highlight header and section shortcuts visible while scrolling. Formatted and printable views require a suitable HTML capture or attachment; unavailable modes explain the next step. Text size and highlighting follow the active mode. Highlights and saved-file loading errors remain local to their sections. On phones, row action targets are 44px and a 44px letter picker complements the A–Z rail.
 
