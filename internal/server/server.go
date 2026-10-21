@@ -43,7 +43,6 @@ func New(s *store.Store, token, origin string, secure bool) *Server {
 	a.registerDAV(a.mux)
 	a.registerAssets(a.mux)
 	a.registerFiles(a.mux)
-	a.registerCompat(a.mux)
 	a.mux.HandleFunc("POST /api/login", a.login)
 	a.mux.HandleFunc("POST /api/logout", func(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{Name: "pocketmark", Value: "", Path: "/", HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteStrictMode, MaxAge: -1})
@@ -109,7 +108,7 @@ func (a *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "server busy; try again shortly")
 		return
 	}
-	if r.Method != "GET" && r.Method != "HEAD" && !(extension && (strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || (isDAV && strings.HasPrefix(r.Header.Get("Authorization"), "Basic ")) || r.URL.Path == "/api/v1/session")) {
+	if r.Method != "GET" && r.Method != "HEAD" && !(extension && (strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || (isDAV && strings.HasPrefix(r.Header.Get("Authorization"), "Basic ")))) {
 		// An exact Origin check protects both login and cookie-authenticated mutations.
 		if o := r.Header.Get("Origin"); o != "" {
 			expected := a.origin
@@ -130,7 +129,7 @@ func (a *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	publicAPI := r.URL.Path == "/api/login" || r.URL.Path == "/api/setup" || r.URL.Path == "/api/v1/session" || r.URL.Path == "/api/v1/config" || r.URL.Path == "/api/v1/logins"
+	publicAPI := r.URL.Path == "/api/login" || r.URL.Path == "/api/setup"
 	if strings.HasPrefix(r.URL.Path, "/api/") && !publicAPI && !a.authenticated(r) {
 		fail(w, 401, "sign in required")
 		return

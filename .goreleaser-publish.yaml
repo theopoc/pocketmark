@@ -18,7 +18,6 @@ release:
     - glob: artifacts/verified/pocketmark-linux-amd64.buildinfo.txt
     - glob: artifacts/verified/pocketmark-linux-arm64.buildinfo.txt
     - glob: artifacts/verified/pocketmark-extension.zip
-    - glob: artifacts/verified/pocketmark-extension-advanced.zip
     - glob: artifacts/verified/SHA256SUMS
 changelog:
   sort: asc

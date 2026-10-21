@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Pocketmark",
-  "version": "1.0.0",
-  "description": "Save a bookmark, rendered page or screenshot to your own Pocketmark server.",
+  "version": "2.0.0",
+  "description": "Save and edit Pocketmark bookmarks, with optional HTML, screenshots and PDF captures.",
   "permissions": [
     "activeTab",
     "scripting",
-    "storage"
+    "storage",
+    "debugger"
   ],
   "optional_host_permissions": [
     "http://*/*",
@@ -15,5 +16,9 @@
   "action": {
     "default_popup": "popup.html",
     "default_title": "Save to Pocketmark"
+  },
+  "minimum_chrome_version": "120",
+  "background": {
+    "service_worker": "background.js"
   }
 }

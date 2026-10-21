@@ -9,9 +9,9 @@ import tarfile
 import zipfile
 
 ARCHES = {"amd64": 62, "arm64": 183}
-EXTENSION_FILES = {"manifest.json", "popup.html", "popup.js", "popup.css", "README.md"}
+EXTENSION_FILES = {"manifest.json", "popup.html", "popup.js", "popup.css", "README.md", "background.js", "common.js", "capture.js", "job-store.js"}
 ASSETS = {f"pocketmark-linux-{arch}{suffix}" for arch in ARCHES for suffix in (".tar.gz", ".buildinfo.txt")}
-ASSETS |= {"pocketmark-extension.zip", "pocketmark-extension-advanced.zip"}
+ASSETS |= {"pocketmark-extension.zip"}
 
 
 def require(condition, message):
@@ -61,14 +61,13 @@ def verify(directory, commit, metadata=None, output=None):
         info = locate(f"pocketmark-linux-{arch}.buildinfo.txt").read_text()
         require(f"vcs.revision={commit}" in info and "vcs.modified=false" in info,
                 f"binary was not built from the verified clean commit: {arch}")
-    for advanced in (False, True):
-        suffix = "-advanced" if advanced else ""
-        with zipfile.ZipFile(locate(f"pocketmark-extension{suffix}.zip")) as archive:
-            names = archive.namelist()
-            require(len(names) == 5 and set(names) == EXTENSION_FILES and archive.testzip() is None,
-                    "unexpected extension archive contents")
-            configuration = json.loads(archive.read("manifest.json"))
-            require(("debugger" in configuration["permissions"]) == advanced, "extension permission mismatch")
+    with zipfile.ZipFile(locate("pocketmark-extension.zip")) as archive:
+        names = archive.namelist()
+        require(len(names) == len(EXTENSION_FILES) and set(names) == EXTENSION_FILES and archive.testzip() is None,
+                "unexpected extension archive contents")
+        configuration = json.loads(archive.read("manifest.json"))
+        require(set(configuration["permissions"]) == {"activeTab", "scripting", "storage", "debugger"}, "extension permission mismatch")
+        require(configuration.get("background") == {"service_worker": "background.js"}, "missing capture worker")
     if output:
         output.mkdir(parents=True, exist_ok=False)
         for name in sorted(ASSETS):

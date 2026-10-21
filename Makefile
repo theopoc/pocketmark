@@ -10,7 +10,7 @@ test:
 	go test $(TEST_FLAGS) -tags '$(GO_TAGS)' ./...
 	node --test internal/webui/workspace.test.cjs
 test-extension:
-	node --test extension/popup.test.cjs
+	node --test extension/*.test.cjs
 fmt-check:
 	@test -z "$$(gofmt -l cmd internal)" || { gofmt -l cmd internal; exit 1; }
 check: fmt-check
@@ -19,8 +19,8 @@ check: fmt-check
 	node --check internal/webui/static/workspace.js
 	node --check internal/webui/static/app.js
 	node --check internal/webui/static/sw.js
-	node --check extension/popup.js
-	python3 -m py_compile scripts/*.py extension/build_advanced.py
+	@for source in extension/*.js; do node --check "$$source" || exit; done
+	python3 -m py_compile scripts/*.py extension/package.py
 release-check:
 	goreleaser check --config .goreleaser.yaml
 	goreleaser check --config .goreleaser-publish.yaml
