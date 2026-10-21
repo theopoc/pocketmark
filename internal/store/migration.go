@@ -60,7 +60,7 @@ func (s *Store) Import(ctx context.Context, r io.Reader) (ImportResult, error) {
 		return result, errors.New("unsupported export format or version")
 	}
 	if data.Collections == nil && data.Links == nil {
-		return result, errors.New("expected a Pocketmark or legacy client export with collections or links")
+		return result, errors.New("expected a Pocketmark or compatible JSON export with collections or links")
 	}
 	if len(data.Collections) > 2000 {
 		return result, errors.New("import supports at most 2000 collections")

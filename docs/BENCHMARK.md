@@ -14,7 +14,7 @@ The complete extended workload passed with the mobile adapter fixes: six public-
 | Process RSS after workload, sampled maximum | 17.17 MiB |
 | Whole-container memory after workload, sampled maximum | 69.20 MiB |
 
-Whole-container accounting includes filesystem cache, health checks and the small sampler; it is not Go heap size. This run's container peak is higher than the earlier client build, while the process peak is similar; these separate bounded runs do not establish a causal regression or a worst-case bound. Client rendering, the Android emulator, host and Docker VM RAM are excluded. The actual Android UI tests were separate from this server benchmark. No matching upstream legacy client RAM baseline was measured.
+Whole-container accounting includes filesystem cache, health checks and the small sampler; it is not Go heap size. This run's container peak is higher than the earlier client build, while the process peak is similar; these separate bounded runs do not establish a causal regression or a worst-case bound. Client rendering, the Android emulator, host and Docker VM RAM are excluded. The actual Android UI tests were separate from this server benchmark. No matching RAM baseline for another server was measured.
 
 ```sh
 docker build -t pocketmark:mobile .
@@ -35,7 +35,7 @@ The extended workload below was repeated with the corrected client adapter and a
 | Process RSS after workload, sampled maximum | 18.10 MiB |
 | Whole container after workload, sampled maximum | 57.73 MiB |
 
-The container figure includes filesystem cache, health checks and the sampler. Its accounting differs from process RSS; do not subtract the two or treat the container figure as Go heap size. Browser rendering and the Docker VM remain excluded. Actual browser client workflows were also tested separately, as recorded in [REAL_CLIENTS.md](REAL_CLIENTS.md). Their RAM was not measured. These are bounded sample workloads, without an upstream legacy client baseline.
+The container figure includes filesystem cache, health checks and the sampler. Its accounting differs from process RSS; do not subtract the two or treat the container figure as Go heap size. Browser rendering and the Docker VM remain excluded. Actual browser client workflows were also tested separately, as recorded in [REAL_CLIENTS.md](REAL_CLIENTS.md). Their RAM was not measured. These are bounded sample workloads, without a baseline for another server.
 
 ```sh
 docker build -t pocketmark:clients .
@@ -66,7 +66,7 @@ docker build -t pocketmark:features .
 python3 scripts/benchmark_capture.py --features --image pocketmark:features --output docs/benchmark-features.json
 ```
 
-Client browser RAM, PDF/PNG browser rendering and the Docker VM are **excluded**. PDF/full-page screenshot extension tests use Chrome API doubles; their real browser memory has not been measured. This is a small real-page workload plus a large synthetic upload, not a 10,000-captured-page or worst-case guarantee. No upstream legacy client runtime comparison was performed.
+Client browser RAM, PDF/PNG browser rendering and the Docker VM are **excluded**. PDF/full-page screenshot extension tests use Chrome API doubles; their real browser memory has not been measured. This is a small real-page workload plus a large synthetic upload, not a 10,000-captured-page or worst-case guarantee. No runtime comparison with another server was performed.
 
 ## Earlier minimal build: Docker with page capture enabled
 
@@ -131,5 +131,6 @@ Capture is **disabled** in this benchmark. It does not fetch example URLs, rende
 
 ## Comparison boundary
 
+No matching runtime comparison with another bookmark manager was performed. These measurements describe Pocketmark only.
 
 Capture architecture differs: bounded passive server snapshots embed resources, while rendered HTML/PDF/screenshots use the user's browser through the extension. These capabilities and their limits are documented in [FEATURES.md](FEATURES.md). Low server RAM is partly achieved by placing browser rendering on the client; it does not eliminate that browser's memory cost.

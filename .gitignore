@@ -42,10 +42,8 @@ node_modules/
 __pycache__/
 *.py[cod]
 
+# Local agent skills and design tooling
 /skills/
-
 /.skills/
-
 /SKILL.md
-
 /.impeccable/

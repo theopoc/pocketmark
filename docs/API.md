@@ -78,7 +78,7 @@ The result is `{"links":[…],"total":123,"page":1,"pageSize":40}`. `sort=newest
 
 ## Import and export
 
-Send the file itself, not multipart form data or legacy client's `{format:0,data:"…"}` API envelope:
+Send the file itself, not multipart form data or the compatibility API's `{format:0,data:"…"}` API envelope:
 
 ```sh
 curl --fail-with-body -X POST "$POCKETMARK_URL/api/import" \
@@ -88,7 +88,7 @@ curl --fail-with-body -H "Authorization: Bearer $POCKETMARK_ACCESS_TOKEN" \
   "$POCKETMARK_URL/api/export" --output pocketmark-export.json
 ```
 
-Accepted inputs are raw legacy client JSON (`collections[].links`, object tags, `parentId`, `pinnedLinks`) and Pocketmark exports (`format:"pocketmark"`, `version:1`, `collections`, top-level `links`). Duplicate URLs and unsupported legacy client uploaded-file types are skipped; other invalid records roll back the transaction. Matching collection names under the same parent are reused and IDs remapped. Valid RFC3339 source timestamps are preserved. Captured assets/text and annotations require a full backup rather than metadata JSON. Pocketmark exports preserve notes, read flags, favorites, tags and collection hierarchy; they do not use legacy client's exact format.
+Accepted inputs are legacy JSON exports (`collections[].links`, object tags, `parentId`, `pinnedLinks`) and Pocketmark exports (`format:"pocketmark"`, `version:1`, `collections`, top-level `links`). Duplicate URLs and unsupported uploaded-file types are skipped; other invalid records roll back the transaction. Matching collection names under the same parent are reused and IDs remapped. Valid RFC3339 source timestamps are preserved. Captured assets/text and annotations require a full backup rather than metadata JSON. Pocketmark exports preserve notes, read flags, favorites, tags and collection hierarchy; they do not use the compatibility API's exact format.
 
 ## Additional personal-library endpoints
 
@@ -127,7 +127,7 @@ Annotation colors: `yellow`, `green`, `blue`, `pink`. Each bookmark supports up 
 | `POST /api/tokens` | Owner-only `{name}` → `{id,name,createdAt,token}`; raw key appears once. Max 32 keys. |
 | `DELETE /api/tokens/{id}` | Owner-only immediate revocation. |
 
-The included extension uses bearer authentication with narrowly recognized `chrome-extension://`/`moz-extension://` CORS origins; no credentialed cross-origin cookies are allowed. Ordinary cross-site browser mutations remain rejected. The Client compatibility credential endpoint also accepts extension-origin password requests, protected by the same rate limit.
+The included extension uses bearer authentication with narrowly recognized `chrome-extension://`/`moz-extension://` CORS origins; no credentialed cross-origin cookies are allowed. Ordinary cross-site browser mutations remain rejected. The compatibility credential endpoint also accepts extension-origin password requests, protected by the same rate limit.
 
 ### Existing installations and account recovery
 
@@ -146,7 +146,7 @@ Use the local server address or HTTPS, delete the private JSON file afterward, a
 
 ## Compatibility and synchronization
 
-The `/api/v1/` adapter supports private-library Compatibility client request shapes: config, logins, password session, users/me, collections, links, tags, search, highlights and archives. `/api/v2/dashboard` supplies the mobile dashboard shape. Search uses `{data:{links,nextCursor}}`; clients must return the supplied cursor unchanged. The adapter has its own upstream-compatible response envelopes. Protocol tests do not certify every official client workflow. Unsupported operations are rejected; scope and limits are listed in [FEATURES.md](FEATURES.md).
+The `/api/v1/` adapter supports private-library client request shapes: config, logins, password session, users/me, collections, links, tags, search, highlights and archives. `/api/v2/dashboard` supplies the mobile dashboard shape. Search uses `{data:{links,nextCursor}}`; clients must return the supplied cursor unchanged. The adapter has its own upstream-compatible response envelopes. Protocol tests do not certify every official client workflow. Unsupported operations are rejected; scope and limits are listed in [FEATURES.md](FEATURES.md).
 
 The mobile tag-upsert shape `{tags:[{label:"name",value:existingId}]}` accepts 1–100 validated options with optional `value` and returns a corresponding array; legacy `{name:"name"}` creation remains supported. Tag detail is available at `GET /api/v1/tags/{id}`. Compatibility collections/tags expose stable persisted `createdAt` dates. Collection descriptions round-trip through list/detail/create/update and JSON import/export; omitted descriptions survive rename/move, while `""` clears them. Old databases receive creation-date backfills on first upgrade, not recovered historical dates.
 
