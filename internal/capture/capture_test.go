@@ -110,6 +110,32 @@ func TestExtractionAndFetch(t *testing.T) {
 	}
 }
 
+func TestFetchLargeInlineTokens(t *testing.T) {
+	for _, tc := range []struct {
+		name, prefix, suffix string
+	}{
+		{"script", "<script>", "</script>"},
+		{"style", "<style>", "</style>"},
+		{"attribute", `<div data-config="`, `"></div>`},
+		{"comment", "<!--", "-->"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			prefix := `<html><head><title>Article</title></head><body>` + tc.prefix
+			suffix := tc.suffix + `<main><p>Readable article.</p></main></body></html>`
+			// Exercise a single token close to the 2 MiB document ceiling,
+			// rather than coupling this regression to the tokenizer constant.
+			body := []byte(prefix + strings.Repeat("x", (2<<20)-len(prefix)-len(suffix)) + suffix)
+			result, err := fetch(context.Background(), "https://example.com", fixtureClient(body, "text/html", "", 200))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Title != "Article" || result.Content != "Readable article." || !bytes.Equal(result.HTML, body) {
+				t.Fatalf("large token broke capture: title=%q content=%q archive=%d bytes", result.Title, result.Content, len(result.HTML))
+			}
+		})
+	}
+}
+
 func TestResponseLimitsAndContentType(t *testing.T) {
 	var zipped bytes.Buffer
 	writer := gzip.NewWriter(&zipped)
