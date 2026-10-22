@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Pocketmark",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Save and edit Pocketmark bookmarks, with optional HTML, screenshots and PDF captures.",
   "permissions": [
     "activeTab",

@@ -1,17 +1,17 @@
 "use strict";
 const { test } = require("node:test"), assert = require("node:assert/strict"), vm = require("node:vm"), fs = require("node:fs"), path = require("node:path");
-async function setup({ stored, permissionCloses = false, granted = true, hostGranted = true, authenticated = true, existing = false } = {}) {
+async function setup({ stored, permissionCloses = false, granted = true, hostGranted = true, authenticated = true, existing = false, job = null } = {}) {
   const elements = new Map(), calls = [], writes = [], permissions = [], data = stored || { server: "https://library.example", token: "key" };
   function node(id = "") { return { id, value: "", hidden: true, children: [], listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; }, setAttribute() {}, replaceChildren() { this.children = []; }, append(child) { this.children.push(child); }, focus() {} }; }
   const element = (id) => { if (!elements.has(id)) elements.set(id, node(id)); return elements.get(id); };
-  const context = vm.createContext({ document: { getElementById: element, createElement: () => node() }, URL, TextEncoder, setTimeout, clearTimeout, setInterval: () => 1, clearInterval() {}, window: { addEventListener() {} },
+  const context = vm.createContext({ document: { getElementById: element, createElement: () => node(), createElementNS: () => node() }, URL, TextEncoder, setTimeout, clearTimeout, setInterval: () => 1, clearInterval() {}, window: { addEventListener() {} },
     chrome: {
       storage: { local: { setAccessLevel: async () => {}, get: async () => data, set: async (value) => { writes.push(value); Object.assign(data, value); } } },
       tabs: { query: async () => [{ id: 3, url: "https://example.org", title: "Page title" }] },
       permissions: { contains: async () => hostGranted, request: async (value) => { permissions.push(value); return permissionCloses ? new Promise(() => {}) : granted; } },
       runtime: { sendMessage: async (message) => {
         calls.push(message);
-        let value = null;
+        let value = message.type === "state" ? job : null;
         if (message.type === "connect") {
           if (!authenticated) return { ok: false, error: "Invalid API key" };
           Object.assign(data, message.connection, { pendingConnection: null }); value = { connected: true };
@@ -25,7 +25,7 @@ async function setup({ stored, permissionCloses = false, granted = true, hostGra
   for (const file of ["common.js", "popup.js"]) vm.runInContext(fs.readFileSync(path.join(__dirname, file), "utf8"), context);
   await new Promise(setImmediate);
   const submit = async (id) => element(id).listeners.submit({ preventDefault() {} });
-  return { element, calls, writes, permissions, data, submit };
+  return { element, calls, writes, permissions, data, submit, context };
 }
 test("existing bookmark preloads editable fields, collection and selected tags", async () => {
   const env = await setup({ existing: true });
@@ -67,4 +67,37 @@ test("server address rejects credentials, paths, queries and fragments", async (
     env.element("server").value = url; env.element("token").value = "key"; await env.submit("settings-form");
   }
   assert.equal(env.permissions.length, 0);
+});
+test("first-run connection takes priority over an unusable editor", async () => {
+  const env = await setup({ stored: {} });
+  assert.equal(env.element("settings").hidden, false);
+  assert.equal(env.element("save-form").hidden, true);
+  assert.equal(env.element("connect-footer").hidden, false);
+  assert.equal(env.element("save-footer").hidden, true);
+});
+test("connection settings preserve an unfinished bookmark and selected captures", async () => {
+  const env = await setup(); env.element("title").value = "Unfinished title"; env.element("capture-pdf").checked = true;
+  env.element("connection-toggle").listeners.click();
+  assert.equal(env.element("settings").hidden, false); assert.equal(env.element("save-form").hidden, true);
+  env.element("connection-toggle").listeners.click();
+  assert.equal(env.element("save-form").hidden, false); assert.equal(env.element("title").value, "Unfinished title"); assert.equal(env.element("capture-pdf").checked, true);
+  assert.equal(env.calls.filter((call) => call.type === "load").length, 1);
+});
+test("pending work shows recovery actions, then collapses on completion without reopening on polling", async () => {
+  const job = { id: "task", status: "paused", fields: { url: "https://example.org", title: "Saved article" }, message: "Retry manually", items: [{ mode: "pdf", status: "failed", error: "Temporary error" }] };
+  const env = await setup({ job });
+  assert.equal(env.element("save-form").hidden, true); assert.equal(env.element("task-actions").hidden, false); assert.equal(env.element("task").open, true);
+  env.element("task").open = false;
+  const previousChildren = env.element("task-items").children;
+  env.context.renderTask(structuredClone(job));
+  assert.equal(env.element("task").open, false); assert.equal(env.element("task-items").children, previousChildren);
+  env.context.renderTask({ ...job, status: "done", items: [{ mode: "pdf", status: "saved" }] });
+  assert.equal(env.element("task").open, false); assert.equal(env.element("save-form").hidden, false); assert.equal(env.element("task-actions").hidden, true);
+});
+test("capture selection updates its summary without starting capture work", async () => {
+  const env = await setup();
+  assert.equal(env.element("save-hint").textContent, "Bookmark only");
+  env.element("capture-pdf").checked = true; env.element("capture-pdf").listeners.change();
+  assert.equal(env.element("capture-count").textContent, "1 selected"); assert.equal(env.element("save-hint").textContent, "Bookmark + 1 capture");
+  assert.equal(env.calls.some((call) => call.type === "save"), false);
 });

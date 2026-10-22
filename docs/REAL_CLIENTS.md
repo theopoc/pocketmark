@@ -5,6 +5,42 @@
 > Floccus Linkwarden API backend have been removed. The older dated observations
 > remain historical evidence; the new worker is qualified separately below.
 
+## Extension popup UI/UX — 22 October 2026
+
+The popup keeps Pocketmark's existing dark/indigo workspace language. Connection
+setup, bookmark editing and pending work have separate views. Optional captures
+are disclosed on demand; primary save/connect/recovery actions remain in a fixed
+footer while content scrolls. Completed saves collapse into a summary. Repeated
+background polls preserve disclosure state and keyboard focus.
+
+Disposable Chrome for Testing 149.0.7827.55 observations:
+
+- The actual action popup opened at 400 px wide and adapted to the native
+  available height (498 px in the test window); its footer remained within the
+  viewport. This caught and corrected an intrinsic-sizing issue that did not
+  reproduce when the same document was opened in a normal tab.
+- A separate UI harness with mocked Chrome/library responses checked 48 layout
+  combinations: 200/320/360/400 px wide, 260/400/600 px high, with connection,
+  normal editor, long tags/nested collections and partial-upload recovery states.
+  No horizontal document/content overflow or clipped footer was observed.
+- Keyboard checks covered Enter submission from the title/connection fields,
+  tag creation/removal and Escape/cancel focus recovery for a new collection.
+  Switching to Connection and back retained an unfinished title and selected
+  formats. Unchanged polling preserved a collapsed task and focused summary.
+- The real-extension/native-server capture scenario below passed again with
+  the updated UI: all four formats, popup closure, partial upload failure,
+  source-tab closure, full browser restart, manual retry and metadata retention.
+
+These are Chromium desktop and emulated viewport checks, not physical mobile or
+other-browser qualification. Runtime permission origins were pre-granted only
+in the disposable real-extension fixture as described below. No personal profile
+or database was used. The Impeccable engine was unavailable; refinement followed
+PRODUCT.md, DESIGN.md and the skill's adapt/polish/craft references directly.
+
+Screenshots: [editor](pocketmark-extension.png),
+[connection](pocketmark-extension-connect.png),
+[manual retry](pocketmark-extension-retry.png).
+
 ## Personal native Chrome extension — 21 October 2026
 
 A disposable Chrome for Testing 149.0.7827.55 profile exercised the new popup,

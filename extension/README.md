@@ -23,14 +23,17 @@ that task before connecting to another server.
 ## Save and edit
 
 The popup loads an existing bookmark for the exact URL, or starts a new one.
-Edit its **title**, **collection** and **tags**. Select nested collections or create
+Edit its **title**, **collection** and **tags**. The save action stays visible
+while the editor scrolls. **Connection** opens settings without losing the
+current editor fields. Select nested collections or create
 one under the root/current collection. Choose existing tags from suggestions or
 type a new one and press Enter/Add; new tags are created on saving. Notes,
 description, favorites and read status are preserved when updating a bookmark.
 No library browser or bookmark synchronization is built into this extension.
 Floccus can still synchronize browser bookmarks independently through WebDAV.
 
-Select any combination of these optional captures; all start unchecked:
+Open **Attach captures** and select any combination of these optional formats;
+all start unchecked:
 
 - **Rendered HTML**: a passive offline snapshot of the current rendered DOM.
 - **Visible area**: PNG of the source tab's viewport.
@@ -46,7 +49,9 @@ No persistent content script or automatic capture scans your browsing activity.
 ## Progress, failures and manual retry
 
 One background task runs at a time. Closing the popup does not cancel it; reopen
-the popup to see progress and results. Keep the source tab open and on the same
+the popup to see progress and results. Active/failed tasks take priority over
+the editor, with retry/discard actions kept visible. Successful results collapse
+into a summary; expand it to inspect individual formats. Keep the source tab open and on the same
 URL until acquisition finishes. After acquisition, uploads do not need that tab.
 Closing Chrome interrupts work; reopening the popup marks it interrupted and
 requires a manual retry, rather than silently resuming or recapturing.
