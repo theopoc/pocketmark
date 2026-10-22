@@ -1,24 +1,68 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 const { formats, origin, validate } = Pocketmark;
-let activeTab, connected = false, connecting = false, loaded = false, task = null, tags = [], collections = [], poll, tagTimer, tagQuery = 0;
-function status(message, error = false) { $("status").textContent = message; $("status").className = error ? "error" : ""; }
+// Chrome sizes action popups from their contents. Viewport-relative caps during
+// that first measurement otherwise collapse the popup to Chrome's minimum size.
+// Establish its preferred size first, then clamp to actual native resize events.
+if (chrome.extension?.getViews({ type: "popup" }).includes(window)) {
+  document.body.classList.add("native-popup");
+  window.addEventListener("resize", () => {
+    document.body.style.maxInlineSize = `${window.innerWidth}px`;
+    document.body.style.maxBlockSize = `${window.innerHeight}px`;
+  });
+}
+let activeTab, connected = false, connecting = false, loaded = false, ready = false, settingsOpen = false, task = null, tags = [], collections = [], poll, tagTimer, tagQuery = 0, taskSignature;
+function status(message, error = false) {
+  const changed = $("status").textContent !== message;
+  $("status").setAttribute("role", error ? "alert" : "status");
+  $("status").setAttribute("aria-live", error ? "assertive" : "polite");
+  $("status").textContent = message; $("status").className = error ? "notice error" : "notice";
+  if (error && changed) $("status").scrollIntoView?.({ block: "nearest" });
+}
 async function send(type, values = {}) {
   const response = await chrome.runtime.sendMessage({ type, ...values });
   if (!response?.ok) throw new Error(response?.error || "The extension could not respond. Reopen the popup.");
   return response.value;
 }
 function controls() {
-  $("editor").disabled = !connected || !loaded || connecting || task?.status === "running" || task?.status === "paused";
+  const running = task?.status === "running", paused = task?.status === "paused";
+  const editing = connected && loaded && !settingsOpen && !running && !paused;
+  $("editor").disabled = !editing || connecting;
+  $("save-form").hidden = !editing;
+  $("settings").hidden = !settingsOpen;
+  $("save-footer").hidden = !editing;
+  $("connect-footer").hidden = !settingsOpen;
+  $("task-actions").hidden = settingsOpen || !paused;
+  $("background-note").hidden = settingsOpen || !running;
+  $("footer").hidden = !(editing || settingsOpen || running || paused);
+  $("task").hidden = settingsOpen || !task || (task.status === "done" && task.fields.url !== activeTab?.url);
+  $("unsupported").hidden = settingsOpen || !ready || !connected || loaded || running || paused;
+  $("connection-toggle").hidden = !connected;
+  $("connection-toggle").textContent = settingsOpen ? "Back to bookmark" : "Connection";
+  $("connection-toggle").setAttribute("aria-expanded", String(settingsOpen));
   $("connect").disabled = connecting || task?.status === "running";
+  $("connect").textContent = connecting ? "Connecting…" : "Connect";
+  captureHint();
+}
+function showSettings(open) {
+  settingsOpen = open;
+  controls();
+}
+function captureHint() {
+  const count = Object.keys(formats).filter((mode) => $("capture-" + mode).checked).length;
+  $("capture-count").textContent = count ? `${count} selected` : "Optional";
+  $("save-hint").textContent = count ? `Bookmark + ${count} capture${count === 1 ? "" : "s"}` : "Bookmark only";
 }
 function renderTags() {
   $("selected-tags").replaceChildren();
   for (const tag of tags) {
-    const item = document.createElement("li"), button = document.createElement("button");
-    button.type = "button"; button.textContent = `${tag} ×`; button.setAttribute("aria-label", `Remove tag ${tag}`);
-    button.addEventListener("click", () => { tags = tags.filter((value) => value !== tag); renderTags(); });
-    item.append(button); $("selected-tags").append(item);
+    const item = document.createElement("li"), label = document.createElement("span"), button = document.createElement("button");
+    label.className = "tag-name"; label.textContent = tag;
+    button.type = "button"; button.setAttribute("aria-label", `Remove tag ${tag}`);
+    const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg"), line = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    icon.setAttribute("viewBox", "0 0 24 24"); icon.setAttribute("aria-hidden", "true"); line.setAttribute("d", "m7 7 10 10M17 7 7 17"); icon.append(line); button.append(icon);
+    button.addEventListener("click", () => { tags = tags.filter((value) => value !== tag); renderTags(); $("tag-input").focus(); });
+    item.append(label, button); $("selected-tags").append(item);
   }
 }
 function addTags() {
@@ -54,13 +98,25 @@ async function load() {
   $("title").value = data.link?.title || activeTab.title || activeTab.url;
   tags = data.link?.tags || []; renderTags();
   $("save").textContent = data.link ? "Save changes" : "Save bookmark";
-  status(data.link ? "Already saved. Edit its title, collection or tags." : "Ready to save this page.");
+  status(task && (task.status !== "done" || task.fields.url === activeTab?.url) ? "" : data.link ? "Already saved. Edit its title, collection or tags." : "Ready to save this page.");
   loaded = true; controls();
 }
 function renderTask(job) {
+  const signature = JSON.stringify(job);
+  // Background polling must not recreate focused controls, re-announce the
+  // same status or reopen a disclosure the user deliberately collapsed.
+  if (signature === taskSignature) { controls(); return; }
+  taskSignature = signature;
+  const changedState = task?.status !== job?.status || task?.id !== job?.id;
   task = job;
-  $("task").hidden = !job;
   if (job) {
+    $("task").setAttribute("data-state", job.status);
+    if (changedState) $("task").open = job.status !== "done";
+    $("task-heading").textContent = job.status === "done" ? (job.fields.url === activeTab?.url ? "Saved to Pocketmark" : "Previous save") : job.status === "paused" ? "Save needs attention" : "Saving to Pocketmark";
+    const saved = job.items.filter((item) => item.status === "saved").length;
+    $("task-count").textContent = job.items.length ? `${saved}/${job.items.length}` : "";
+    $("task-count").setAttribute("aria-label", `${saved} of ${job.items.length} captures saved`);
+    $("task-icon").setAttribute("d", job.status === "done" ? "m5 12 4 4L19 6" : job.status === "paused" ? "M12 4v9m0 5v1" : "M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-2l2 2M4 17l2 2a7 7 0 0 0 12-2");
     $("task-title").textContent = job.fields.title || job.fields.url;
     $("task-message").textContent = job.message;
     $("task-message").className = job.status === "paused" ? "error" : "";
@@ -68,20 +124,23 @@ function renderTask(job) {
     for (const item of job.items) {
       const li = document.createElement("li");
       const label = { pending: "Waiting", capturing: "Capturing", ready: "Captured locally", uploading: "Uploading", saved: "Saved", failed: "Failed" }[item.status];
-      li.textContent = `${formats[item.mode][0]}: ${label}${item.error ? ` — ${item.error}` : ""}`;
-      if (item.status === "failed") li.className = "error";
+      const name = document.createElement("span"), state = document.createElement("span");
+      name.textContent = formats[item.mode][0]; state.textContent = label; state.className = item.status === "saved" ? "item-state item-saved" : "item-state";
+      li.append(name, state);
+      if (item.error) { const error = document.createElement("span"); error.className = "item-error"; error.textContent = item.error; li.append(error); }
       $("task-items").append(li);
     }
     $("retry").hidden = job.status !== "paused";
     $("discard").hidden = job.status !== "paused";
     if (job.linkId && job.fields.url === activeTab?.url) $("save").textContent = "Save changes";
+    if (changedState && job.status === "done" && ready) status("Saved. You can edit this bookmark.");
   }
   controls();
 }
 async function refresh() { renderTask(await send("state")); }
 async function finishConnection(candidate) {
   await send("connect", { connection: candidate });
-  connected = true; $("settings").open = false;
+  connected = true; showSettings(false);
   await load();
 }
 $("settings-form").addEventListener("submit", async (event) => {
@@ -98,12 +157,19 @@ $("settings-form").addEventListener("submit", async (event) => {
     const [, granted] = await Promise.all([persisted, permission]);
     if (!granted) { await chrome.storage.local.set({ pendingConnection: null }); throw new Error("Server access was not granted. Click Connect to retry."); }
     await finishConnection(candidate);
-  } catch (error) { $("settings").open = true; status(error.message, true); }
+  } catch (error) { showSettings(true); status(error.message, true); }
   finally { connecting = false; controls(); }
 });
-$("add-tag").addEventListener("click", addTags);
+$("connection-toggle").addEventListener("click", () => {
+  showSettings(!settingsOpen);
+  status("");
+  if (settingsOpen) $("server").focus();
+});
+for (const mode of Object.keys(formats)) $("capture-" + mode).addEventListener("change", captureHint);
+$("add-tag").addEventListener("click", () => { addTags(); $("tag-input").focus(); });
 $("tag-input").addEventListener("keydown", (event) => {
   if (event.key === "Enter" || event.key === ",") { event.preventDefault(); addTags(); }
+  if (event.key === "Backspace" && !$("tag-input").value && tags.length) $("selected-tags").lastElementChild?.querySelector("button")?.focus();
 });
 $("tag-input").addEventListener("input", () => {
   clearTimeout(tagTimer); const sequence = ++tagQuery;
@@ -117,13 +183,17 @@ function collectionEditor(open) {
   if (open) { $("collection-parent").value = $("collection").value; $("collection-name").focus(); }
 }
 $("new-collection").addEventListener("click", () => collectionEditor($("collection-create").hidden));
-$("cancel-collection").addEventListener("click", () => collectionEditor(false));
-$("collection-name").addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); $("create-collection").click(); } });
+$("cancel-collection").addEventListener("click", () => { collectionEditor(false); $("new-collection").focus(); });
+$("collection-name").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") { event.preventDefault(); $("create-collection").click(); }
+  if (event.key === "Escape") { event.preventDefault(); collectionEditor(false); $("new-collection").focus(); }
+});
 $("create-collection").addEventListener("click", async () => {
   $("create-collection").disabled = true;
   try {
     const collection = await send("collection", { name: $("collection-name").value, parentId: Number($("collection-parent").value) || null });
     collections.push(collection); renderCollections(collection.id); collectionEditor(false); $("collection-name").value = "";
+    $("collection").focus();
     status("Collection created and selected.");
   } catch (error) { status(error.message, true); }
   finally { $("create-collection").disabled = false; }
@@ -137,7 +207,7 @@ $("save-form").addEventListener("submit", async (event) => {
     const modes = Object.keys(formats).filter((mode) => $("capture-" + mode).checked);
     renderTask(await send("save", { tabId: activeTab.id, fields, modes }));
     for (const mode of Object.keys(formats)) $("capture-" + mode).checked = false;
-    status("Task started. You can close this popup.");
+    status("");
   } catch (error) { status(error.message, true); }
   finally { $("save").disabled = false; controls(); }
 });
@@ -155,7 +225,8 @@ async function initialize() {
   try {
     await chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
     [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    $("page-title").textContent = activeTab?.title || activeTab?.url || "Your current page";
+    $("page-title").textContent = activeTab?.url && /^https?:\/\//i.test(activeTab.url) ? new URL(activeTab.url).hostname : "Your current page";
+    $("page-title").title = activeTab?.url || "";
     await refresh();
     const stored = await chrome.storage.local.get(["server", "token", "pendingConnection"]), candidate = stored.pendingConnection || stored;
     $("server").value = candidate.server || ""; $("token").value = candidate.token || "";
@@ -163,9 +234,10 @@ async function initialize() {
       if (await chrome.permissions.contains({ origins: [origin(candidate.server) + "/*"] })) await finishConnection(candidate);
       else { await chrome.storage.local.set({ pendingConnection: null }); throw new Error("Server access was not granted. Click Connect to retry."); }
     } else if (stored.server && stored.token) { connected = true; await load(); }
-    else { $("settings").open = true; status("Connect your Pocketmark server to get started."); }
-  } catch (error) { $("settings").open = true; status(error.message, true); }
+    else { showSettings(true); status(""); }
+  } catch (error) { showSettings(true); status(error.message, true); }
   finally {
+    ready = true;
     controls();
     poll = setInterval(() => { refresh().catch((error) => status(error.message, true)); }, 1000);
   }
