@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -16,9 +15,6 @@ import (
 )
 
 func (a *Server) registerDAV(mux *http.ServeMux) {
-	if e := a.Store.InitDAV(context.Background()); e != nil {
-		panic(e)
-	}
 	for _, method := range []string{"GET", "PUT", "PROPFIND", "OPTIONS", "MKCOL", "DELETE", "POST", "MOVE"} {
 		mux.HandleFunc(method+" /dav/", a.dav)
 	}
@@ -99,7 +95,7 @@ func (a *Server) dav(w http.ResponseWriter, r *http.Request) {
 		davProperties(w, r, store.DAVFile{})
 		return
 	}
-	f, e := a.temporaryDataFile(r.Context(), ".xbel-*")
+	f, e := a.Store.TemporaryFile(".xbel-*")
 	if e != nil {
 		davError(w, e)
 		return
@@ -220,7 +216,7 @@ func (a *Server) davWrite(w http.ResponseWriter, r *http.Request, owner string) 
 		w.WriteHeader(412)
 		return
 	}
-	f, e := a.temporaryDataFile(r.Context(), ".dav-upload-*")
+	f, e := a.Store.TemporaryFile(".dav-upload-*")
 	if e != nil {
 		davError(w, e)
 		return

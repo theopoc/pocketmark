@@ -1,5 +1,78 @@
 # Real client validation
 
+> Current scope: Pocketmark's own Chrome extension and Floccus WebDAV. The
+> Linkwarden API compatibility layer, third-party extension/mobile support and
+> Floccus Linkwarden API backend have been removed. The older dated observations
+> remain historical evidence; the new worker is qualified separately below.
+
+## Extension popup UI/UX — 22 October 2026
+
+The popup keeps Pocketmark's existing dark/indigo workspace language. Connection
+setup, bookmark editing and pending work have separate views. Optional captures
+are disclosed on demand; primary save/connect/recovery actions remain in a fixed
+footer while content scrolls. Completed saves collapse into a summary. Repeated
+background polls preserve disclosure state and keyboard focus.
+
+Disposable Chrome for Testing 149.0.7827.55 observations:
+
+- The actual action popup opened at 400 px wide and adapted to the native
+  available height (498 px in the test window); its footer remained within the
+  viewport. This caught and corrected an intrinsic-sizing issue that did not
+  reproduce when the same document was opened in a normal tab.
+- A separate UI harness with mocked Chrome/library responses checked 48 layout
+  combinations: 200/320/360/400 px wide, 260/400/600 px high, with connection,
+  normal editor, long tags/nested collections and partial-upload recovery states.
+  No horizontal document/content overflow or clipped footer was observed.
+- Keyboard checks covered Enter submission from the title/connection fields,
+  tag creation/removal and Escape/cancel focus recovery for a new collection.
+  Switching to Connection and back retained an unfinished title and selected
+  formats. Unchanged polling preserved a collapsed task and focused summary.
+- The real-extension/native-server capture scenario below passed again with
+  the updated UI: all four formats, popup closure, partial upload failure,
+  source-tab closure, full browser restart, manual retry and metadata retention.
+
+These are Chromium desktop and emulated viewport checks, not physical mobile or
+other-browser qualification. Runtime permission origins were pre-granted only
+in the disposable real-extension fixture as described below. No personal profile
+or database was used. The Impeccable engine was unavailable; refinement followed
+PRODUCT.md, DESIGN.md and the skill's adapt/polish/craft references directly.
+
+Screenshots: [editor](pocketmark-extension.png),
+[connection](pocketmark-extension-connect.png),
+[manual retry](pocketmark-extension-retry.png).
+
+## Personal native Chrome extension — 21 October 2026
+
+A disposable Chrome for Testing 149.0.7827.55 profile exercised the new popup,
+MV3 worker and real IndexedDB against an isolated native Pocketmark executable
+and a synthetic JavaScript-rendered article. No personal database/profile was
+used. The automated test copy pre-granted only its two loopback origins to
+represent an already authorized connection and tab; production permission-dialog
+interruption/recovery is covered by deterministic popup regressions, not this run.
+
+Observed successfully:
+
+- Creation/selection of a collection, creation of a tag and one bookmark.
+- Cumulative rendered HTML, visible PNG, full-page PNG and PDF capture. HTML
+  contained the marker inserted by page JavaScript.
+- Closing the popup immediately after starting the task did not cancel work.
+- A synthetic HTTP 503 rejected only the PDF upload; the bookmark and three
+  successful attachments remained. The PDF was retained in local IndexedDB.
+- Closing the source tab, fully closing Chrome, reopening the same disposable
+  profile and manually retrying sent the retained PDF without recapturing it.
+  All four attachments then remained on the bookmark.
+- Reopening the extension loaded the same exact-URL bookmark. Editing its title
+  and tags kept its collection, notes, description, favorite flag and attachments;
+  the native exact-URL query still returned exactly one bookmark.
+
+[Current popup with synthetic content](pocketmark-extension.png).
+The screenshot is the 390 px-wide extension body; tall popups scroll in Chrome.
+Deterministic extension tests additionally cover interrupted workers, failed
+acquisition, raster/PDF limits, response-loss reconciliation, connection recovery,
+validation and preventing a pending task from being sent to a different server.
+
+## Historical client observations
+
 19–20 October 2026 (Europe/Paris), macOS ARM64, Google Chrome 155.0.8059.80. Tests use an explicitly authorized temporary Chrome profile, an isolated Pocketmark database, synthetic pages and dedicated credentials. Personal browser data is not involved.
 
 ## Executed clients

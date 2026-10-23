@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"path/filepath"
@@ -71,21 +72,36 @@ func TestLegacySetupCannotClaimLibrary(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// Reproduce the pre-upgrade account schema, including a disabled login.
-			_, err = s.DB.Exec(`CREATE TABLE account(id INTEGER PRIMARY KEY CHECK(id=1),username TEXT NOT NULL,salt TEXT NOT NULL,hash TEXT NOT NULL);
+			if err = s.Close(); err != nil {
+				t.Fatal(err)
+			}
+			legacy, err := sql.Open("pocketmark-sqlite3", path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer legacy.Close()
+			// Reproduce the old account schema without the persisted setup decision.
+			_, err = legacy.Exec(`DROP TABLE account_setup; DROP TABLE account; DROP TABLE api_tokens; CREATE TABLE account(id INTEGER PRIMARY KEY CHECK(id=1),username TEXT NOT NULL,salt TEXT NOT NULL,hash TEXT NOT NULL);
  CREATE TABLE api_tokens(id INTEGER PRIMARY KEY,name TEXT NOT NULL,hash TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL);`)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if password != "" {
-				_, err = s.DB.Exec("INSERT INTO account VALUES(1,?,?,?)", "legacy", "salt", passwordHash(password, "salt"))
+				_, err = legacy.Exec("INSERT INTO account VALUES(1,?,?,?)", "legacy", "salt", passwordHash(password, "salt"))
 				if err != nil {
 					t.Fatal(err)
 				}
 			}
 			key := strings.Repeat("a", 64)
 			digest := sha256.Sum256([]byte(key))
-			if _, err := s.DB.Exec("INSERT INTO api_tokens VALUES(1,'legacy client',?,'2026-01-01')", hex.EncodeToString(digest[:])); err != nil {
+			if _, err := legacy.Exec("INSERT INTO api_tokens VALUES(1,'legacy client',?,'2026-01-01')", hex.EncodeToString(digest[:])); err != nil {
+				t.Fatal(err)
+			}
+			if err = legacy.Close(); err != nil {
+				t.Fatal(err)
+			}
+			s, err = store.Open(path)
+			if err != nil {
 				t.Fatal(err)
 			}
 			id, err := s.Create(context.Background(), store.Link{URL: "https://example.org/keep", Notes: "keep private"})

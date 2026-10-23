@@ -1,195 +1,246 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
-let settings = {}, activeTab, attachedTarget, connecting = false;
-const LIMIT = 20 * 1024 * 1024;
-function status(message, error = false) { $("status").textContent = message; $("status").className = error ? "error" : ""; }
-function origin(value) { const url = new URL(value); if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || (url.pathname !== "/" && url.pathname !== "")) throw new Error("Enter an http(s) server origin without a path or credentials."); return url.origin; }
-async function request(path, options = {}, connection = settings) {
-  const response = await fetch(connection.server + path, { ...options, credentials: "omit", headers: { "Authorization": `Bearer ${connection.token}`, ...options.headers } });
-  const text = await response.text(); let data = null; try { data = text ? JSON.parse(text) : null; } catch { throw new Error("The server returned an unexpected response."); }
-  if (!response.ok) throw new Error(data?.error || `Request failed (${response.status}).`);
-  return data;
+const { formats, origin, validate } = Pocketmark;
+// Chrome sizes action popups from their contents. Viewport-relative caps during
+// that first measurement otherwise collapse the popup to Chrome's minimum size.
+// Establish its preferred size first, then clamp to actual native resize events.
+if (chrome.extension?.getViews({ type: "popup" }).includes(window)) {
+  document.body.classList.add("native-popup");
+  window.addEventListener("resize", () => {
+    document.body.style.maxInlineSize = `${window.innerWidth}px`;
+    document.body.style.maxBlockSize = `${window.innerHeight}px`;
+  });
 }
-async function upload(id, name, blob) {
-  if (blob.size > LIMIT) throw new Error("Snapshot exceeds the 20 MiB file limit.");
-  return request(`/api/links/${id}/assets?name=${encodeURIComponent(name)}`, { method: "POST", headers: { "Content-Type": blob.type }, body: blob });
+let activeTab, connected = false, connecting = false, loaded = false, ready = false, settingsOpen = false, task = null, tags = [], collections = [], poll, tagTimer, tagQuery = 0, taskSignature;
+function status(message, error = false) {
+  const changed = $("status").textContent !== message;
+  $("status").setAttribute("role", error ? "alert" : "status");
+  $("status").setAttribute("aria-live", error ? "assertive" : "polite");
+  $("status").textContent = message; $("status").className = error ? "notice error" : "notice";
+  if (error && changed) $("status").scrollIntoView?.({ block: "nearest" });
 }
-
-function decodedBytes(data) {
-  if (typeof data !== "string" || data.length > Math.ceil(LIMIT / 3) * 4 + 4) throw new Error("Capture exceeds the 20 MiB limit.");
-  const binary = atob(data), bytes = new Uint8Array(binary.length);
-  if (bytes.length > LIMIT) throw new Error("Capture exceeds the 20 MiB limit.");
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
+async function send(type, values = {}) {
+  const response = await chrome.runtime.sendMessage({ type, ...values });
+  if (!response?.ok) throw new Error(response?.error || "The extension could not respond. Reopen the popup.");
+  return response.value;
 }
-async function advancedCapture(mode) {
-  if (!chrome.debugger || !await chrome.permissions.contains({ permissions: ["debugger"] })) throw new Error("This mode requires the advanced extension package. See extension/README.md, or use your browser’s Print → Save as PDF.");
-  const current = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (current[0]?.id !== activeTab.id || current[0]?.url !== activeTab.url) throw new Error("The active page changed. Reopen the extension on the page to capture.");
-  const target = { tabId: activeTab.id };
-  let attached = false, stream;
-  try {
-    await chrome.debugger.attach(target, "1.3"); attached = true; attachedTarget = target;
-    if (mode === "fullpage") {
-      const metrics = await chrome.debugger.sendCommand(target, "Page.getLayoutMetrics");
-      const { width, height, x = 0, y = 0 } = metrics.cssContentSize || {};
-      if (![width, height, x, y].every(Number.isFinite) || width <= 0 || height <= 0 || width > 1e6 || height > 1e6) throw new Error("This page has unsupported dimensions.");
-      const density = await chrome.debugger.sendCommand(target, "Runtime.evaluate", { expression: "window.devicePixelRatio", returnByValue: true });
-      const dpr = density.result?.value;
-      if (!Number.isFinite(dpr) || dpr <= 0 || dpr > 16) throw new Error("This page has an unsupported pixel density.");
-      // CDP clip dimensions are CSS pixels, but PNG pixels include device scale.
-      // Account for Retina/zoom before capture to bound the physical raster.
-      const physicalWidth = width * dpr, physicalHeight = height * dpr;
-      // Reserve one pixel per axis for Chromium's integer raster rounding.
-      const area = physicalWidth * physicalHeight, edges = physicalWidth + physicalHeight;
-      const pixelScale = (Math.sqrt(edges * edges + 4 * area * (16_000_000 - 1)) - edges) / (2 * area);
-      const scale = Math.min(1, pixelScale, 16383 / physicalWidth, 16383 / physicalHeight);
-      const result = await chrome.debugger.sendCommand(target, "Page.captureScreenshot", { format: "png", captureBeyondViewport: true, fromSurface: true, clip: { x, y, width, height, scale } });
-      return new Blob([decodedBytes(result.data)], { type: "image/png" });
+function controls() {
+  const running = task?.status === "running", paused = task?.status === "paused";
+  const editing = connected && loaded && !settingsOpen && !running && !paused;
+  $("editor").disabled = !editing || connecting;
+  $("save-form").hidden = !editing;
+  $("settings").hidden = !settingsOpen;
+  $("save-footer").hidden = !editing;
+  $("connect-footer").hidden = !settingsOpen;
+  $("task-actions").hidden = settingsOpen || !paused;
+  $("background-note").hidden = settingsOpen || !running;
+  $("footer").hidden = !(editing || settingsOpen || running || paused);
+  $("task").hidden = settingsOpen || !task || (task.status === "done" && task.fields.url !== activeTab?.url);
+  $("unsupported").hidden = settingsOpen || !ready || !connected || loaded || running || paused;
+  $("connection-toggle").hidden = !connected;
+  $("connection-toggle").textContent = settingsOpen ? "Back to bookmark" : "Connection";
+  $("connection-toggle").setAttribute("aria-expanded", String(settingsOpen));
+  $("connect").disabled = connecting || task?.status === "running";
+  $("connect").textContent = connecting ? "Connecting…" : "Connect";
+  captureHint();
+}
+function showSettings(open) {
+  settingsOpen = open;
+  controls();
+}
+function captureHint() {
+  const count = Object.keys(formats).filter((mode) => $("capture-" + mode).checked).length;
+  $("capture-count").textContent = count ? `${count} selected` : "Optional";
+  $("save-hint").textContent = count ? `Bookmark + ${count} capture${count === 1 ? "" : "s"}` : "Bookmark only";
+}
+function renderTags() {
+  $("selected-tags").replaceChildren();
+  for (const tag of tags) {
+    const item = document.createElement("li"), label = document.createElement("span"), button = document.createElement("button");
+    label.className = "tag-name"; label.textContent = tag;
+    button.type = "button"; button.setAttribute("aria-label", `Remove tag ${tag}`);
+    const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg"), line = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    icon.setAttribute("viewBox", "0 0 24 24"); icon.setAttribute("aria-hidden", "true"); line.setAttribute("d", "m7 7 10 10M17 7 7 17"); icon.append(line); button.append(icon);
+    button.addEventListener("click", () => { tags = tags.filter((value) => value !== tag); renderTags(); $("tag-input").focus(); });
+    item.append(label, button); $("selected-tags").append(item);
+  }
+}
+function addTags() {
+  tags = [...new Set([...tags, ...$("tag-input").value.split(",").map((tag) => tag.trim()).filter(Boolean)])];
+  $("tag-input").value = ""; renderTags();
+}
+function options(select, label, value) { const option = document.createElement("option"); option.textContent = label; option.value = value; select.append(option); }
+function collectionPath(collection) {
+  const names = [collection.name], seen = new Set([collection.id]);
+  let parent = collections.find((value) => value.id === collection.parentId);
+  while (parent && !seen.has(parent.id)) { names.unshift(parent.name); seen.add(parent.id); parent = collections.find((value) => value.id === parent.parentId); }
+  return names.join(" / ");
+}
+function renderCollections(selected = "") {
+  $("collection").replaceChildren(); $("collection-parent").replaceChildren();
+  options($("collection"), "Inbox", ""); options($("collection-parent"), "Library root", "");
+  for (const collection of [...collections].sort((a, b) => collectionPath(a).localeCompare(collectionPath(b)))) {
+    options($("collection"), collectionPath(collection), collection.id); options($("collection-parent"), collectionPath(collection), collection.id);
+  }
+  $("collection").value = String(selected || "");
+}
+function tagOptions(values) {
+  $("tag-options").replaceChildren();
+  for (const tag of values) if (!tags.includes(tag.name)) options($("tag-options"), tag.name, tag.name);
+}
+async function load() {
+  loaded = false; controls();
+  if (!activeTab?.url || !/^https?:\/\//i.test(activeTab.url)) { status("Open a regular http(s) page to save it.", true); return; }
+  const data = await send("load", { tabId: activeTab.id });
+  collections = data.collections;
+  renderCollections(data.link?.collectionId);
+  tagOptions(data.tags);
+  $("title").value = data.link?.title || activeTab.title || activeTab.url;
+  tags = data.link?.tags || []; renderTags();
+  $("save").textContent = data.link ? "Save changes" : "Save bookmark";
+  status(task && (task.status !== "done" || task.fields.url === activeTab?.url) ? "" : data.link ? "Already saved. Edit its title, collection or tags." : "Ready to save this page.");
+  loaded = true; controls();
+}
+function renderTask(job) {
+  const signature = JSON.stringify(job);
+  // Background polling must not recreate focused controls, re-announce the
+  // same status or reopen a disclosure the user deliberately collapsed.
+  if (signature === taskSignature) { controls(); return; }
+  taskSignature = signature;
+  const changedState = task?.status !== job?.status || task?.id !== job?.id;
+  task = job;
+  if (job) {
+    $("task").setAttribute("data-state", job.status);
+    if (changedState) $("task").open = job.status !== "done";
+    $("task-heading").textContent = job.status === "done" ? (job.fields.url === activeTab?.url ? "Saved to Pocketmark" : "Previous save") : job.status === "paused" ? "Save needs attention" : "Saving to Pocketmark";
+    const saved = job.items.filter((item) => item.status === "saved").length;
+    $("task-count").textContent = job.items.length ? `${saved}/${job.items.length}` : "";
+    $("task-count").setAttribute("aria-label", `${saved} of ${job.items.length} captures saved`);
+    $("task-icon").setAttribute("d", job.status === "done" ? "m5 12 4 4L19 6" : job.status === "paused" ? "M12 4v9m0 5v1" : "M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-2l2 2M4 17l2 2a7 7 0 0 0 12-2");
+    $("task-title").textContent = job.fields.title || job.fields.url;
+    $("task-message").textContent = job.message;
+    $("task-message").className = job.status === "paused" ? "error" : "";
+    $("task-items").replaceChildren();
+    for (const item of job.items) {
+      const li = document.createElement("li");
+      const label = { pending: "Waiting", capturing: "Capturing", ready: "Captured locally", uploading: "Uploading", saved: "Saved", failed: "Failed" }[item.status];
+      const name = document.createElement("span"), state = document.createElement("span");
+      name.textContent = formats[item.mode][0]; state.textContent = label; state.className = item.status === "saved" ? "item-state item-saved" : "item-state";
+      li.append(name, state);
+      if (item.error) { const error = document.createElement("span"); error.className = "item-error"; error.textContent = item.error; li.append(error); }
+      $("task-items").append(li);
     }
-    const result = await chrome.debugger.sendCommand(target, "Page.printToPDF", { printBackground: true, preferCSSPageSize: true, transferMode: "ReturnAsStream" });
-    if (!result.stream) return new Blob([decodedBytes(result.data)], { type: "application/pdf" });
-    stream = result.stream;
-    const chunks = []; let size = 0;
-    for (;;) {
-      const chunk = await chrome.debugger.sendCommand(target, "IO.read", { handle: stream, size: 256 * 1024 });
-      const bytes = chunk.base64Encoded ? decodedBytes(chunk.data) : new TextEncoder().encode(chunk.data);
-      size += bytes.length;
-      if (size > LIMIT) throw new Error("PDF exceeds the 20 MiB limit.");
-      chunks.push(bytes);
-      if (chunk.eof) break;
-      if (!bytes.length) throw new Error("PDF stream stalled.");
-    }
-    return new Blob(chunks, { type: "application/pdf" });
-  } finally {
-    if (stream) { try { await chrome.debugger.sendCommand(target, "IO.close", { handle: stream }); } catch {} }
-    if (attached) { try { await chrome.debugger.detach(target); } catch {} }
-    attachedTarget = undefined;
+    $("retry").hidden = job.status !== "paused";
+    $("discard").hidden = job.status !== "paused";
+    if (job.linkId && job.fields.url === activeTab?.url) $("save").textContent = "Save changes";
+    if (changedState && job.status === "done" && ready) status("Saved. You can edit this bookmark.");
   }
+  controls();
 }
-window.addEventListener("pagehide", () => { if (attachedTarget) chrome.debugger.detach(attachedTarget).catch(() => {}); });
-
-// Runs only after the user chooses a snapshot. No persistent content script or background process.
-async function snapshotPage() {
-  const clone = document.documentElement.cloneNode(true);
-  const limit = 12 * 1024 * 1024;
-  let embedded = 0, omitted = 0;
-  const styles = [];
-  for (const sheet of document.styleSheets) {
-    try { const css = [...sheet.cssRules].map((rule) => rule.cssText).join("\n"); if (embedded + css.length < limit) { styles.push(css); embedded += css.length; } else omitted++; }
-    catch { omitted++; }
-  }
-  const originals = [...document.images], images = [...clone.querySelectorAll("img")];
-  for (let i = 0; i < images.length; i++) {
-    const source = originals[i], target = images[i]; target.removeAttribute("srcset"); target.removeAttribute("loading");
-    if (!source?.complete || !source.naturalWidth || source.naturalWidth * source.naturalHeight > 4_000_000 || embedded >= limit) { target.removeAttribute("src"); omitted++; continue; }
-    try {
-      const canvas = document.createElement("canvas"); canvas.width = source.naturalWidth; canvas.height = source.naturalHeight;
-      canvas.getContext("2d").drawImage(source, 0, 0); const data = canvas.toDataURL("image/png");
-      canvas.width = canvas.height = 0;
-      if (embedded + data.length <= limit) { target.setAttribute("src", data); embedded += data.length; } else { target.removeAttribute("src"); omitted++; }
-    } catch { target.removeAttribute("src"); omitted++; }
-  }
-  for (const node of clone.querySelectorAll("script,iframe,frame,object,embed,link,base,meta[http-equiv],input,textarea,select,button")) node.remove();
-  for (const node of clone.querySelectorAll("*")) {
-    for (const attr of [...node.attributes]) if (/^on/i.test(attr.name) || ["srcdoc", "nonce", "integrity", "formaction", "action", "contenteditable"].includes(attr.name)) node.removeAttribute(attr.name);
-    if (node.tagName === "A") { try { const url = new URL(node.getAttribute("href"), location.href); if (["http:", "https:"].includes(url.protocol)) { node.setAttribute("href", url.href); node.setAttribute("rel", "noopener noreferrer"); } else node.removeAttribute("href"); } catch { node.removeAttribute("href"); } }
-  }
-  const head = clone.querySelector("head");
-  const policy = document.createElement("meta"); policy.httpEquiv = "Content-Security-Policy"; policy.content = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'"; head.prepend(policy);
-  const style = document.createElement("style"); style.textContent = styles.join("\n"); head.append(style);
-  const html = "<!doctype html>\n" + clone.outerHTML;
-  if (html.length > 19 * 1024 * 1024) throw new Error("Rendered page is too large to save.");
-  return { html, omitted };
-}
+async function refresh() { renderTask(await send("state")); }
 async function finishConnection(candidate) {
-  const connection = { server: origin(candidate.server), token: candidate.token };
-  if (typeof connection.token !== "string" || !connection.token.trim()) throw new Error("Enter a named API key from the Pocketmark API keys menu.");
-  const session = await request("/api/session", {}, connection);
-  if (session?.authenticated !== true) throw new Error("The server did not confirm an authenticated connection.");
-  // Promote only after server validation; pending credentials never become active.
-  await chrome.storage.local.set({ ...connection, pendingConnection: null });
-  settings = connection;
-  $("settings").open = false; status("Connected. You can save this page.");
+  await send("connect", { connection: candidate });
+  connected = true; showSettings(false);
+  await load();
 }
 $("settings-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  if (connecting) return;
-  connecting = true; $("save").disabled = true;
+  event.preventDefault(); if (connecting) return;
+  connecting = true; connected = false; controls();
   try {
-    const server = origin($("server").value.trim()), token = $("token").value.trim();
-    if (!token) throw new Error("Enter a named API key from the Pocketmark API keys menu.");
-    const candidate = { server, token };
-    settings = {};
-    status("Waiting for server permission… Reopen this popup after approving if it closes.");
-    // Dispatch the durable write before opening Chrome's permission prompt.
-    // Start request synchronously in the user gesture: its dialog may destroy
-    // this popup, but the browser-owned storage operation still persists.
+    const candidate = { server: origin($("server").value.trim()), token: $("token").value.trim() };
+    if (!candidate.token) throw new Error("Enter a dedicated API key from Pocketmark → API keys.");
+    status("Approve server access, then reopen this popup if it closes.");
+    // Both operations start within the user gesture. Permission prompts can
+    // destroy popups, so store the draft before Chrome presents its dialog.
     const persisted = chrome.storage.local.set({ pendingConnection: candidate });
-    const permission = chrome.permissions.request({ origins: [server + "/*"] });
+    const permission = chrome.permissions.request({ origins: [candidate.server + "/*"] });
     const [, granted] = await Promise.all([persisted, permission]);
-    if (!granted) {
-      await chrome.storage.local.set({ pendingConnection: null });
-      throw new Error("Server access was not granted. Click Connect to retry.");
-    }
-    status("Checking the server connection…");
+    if (!granted) { await chrome.storage.local.set({ pendingConnection: null }); throw new Error("Server access was not granted. Click Connect to retry."); }
     await finishConnection(candidate);
-  } catch (error) { $("settings").open = true; status(error.message, true); }
-  finally { connecting = false; $("save").disabled = false; }
+  } catch (error) { showSettings(true); status(error.message, true); }
+  finally { connecting = false; controls(); }
+});
+$("connection-toggle").addEventListener("click", () => {
+  showSettings(!settingsOpen);
+  status("");
+  if (settingsOpen) $("server").focus();
+});
+for (const mode of Object.keys(formats)) $("capture-" + mode).addEventListener("change", captureHint);
+$("add-tag").addEventListener("click", () => { addTags(); $("tag-input").focus(); });
+$("tag-input").addEventListener("keydown", (event) => {
+  if (event.key === "Enter" || event.key === ",") { event.preventDefault(); addTags(); }
+  if (event.key === "Backspace" && !$("tag-input").value && tags.length) $("selected-tags").lastElementChild?.querySelector("button")?.focus();
+});
+$("tag-input").addEventListener("input", () => {
+  clearTimeout(tagTimer); const sequence = ++tagQuery;
+  tagTimer = setTimeout(async () => {
+    try { const data = await send("tags", { query: $("tag-input").value }); if (sequence === tagQuery) tagOptions(data.tags); }
+    catch { /* Manual creation remains available when suggestions fail. */ }
+  }, 200);
+});
+function collectionEditor(open) {
+  $("collection-create").hidden = !open; $("new-collection").setAttribute("aria-expanded", String(open));
+  if (open) { $("collection-parent").value = $("collection").value; $("collection-name").focus(); }
+}
+$("new-collection").addEventListener("click", () => collectionEditor($("collection-create").hidden));
+$("cancel-collection").addEventListener("click", () => { collectionEditor(false); $("new-collection").focus(); });
+$("collection-name").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") { event.preventDefault(); $("create-collection").click(); }
+  if (event.key === "Escape") { event.preventDefault(); collectionEditor(false); $("new-collection").focus(); }
+});
+$("create-collection").addEventListener("click", async () => {
+  $("create-collection").disabled = true;
+  try {
+    const collection = await send("collection", { name: $("collection-name").value, parentId: Number($("collection-parent").value) || null });
+    collections.push(collection); renderCollections(collection.id); collectionEditor(false); $("collection-name").value = "";
+    $("collection").focus();
+    status("Collection created and selected.");
+  } catch (error) { status(error.message, true); }
+  finally { $("create-collection").disabled = false; }
 });
 $("save-form").addEventListener("submit", async (event) => {
   event.preventDefault(); $("save").disabled = true;
   try {
-    if (connecting || !settings.server || !settings.token) throw new Error("Connect your Pocketmark server below first.");
-    if (!activeTab?.url || !/^https?:\/\//i.test(activeTab.url)) throw new Error("Open a regular http(s) web page first.");
-    status("Saving… Keep this popup open until it finishes.");
-    const mode = $("mode").value;
-    // Capture before network work so the visible page cannot change unnoticed.
-    let screenshot, snapshot, advanced;
-    if (["pdf", "fullpage"].includes(mode)) advanced = await advancedCapture(mode);
-    if (["screenshot", "both"].includes(mode)) {
-      const current = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (current[0]?.id !== activeTab.id) throw new Error("The active tab changed. Reopen the extension on the page to capture.");
-      const data = await chrome.tabs.captureVisibleTab(activeTab.windowId, { format: "png" });
-      screenshot = await (await fetch(data)).blob();
-    }
-    if (["html", "both"].includes(mode)) {
-      const results = await chrome.scripting.executeScript({ target: { tabId: activeTab.id }, func: snapshotPage });
-      if (!results[0]?.result?.html) throw new Error("This page could not be captured.");
-      snapshot = results[0].result;
-    }
-    // Reuse a bookmark already saved with the exact URL.
-    const existing = await request(`/api/links?url=${encodeURIComponent(activeTab.url)}`);
-    let link = existing.links?.find((item) => item.url === activeTab.url);
-    if (!link) link = await request("/api/links", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: activeTab.url, title: $("title").value.trim(), tags: [...new Set($("tags").value.split(",").map((tag) => tag.trim()).filter(Boolean))] }) });
-    if (snapshot) await upload(link.id, "rendered-page.html", new Blob([snapshot.html], { type: "text/html" }));
-    if (screenshot) await upload(link.id, "screenshot.png", screenshot);
-    if (advanced) await upload(link.id, mode === "pdf" ? "page.pdf" : "full-page.png", advanced);
-    status(`Saved to Pocketmark.${snapshot?.omitted ? ` ${snapshot.omitted} resource(s) could not be embedded; save a screenshot to preserve visible appearance.` : ""}`);
-  } catch (error) { status(error.message, true); } finally { $("save").disabled = false; }
+    addTags();
+    const fields = { url: activeTab.url, title: $("title").value.trim(), collectionId: Number($("collection").value) || null, tags };
+    validate(fields);
+    const modes = Object.keys(formats).filter((mode) => $("capture-" + mode).checked);
+    renderTask(await send("save", { tabId: activeTab.id, fields, modes }));
+    for (const mode of Object.keys(formats)) $("capture-" + mode).checked = false;
+    status("");
+  } catch (error) { status(error.message, true); }
+  finally { $("save").disabled = false; controls(); }
 });
-(async () => {
+$("retry").addEventListener("click", async () => {
+  $("retry").disabled = true;
+  try { renderTask(await send("retry", { tabId: activeTab?.id })); }
+  catch (error) { status(error.message, true); }
+  finally { $("retry").disabled = false; }
+});
+$("discard").addEventListener("click", async () => {
+  try { await send("discard"); renderTask(null); status("Pending local files discarded. Saved bookmarks and captures are unchanged."); }
+  catch (error) { status(error.message, true); }
+});
+async function initialize() {
   try {
-    const stored = await chrome.storage.local.get(["server", "token", "pendingConnection"]);
-    settings = { server: stored.server, token: stored.token };
+    await chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
     [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    $("title").value = activeTab?.title || ""; $("page-title").textContent = activeTab?.title || "Open a web page to save it";
-    const candidate = stored.pendingConnection;
-    const displayed = candidate || settings;
-    $("server").value = displayed.server || ""; $("token").value = displayed.token || "";
-    $("settings").open = !!candidate || !settings.server || !settings.token;
-    const advanced = !!chrome.debugger && await chrome.permissions.contains({ permissions: ["debugger"] });
-    $("mode-pdf").disabled = !advanced; $("mode-fullpage").disabled = !advanced;
-    if (candidate) {
-      settings = {}; connecting = true; $("save").disabled = true;
-      const server = origin(candidate.server);
-      if (!await chrome.permissions.contains({ origins: [server + "/*"] })) {
-        await chrome.storage.local.set({ pendingConnection: null });
-        throw new Error("Server access was not granted. Click Connect to retry.");
-      }
-      status("Checking the saved connection…");
-      await finishConnection(candidate);
-    }
-  } catch (error) { $("settings").open = true; status(error.message, true); }
-  finally { connecting = false; $("save").disabled = false; }
-})();
+    $("page-title").textContent = activeTab?.url && /^https?:\/\//i.test(activeTab.url) ? new URL(activeTab.url).hostname : "Your current page";
+    $("page-title").title = activeTab?.url || "";
+    await refresh();
+    const stored = await chrome.storage.local.get(["server", "token", "pendingConnection"]), candidate = stored.pendingConnection || stored;
+    $("server").value = candidate.server || ""; $("token").value = candidate.token || "";
+    if (stored.pendingConnection) {
+      if (await chrome.permissions.contains({ origins: [origin(candidate.server) + "/*"] })) await finishConnection(candidate);
+      else { await chrome.storage.local.set({ pendingConnection: null }); throw new Error("Server access was not granted. Click Connect to retry."); }
+    } else if (stored.server && stored.token) { connected = true; await load(); }
+    else { showSettings(true); status(""); }
+  } catch (error) { showSettings(true); status(error.message, true); }
+  finally {
+    ready = true;
+    controls();
+    poll = setInterval(() => { refresh().catch((error) => status(error.message, true)); }, 1000);
+  }
+}
+window.addEventListener("pagehide", () => { clearInterval(poll); clearTimeout(tagTimer); });
+void initialize();

@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -22,7 +21,13 @@ func init() {
 	}})
 }
 
-type Store struct{ DB *sql.DB }
+// Store owns the SQLite connection, complete schema and disk-backed work files.
+// A successful Open is sufficient for every operation; HTTP construction never
+// initializes or migrates persistence.
+type Store struct {
+	db        *sql.DB
+	directory string
+}
 type Link struct {
 	ID               int64    `json:"id"`
 	Type             string   `json:"type"`
@@ -37,6 +42,7 @@ type Link struct {
 	Status           string   `json:"status"`
 	Error            string   `json:"error,omitempty"`
 	Content          string   `json:"content,omitempty"`
+	SearchSnippet    string   `json:"searchSnippet,omitempty"`
 	ArchiveAvailable bool     `json:"archiveAvailable"`
 	CreatedAt        string   `json:"createdAt"`
 	UpdatedAt        string   `json:"updatedAt"`
@@ -61,6 +67,10 @@ type Page struct {
 }
 
 func Open(path string) (*Store, error) {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return nil, err
 	}
@@ -71,40 +81,8 @@ func Open(path string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
-	s := &Store{db}
-	_, err = db.Exec(`
-PRAGMA mmap_size=0;
-PRAGMA temp_store=FILE;
-CREATE TABLE IF NOT EXISTS collections(id INTEGER PRIMARY KEY, name TEXT NOT NULL, parent_id INTEGER REFERENCES collections(id) ON DELETE SET NULL, description TEXT NOT NULL DEFAULT '');
-CREATE TABLE IF NOT EXISTS links(
- id INTEGER PRIMARY KEY, url TEXT NOT NULL UNIQUE, title TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '',
- collection_id INTEGER REFERENCES collections(id) ON DELETE SET NULL, tags TEXT NOT NULL DEFAULT '[]', favorite INTEGER NOT NULL DEFAULT 0, read INTEGER NOT NULL DEFAULT 0,
- status TEXT NOT NULL DEFAULT 'pending', error TEXT NOT NULL DEFAULT '', content TEXT NOT NULL DEFAULT '', archive BLOB,
- created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS annotations(id INTEGER PRIMARY KEY, link_id INTEGER NOT NULL REFERENCES links(id) ON DELETE CASCADE, quote TEXT NOT NULL, start_offset INTEGER NOT NULL, end_offset INTEGER NOT NULL, note TEXT NOT NULL DEFAULT '', color TEXT NOT NULL DEFAULT 'yellow', created_at TEXT NOT NULL);
-CREATE INDEX IF NOT EXISTS annotations_link ON annotations(link_id,id);
-CREATE INDEX IF NOT EXISTS links_collection ON links(collection_id,id DESC);
-CREATE INDEX IF NOT EXISTS links_status ON links(status,id);
-CREATE VIRTUAL TABLE IF NOT EXISTS links_fts USING fts5(title,url,description,notes,tags,content,content='links',content_rowid='id',tokenize='unicode61 remove_diacritics 2');
-CREATE TRIGGER IF NOT EXISTS links_ai AFTER INSERT ON links BEGIN
- INSERT INTO links_fts(rowid,title,url,description,notes,tags,content) VALUES(new.id,new.title,new.url,new.description,new.notes,new.tags,new.content);
-END;
-CREATE TRIGGER IF NOT EXISTS links_ad AFTER DELETE ON links BEGIN
- INSERT INTO links_fts(links_fts,rowid,title,url,description,notes,tags,content) VALUES('delete',old.id,old.title,old.url,old.description,old.notes,old.tags,old.content);
-END;
-CREATE TRIGGER IF NOT EXISTS links_au AFTER UPDATE OF title,url,description,notes,tags,content ON links BEGIN
- INSERT INTO links_fts(links_fts,rowid,title,url,description,notes,tags,content) VALUES('delete',old.id,old.title,old.url,old.description,old.notes,old.tags,old.content);
- INSERT INTO links_fts(rowid,title,url,description,notes,tags,content) VALUES(new.id,new.title,new.url,new.description,new.notes,new.tags,new.content);
-END;
-UPDATE links SET status='pending' WHERE status='processing';
-PRAGMA user_version=1;
-`)
-	if err != nil {
-		db.Close()
-		return nil, fmt.Errorf("initialize SQLite (build with -tags sqlite_fts5): %w", err)
-	}
-	if err = s.initLibraryTimestamps(); err != nil {
+	s := &Store{db: db, directory: filepath.Dir(path)}
+	if err = s.initializeSchema(context.Background()); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -114,7 +92,7 @@ PRAGMA user_version=1;
 	}
 	return s, nil
 }
-func (s *Store) Close() error { return s.DB.Close() }
+func (s *Store) Close() error { return s.db.Close() }
 
 // IsFileURL recognizes opaque identifiers of local library documents. They are
 // never passed to the network capture worker or exported as browser bookmarks.
@@ -187,10 +165,10 @@ func Insert(ctx context.Context, ex executor, l Link) (int64, error) {
 	}
 	return r.LastInsertId()
 }
-func (s *Store) Create(ctx context.Context, l Link) (int64, error) { return Insert(ctx, s.DB, l) }
+func (s *Store) Create(ctx context.Context, l Link) (int64, error) { return Insert(ctx, s.db, l) }
 func (s *Store) Update(ctx context.Context, id int64, l Link) error {
 	var oldURL string
-	if e := s.DB.QueryRowContext(ctx, "SELECT url FROM links WHERE id=?", id).Scan(&oldURL); e != nil {
+	if e := s.db.QueryRowContext(ctx, "SELECT url FROM links WHERE id=?", id).Scan(&oldURL); e != nil {
 		return e
 	}
 	if (IsFileURL(oldURL) || IsFileURL(l.URL)) && oldURL != l.URL {
@@ -201,7 +179,7 @@ func (s *Store) Update(ctx context.Context, id int64, l Link) error {
 		return err
 	}
 	tags, _ := json.Marshal(l.Tags)
-	r, err := s.DB.ExecContext(ctx, `UPDATE links SET title=?,description=?,notes=?,collection_id=?,tags=?,favorite=?,read=?,updated_at=?,
+	r, err := s.db.ExecContext(ctx, `UPDATE links SET title=?,description=?,notes=?,collection_id=?,tags=?,favorite=?,read=?,updated_at=?,
  status=CASE WHEN url<>? THEN 'pending' ELSE status END,error=CASE WHEN url<>? THEN '' ELSE error END,
  content=CASE WHEN url<>? THEN '' ELSE content END,archive=CASE WHEN url<>? THEN NULL ELSE archive END,url=? WHERE id=?`, l.Title, l.Description, l.Notes, l.CollectionID, string(tags), l.Favorite, l.Read, time.Now().UTC().Format(time.RFC3339Nano), l.URL, l.URL, l.URL, l.URL, l.URL, id)
 	return affected(r, err)
@@ -220,7 +198,7 @@ func affected(r sql.Result, err error) error {
 	return nil
 }
 func (s *Store) Delete(ctx context.Context, id int64) error {
-	r, e := s.DB.ExecContext(ctx, "DELETE FROM links WHERE id=?", id)
+	r, e := s.db.ExecContext(ctx, "DELETE FROM links WHERE id=?", id)
 	return affected(r, e)
 }
 
@@ -228,13 +206,14 @@ const columns = `l.id,l.url,l.title,l.description,l.notes,l.collection_id,l.tags
 
 type scanner interface{ Scan(...any) error }
 
-func scan(row scanner, withContent bool) (Link, error) {
+func scan(row scanner, withContent bool, extra ...any) (Link, error) {
 	var l Link
 	var tags string
 	dst := []any{&l.ID, &l.URL, &l.Title, &l.Description, &l.Notes, &l.CollectionID, &tags, &l.Favorite, &l.Read, &l.Status, &l.Error, &l.ArchiveAvailable, &l.CreatedAt, &l.UpdatedAt}
 	if withContent {
 		dst = append(dst, &l.Content)
 	}
+	dst = append(dst, extra...)
 	err := row.Scan(dst...)
 	if err == nil {
 		err = json.Unmarshal([]byte(tags), &l.Tags)
@@ -246,7 +225,7 @@ func scan(row scanner, withContent bool) (Link, error) {
 	return l, err
 }
 func (s *Store) Get(ctx context.Context, id int64) (Link, error) {
-	return scan(s.DB.QueryRowContext(ctx, "SELECT "+columns+",l.content FROM links l WHERE id=?", id), true)
+	return scan(s.db.QueryRowContext(ctx, "SELECT "+columns+",l.content FROM links l WHERE id=?", id), true)
 }
 func (s *Store) List(ctx context.Context, f Filter) (Page, error) {
 	if f.Page < 1 {
@@ -255,6 +234,7 @@ func (s *Store) List(ctx context.Context, f Filter) (Page, error) {
 	p := Page{Links: []Link{}, Page: f.Page, PageSize: 40}
 	where := " WHERE 1=1"
 	args := []any{}
+	ftsQuery := ""
 	if len(f.Query) > 512 {
 		return p, errors.New("query exceeds 512 bytes")
 	}
@@ -267,8 +247,9 @@ func (s *Store) List(ctx context.Context, f Filter) (Page, error) {
 			terms[i] = `"` + strings.ReplaceAll(t, `"`, `""`) + `"*`
 		}
 		if len(terms) > 0 {
+			ftsQuery = strings.Join(terms, " AND ")
 			where += " AND l.id IN (SELECT rowid FROM links_fts WHERE links_fts MATCH ?)"
-			args = append(args, strings.Join(terms, " AND "))
+			args = append(args, ftsQuery)
 		}
 	}
 	if f.Collection == "0" {
@@ -287,7 +268,7 @@ func (s *Store) List(ctx context.Context, f Filter) (Page, error) {
 	if f.Unread {
 		where += " AND l.read=0"
 	}
-	if err := s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM links l"+where, args...).Scan(&p.Total); err != nil {
+	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM links l"+where, args...).Scan(&p.Total); err != nil {
 		return p, err
 	}
 	args = append(args, p.PageSize, (f.Page-1)*p.PageSize)
@@ -295,22 +276,32 @@ func (s *Store) List(ctx context.Context, f Filter) (Page, error) {
 	if order == "" {
 		return p, errors.New("invalid sort")
 	}
-	rows, err := s.DB.QueryContext(ctx, "SELECT "+columns+" FROM links l"+where+" ORDER BY "+order+" LIMIT ? OFFSET ?", args...)
+	// Only search results carry an excerpt, bounded to 24 tokens and 600
+	// characters. Never send the captured document in a library response.
+	// Control-character markers are rendered as text nodes/marks by the UI.
+	snippet := ",''"
+	if ftsQuery != "" {
+		snippet = ",(SELECT substr(snippet(links_fts,-1,char(30),char(31),'…',24),1,600) FROM links_fts WHERE rowid=l.id AND links_fts MATCH ?)"
+		args = append([]any{ftsQuery}, args...)
+	}
+	rows, err := s.db.QueryContext(ctx, "SELECT "+columns+snippet+" FROM links l"+where+" ORDER BY "+order+" LIMIT ? OFFSET ?", args...)
 	if err != nil {
 		return p, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		l, err := scan(rows, false)
+		var excerpt string
+		l, err := scan(rows, false, &excerpt)
 		if err != nil {
 			return p, err
 		}
+		l.SearchSnippet = excerpt
 		p.Links = append(p.Links, l)
 	}
 	return p, rows.Err()
 }
 func (s *Store) Collections(ctx context.Context) ([]Collection, error) {
-	rows, e := s.DB.QueryContext(ctx, "SELECT id,name,parent_id,description FROM collections ORDER BY name COLLATE NOCASE,id")
+	rows, e := s.db.QueryContext(ctx, "SELECT id,name,parent_id,description FROM collections ORDER BY name COLLATE NOCASE,id")
 	if e != nil {
 		return nil, e
 	}
@@ -333,29 +324,29 @@ func (s *Store) AddCollection(ctx context.Context, c Collection) (int64, error) 
 	if c.Description != nil && len(*c.Description) > 8192 {
 		return 0, errors.New("collection description exceeds 8 KiB")
 	}
-	r, e := s.DB.ExecContext(ctx, "INSERT INTO collections(name,parent_id,description) VALUES(?,?,COALESCE(?,''))", c.Name, c.ParentID, c.Description)
+	r, e := s.db.ExecContext(ctx, "INSERT INTO collections(name,parent_id,description) VALUES(?,?,COALESCE(?,''))", c.Name, c.ParentID, c.Description)
 	if e != nil {
 		return 0, e
 	}
 	return r.LastInsertId()
 }
 func (s *Store) DeleteCollection(ctx context.Context, id int64) error {
-	r, e := s.DB.ExecContext(ctx, "DELETE FROM collections WHERE id=?", id)
+	r, e := s.db.ExecContext(ctx, "DELETE FROM collections WHERE id=?", id)
 	return affected(r, e)
 }
 func (s *Store) Queue(ctx context.Context, id int64) error {
-	r, e := s.DB.ExecContext(ctx, "UPDATE links SET status='pending',error='' WHERE id=? AND status<>'processing' AND url NOT LIKE 'pocketmark-file:%'", id)
+	r, e := s.db.ExecContext(ctx, "UPDATE links SET status='pending',error='' WHERE id=? AND status<>'processing' AND url NOT LIKE 'pocketmark-file:%'", id)
 	return affected(r, e)
 }
 func (s *Store) Next(ctx context.Context) (Link, error) {
 	// The service runs exactly one worker. This atomic claim also guards accidental second workers.
-	return scan(s.DB.QueryRowContext(ctx, `UPDATE links SET status='processing' WHERE id=(SELECT id FROM links WHERE status='pending' AND url NOT LIKE 'pocketmark-file:%' ORDER BY id LIMIT 1) RETURNING id,url,title,description,notes,collection_id,tags,favorite,read,status,error,archive IS NOT NULL,created_at,updated_at`), false)
+	return scan(s.db.QueryRowContext(ctx, `UPDATE links SET status='processing' WHERE id=(SELECT id FROM links WHERE status='pending' AND url NOT LIKE 'pocketmark-file:%' ORDER BY id LIMIT 1) RETURNING id,url,title,description,notes,collection_id,tags,favorite,read,status,error,archive IS NOT NULL,created_at,updated_at`), false)
 }
 func (s *Store) Finish(ctx context.Context, l Link, title, description, content string, archive []byte, fetchErr error) error {
 	if fetchErr != nil {
-		_, e := s.DB.ExecContext(ctx, "UPDATE links SET status='failed',error=? WHERE id=? AND url=? AND status='processing'", fetchErr.Error(), l.ID, l.URL)
+		_, e := s.db.ExecContext(ctx, "UPDATE links SET status='failed',error=? WHERE id=? AND url=? AND status='processing'", fetchErr.Error(), l.ID, l.URL)
 		return e
 	}
-	_, e := s.DB.ExecContext(ctx, `UPDATE links SET status='ready',error='',title=CASE WHEN title=url AND ?<>'' THEN ? ELSE title END,description=CASE WHEN description='' THEN ? ELSE description END,content=?,archive=? WHERE id=? AND url=? AND status='processing'`, title, title, description, content, archive, l.ID, l.URL)
+	_, e := s.db.ExecContext(ctx, `UPDATE links SET status='ready',error='',title=CASE WHEN title=url AND ?<>'' THEN ? ELSE title END,description=CASE WHEN description='' THEN ? ELSE description END,content=?,archive=? WHERE id=? AND url=? AND status='processing'`, title, title, description, content, archive, l.ID, l.URL)
 	return e
 }

@@ -24,7 +24,7 @@ A self-hosted bookmark library built around one Go process, SQLite/FTS5 and an e
 - Save and capture pages through the companion browser extension when browser rendering is needed.
 - Organize bookmarks in nested collections and tags, with an Inbox, favorites and read/unread status.
 - Search bookmark metadata and captured text, read saved content, and add highlights and notes.
-- Import existing JSON or browser bookmark metadata; optionally synchronize with Floccus through the supported compatibility interfaces.
+- Import existing JSON or browser bookmark metadata; optionally synchronize with Floccus through WebDAV.
 - Run locally or self-host behind a configured reverse proxy. Full backups and portable metadata exports serve different purposes.
 
 ## Capabilities and Constraints
@@ -34,9 +34,9 @@ A self-hosted bookmark library built around one Go process, SQLite/FTS5 and an e
 - Prefer standard-library solutions, bounded queues and disk-backed or streamed work. Justify dependencies and caches against the RAM goal.
 - Keep origin checks, SSRF protections, request limits and archive boundaries intact.
 - Collaboration, public sharing, SSO/OIDC, RSS, AI automation, scheduled recapture and automatic backups are outside scope.
-- The compatibility adapter covers selected private-library operations; it is not complete compatibility with every endpoint or client.
+- The personal Chrome extension uses the native API. Linkwarden compatibility endpoints and third-party client integration are removed; Floccus WebDAV remains.
 - Metadata JSON/HTML exports do not contain the complete archive library. The owner-only full ZIP backup preserves the database and saved assets; the recovery token must be kept separately.
-- The prolonged-offline cache limitation in the official Android client remains unresolved. Physical phones, iOS, Firefox and Safari are not established as qualified clients by the current evidence.
+- Third-party Android/iOS clients are outside the supported scope. Physical phones, Firefox and Safari are not established as qualified clients by the current evidence.
 
 ## Brand Commitments
 

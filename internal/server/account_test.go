@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"strings"
@@ -33,8 +34,7 @@ func TestPasswordKeysAndRevocation(t *testing.T) {
 	if strings.Contains(w.Body.String(), key.Token) {
 		t.Fatal("listed raw key")
 	}
-	var stored string
-	if e := a.Store.DB.QueryRow("SELECT hash FROM api_tokens WHERE id=1").Scan(&stored); e != nil || stored == key.Token {
+	if a.Store.HasAPIKeyHash(context.Background(), key.Token) {
 		t.Fatal("key stored in plaintext")
 	}
 	requireStatus(t, request(a, "DELETE", "/api/tokens/1", "", true, nil), 200)

@@ -58,14 +58,11 @@ func TestXBELURLEditPreservesPersonalDataAndFiles(t *testing.T) {
 	}
 	defer s.Close()
 	ctx := context.Background()
-	if e = s.InitAssets(ctx); e != nil {
-		t.Fatal(e)
-	}
 	id, e := s.Create(ctx, Link{URL: "https://old.example", Title: "Title", Notes: "personal notes", Tags: []string{"kept"}, Favorite: true, Read: true})
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, e = s.DB.Exec(`UPDATE links SET content='Original text',archive=?,status='ready' WHERE id=?`, []byte("<p>Original text</p>"), id); e != nil {
+	if _, e = s.db.Exec(`UPDATE links SET content='Original text',archive=?,status='ready' WHERE id=?`, []byte("<p>Original text</p>"), id); e != nil {
 		t.Fatal(e)
 	}
 	annotationID, e := s.SaveAnnotation(ctx, id, 0, Annotation{Quote: "Original", Start: 0, End: 8, Note: "Keep this"})
@@ -80,7 +77,7 @@ func TestXBELURLEditPreservesPersonalDataAndFiles(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, e = s.DB.Exec("UPDATE links SET url=?,status='ready' WHERE id=?", "pocketmark-file:"+strings.Repeat("a", 64), fileID); e != nil {
+	if _, e = s.db.Exec("UPDATE links SET url=?,status='ready' WHERE id=?", "pocketmark-file:"+strings.Repeat("a", 64), fileID); e != nil {
 		t.Fatal(e)
 	}
 	var before bytes.Buffer
@@ -203,7 +200,7 @@ func TestDAVHighestIDAndExpiredLeaseRequireFreshRead(t *testing.T) {
 	if e = s.Update(ctx, id, l); e != nil {
 		t.Fatal(e)
 	}
-	if _, e = s.DB.Exec("UPDATE dav_lock SET modified=unixepoch()-1000"); e != nil {
+	if _, e = s.db.Exec("UPDATE dav_lock SET modified=unixepoch()-1000"); e != nil {
 		t.Fatal(e)
 	}
 	if _, e = s.DAVLockTime(ctx); !errors.Is(e, sql.ErrNoRows) {

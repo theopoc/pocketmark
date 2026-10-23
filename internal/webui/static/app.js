@@ -2,28 +2,27 @@
 
 (() => {
   const $ = (id) => document.getElementById(id);
-  const state = { filter: "all", collection: null, tag: "", query: "", page: 1, pageSize: 40, total: 0, links: [], collections: [], editing: null, reading: null, readerRequest: 0, request: 0, timer: null, signedIn: false, sort: "newest", fuzzy: false, selected: new Set(), editingCollection: null, annotations: [], annotationDraft: null, readerSelection: null };
+  const state = { filter: "all", collection: null, tag: "", query: "", page: 1, pageSize: 40, total: 0, links: [], collections: [], editing: null, request: 0, timer: null, signedIn: false, sort: "newest", fuzzy: false, editingCollection: null };
   let toastTimer;
+  let expandedBookmarkActions = null;
   let searchTimer;
   let tagsTimer;
   let tagsPage = 1;
   let tagsRequest = 0;
   let showingTags = false;
   const workspace = globalThis.PocketmarkWorkspace;
-  const drafts = workspace.createDrafts();
+  const { editableBookmark: editable, bookmarkDraftKey: draftKey, safeURL, domain } = workspace;
+  let draftStorage;
+  try { draftStorage = window.sessionStorage; } catch { /* Private browsing may deny storage. */ }
+  const drafts = workspace.createDrafts(draftStorage);
   const tagPickers = new Map();
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
   const activeMotion = new Map();
   let themeTransition = null;
   let renderedLibraryRoute = null;
-  const selectionLabels = new Map();
   const sharedParams = new URLSearchParams(location.search);
   let editorBaseline = null;
   let editorSession = 0;
-  let annotationSession = 0;
-  let readerAssets = [];
-  let readerLayoutURL = "";
-  let layoutRequest = 0;
   let routeRequest = 0;
   let scrollTimer;
   let searchSession = false;
@@ -55,7 +54,9 @@
     $("search").value = state.query; $("tags-search").value = restored.tagsQuery;
     $("sort-order").value = state.sort; $("fuzzy-search").checked = state.fuzzy;
     $("tags-view").hidden = !showingTags; $("library-view").hidden = showingTags;
-    if (!initial && previous !== workspace.routeSearch(route())) { state.selected.clear(); selectionLabels.clear(); }
+    if (!initial && previous !== workspace.routeSearch(route())) bulk.clear();
+    reader.close();
+    bulk.close();
     document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
     await refresh();
     if (request !== routeRequest) return;
@@ -72,6 +73,17 @@
   window.addEventListener("beforeunload", (event) => {
     if (drafts.size) { event.preventDefault(); event.returnValue = ""; }
   });
+
+  const compactLibrary = window.matchMedia("(max-width: 600px)");
+  let viewOptionsOpen = false;
+  function syncViewOptions() {
+    const visible = !compactLibrary.matches || viewOptionsOpen;
+    $("library-view-options").hidden = !visible;
+    $("view-options-toggle").setAttribute("aria-expanded", String(visible));
+  }
+  $("view-options-toggle").addEventListener("click", () => { viewOptionsOpen = !viewOptionsOpen; syncViewOptions(); });
+  compactLibrary.addEventListener("change", syncViewOptions);
+  syncViewOptions();
 
   function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -202,21 +214,47 @@
     if (event.target.closest("button") && event.target.closest("button").id !== "close-navigation") closeNavigation();
   }, true);
 
-  function toast(message, error = false) {
+  function toast(message, error = false, action = null) {
     clearTimeout(toastTimer);
-    $("toast").textContent = message;
-    $("toast").className = error ? "error" : "";
-    $("toast").hidden = false;
-    toastTimer = setTimeout(() => { $("toast").hidden = true; }, 5000);
+    const notice = $("toast");
+    // Native dialogs live in the top layer. Feedback must be in that same
+    // layer to be visible and exposed to assistive technology.
+    const dialogs = [...document.querySelectorAll("dialog[open]")];
+    (dialogs.at(-1) || document.body).append(notice);
+    notice.replaceChildren(el("span", "", message));
+    notice.className = error ? "error" : "";
+    notice.setAttribute("role", error ? "alert" : "status");
+    if (action) {
+      const button = el("button", "toast-action", action.label);
+      button.type = "button";
+      button.addEventListener("click", async () => {
+        clearTimeout(toastTimer);
+        button.disabled = true;
+        try { await action.run(); } catch (error) { toast(error.message, true); }
+      });
+      notice.append(button);
+    }
+    notice.hidden = false;
+    toastTimer = setTimeout(() => { notice.hidden = true; }, action || error ? 12000 : 5000);
   }
+  document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("close", () => {
+    if (dialog.contains($("toast"))) {
+      clearTimeout(toastTimer);
+      $("toast").hidden = true;
+      document.body.append($("toast"));
+    }
+  }));
 
   let setupRequired = false;
   function showLogin() {
     clearTimeout(tagsTimer);
     tagsRequest++;
     state.signedIn = false;
+    bulk.clear();
     state.request++;
     clearTimeout(state.timer);
+    reader.close();
+    bulk.close();
     document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
     $("app-view").hidden = true;
     $("login-view").hidden = false;
@@ -226,34 +264,40 @@
   async function api(path, options = {}) {
     const headers = new Headers(options.headers || {});
     if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-    const response = await fetch(path, { ...options, headers, credentials: "same-origin" });
+    let response;
+    try { response = await fetch(path, { ...options, headers, credentials: "same-origin" }); }
+    catch { throw new Error(workspace.requestFailure(0)); }
     let body = null;
     if (response.status !== 204) {
-      const text = await response.text();
+      let text;
+      try { text = await response.text(); }
+      catch { throw new Error(workspace.requestFailure(0)); }
       if (text) {
         try { body = JSON.parse(text); } catch { throw new Error("The server returned an unexpected response. Please try again."); }
       }
     }
     if (!response.ok) {
-      if (response.status === 401 && path !== "/api/login" && path !== "/api/setup") showLogin();
-      const error = new Error(body?.error || `Request failed (${response.status}).`);
+      if (response.status === 401 && path !== "/api/login" && path !== "/api/setup") {
+        const expired = state.signedIn;
+        showLogin();
+        if (expired) $("login-error").textContent = workspace.requestFailure(401);
+      }
+      const message = response.status === 401 && ["/api/login", "/api/setup"].includes(path) ? (body?.error || "Check your username and password, then try again.") : workspace.requestFailure(response.status, body?.error);
+      const error = new Error(message);
       error.status = response.status;
       throw error;
     }
     return body;
   }
 
-  function safeURL(value) {
-    try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) ? url.href : null; } catch { return null; }
-  }
+  const reader = globalThis.PocketmarkReader.create({
+    api, drafts, toast, onEdit: openEditor, onChange: () => refresh(true), onSessionExpired: showLogin,
+  });
 
-  function domain(value) {
-    try { return new URL(value).hostname.replace(/^www\./, ""); } catch { return "Saved link"; }
-  }
-
-  function editable(link) {
-    return { url: link.url, title: link.title || "", description: link.description || "", notes: link.notes || "", collectionId: link.collectionId ?? null, tags: link.tags || [], favorite: !!link.favorite, read: !!link.read };
-  }
+  const bulk = globalThis.PocketmarkBulk.create({
+    api, toast, onChange: () => refresh(true), onSelectionChange: renderLinks, fillCollections,
+    defaultCollection: () => state.filter === "collection" ? state.collection : null, onSessionExpired: showLogin,
+  });
 
   function collectionLabel(id) {
     return state.collections.find((collection) => String(collection.id) === String(id))?.name || "Collection";
@@ -302,7 +346,8 @@
   function focusedKey(root) { return root.contains(document.activeElement) ? document.activeElement.dataset.focusKey : null; }
   function restoreFocus(root, key) {
     if (!key || document.activeElement !== document.body || document.querySelector("dialog[open]")) return;
-    [...root.querySelectorAll("[data-focus-key]")].find((node) => node.dataset.focusKey === key)?.focus({ preventScroll: true });
+    const target = [...root.querySelectorAll("[data-focus-key]")].find((node) => node.dataset.focusKey === key);
+    (target || root.querySelector(".card-title button") || $("page-title")).focus({ preventScroll: true });
   }
 
   function selectFilter(filter, collection = null, tag = "") {
@@ -315,8 +360,7 @@
     state.collection = collection;
     state.tag = tag;
     state.page = 1;
-    state.selected.clear();
-    selectionLabels.clear();
+    bulk.clear();
     commitRoute();
     $("tags-view").hidden = true;
     $("library-view").hidden = false;
@@ -538,6 +582,16 @@
     try {
       await api(`/api/links/${link.id}`, { method: "PUT", body: JSON.stringify({ ...editable(link), ...changes }) });
       await refresh();
+      const field = Object.hasOwn(changes, "favorite") ? "favorite" : "read";
+      const message = field === "favorite" ? (changes.favorite ? "Added to favorites." : "Removed from favorites.") : (changes.read ? "Marked as read." : "Marked unread.");
+      toast(message, false, { label: "Undo", run: async () => {
+        // Restore only the toggled field, preserving any newer notes or tags.
+        const latest = await api(`/api/links/${link.id}`);
+        if (latest[field] !== changes[field]) { toast("This bookmark has changed. Its current state was kept."); return; }
+        await api(`/api/links/${link.id}`, { method: "PUT", body: JSON.stringify({ ...editable(latest), [field]: link[field] }) });
+        await refresh();
+        toast("Change undone.");
+      } });
     } catch (error) { toast(error.message, true); if (button) button.disabled = false; }
   }
 
@@ -555,36 +609,56 @@
       const favorite = el("button", `card-action favorite-button${link.favorite ? " is-favorite" : ""}`);
       favorite.append(icon("star"));
       favorite.title = link.favorite ? "Remove from favorites" : "Add to favorites";
-      favorite.setAttribute("aria-label", favorite.title);
+      favorite.setAttribute("aria-label", `${favorite.title}: ${link.title || link.url}`);
       favorite.setAttribute("aria-pressed", String(!!link.favorite));
       favorite.addEventListener("click", () => updateLink(link, { favorite: !link.favorite }, favorite));
       const select = el("input", "bookmark-select");
       select.type = "checkbox";
-      select.checked = state.selected.has(link.id);
+      select.checked = bulk.has(link.id);
       select.dataset.focusKey = `link:${link.id}:select`;
       select.setAttribute("aria-label", `Select ${link.title || link.url}`);
       select.addEventListener("change", () => {
-        if (select.checked && state.selected.size >= 500) { select.checked = false; toast("Select up to 500 bookmarks at a time.", true); return; }
-        if (select.checked) { state.selected.add(link.id); selectionLabels.set(link.id, link.title || link.url); }
-        else { state.selected.delete(link.id); selectionLabels.delete(link.id); }
+        select.checked = bulk.select(link, select.checked);
         card.classList.toggle("is-selected", select.checked);
-        updateSelection();
       });
       card.classList.toggle("is-selected", select.checked);
-      top.append(select, avatar);
+      const selectTarget = el("label", "bookmark-select-target");
+      selectTarget.append(select);
+      top.append(selectTarget, avatar);
       const body = el("div", "card-body");
       const heading = el("h2", "card-title");
       const open = el("button", "", link.title || link.url);
       open.dataset.focusKey = `link:${link.id}:open`;
-      open.addEventListener("click", () => openReader(link.id));
+      open.addEventListener("click", () => reader.open(link.id));
       heading.append(open);
       body.append(heading, el("p", "card-domain", host));
       if (link.description) body.append(el("p", "card-description", link.description));
+      if (state.query && link.searchSnippet) {
+        const excerpt = el("p", "search-excerpt");
+        excerpt.append(el("span", "search-match-label", "Match: "));
+        for (const part of workspace.searchExcerpt(link.searchSnippet)) {
+          excerpt.append(part.match ? el("mark", "", part.text) : document.createTextNode(part.text));
+        }
+        body.append(excerpt);
+      }
       const tags = el("div", "card-tags");
       for (const name of (link.tags || []).slice(0, 5)) {
         const tag = el("button", "card-tag", `#${name}`);
         tag.addEventListener("click", () => selectFilter("all", null, name));
         tags.append(tag);
+      }
+      if ((link.tags || []).length > 5) {
+        const more = el("button", "card-tag", `+${link.tags.length - 5}`);
+        more.setAttribute("aria-label", `Show all ${link.tags.length} tags for ${link.title || link.url}`);
+        more.addEventListener("click", () => {
+          more.remove();
+          for (const name of link.tags.slice(5)) {
+            const tag = el("button", "card-tag", `#${name}`);
+            tag.addEventListener("click", () => selectFilter("all", null, name));
+            tags.append(tag);
+          }
+        });
+        tags.append(more);
       }
       body.append(tags);
       const footer = el("div", "card-footer");
@@ -594,16 +668,31 @@
       status.prepend(icon(link.status === "ready" ? "check" : link.status === "failed" ? "warning" : "clock"));
       footer.append(status);
       const actions = el("div", "card-actions");
-      actions.append(favorite);
-      actions.append(actionButton(link.read ? "check" : "clock", link.read ? "Mark unread" : "Mark as read", (event) => updateLink(link, { read: !link.read }, event.currentTarget), link.read ? "read" : ""));
-      actions.append(actionButton("edit", "Edit bookmark", () => openEditor(link)));
-      actions.append(actionButton("trash", "Delete bookmark", async (event) => {
+      favorite.append(el("span", "mobile-action-label", "Favorite"));
+      const moreActions = el("button", "card-actions-toggle button subtle", "Actions");
+      moreActions.type = "button";
+      moreActions.dataset.focusKey = `link:${link.id}:more`;
+      moreActions.setAttribute("aria-label", `Actions for ${link.title || link.url}`);
+      const overflow = el("div", "card-overflow-actions");
+      overflow.id = `link-${link.id}-actions`;
+      const expanded = expandedBookmarkActions === link.id;
+      overflow.classList.toggle("is-open", expanded);
+      moreActions.setAttribute("aria-controls", overflow.id);
+      moreActions.setAttribute("aria-expanded", String(expanded));
+      moreActions.addEventListener("click", () => {
+        expandedBookmarkActions = expandedBookmarkActions === link.id ? null : link.id;
+        renderLinks();
+      });
+      actions.append(favorite, moreActions, overflow);
+      overflow.append(actionButton(link.read ? "check" : "clock", link.read ? "Mark unread" : "Mark as read", (event) => updateLink(link, { read: !link.read }, event.currentTarget), link.read ? "read" : ""));
+      overflow.append(actionButton("edit", "Edit bookmark", () => openEditor(link)));
+      overflow.append(actionButton("trash", "Delete bookmark", async (event) => {
         if (!confirm(`Delete “${link.title || link.url}” and its saved content?`)) return;
         const button = event.currentTarget;
         button.disabled = true;
         try {
           await api(`/api/links/${link.id}`, { method: "DELETE" });
-          state.selected.delete(link.id); selectionLabels.delete(link.id);
+          bulk.select(link, false);
           if (state.links.length === 1 && state.page > 1) state.page--;
           await refresh();
           toast("Bookmark deleted.");
@@ -617,20 +706,29 @@
         original.rel = "noopener noreferrer";
         original.title = "Visit original";
         original.setAttribute("aria-label", `Visit ${host}`);
-        actions.append(original);
+        overflow.append(original);
       }
       footer.append(actions);
-      actions.querySelectorAll("button,a").forEach((button, i) => { button.dataset.focusKey = `link:${link.id}:action:${i}`; });
+      actions.querySelectorAll("button,a").forEach((button, i) => {
+        if (button === moreActions) return;
+        button.dataset.focusKey = `link:${link.id}:action:${button === favorite ? 0 : i - 1}`;
+        if (button !== favorite) button.append(el("span", "mobile-action-label", button.title));
+        button.setAttribute("aria-label", `${button.title}: ${link.title || link.url}`);
+      });
       card.append(top, body, footer);
       grid.append(card);
     }
-    updateSelection();
+    bulk.render(state.links);
     $("empty-state").hidden = state.links.length > 0;
     const filtered = !!state.query || state.filter !== "all" || !!state.tag;
     $("empty-title").textContent = filtered ? "No bookmarks found" : "Your library starts here";
     $("empty-message").textContent = filtered ? "Try a different search or clear your filters to see all bookmarks." : "Save your first bookmark, or import an existing library from the navigation.";
     $("empty-reset").hidden = !filtered;
     $("empty-add").textContent = filtered ? "Add a bookmark" : "Add your first bookmark";
+    $("empty-add").classList.toggle("primary", !filtered);
+    $("empty-add").classList.toggle("subtle", filtered);
+    $("empty-reset").classList.toggle("primary", filtered);
+    $("empty-reset").classList.toggle("subtle", !filtered);
     const pages = Math.max(1, Math.ceil(state.total / state.pageSize));
     $("pagination").hidden = pages <= 1;
     $("page-label").textContent = `Page ${state.page} of ${pages}`;
@@ -707,22 +805,31 @@
     const draft = drafts.get(draftKey(link));
     if (draft) fillEditor(draft);
     $("bookmark-draft").hidden = !draft;
+    validateBookmarkFields();
     $("bookmark-dialog").showModal();
     $("bookmark-url").focus();
   }
 
-  function draftKey(link) { return `bookmark:${link?.id || "new"}`; }
   function editorValues() {
     return { url: $("bookmark-url").value, title: $("bookmark-title").value, description: $("bookmark-description").value, notes: $("bookmark-notes").value, collectionId: $("bookmark-collection").value ? Number($("bookmark-collection").value) : null, tags: [...new Set($("bookmark-tags").value.split(",").map((tag) => tag.trim()).filter(Boolean))], favorite: $("bookmark-favorite").checked, read: $("bookmark-read").checked };
+  }
+  function validateBookmarkFields() {
+    const issues = workspace.bookmarkIssues({ ...editorValues(), type: state.editing?.type });
+    for (const field of ["url", "title", "description", "notes", "tags"]) {
+      $("bookmark-" + field + (field === "tags" ? "-query" : "")).setCustomValidity(issues[field] || "");
+    }
+    return issues;
   }
   function fillEditor(value) {
     for (const field of ["url", "title", "description", "notes"]) $("bookmark-" + field).value = value[field] || "";
     tagPickers.get("bookmark-tags").set(value.tags || []);
     fillCollections($("bookmark-collection"), value.collectionId);
     $("bookmark-favorite").checked = !!value.favorite; $("bookmark-read").checked = !!value.read;
+    validateBookmarkFields();
   }
   $("bookmark-form").addEventListener("input", () => {
     if (!editorBaseline) return;
+    validateBookmarkFields();
     drafts.put(draftKey(state.editing), editorValues(), editorBaseline);
     $("bookmark-draft").hidden = !drafts.get(draftKey(state.editing));
   });
@@ -736,276 +843,10 @@
   });
 
   function attachTagPicker(id) {
-    const source = $(id), input = el("input", "tag-picker-query"), host = el("div", "tag-picker"), panel = el("div", "tag-picker-panel");
-    const field = el("div", "tag-picker-field");
-    input.id = id + "-query"; input.placeholder = "Choose or create tags"; input.spellcheck = false;
-    document.querySelector(`label[for="${id}"]`).htmlFor = input.id;
-    source.type = "hidden"; source.hidden = true;
-    const status = el("p", "tag-picker-status"), list = el("div", "tag-picker-options");
-    const retry = el("button", "text-button tag-picker-retry", "Retry tag suggestions");
-    const hint = $(id + "-hint") || el("p", "field-hint");
-    hint.textContent = "Choose a tag or type a new one, then press Enter. Use commas to add several.";
-    hint.id = id + "-hint";
-    if (!hint.parentNode) source.after(hint);
-    source.before(host); host.append(source, field, panel); field.append(input); panel.append(status, list, retry);
-    panel.hidden = true; retry.hidden = true; retry.type = "button";
-    list.id = id + "-options"; list.setAttribute("role", "listbox"); list.setAttribute("aria-label", "Tag suggestions");
-    status.setAttribute("role", "status");
-    input.setAttribute("role", "combobox"); input.setAttribute("aria-autocomplete", "list");
-    input.setAttribute("aria-controls", list.id); input.setAttribute("aria-expanded", "false");
-    input.setAttribute("aria-describedby", hint.id);
-    input.autocomplete = "off";
-    let generation = 0, timer, options = [], active = -1, selected = [], rendering = false;
-    function sync(emit = true) {
-      source.value = workspace.tagValues(selected, input.value).join(", ");
-      if (emit) source.dispatchEvent(new Event("input", { bubbles: true }));
-    }
-    function renderTags() {
-      const previous = new Map();
-      const animateTags = !reducedMotion.matches && input.closest("dialog").open;
-      if (animateTags) {
-        field.querySelectorAll(".tag-picker-chip").forEach((chip) => previous.set(chip.dataset.tagName, chip.getBoundingClientRect()));
-      }
-      rendering = true;
-      field.querySelectorAll(".tag-picker-chip").forEach((chip) => { activeMotion.get(chip)?.cancel(); chip.remove(); });
-      selected.forEach((name, index) => {
-        const chip = el("span", "tag-picker-chip"), remove = el("button", "tag-picker-remove");
-        chip.dataset.tagName = name;
-        remove.type = "button"; remove.setAttribute("aria-label", `Remove tag ${name}`); remove.append(icon("close"));
-        remove.addEventListener("click", (event) => {
-          selected.splice(index, 1); renderTags(); sync(); close();
-          if (event.detail === 0) (field.querySelectorAll(".tag-picker-remove")[index] || input).focus();
-          else input.focus();
-        });
-        remove.addEventListener("keydown", (event) => {
-          if (["Backspace", "Delete"].includes(event.key)) { event.preventDefault(); remove.click(); }
-        });
-        chip.append(el("span", "tag-picker-chip-name", `#${name}`), remove); field.insertBefore(chip, input);
-      });
-      input.placeholder = selected.length ? "Add a tag…" : "Choose or create tags";
-      rendering = false;
-      position();
-      if (animateTags) {
-        // Read every destination before starting animations to avoid layout thrashing.
-        const destinations = [...field.querySelectorAll(".tag-picker-chip")].map((chip) => [chip, chip.getBoundingClientRect()]);
-        for (const [chip, bounds] of destinations) {
-          const before = previous.get(chip.dataset.tagName);
-          if (!before) move(chip, [{ opacity: .6, transform: "scale(.97)" }, { opacity: 1, transform: "scale(1)" }], 150);
-          else {
-            const x = before.left - bounds.left, y = before.top - bounds.top;
-            if (Math.abs(x) + Math.abs(y) > 1) move(chip, [{ transform: `translate(${x}px,${y}px)` }, { transform: "translate(0,0)" }]);
-          }
-        }
-      }
-    }
-    function commitTyped() {
-      if (!input.value.trim()) return;
-      selected = workspace.tagValues(selected, input.value); input.value = ""; renderTags(); sync();
-    }
-    tagPickers.set(id, { set(names) { selected = workspace.tagValues(names); input.value = ""; renderTags(); sync(false); close(); } });
-    function position() {
-      if (panel.hidden) return;
-      const bounds = field.getBoundingClientRect(), dialog = input.closest("dialog").getBoundingClientRect();
-      const below = dialog.bottom - bounds.bottom - 12, above = bounds.top - dialog.top - 12;
-      const upward = below < 240 && above > below;
-      panel.dataset.side = Math.max(above, below) < 120 ? "inline" : upward ? "above" : "below";
-      list.style.maxHeight = `${Math.max(44, Math.min(216, (upward ? above : below) - status.offsetHeight - 28))}px`;
-    }
-    function close() {
-      clearTimeout(timer); generation++; panel.hidden = true;
-      input.setAttribute("aria-expanded", "false"); input.removeAttribute("aria-activedescendant");
-    }
-    function choose(name) {
-      selected = workspace.tagValues(selected, name); input.value = ""; renderTags(); sync();
-      input.focus(); schedule(0);
-    }
-    function highlight(index) {
-      active = index;
-      [...list.children].forEach((option, i) => option.setAttribute("aria-selected", String(i === index)));
-      const option = list.children[index];
-      if (option) { input.setAttribute("aria-activedescendant", option.id); option.scrollIntoView({ block: "nearest" }); }
-      else input.removeAttribute("aria-activedescendant");
-    }
-    function schedule(delay = 180) {
-      clearTimeout(timer);
-      const request = ++generation;
-      const query = input.value.trim(), alreadySelected = new Set(selected);
-      options = []; active = -1; list.replaceChildren(); retry.hidden = true;
-      input.removeAttribute("aria-activedescendant"); input.setAttribute("aria-expanded", "true");
-      panel.hidden = false; status.textContent = "Finding tags…";
-      position();
-      timer = setTimeout(async () => {
-        try {
-          // The browse endpoint searches the entire library in bounded pages.
-          const result = query ? await api(`/api/tags/browse?q=${encodeURIComponent(query)}`) : await api("/api/tags");
-          if (request !== generation || !input.closest("dialog")?.open) return;
-          const tags = query ? result.tags : result;
-          const available = tags.filter((tag) => !alreadySelected.has(tag.name));
-          options = available.slice(0, 12).map((tag) => ({ ...tag, create: false }));
-          if (query && !alreadySelected.has(query) && !tags.some((tag) => tag.name === query)) options.push({ name: query, create: true });
-          status.textContent = options.length ? (query ? "Matching tags" : "Frequent tags") : "These tags are already selected. Type to find or create another.";
-          if (!tags.length && !query) status.textContent = "No tags yet. Type a tag name to create your first one.";
-          if (available.length > 12 || query && result.total > tags.length) status.textContent += " · Type more to narrow the list";
-          for (const [i, tag] of options.entries()) {
-            const option = el("button", "tag-picker-option");
-            option.type = "button"; option.tabIndex = -1; option.id = `${id}-option-${i}`;
-            option.setAttribute("role", "option"); option.setAttribute("aria-selected", "false");
-            option.append(el("span", "tag-picker-name", `#${tag.name}`), el("span", "tag-picker-count", tag.create ? "Create tag" : `${tag.count} bookmark${tag.count === 1 ? "" : "s"}`));
-            option.addEventListener("pointerdown", (event) => event.preventDefault());
-            option.addEventListener("click", () => choose(tag.name));
-            list.append(option);
-          }
-          position();
-        } catch (error) {
-          if (request !== generation) return;
-          status.textContent = "Could not load tags. You can still type tag names.";
-          retry.hidden = false;
-          position();
-        }
-      }, delay);
-    }
-    input.addEventListener("focus", () => schedule(0));
-    input.addEventListener("click", () => { if (panel.hidden) schedule(0); });
-    input.addEventListener("input", (event) => {
-      event.stopPropagation();
-      if (!event.isComposing && input.value.includes(",")) {
-        const parts = input.value.split(","); input.value = parts.pop().trimStart();
-        selected = workspace.tagValues(selected, parts.join(",")); renderTags();
-      }
-      sync(); schedule();
-    });
-    input.addEventListener("compositionend", () => input.dispatchEvent(new Event("input", { bubbles: true })));
-    input.addEventListener("keydown", (event) => {
-      if (event.isComposing) return;
-      if (event.key === "Escape" && !panel.hidden) { event.preventDefault(); event.stopPropagation(); close(); }
-      else if (["ArrowDown", "ArrowUp"].includes(event.key)) {
-        event.preventDefault();
-        if (panel.hidden) schedule(0);
-        else if (options.length) highlight((active + (event.key === "ArrowDown" ? 1 : active < 0 ? 0 : -1) + options.length) % options.length);
-      } else if (event.key === "Enter") {
-        event.preventDefault();
-        const query = input.value.trim();
-        if (active >= 0 && options[active]) choose(options[active].name);
-        else if (query) choose(query);
-      } else if (event.key === "Backspace" && !input.value && selected.length) {
-        event.preventDefault(); close(); field.querySelectorAll(".tag-picker-remove")[selected.length - 1].focus();
-      } else if (event.key === "Tab") { commitTyped(); close(); }
-    });
-    field.addEventListener("click", (event) => { if (event.target === field) input.focus(); });
-    host.addEventListener("focusout", (event) => { if (!rendering && !host.contains(event.relatedTarget)) { commitTyped(); close(); } });
-    retry.addEventListener("click", () => { input.focus(); schedule(0); });
-    input.form.addEventListener("reset", () => tagPickers.get(id).set([]));
-    input.closest("dialog").addEventListener("close", close);
-    input.closest("dialog").addEventListener("scroll", position, { passive: true });
-    window.addEventListener("resize", position);
+    tagPickers.set(id, globalThis.PocketmarkTagPicker.create({ id, api, icon, move }));
   }
   attachTagPicker("bookmark-tags");
   attachTagPicker("bulk-tags");
-
-  async function openReader(id, recheck = false) {
-    const scroll = recheck ? $("reader-dialog").scrollTop : 0;
-    const request = ++state.readerRequest;
-    layoutRequest++;
-    state.reading = null;
-    readerAssets = []; readerLayoutURL = "";
-    state.readerSelection = null;
-    $("reader-title").textContent = "Opening your bookmark…";
-    $("reader-domain").textContent = "";
-    $("reader-content").textContent = "";
-    $("reader-content").hidden = false;
-    $("reader-layout").hidden = true;
-    $("reader-layout").removeAttribute("src");
-    $("reader-layout-mode").setAttribute("aria-pressed", "false");
-    $("reader-layout-mode").disabled = true;
-    $("reader-print").disabled = true;
-    $("reader-size").disabled = false;
-    document.querySelectorAll("[data-highlight-selection]").forEach((button) => { button.disabled = true; });
-    $("reader-text-mode").setAttribute("aria-pressed", "true");
-    $("annotation-list").replaceChildren();
-    $("asset-list").replaceChildren();
-    state.annotations = [];
-    $("reader-status").textContent = "";
-    $("reader-mode-hint").textContent = "Checking saved HTML…";
-    $("reader-recheck").hidden = true;
-    for (const section of ["annotations", "assets"]) { $(section + "-error").hidden = true; $(section + "-retry").hidden = true; $(section + "-retry").disabled = false; }
-    $("reader-notes").value = "";
-    $("reader-notes-form").querySelector("button[type=submit]").disabled = false;
-    $("reader-error").textContent = "";
-    $("reader-original").hidden = true;
-    $("reader-archive").hidden = true;
-    $("reader-capture").disabled = true;
-    $("reader-edit").disabled = true;
-    $("reader-notes-form").hidden = true;
-    if (!$("reader-dialog").open) $("reader-dialog").showModal();
-    try {
-      const link = await api(`/api/links/${id}`);
-      if (request !== state.readerRequest || !$("reader-dialog").open) return;
-      state.reading = link;
-      $("reader-title").textContent = link.title || link.url;
-      $("reader-domain").textContent = link.type === "file" ? "Saved file" : domain(link.url);
-      $("reader-capture").hidden = link.type === "file";
-      $("preserve-page").hidden = link.type === "file";
-      const url = safeURL(link.url);
-      $("reader-original").hidden = !url;
-      if (url) $("reader-original").href = url;
-      $("reader-archive").hidden = !link.archiveAvailable;
-      $("reader-archive").href = `/api/links/${id}/archive`;
-      $("reader-archive").setAttribute("download", "");
-      $("reader-content").textContent = link.content || link.description || "No readable content captured yet. Visit the original page, or try refreshing the capture.";
-      $("reader-status").textContent = { ready: "Captured text · Some pages may require the original site.", failed: "Capture failed. Your original link and saved content are still available. Try Refresh capture or attach a browser snapshot under Files.", pending: "Capture is queued. Check its status here without closing the reader.", processing: "Capture is in progress. Check its status here without closing the reader." }[link.status] || "";
-      $("reader-recheck").hidden = !["pending", "processing"].includes(link.status);
-      const draft = drafts.get(draftKey(link));
-      $("reader-notes").value = draft?.notes ?? link.notes ?? "";
-      $("reader-notes-draft").hidden = !draft || draft.notes === (link.notes || "");
-      $("reader-capture").disabled = false;
-      $("reader-edit").disabled = false;
-      $("reader-notes-form").hidden = false;
-      document.querySelectorAll("[data-highlight-selection]").forEach((button) => { button.disabled = !link.content; });
-      const loaded = await Promise.allSettled([loadAnnotations(id, request), loadAssets(id, request)]);
-      if (request !== state.readerRequest || !$("reader-dialog").open) return;
-      loaded.forEach((result, i) => { if (result.status === "rejected") readerSectionError(i ? "assets" : "annotations", result.reason); });
-      if (recheck) $("reader-dialog").scrollTop = scroll;
-    } catch (error) {
-      if (request !== state.readerRequest) return;
-      $("reader-title").textContent = "Could not open this bookmark";
-      $("reader-error").textContent = error.message;
-      $("reader-status").textContent = error.message;
-    }
-  }
-
-  function readerSectionError(section, error) {
-    $(section + "-error").textContent = `Could not load ${section === "assets" ? "saved files" : "highlights"}. ${error.message}`;
-    $(section + "-error").hidden = false; $(section + "-retry").hidden = false;
-    if (section === "assets") $("reader-mode-hint").textContent = "Could not check saved HTML. Retry saved files below; text view remains available.";
-  }
-  for (const section of ["annotations", "assets"]) $(section + "-retry").addEventListener("click", async () => {
-    if (!state.reading) return;
-    const id = state.reading.id, request = state.readerRequest;
-    $(section + "-retry").disabled = true;
-    try { await (section === "assets" ? loadAssets(id, request) : loadAnnotations(id, request)); if (request === state.readerRequest) { $(section + "-error").hidden = true; $(section + "-retry").hidden = true; } }
-    catch (error) { if (request === state.readerRequest) readerSectionError(section, error); }
-    finally { if (request === state.readerRequest) $(section + "-retry").disabled = false; }
-  });
-  $("reader-recheck").addEventListener("click", () => { if (state.reading) openReader(state.reading.id, true); });
-  document.querySelectorAll("[data-reader-section]").forEach((button) => button.addEventListener("click", () => {
-    const target = $(button.dataset.readerSection);
-    if (target.id === "reader-content" && target.hidden) $("reader-text-mode").click();
-    target.tabIndex = -1;
-    target.focus({ preventScroll: true });
-    target.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
-  }));
-  $("reader-notes").addEventListener("input", () => {
-    if (!state.reading) return;
-    const draft = drafts.get(draftKey(state.reading)) || editable(state.reading);
-    draft.notes = $("reader-notes").value;
-    drafts.put(draftKey(state.reading), draft, editable(state.reading));
-    $("reader-notes-draft").hidden = draft.notes === (state.reading.notes || "");
-  });
-  $("discard-reader-notes").addEventListener("click", () => {
-    if (!state.reading || !confirm("Discard these unsaved notes?")) return;
-    $("reader-notes").value = state.reading.notes || "";
-    $("reader-notes").dispatchEvent(new Event("input"));
-  });
 
   $("login-form").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -1052,6 +893,7 @@
 
   $("bookmark-form").addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (Object.keys(validateBookmarkFields()).length) { $("bookmark-form").reportValidity(); return; }
     const button = event.submitter;
     const session = editorSession, editing = state.editing, key = draftKey(editing), submitted = editorValues();
     button.disabled = true;
@@ -1091,45 +933,6 @@
       await refresh();
       toast(state.editingCollection ? "Collection updated." : "Collection created.");
     } catch (error) { $("collection-error").textContent = error.message; } finally { button.disabled = false; }
-  });
-
-  $("reader-edit").addEventListener("click", () => {
-    const link = state.reading;
-    if (!link) return;
-    $("reader-dialog").close();
-    openEditor(link);
-  });
-  $("reader-capture").addEventListener("click", async () => {
-    if (!state.reading) return;
-    $("reader-capture").disabled = true;
-    $("reader-error").textContent = "";
-    try {
-      await api(`/api/links/${state.reading.id}/capture`, { method: "POST" });
-      $("reader-status").textContent = "Capture queued. Check its status here without closing the reader.";
-      $("reader-recheck").hidden = false;
-      toast("Capture queued.");
-      await refresh(true);
-    } catch (error) { $("reader-error").textContent = error.message; } finally { $("reader-capture").disabled = false; }
-  });
-  $("reader-notes-form").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!state.reading) return;
-    const button = event.submitter;
-    const link = state.reading, request = state.readerRequest, key = draftKey(link);
-    button.disabled = true;
-    $("reader-error").textContent = "";
-    try {
-      const notes = $("reader-notes").value;
-      await api(`/api/links/${link.id}`, { method: "PUT", body: JSON.stringify({ ...editable(link), notes }) });
-      link.notes = notes;
-      const remaining = drafts.get(key) || (request === state.readerRequest ? editable(link) : null);
-      if (remaining && request === state.readerRequest) remaining.notes = $("reader-notes").value;
-      if (remaining) drafts.put(key, remaining, editable(link));
-      if (request === state.readerRequest) $("reader-notes-draft").hidden = $("reader-notes").value === notes;
-      toast("Notes saved.");
-      await refresh(true);
-    } catch (error) { if (request === state.readerRequest) $("reader-error").textContent = error.message; else toast(error.message, true); }
-    finally { if (request === state.readerRequest) button.disabled = false; }
   });
 
   $("import-button").addEventListener("click", () => $("import-file").click());
@@ -1176,248 +979,8 @@
     $("collection-name").focus();
   }
 
-  function updateSelection() {
-    const count = state.links.filter((link) => state.selected.has(link.id)).length;
-    const outside = state.selected.size - count;
-    $("selected-count").textContent = `${state.selected.size} selected${outside ? ` · ${outside} outside these results` : ""}`;
-    $("selected-count").hidden = !state.selected.size;
-    $("bulk-open").hidden = !state.selected.size;
-    $("bulk-open").disabled = !state.selected.size;
-    $("clear-selection").hidden = !state.selected.size;
-    $("select-page").checked = state.links.length > 0 && count === state.links.length;
-    $("select-page").indeterminate = count > 0 && count < state.links.length;
-  }
-  $("select-page").addEventListener("change", () => {
-    for (const link of state.links) {
-      if (!$("select-page").checked) { state.selected.delete(link.id); selectionLabels.delete(link.id); }
-      else if (state.selected.size < 500) { state.selected.add(link.id); selectionLabels.set(link.id, link.title || link.url); }
-    }
-    renderLinks();
-  });
-  $("clear-selection").addEventListener("click", () => { state.selected.clear(); selectionLabels.clear(); renderLinks(); });
   $("sort-order").addEventListener("change", () => { state.sort = $("sort-order").value; state.page = 1; commitRoute(); refresh(); });
   $("fuzzy-search").addEventListener("change", () => { state.fuzzy = $("fuzzy-search").checked; state.page = 1; commitRoute(); refresh(); });
-  $("bulk-open").addEventListener("click", () => {
-    $("bulk-form").reset();
-    fillCollections($("bulk-collection"), state.filter === "collection" ? state.collection : null);
-    $("bulk-error").textContent = "";
-    $("bulk-title").textContent = `${state.selected.size} selected bookmark${state.selected.size === 1 ? "" : "s"}`;
-    const visible = state.links.filter((link) => state.selected.has(link.id)).length;
-    const outside = state.selected.size - visible;
-    $("bulk-scope").textContent = outside ? `${outside} selected bookmark${outside === 1 ? " is" : "s are"} outside the current results. Review the full selection before applying an action.` : "This action applies to the bookmarks listed below.";
-    $("bulk-review").open = outside > 0;
-    $("bulk-items").replaceChildren(...[...state.selected].map((id) => el("li", "", selectionLabels.get(id) || `Bookmark ${id}`)));
-    updateBulkAction();
-    $("bulk-dialog").showModal();
-    $("bulk-action").focus();
-  });
-  function updateBulkAction() {
-    const action = $("bulk-action").value;
-    $("bulk-move-fields").hidden = action !== "move";
-    $("bulk-tags-fields").hidden = action !== "tags";
-    $("bulk-value-fields").hidden = !["favorite", "read"].includes(action);
-    $("bulk-value-label").textContent = action === "read" ? "Reading status" : "Favorite status";
-    $("bulk-value").options[0].textContent = action === "read" ? "Read" : "Favorite";
-    $("bulk-value").options[1].textContent = action === "read" ? "To read" : "Not favorite";
-    const labels = { move: "Move", tags: "Replace tags on", favorite: "Update favorites for", read: "Update reading status for", capture: "Refresh captures for", delete: "Delete" };
-    $("bulk-apply").textContent = action ? `${labels[action]} ${state.selected.size} bookmark${state.selected.size === 1 ? "" : "s"}` : "Choose an action";
-    $("bulk-apply").disabled = !action;
-  }
-  $("bulk-action").addEventListener("change", updateBulkAction);
-  $("bulk-form").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const action = $("bulk-action").value;
-    if (action === "delete" && !confirm(`Delete ${state.selected.size} selected bookmarks and their saved content?`)) return;
-    event.submitter.disabled = true;
-    $("bulk-error").textContent = "";
-    try {
-      await api("/api/links/bulk", { method: "POST", body: JSON.stringify({ ids: [...state.selected], action, collectionId: $("bulk-collection").value ? Number($("bulk-collection").value) : null, tags: [...new Set($("bulk-tags").value.split(",").map((tag) => tag.trim()).filter(Boolean))], value: $("bulk-value").value === "true" }) });
-      state.selected.clear();
-      selectionLabels.clear();
-      $("bulk-dialog").close();
-      await refresh();
-      toast("Selected bookmarks updated.");
-    } catch (error) { $("bulk-error").textContent = error.message; } finally { event.submitter.disabled = false; }
-  });
-
-  function renderReaderText() {
-    const content = state.reading?.content || "";
-    const root = $("reader-content");
-    root.replaceChildren();
-    if (!content) { root.textContent = state.reading?.description || "No readable content captured yet."; return; }
-    const points = Array.from(content);
-    const notes = state.annotations.filter((item) => !item.stale && item.start >= 0 && item.end <= points.length && item.start < item.end && points.slice(item.start, item.end).join("") === item.quote);
-    // Split overlapping highlights into bounded segments without trusting any captured markup.
-    const boundaries = [...new Set([0, points.length, ...notes.flatMap((item) => [item.start, item.end])])].sort((a, b) => a - b);
-    const fragment = document.createDocumentFragment();
-    for (let i = 1; i < boundaries.length; i++) {
-      const start = boundaries[i - 1], end = boundaries[i];
-      const text = points.slice(start, end).join("");
-      const note = notes.find((item) => item.start <= start && item.end >= end);
-      if (!note) { fragment.append(document.createTextNode(text)); continue; }
-      const mark = el("mark", `highlight-${["yellow", "green", "blue", "pink"].includes(note.color) ? note.color : "yellow"}`, text);
-      mark.title = note.note || "Saved highlight";
-      mark.addEventListener("click", () => editAnnotation(note));
-      fragment.append(mark);
-    }
-    root.append(fragment);
-  }
-
-  async function loadAnnotations(id, request = state.readerRequest) {
-    const annotations = await api(`/api/links/${id}/annotations`);
-    if (request !== state.readerRequest || state.reading?.id !== id) return;
-    state.annotations = annotations || [];
-    renderReaderText();
-    $("annotation-list").replaceChildren();
-    for (const annotation of state.annotations) {
-      const row = el("article", "annotation-item");
-      row.append(el("blockquote", `highlight-${annotation.color}`, annotation.quote), el("p", "", annotation.note || "Highlight"));
-      if (annotation.stale) row.append(el("p", "small muted", "The captured text has changed. This highlight belongs to an earlier capture."));
-      const edit = el("button", "text-button", "Edit note");
-      edit.addEventListener("click", () => editAnnotation(annotation));
-      const remove = el("button", "text-button", "Delete");
-      remove.addEventListener("click", async () => {
-        if (!confirm("Delete this annotation?")) return;
-        remove.disabled = true;
-        try { await api(`/api/links/${id}/annotations/${annotation.id}`, { method: "DELETE" }); await loadAnnotations(id); }
-        catch (error) { toast(error.message, true); remove.disabled = false; }
-      });
-      const actions = el("div", "reader-actions"); actions.append(edit, remove); row.append(actions);
-      $("annotation-list").append(row);
-    }
-    if (!state.annotations.length) $("annotation-list").append(el("p", "small muted", "No highlights yet."));
-  }
-
-  function editAnnotation(annotation) {
-    annotationSession++;
-    $("annotation-form").querySelector("button[type=submit]").disabled = false;
-    state.annotationDraft = annotation;
-    $("annotation-quote").textContent = annotation.quote;
-    $("annotation-note").value = annotation.note || "";
-    $("annotation-color").value = annotation.color || "yellow";
-    const draft = drafts.get(annotationKey());
-    if (draft) { $("annotation-note").value = draft.note; $("annotation-color").value = draft.color; }
-    $("annotation-draft-notice").hidden = !draft;
-    $("annotation-error").textContent = "";
-    $("annotation-dialog").showModal();
-  }
-  function annotationKey() { const item = state.annotationDraft; return `annotation:${state.reading?.id}:${item?.id || `${item?.start}:${item?.end}`}`; }
-  $("annotation-form").addEventListener("input", () => {
-    if (!state.annotationDraft) return;
-    drafts.put(annotationKey(), { note: $("annotation-note").value, color: $("annotation-color").value }, { note: state.annotationDraft.note || "", color: state.annotationDraft.color || "yellow" });
-  });
-  $("annotation-color").addEventListener("change", () => $("annotation-form").dispatchEvent(new Event("input")));
-  function rememberReaderSelection() {
-    const selection = window.getSelection(), root = $("reader-content");
-    if (!state.reading?.content || !selection?.rangeCount || selection.isCollapsed) return null;
-    const range = selection.getRangeAt(0);
-    if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return null;
-    const prefix = range.cloneRange(); prefix.selectNodeContents(root); prefix.setEnd(range.startContainer, range.startOffset);
-    const start = Array.from(prefix.toString()).length, quote = range.toString();
-    if (!quote.trim()) return null;
-    state.readerSelection = { linkId: state.reading.id, quote, start, end: start + Array.from(quote).length };
-    return state.readerSelection;
-  }
-  document.addEventListener("selectionchange", rememberReaderSelection);
-  $("reader-content").addEventListener("pointerdown", () => { state.readerSelection = null; });
-  document.querySelectorAll("[data-highlight-selection]").forEach((button) => {
-    button.addEventListener("pointerdown", (event) => { rememberReaderSelection(); event.preventDefault(); });
-    button.addEventListener("click", () => {
-      const passage = rememberReaderSelection() || state.readerSelection;
-      if (!passage || passage.linkId !== state.reading?.id) { toast("Select a passage in the text reader first.", true); return; }
-      editAnnotation({ quote: passage.quote, start: passage.start, end: passage.end, color: "yellow", note: "" });
-    });
-  });
-  $("annotation-form").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!state.reading || !state.annotationDraft) return;
-    const session = annotationSession, linkID = state.reading.id, request = state.readerRequest;
-    const key = annotationKey(), draft = state.annotationDraft;
-    const submitted = { note: $("annotation-note").value, color: $("annotation-color").value };
-    event.submitter.disabled = true;
-    $("annotation-error").textContent = "";
-    try {
-      const saved = await api(`/api/links/${linkID}/annotations${draft.id ? `/${draft.id}` : ""}`, { method: draft.id ? "PUT" : "POST", body: JSON.stringify({ quote: draft.quote, start: draft.start, end: draft.end, ...submitted }) });
-      const latest = session === annotationSession ? { note: $("annotation-note").value, color: $("annotation-color").value } : drafts.get(key) || submitted;
-      drafts.delete(key);
-      const savedKey = `annotation:${linkID}:${saved.id}`;
-      drafts.put(savedKey, latest, submitted);
-      if (session === annotationSession) {
-        state.annotationDraft = { ...draft, ...submitted, id: saved.id };
-        if (!drafts.get(savedKey)) $("annotation-dialog").close();
-      }
-      if (request === state.readerRequest) await loadAnnotations(linkID, request);
-      toast("Annotation saved.");
-    } catch (error) { if (session === annotationSession) $("annotation-error").textContent = error.message; }
-    finally { if (session === annotationSession) event.submitter.disabled = false; }
-  });
-  $("reader-size").addEventListener("change", () => { $("reader-content").style.fontSize = `${$("reader-size").value}px`; });
-  function readerMode(layout) {
-    state.readerSelection = null;
-    $("reader-layout").hidden = !layout; $("reader-content").hidden = layout;
-    if (!layout) $("reader-layout").removeAttribute("src");
-    $("reader-layout-mode").setAttribute("aria-pressed", String(layout)); $("reader-text-mode").setAttribute("aria-pressed", String(!layout));
-    $("reader-size").disabled = layout;
-    document.querySelectorAll("[data-highlight-selection]").forEach((button) => { button.disabled = layout || !state.reading?.content; });
-  }
-  function readerAvailability() {
-    if (!state.reading) return;
-    const snapshot = workspace.readerSnapshot(state.reading, readerAssets);
-    readerLayoutURL = snapshot.url;
-    $("reader-layout-mode").disabled = !snapshot.url; $("reader-print").disabled = !snapshot.url;
-    $("reader-mode-hint").textContent = snapshot.message;
-    if (!snapshot.url) readerMode(false);
-  }
-  $("reader-layout-mode").addEventListener("click", async () => {
-    if (!readerLayoutURL) return;
-    const request = ++layoutRequest, url = readerLayoutURL;
-    $("reader-layout-mode").disabled = true;
-    $("reader-mode-hint").textContent = "Opening formatted view…";
-    try {
-      const response = await fetch(url, { method: "HEAD", credentials: "same-origin" });
-      if (request !== layoutRequest || !$("reader-dialog").open) return;
-      if (response.status === 401) { showLogin(); return; }
-      if (!response.ok) throw new Error("Formatted view is unavailable. Read the text or retry after saving an HTML capture.");
-      $("reader-layout").src = url; readerMode(true);
-      $("reader-mode-hint").textContent = "Formatted page · Text size and highlighting are available in Text & highlights.";
-    } catch (error) {
-      if (request !== layoutRequest) return;
-      readerMode(false); $("reader-mode-hint").textContent = error.message;
-    } finally { if (request === layoutRequest) $("reader-layout-mode").disabled = !readerLayoutURL; }
-  });
-  $("reader-text-mode").addEventListener("click", () => { layoutRequest++; readerMode(false); readerAvailability(); });
-  $("reader-print").addEventListener("click", () => {
-    if (!readerLayoutURL) return;
-    window.open(readerLayoutURL, "_blank", "noopener,noreferrer");
-    toast("Use your browser’s Print command, then Save as PDF. Upload the PDF below to keep it here.");
-  });
-
-  async function loadAssets(id, request = state.readerRequest) {
-    const assets = await api(`/api/links/${id}/assets`);
-    if (request !== state.readerRequest || state.reading?.id !== id) return;
-    readerAssets = assets || [];
-    readerAvailability();
-    $("asset-list").replaceChildren();
-    for (const asset of assets || []) {
-      const row = el("div", "asset-item");
-      const download = el("a", "", asset.name); download.href = `/api/assets/${asset.id}`; download.setAttribute("download", "");
-      row.append(download, el("span", "small muted", `${(asset.size / 1024).toFixed(1)} KiB`));
-      if (asset.mediaType === "text/html" && asset.size <= 2 * 1024 * 1024) {
-        const read = el("button", "text-button", "Read");
-        read.addEventListener("click", () => { readerLayoutURL = `/api/links/${id}/reader?asset=${asset.id}`; $("reader-layout-mode").disabled = false; $("reader-print").disabled = false; $("reader-layout-mode").click(); });
-        row.append(read);
-      }
-      const remove = el("button", "text-button", "Delete");
-      remove.addEventListener("click", async () => {
-        if (!confirm(`Delete saved file “${asset.name}”?`)) return;
-        remove.disabled = true;
-        try { await api(`/api/assets/${asset.id}`, { method: "DELETE" }); await loadAssets(id); }
-        catch (error) { toast(error.message, true); remove.disabled = false; }
-      });
-      row.append(remove); $("asset-list").append(row);
-    }
-    if (!assets?.length) $("asset-list").append(el("p", "small muted", "No additional files saved."));
-  }
   $("upload-file-button").addEventListener("click", () => $("library-file").click());
   $("library-file").addEventListener("change", async () => {
     const file = $("library-file").files[0];
@@ -1429,29 +992,24 @@
       if (state.filter === "collection") params.set("collection", state.collection);
       const result = await api(`/api/files?${params}`, { method: "POST", headers: { "Content-Type": file.type || (/\.html?$/i.test(file.name) ? "text/html" : "application/octet-stream") }, body: file });
       await refresh(); toast("File saved to your library.");
-      await openReader(result.link.id);
+      await reader.open(result.link.id);
     } catch (error) { toast(error.message, true); } finally { $("library-file").value = ""; $("upload-file-button").disabled = false; }
   });
-  $("asset-file").addEventListener("change", async () => {
-    const file = $("asset-file").files[0];
-    if (!file || !state.reading) return;
-    const id = state.reading.id;
-    $("asset-file").disabled = true;
-    try {
-      if (file.size > 20 * 1024 * 1024) throw new Error("Choose a file smaller than 20 MiB.");
-      await api(`/api/links/${id}/assets?name=${encodeURIComponent(file.name)}`, { method: "POST", headers: { "Content-Type": file.type || (/\.html?$/i.test(file.name) ? "text/html" : "application/octet-stream") }, body: file });
-      await loadAssets(id); toast("File saved.");
-    } catch (error) { toast(error.message, true); } finally { $("asset-file").value = ""; $("asset-file").disabled = false; }
-  });
-  $("preserve-page").addEventListener("click", async () => {
-    if (!state.reading) return;
-    const id = state.reading.id;
-    $("preserve-page").disabled = true;
-    try {
-      const result = await api(`/api/links/${id}/preserve`, { method: "POST" });
-      await loadAssets(id); toast(`Page saved with ${result.embedded || 0} resources.${result.omitted ? ` ${result.omitted} resources could not be embedded.` : ""}`);
-    } catch (error) { toast(error.message, true); } finally { $("preserve-page").disabled = false; }
-  });
+  function updateHelp() {
+    const query = $("help-search").value.trim().toLocaleLowerCase();
+    let matches = 0;
+    document.querySelectorAll("#help-topics > details").forEach((topic) => {
+      const match = !query || topic.textContent.toLocaleLowerCase().includes(query);
+      topic.hidden = !match;
+      topic.open = !!query && match;
+      if (match) matches++;
+    });
+    $("help-results").textContent = `${matches} help topic${matches === 1 ? "" : "s"}`;
+    $("help-empty").hidden = matches > 0;
+  }
+  $("help-search").addEventListener("input", updateHelp);
+  $("help-clear").addEventListener("click", () => { $("help-search").value = ""; updateHelp(); $("help-search").focus(); });
+  $("help-button").addEventListener("click", () => { $("help-search").value = ""; updateHelp(); $("help-dialog").showModal(); });
 
   function configureLogin(passwordEnabled = true) {
     $("login-title").textContent = setupRequired ? "Create your account" : "Welcome back";
@@ -1516,7 +1074,6 @@
   $("settings-dialog").addEventListener("close", () => { $("account-password").value = ""; });
   $("api-keys-dialog").addEventListener("close", () => { $("new-token-value").value = ""; $("new-token").hidden = true; });
   $("export-button").addEventListener("click", () => $("export-dialog").showModal());
-  $("reader-dialog").addEventListener("close", () => { state.readerRequest++; layoutRequest++; $("reader-layout").removeAttribute("src"); });
 
   function openSharedLink() {
     const params = sharedParams;

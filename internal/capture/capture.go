@@ -22,9 +22,12 @@ import (
 )
 
 const (
-	maxBody  = 2 << 20
-	maxText  = 256 << 10
-	maxToken = 64 << 10
+	maxBody = 2 << 20
+	maxText = 256 << 10
+	// A page within maxBody may contain one large inline script or data
+	// attribute. Keep tokenization bounded by the same document limit so
+	// excluded script/style content does not prevent capturing the article.
+	maxToken = maxBody
 )
 
 type Result struct {

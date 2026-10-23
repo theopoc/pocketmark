@@ -4,12 +4,16 @@ import (
 	"crypto/pbkdf2"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"pocketmark/internal/store"
 )
 
 func extensionOrigin(raw string) bool {
@@ -33,17 +37,6 @@ func randomSecret() string {
 	return hex.EncodeToString(b)
 }
 func (a *Server) registerAccount(mux *http.ServeMux) {
-	// Persist eligibility before creating account tables, so an upgrade never
-	// makes an existing installation anonymously claimable.
-	if _, err := a.Store.DB.Exec(`CREATE TABLE IF NOT EXISTS account_setup(id INTEGER PRIMARY KEY CHECK(id=1), allowed INTEGER NOT NULL);
- INSERT INTO account_setup(id,allowed) SELECT 1,
- NOT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name IN ('account','api_tokens'))
- AND NOT EXISTS(SELECT 1 FROM links) AND NOT EXISTS(SELECT 1 FROM collections)
- WHERE NOT EXISTS(SELECT 1 FROM account_setup);
- CREATE TABLE IF NOT EXISTS account(id INTEGER PRIMARY KEY CHECK(id=1),username TEXT NOT NULL,salt TEXT NOT NULL,hash TEXT NOT NULL);
- CREATE TABLE IF NOT EXISTS api_tokens(id INTEGER PRIMARY KEY,name TEXT NOT NULL,hash TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL);`); err != nil {
-		panic(err)
-	}
 	mux.HandleFunc("GET /api/setup", a.setupStatus)
 	mux.HandleFunc("POST /api/setup", a.setup)
 	mux.HandleFunc("GET /api/account", a.account)
@@ -69,22 +62,21 @@ func (a *Server) account(w http.ResponseWriter, r *http.Request) {
 	if !a.requireOwner(w, r) {
 		return
 	}
-	var username, hash string
-	_ = a.Store.DB.QueryRowContext(r.Context(), "SELECT username,hash FROM account WHERE id=1").Scan(&username, &hash)
-	respond(w, 200, map[string]any{"username": username, "passwordEnabled": hash != ""})
+	account, err := a.Store.Account(r.Context())
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		handleError(w, err)
+		return
+	}
+	respond(w, 200, map[string]any{"username": account.Username, "passwordEnabled": account.Hash != ""})
 }
 
 func (a *Server) setupStatus(w http.ResponseWriter, r *http.Request) {
-	var allowed, passwordEnabled bool
-	err := a.Store.DB.QueryRowContext(r.Context(), `SELECT
- EXISTS(SELECT 1 FROM account_setup WHERE allowed=1) AND NOT EXISTS(SELECT 1 FROM account)
- AND NOT EXISTS(SELECT 1 FROM links) AND NOT EXISTS(SELECT 1 FROM collections) AND NOT EXISTS(SELECT 1 FROM api_tokens),
- EXISTS(SELECT 1 FROM account WHERE hash!='')`).Scan(&allowed, &passwordEnabled)
+	state, err := a.Store.SetupStatus(r.Context())
 	if err != nil {
 		handleError(w, err)
 		return
 	}
-	respond(w, 200, map[string]bool{"setupRequired": allowed, "passwordEnabled": passwordEnabled})
+	respond(w, 200, state)
 }
 
 func (a *Server) setup(w http.ResponseWriter, r *http.Request) {
@@ -108,22 +100,12 @@ func (a *Server) setup(w http.ResponseWriter, r *http.Request) {
 	a.passwordMu.Lock()
 	defer a.passwordMu.Unlock()
 	salt := randomSecret()
-	// One conditional write also protects against another server creating the
-	// owner concurrently. Never overwrite an account, even a disabled legacy one.
-	result, err := a.Store.DB.ExecContext(r.Context(), `INSERT INTO account(id,username,salt,hash)
- SELECT 1,?,?,? WHERE EXISTS(SELECT 1 FROM account_setup WHERE allowed=1)
- AND NOT EXISTS(SELECT 1 FROM account) AND NOT EXISTS(SELECT 1 FROM links)
- AND NOT EXISTS(SELECT 1 FROM collections) AND NOT EXISTS(SELECT 1 FROM api_tokens)`, b.Username, salt, passwordHash(b.Password, salt))
+	created, err := a.Store.CreateAccount(r.Context(), store.Account{Username: b.Username, Salt: salt, Hash: passwordHash(b.Password, salt)})
 	if err != nil {
 		handleError(w, err)
 		return
 	}
-	n, err := result.RowsAffected()
-	if err != nil {
-		handleError(w, err)
-		return
-	}
-	if n != 1 {
+	if !created {
 		fail(w, 409, "account creation is unavailable; sign in or ask the server administrator to configure your password")
 		return
 	}
@@ -150,7 +132,7 @@ func (a *Server) setAccount(w http.ResponseWriter, r *http.Request) {
 	defer a.passwordMu.Unlock()
 	salt := randomSecret()
 	hash := passwordHash(b.Password, salt)
-	if _, err := a.Store.DB.ExecContext(r.Context(), "INSERT INTO account(id,username,salt,hash) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET username=excluded.username,salt=excluded.salt,hash=excluded.hash", b.Username, salt, hash); err != nil {
+	if err := a.Store.SaveAccount(r.Context(), store.Account{Username: b.Username, Salt: salt, Hash: hash}); err != nil {
 		handleError(w, err)
 		return
 	}
@@ -163,20 +145,19 @@ func (a *Server) verifyPassword(r *http.Request, username, password string) bool
 	}
 	a.passwordMu.Lock()
 	defer a.passwordMu.Unlock()
-	var user, salt, hash string
-	if a.Store.DB.QueryRowContext(r.Context(), "SELECT username,salt,hash FROM account WHERE id=1").Scan(&user, &salt, &hash) != nil || hash == "" {
+	account, err := a.Store.Account(r.Context())
+	if err != nil || account.Hash == "" {
 		return false
 	}
-	got := passwordHash(password, salt)
-	return secretEqual(username, user) && secretEqual(got, hash)
+	got := passwordHash(password, account.Salt)
+	return secretEqual(username, account.Username) && secretEqual(got, account.Hash)
 }
 func (a *Server) validAPIKey(r *http.Request, key string) bool {
 	if len(key) != 64 {
 		return false
 	}
 	sum := sha256.Sum256([]byte(key))
-	var one int
-	return a.Store.DB.QueryRowContext(r.Context(), "SELECT 1 FROM api_tokens WHERE hash=?", hex.EncodeToString(sum[:])).Scan(&one) == nil
+	return a.Store.HasAPIKeyHash(r.Context(), hex.EncodeToString(sum[:]))
 }
 
 type apiToken struct {
@@ -190,26 +171,12 @@ func (a *Server) tokens(w http.ResponseWriter, r *http.Request) {
 	if !a.requireOwner(w, r) {
 		return
 	}
-	rows, e := a.Store.DB.QueryContext(r.Context(), "SELECT id,name,created_at FROM api_tokens ORDER BY id")
-	if e != nil {
-		handleError(w, e)
+	keys, err := a.Store.APIKeys(r.Context())
+	if err != nil {
+		handleError(w, err)
 		return
 	}
-	defer rows.Close()
-	out := []apiToken{}
-	for rows.Next() {
-		var t apiToken
-		if e = rows.Scan(&t.ID, &t.Name, &t.CreatedAt); e != nil {
-			handleError(w, e)
-			return
-		}
-		out = append(out, t)
-	}
-	if e = rows.Err(); e != nil {
-		handleError(w, e)
-		return
-	}
-	respond(w, 200, out)
+	respond(w, 200, keys)
 }
 func (a *Server) createToken(w http.ResponseWriter, r *http.Request) {
 	if !a.requireOwner(w, r) {
@@ -228,32 +195,28 @@ func (a *Server) createToken(w http.ResponseWriter, r *http.Request) {
 	}
 	token := randomSecret()
 	sum := sha256.Sum256([]byte(token))
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	res, e := a.Store.DB.ExecContext(r.Context(), "INSERT INTO api_tokens(name,hash,created_at) SELECT ?,?,? WHERE (SELECT COUNT(*) FROM api_tokens)<32", b.Name, hex.EncodeToString(sum[:]), now)
-	if e != nil {
-		handleError(w, e)
+	key, err := a.Store.CreateAPIKey(r.Context(), b.Name, hex.EncodeToString(sum[:]))
+	if errors.Is(err, store.ErrAPIKeyLimit) {
+		fail(w, 409, err.Error())
 		return
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		fail(w, 409, "at most 32 API keys")
+	if err != nil {
+		handleError(w, err)
 		return
 	}
-	id, _ := res.LastInsertId()
-	respond(w, 201, apiToken{id, b.Name, now, token})
+	respond(w, 201, apiToken{ID: key.ID, Name: key.Name, CreatedAt: key.CreatedAt, Token: token})
 }
 func (a *Server) deleteToken(w http.ResponseWriter, r *http.Request) {
 	if !a.requireOwner(w, r) {
 		return
 	}
-	res, e := a.Store.DB.ExecContext(r.Context(), "DELETE FROM api_tokens WHERE id=?", id(r))
-	if e != nil {
-		handleError(w, e)
+	err := a.Store.DeleteAPIKey(r.Context(), id(r))
+	if errors.Is(err, sql.ErrNoRows) {
+		fail(w, 404, "key not found")
 		return
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		fail(w, 404, "key not found")
+	if err != nil {
+		handleError(w, err)
 		return
 	}
 	respond(w, 200, map[string]bool{"ok": true})

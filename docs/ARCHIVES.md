@@ -6,6 +6,13 @@ fonts. It follows the same public-address DNS pinning as the basic capturer,
 including redirects and every resource request. Resources are fetched one at a
 time, with no browser process and no in-memory resource cache.
 
+The automatic capture accepts HTML responses up to 2 MiB, with individual tokens
+bounded to that same limit. Large inline scripts, styles and data attributes do
+not prevent text extraction within this budget; scripts and styles are excluded
+from indexed text. This server capture is separate from the browser extension's
+attachments: a failed automatic capture does not remove successful HTML, image
+or PDF uploads.
+
 Limits are deliberate: 45 seconds per snapshot, 25 HTTP resource requests
 including the main document, 2 MiB per response, 12 MiB total downloaded bytes,
 and 20 MiB final HTML. Scripts, frames, embedded media, SVG and CSS `@import`
@@ -49,7 +56,7 @@ rendered markup. Larger files remain downloadable.
 | `GET /api/backup` | Owner-only ZIP containing a consistent complete SQLite database and restore instructions |
 
 Native attachment uploads, manual preservation, rich-reader generation and backup
-share one work slot; standalone/compatibility uploads share the import slot.
+share one work slot; standalone uploads share the import slot.
 A competing operation on the same slot receives HTTP 409. Untrusted archives
 are always downloaded as attachments and never rendered on the application's
 origin. The API does not upload to a third-party service.

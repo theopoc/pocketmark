@@ -1,6 +1,34 @@
 # Pocketmark HTTP API
 
-Base URL: `http://127.0.0.1:8090`. API endpoints require an owner session, recovery token or named API key unless explicitly public. First-run setup, login and compatibility configuration/login discovery are public. `/healthz` is unauthenticated and returns `{"status":"ok"}` when SQLite is reachable. Named keys cannot access account/key management or full backups.
+## Interactive API documentation
+
+Open **API documentation** at the bottom of the library navigation, or visit
+`/api-docs/` on your instance. Swagger UI lists the native HTTP API with request
+schemas, filters, responses and errors. Search by tag or path, expand an operation,
+then use **Try it out** to send a real request to your instance. Mutations affect
+your library, including deletions.
+
+Your existing owner session is sent automatically. Integrations can use
+**Authorize** with a dedicated API key, without the `Bearer` prefix. Authorization
+is held in tab memory and cleared on reload. Named keys retain their existing
+restrictions: account settings, key management and full backups require an owner
+session or recovery token. The documentation and specification are public static
+files; API data still requires authentication.
+
+Download the OpenAPI 3.0.3 specification from the page or
+`/api-docs/openapi.json`. Its server URL is relative to the current instance, so it
+works behind a reverse proxy without hard-coded hosts. Swagger UI is version-pinned
+and embedded locally, with no CDN or external validator; it loads only on the docs
+page. The library remains dependency-free. WebDAV `/dav/` uses a separate protocol
+and is not included in the OpenAPI reference.
+
+The canonical specification lives in
+`internal/webui/static/api-docs/openapi.json`. When changing routes or payloads,
+update it alongside this document. `make test` checks route coverage, local schema
+references, security declarations and documentation delivery. Upstream asset
+provenance and update instructions are in the adjacent `vendor/README.md`.
+
+Base URL: `http://127.0.0.1:8090`. API endpoints require an owner session, recovery token or named API key unless explicitly public. First-run setup and login are public. `/healthz` is unauthenticated and returns `{"status":"ok"}` when SQLite is reachable. Named keys cannot access account/key management or full backups.
 
 For these examples, load your local token without putting its value directly in the command:
 
@@ -78,7 +106,7 @@ The result is `{"links":[…],"total":123,"page":1,"pageSize":40}`. `sort=newest
 
 ## Import and export
 
-Send the file itself, not multipart form data or the compatibility API's `{format:0,data:"…"}` API envelope:
+Send the file itself, not multipart form data or a JSON envelope:
 
 ```sh
 curl --fail-with-body -X POST "$POCKETMARK_URL/api/import" \
@@ -127,7 +155,7 @@ Annotation colors: `yellow`, `green`, `blue`, `pink`. Each bookmark supports up 
 | `POST /api/tokens` | Owner-only `{name}` → `{id,name,createdAt,token}`; raw key appears once. Max 32 keys. |
 | `DELETE /api/tokens/{id}` | Owner-only immediate revocation. |
 
-The included extension uses bearer authentication with narrowly recognized `chrome-extension://`/`moz-extension://` CORS origins; no credentialed cross-origin cookies are allowed. Ordinary cross-site browser mutations remain rejected. The compatibility credential endpoint also accepts extension-origin password requests, protected by the same rate limit.
+The included extension uses bearer authentication with narrowly recognized `chrome-extension://`/`moz-extension://` CORS origins; no credentialed cross-origin cookies are allowed. Ordinary cross-site browser mutations remain rejected. Extension-origin authentication uses dedicated bearer API keys.
 
 ### Existing installations and account recovery
 
@@ -146,11 +174,13 @@ Use the local server address or HTTPS, delete the private JSON file afterward, a
 
 ## Compatibility and synchronization
 
-The `/api/v1/` adapter supports private-library client request shapes: config, logins, password session, users/me, collections, links, tags, search, highlights and archives. `/api/v2/dashboard` supplies the mobile dashboard shape. Search uses `{data:{links,nextCursor}}`; clients must return the supplied cursor unchanged. The adapter has its own upstream-compatible response envelopes. Protocol tests do not certify every official client workflow. Unsupported operations are rejected; scope and limits are listed in [FEATURES.md](FEATURES.md).
-
-The mobile tag-upsert shape `{tags:[{label:"name",value:existingId}]}` accepts 1–100 validated options with optional `value` and returns a corresponding array; legacy `{name:"name"}` creation remains supported. Tag detail is available at `GET /api/v1/tags/{id}`. Compatibility collections/tags expose stable persisted `createdAt` dates. Collection descriptions round-trip through list/detail/create/update and JSON import/export; omitted descriptions survive rename/move, while `""` clears them. Old databases receive creation-date backfills on first upgrade, not recovered historical dates.
-
-Banner uploads use `/api/v1/archives/{id}?format=0|1&preview=true`. PNG/JPEG preview bytes are sniffed independently of the client's declared type, retained without re-encoding and returned with their actual MIME type. Previews do not replace preserved image archives. See the [actual Android test record and offline limitation](REAL_CLIENTS.md#official-android-application--20-october-2026).
+Pocketmark exposes only its native `/api` endpoints and WebDAV. The Linkwarden
+compatibility endpoints under `/api/v1/` and `/api/v2/` have been removed. This
+also removes third-party Linkwarden extension/mobile access and Floccus's
+Linkwarden API backend. Use the Pocketmark Chrome extension or Floccus WebDAV.
+Existing bookmarks, collections, tags, notes, annotations and archives are kept.
+Legacy compatibility metadata tables remain on disk so no destructive database
+migration is needed; they no longer expose an HTTP interface.
 
 WebDAV supports `OPTIONS`, `PROPFIND`, `GET`, `HEAD`, `PUT`, `DELETE` and `MOVE` for the fixed `/dav/` collection and its `bookmarks.xbel`, `bookmarks.xbel.temp` and `bookmarks.xbel.lock` resources. Resource-specific methods are restricted; primary XML deletion is not supported. Authenticate using Basic with any username and a dedicated API key/recovery token as password, or use bearer authentication. Extension-origin Basic authentication is accepted only after normal credential verification. ETag conditional `If-Match` writes and stale locked snapshots return 412; competing lock owners receive 423. Acquire a lock, GET the primary XML, upload the temporary resource, then MOVE it to the same server's primary XML. XML is limited to 8 MiB and persisted as bounded SQLite chunks. Uploads apply an authoritative bookmark tree including deletions and preserve personal fields for retained IDs/URLs. There is no scheduled server synchronizer. See [Floccus instructions](FEATURES.md#floccus-setup-and-data-semantics) and [protocol details](CLIENT_FLOCCUS_NOTES.md).
 

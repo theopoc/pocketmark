@@ -14,7 +14,7 @@ SPEC.loader.exec_module(VERIFY)
 COMMIT = "a" * 40
 
 
-def fixture(root, wrong_machine=False, extra_member=False, debugger_default=False):
+def fixture(root, wrong_machine=False, extra_member=False, missing_debugger=False):
     for arch, machine in VERIFY.ARCHES.items():
         header = bytearray(64)
         header[:6] = b"\x7fELF\x02\x01"
@@ -27,12 +27,10 @@ def fixture(root, wrong_machine=False, extra_member=False, debugger_default=Fals
             if extra_member:
                 archive.addfile(tarfile.TarInfo("access-token"))
         (root / f"pocketmark-linux-{arch}.buildinfo.txt").write_text(f"vcs.revision={COMMIT}\nvcs.modified=false\n")
-    for advanced in (False, True):
-        suffix = "-advanced" if advanced else ""
-        with zipfile.ZipFile(root / f"pocketmark-extension{suffix}.zip", "w") as archive:
-            for name in VERIFY.EXTENSION_FILES:
-                content = json.dumps({"permissions": ["debugger"] if advanced or debugger_default else []}) if name == "manifest.json" else "synthetic"
-                archive.writestr(name, content)
+    with zipfile.ZipFile(root / "pocketmark-extension.zip", "w") as archive:
+        for name in VERIFY.EXTENSION_FILES:
+            content = json.dumps({"permissions": ["activeTab", "scripting", "storage"] + ([] if missing_debugger else ["debugger"]), "background": {"service_worker": "background.js"}}) if name == "manifest.json" else "synthetic"
+            archive.writestr(name, content)
     (root / "SHA256SUMS").write_text("".join(f"{VERIFY.digest(root / name)}  {name}\n" for name in sorted(VERIFY.ASSETS)))
 
 
@@ -47,7 +45,7 @@ class ReleaseVerificationTests(unittest.TestCase):
             self.assertEqual({x.name for x in output.iterdir()}, VERIFY.ASSETS | {"SHA256SUMS"})
 
     def test_invalid_bundle_is_rejected(self):
-        for options in ({"wrong_machine": True}, {"extra_member": True}, {"debugger_default": True}):
+        for options in ({"wrong_machine": True}, {"extra_member": True}, {"missing_debugger": True}):
             with self.subTest(options=options), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 fixture(root, **options)

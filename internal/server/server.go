@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -43,7 +44,6 @@ func New(s *store.Store, token, origin string, secure bool) *Server {
 	a.registerDAV(a.mux)
 	a.registerAssets(a.mux)
 	a.registerFiles(a.mux)
-	a.registerCompat(a.mux)
 	a.mux.HandleFunc("POST /api/login", a.login)
 	a.mux.HandleFunc("POST /api/logout", func(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{Name: "pocketmark", Value: "", Path: "/", HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteStrictMode, MaxAge: -1})
@@ -67,7 +67,7 @@ func New(s *store.Store, token, origin string, secure bool) *Server {
 	a.mux.HandleFunc("GET /api/export", a.exportData)
 	a.mux.HandleFunc("GET /api/", func(w http.ResponseWriter, r *http.Request) { fail(w, 404, "endpoint not found") })
 	a.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		if e := s.DB.PingContext(r.Context()); e != nil {
+		if e := s.Ping(r.Context()); e != nil {
 			fail(w, 503, "database unavailable")
 			return
 		}
@@ -109,7 +109,7 @@ func (a *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "server busy; try again shortly")
 		return
 	}
-	if r.Method != "GET" && r.Method != "HEAD" && !(extension && (strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || (isDAV && strings.HasPrefix(r.Header.Get("Authorization"), "Basic ")) || r.URL.Path == "/api/v1/session")) {
+	if r.Method != "GET" && r.Method != "HEAD" && !(extension && (strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || (isDAV && strings.HasPrefix(r.Header.Get("Authorization"), "Basic ")))) {
 		// An exact Origin check protects both login and cookie-authenticated mutations.
 		if o := r.Header.Get("Origin"); o != "" {
 			expected := a.origin
@@ -130,7 +130,7 @@ func (a *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	publicAPI := r.URL.Path == "/api/login" || r.URL.Path == "/api/setup" || r.URL.Path == "/api/v1/session" || r.URL.Path == "/api/v1/config" || r.URL.Path == "/api/v1/logins"
+	publicAPI := r.URL.Path == "/api/login" || r.URL.Path == "/api/setup"
 	if strings.HasPrefix(r.URL.Path, "/api/") && !publicAPI && !a.authenticated(r) {
 		fail(w, 401, "sign in required")
 		return
@@ -169,9 +169,8 @@ func secretEqual(x, y string) bool {
 func (a *Server) sign(value string) string {
 	h := hmac.New(sha256.New, []byte(a.token))
 	h.Write([]byte(value))
-	var salt string
-	_ = a.Store.DB.QueryRow("SELECT salt FROM account WHERE id=1").Scan(&salt)
-	h.Write([]byte(salt))
+	account, _ := a.Store.Account(context.Background())
+	h.Write([]byte(account.Salt))
 	return hex.EncodeToString(h.Sum(nil))
 }
 func (a *Server) login(w http.ResponseWriter, r *http.Request) {
@@ -278,17 +277,10 @@ func (a *Server) links(w http.ResponseWriter, r *http.Request) {
 			fail(w, 400, "URL too long")
 			return
 		}
-		var found int64
-		err := a.Store.DB.QueryRowContext(r.Context(), "SELECT id FROM links WHERE url=?", raw).Scan(&found)
+		link, err := a.Store.FindURL(r.Context(), raw)
 		p := store.Page{Links: []store.Link{}, Page: 1, PageSize: 40}
 		if err == nil {
-			l, e := a.Store.Get(r.Context(), found)
-			if e != nil {
-				handleError(w, e)
-				return
-			}
-			l.Content = ""
-			p.Links = append(p.Links, l)
+			p.Links = append(p.Links, link)
 			p.Total = 1
 		} else if !errors.Is(err, sql.ErrNoRows) {
 			handleError(w, err)
@@ -364,43 +356,23 @@ func (a *Server) captureLink(w http.ResponseWriter, r *http.Request) {
 	respond(w, 202, map[string]bool{"ok": true})
 }
 func (a *Server) stats(w http.ResponseWriter, r *http.Request) {
-	var links, pending, failed, collections int
-	e := a.Store.DB.QueryRowContext(r.Context(), `SELECT COUNT(*),COALESCE(SUM(status IN ('pending','processing')),0),COALESCE(SUM(status='failed'),0),(SELECT COUNT(*) FROM collections) FROM links`).Scan(&links, &pending, &failed, &collections)
-	if e != nil {
-		handleError(w, e)
+	stats, err := a.Store.Stats(r.Context())
+	if err != nil {
+		handleError(w, err)
 		return
 	}
-	respond(w, 200, map[string]int{"links": links, "pending": pending, "failed": failed, "collections": collections})
+	respond(w, 200, stats)
 }
 func (a *Server) tags(w http.ResponseWriter, r *http.Request) {
-	type tag struct {
-		Name  string `json:"name"`
-		Count int    `json:"count"`
-	}
-	out := []tag{}
-	rows, e := a.Store.DB.QueryContext(r.Context(), "SELECT value,COUNT(*) FROM links,json_each(links.tags) GROUP BY value ORDER BY COUNT(*) DESC,value LIMIT 200")
-	if e != nil {
-		handleError(w, e)
+	tags, err := a.Store.Tags(r.Context())
+	if err != nil {
+		handleError(w, err)
 		return
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var t tag
-		if e := rows.Scan(&t.Name, &t.Count); e != nil {
-			handleError(w, e)
-			return
-		}
-		out = append(out, t)
-	}
-	if e = rows.Err(); e != nil {
-		handleError(w, e)
-		return
-	}
-	respond(w, 200, out)
+	respond(w, 200, tags)
 }
 func (a *Server) archive(w http.ResponseWriter, r *http.Request) {
-	var raw []byte
-	e := a.Store.DB.QueryRowContext(r.Context(), "SELECT archive FROM links WHERE id=? AND archive IS NOT NULL", id(r)).Scan(&raw)
+	raw, e := a.Store.Archive(r.Context(), id(r))
 	if e != nil {
 		handleError(w, e)
 		return

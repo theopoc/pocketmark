@@ -8,19 +8,23 @@ build:
 	go build -tags '$(GO_TAGS)' -trimpath -ldflags='$(LDFLAGS)' -o bin/pocketmark ./cmd/pocketmark
 test:
 	go test $(TEST_FLAGS) -tags '$(GO_TAGS)' ./...
-	node --test internal/webui/workspace.test.cjs
+	node --test internal/webui/*.test.cjs
 test-extension:
-	node --test extension/popup.test.cjs
+	node --test extension/*.test.cjs
 fmt-check:
 	@test -z "$$(gofmt -l cmd internal)" || { gofmt -l cmd internal; exit 1; }
 check: fmt-check
 	go vet -tags '$(GO_TAGS)' ./...
 	node --check internal/webui/static/theme.js
 	node --check internal/webui/static/workspace.js
+	node --check internal/webui/static/reader.js
+	node --check internal/webui/static/bulk.js
+	node --check internal/webui/static/tag-picker.js
 	node --check internal/webui/static/app.js
 	node --check internal/webui/static/sw.js
-	node --check extension/popup.js
-	python3 -m py_compile scripts/*.py extension/build_advanced.py
+	node --check internal/webui/static/api-docs/docs.js
+	@for source in extension/*.js; do node --check "$$source" || exit; done
+	python3 -m py_compile scripts/*.py extension/package.py
 release-check:
 	goreleaser check --config .goreleaser.yaml
 	goreleaser check --config .goreleaser-publish.yaml

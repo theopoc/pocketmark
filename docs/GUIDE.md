@@ -2,7 +2,7 @@
 
 A personal bookmark manager built for low RAM usage: one Go executable, SQLite and a small embedded web interface. Save links, organize collections and tags, search captured text, and import an existing bookmark library.
 
-Pocketmark uses one process for storage and capture. Public HTML capture runs on the server; JavaScript-rendered capture and screenshots run in your existing browser through the included extension. The compatibility adapter covers selected private-library operations.
+Pocketmark uses one process for storage and capture. Public HTML capture runs on the server; JavaScript-rendered capture and screenshots run in your existing browser through the included extension. The personal Chrome extension uses the native API; Floccus synchronizes through WebDAV.
 
 ## Start locally
 
@@ -48,11 +48,11 @@ The supplied Compose configuration sets a **128 MiB container memory limit** and
 - Browser bookmarks HTML import/export and WebDAV/XBEL synchronization for Floccus.
 - PDF, image and SingleFile/HTML files (standalone or attached) streamed in 64 KiB SQLite chunks; manual offline snapshots with embedded resources.
 - Personal username/password login, named revocable API keys and an owner-only full ZIP backup while the app runs.
-- Installable mobile web interface, share target, and a small [browser extension](../extension/README.md). A [compatibility adapter](FEATURES.md) implements selected extension/mobile API contracts.
+- Installable mobile web interface, share target, and a small [browser extension](../extension/README.md). The Linkwarden compatibility API and third-party extension/mobile integration have been removed.
 
-Default capture fetches one HTML response, with a 20-second timeout, at most five redirects, a 2 MiB response/decompressed-body limit and up to 256 KiB of extracted text. Choose **Save with resources** for bounded resource embedding, or use the extension for an already-rendered page and a visible-tab PNG screenshot. Its separate advanced Chromium variant generates PDF and full-page screenshots on demand, using an explicit debugger permission; [installation and limits](../extension/README.md). Other browsers can use **Print / PDF**, then upload the file. No Chromium instance runs on the server. Private, loopback and reserved network destinations can be bookmarked, but server capture refuses them. See [archive limits](ARCHIVES.md).
+Default capture fetches one HTML response, with a 20-second timeout, at most five redirects, a 2 MiB response/decompressed-body limit and up to 256 KiB of extracted text. Choose **Save with resources** for bounded resource embedding, or use the extension for an already-rendered page and a visible-tab PNG screenshot. The same Chrome extension generates PDF and full-page screenshots on demand, using an explicit debugger permission; [installation and limits](../extension/README.md). Other browsers can use **Print / PDF**, then upload the file. No Chromium instance runs on the server. Private, loopback and reserved network destinations can be bookmarked, but server capture refuses them. See [archive limits](ARCHIVES.md).
 
-Collaboration/public sharing, SSO/OIDC, RSS, AI automation, scheduled recapture and automatic backups are intentionally excluded. Screenshots and PDF rendering consume memory in the user's browser; their memory is not included in server measurements. Actual Chrome tests cover the advanced capture extension, a third-party extension (1.5.6) and Floccus 5.11.1 through both native API and WebDAV backends. See the [real-client validation record](REAL_CLIENTS.md) for tested workflows and remaining mobile/browser limits.
+Collaboration/public sharing, SSO/OIDC, RSS, AI automation, scheduled recapture and automatic backups are intentionally excluded. Screenshots and PDF rendering consume memory in the user's browser; their memory is not included in server measurements. Historical Chrome and third-party client observations are preserved in the [real-client validation record](REAL_CLIENTS.md). The supported integration paths are the Pocketmark Chrome extension and Floccus WebDAV; older Linkwarden client observations do not qualify the new extension.
 
 The unmodified third-party Android app (1.4.4) was also tested in an ARM64 emulator: sign-in, bookmarks, collections/descriptions, tags, search, banners and archive views work for the exercised flows. Prolonged offline opening has an identified client-cache limitation; iOS and physical phones remain untested. See [mobile results and corrections](REAL_CLIENTS.md#official-android-application--20-october-2026).
 
@@ -119,8 +119,16 @@ For the extended feature workload, use `python3 scripts/benchmark_capture.py --f
 | `cmd/pocketmark/` | Configuration, lifecycle and capture worker. |
 | `internal/capture/` | Bounded HTTP fetch, network checks and HTML text extraction. |
 | `internal/server/` | Authentication and HTTP API. |
-| `internal/store/` | SQLite schema, full-text search and migration. |
+| `internal/store/` | SQLite persistence, schema upgrades, full-text search and bookmark import/export. |
 | `internal/webui/` | Embedded interface assets. |
+
+Within `internal/store/`, files are grouped by responsibility and import format; all remain in the same Go package.
+
+| Files | Responsibility |
+| --- | --- |
+| [schema.go](../internal/store/schema.go), `schema*_test.go` | Atomic schema initialization and legacy-database upgrades, including restart regressions. |
+| [import_json.go](../internal/store/import_json.go), `import_json_test.go` | JSON metadata import/export, hierarchy merging and rollback. |
+| [import_html.go](../internal/store/import_html.go), `import_html_test.go` | Netscape HTML bookmark import/export and format round-trip regressions. |
 
 | Documentation | Purpose |
 | --- | --- |
@@ -128,6 +136,8 @@ For the extended feature workload, use `python3 scripts/benchmark_capture.py --f
 | [Benchmarks](BENCHMARK.md) | Reproducible measurements and their limits. |
 
 ## Further reading
+
+- [Architecture and module ownership](ARCHITECTURE.md)
 
 - [Release installation](RELEASE_INSTALL.md) · [Container images](CI.md#ghcr-images)
 - [Archive limits](ARCHIVES.md) · [Feature coverage](FEATURES.md)
