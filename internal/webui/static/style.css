@@ -595,9 +595,43 @@ body:has(dialog[open]) { overflow: hidden; }
 /* Keep direct controls on desktop; name secondary touch actions explicitly. */
 .card-overflow-actions { display: flex; align-items: center; gap: 1px; }
 .card-actions-toggle, .mobile-action-label { display: none; }
-#help-search { margin-bottom: 10px; }
-#help-topics > details { border-top: 1px solid var(--line); padding-block: 6px; }
-#help-topics p { line-height: 1.7; }
+/* Help reads as a compact guide; its search and close control stay in reach. */
+.help-modal { width: min(680px,calc(100vw - 32px)); padding: 0; overflow: hidden; }
+.help-modal[open] { display: flex; flex-direction: column; }
+.help-header { flex-shrink: 0; padding: 24px 32px 20px; border-bottom: 1px solid var(--line); }
+.help-header .dialog-heading { margin-bottom: 16px; }
+.help-header .icon-button { min-width: 44px; min-height: 44px; margin: -8px -8px -8px 0; }
+#help-search { margin: 0; }
+#help-results { margin: 12px 0 0; }
+#help-results:empty { display: none; }
+.help-body { min-height: 0; padding: 0 32px 20px; overflow-y: auto; overscroll-behavior: contain; }
+#help-topics > details + details { border-top: 1px solid var(--line); }
+#help-topics summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 56px; padding-block: 16px; cursor: pointer; list-style: none; font-size: 14px; font-weight: 550; line-height: 1.5; }
+#help-topics summary::-webkit-details-marker { display: none; }
+#help-topics summary:hover { text-decoration: underline; text-underline-offset: 4px; }
+#help-topics summary:focus-visible { outline-offset: -2px; border-radius: 4px; }
+#help-topics summary .icon { width: 16px; height: 16px; color: var(--muted); }
+#help-topics details[open] summary .icon { transform: rotate(90deg); }
+.help-answer { padding: 0 24px 20px 0; font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.help-answer p, .help-answer ol, .help-answer ul { margin: 0 0 12px; }
+.help-answer > :last-child { margin-bottom: 0; }
+.help-answer ol, .help-answer ul { padding-left: 22px; }
+.help-answer li + li { margin-top: 8px; }
+.help-answer strong { font-weight: 600; }
+.help-shortcuts { margin: 0 0 16px; }
+.help-shortcuts > div { display: grid; grid-template-columns: 168px minmax(0,1fr); gap: 16px; padding-block: 6px; }
+.help-shortcuts dt { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.help-shortcuts dd { margin: 0; }
+#help-empty { padding-block: 28px 12px; }
+#help-empty p { margin-bottom: 8px; }
+#help-empty .button { margin-top: 12px; }
+@media (max-width: 600px) {
+  .help-modal { width: 100%; max-width: none; max-height: 100dvh; margin: auto 0; border-radius: 0; }
+  .help-header { padding: max(20px,env(safe-area-inset-top)) 20px 20px; }
+  .help-body { padding: 0 20px max(20px,env(safe-area-inset-bottom)); }
+  .help-answer { padding-right: 0; }
+  .help-shortcuts > div { grid-template-columns: minmax(0,1fr); gap: 4px; padding-block: 8px; }
+}
 @media (max-width: 600px) {
   .reader-options[open] { flex-basis: 100%; }
   .view-list .card-title button { display: block; -webkit-line-clamp: unset; overflow: visible; }
