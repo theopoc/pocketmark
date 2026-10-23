@@ -19,7 +19,7 @@ import (
 // the current bookmark and a bounded folder stack. The transaction is atomic.
 func (s *Store) ImportHTML(ctx context.Context, r io.Reader) (ImportResult, error) {
 	result := ImportResult{}
-	tx, e := s.DB.BeginTx(ctx, nil)
+	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return result, e
 	}
@@ -187,7 +187,7 @@ func (s *Store) ImportHTML(ctx context.Context, r io.Reader) (ImportResult, erro
 // ExportHTML streams bookmarks and writes folders depth-first. Only the small
 // collection directory is retained in memory; bookmark bodies are never read.
 func (s *Store) ExportHTML(ctx context.Context, w io.Writer) error {
-	tx, e := s.DB.BeginTx(ctx, nil)
+	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return e
 	}

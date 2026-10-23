@@ -53,9 +53,7 @@ func TestNativeLibraryRetainsLegacyDataAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.DB.Exec("UPDATE links SET archive=?,content='Legacy captured text',status='ready' WHERE id=?", []byte("legacy archive"), lid); err != nil {
-		t.Fatal(err)
-	}
+	finishTestCapture(t, s, lid, "Legacy captured text", []byte("legacy archive"))
 	if err = s.Close(); err != nil {
 		t.Fatal(err)
 	}

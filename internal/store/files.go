@@ -16,7 +16,7 @@ func (s *Store) CreateFile(ctx context.Context, l Link, a Asset, src io.Reader) 
 	if len(a.Name) == 0 || len(a.Name) > 240 || strings.ContainsAny(a.Name, "\r\n\x00/\\") {
 		return 0, a, errors.New("invalid file name")
 	}
-	tx, e := s.DB.BeginTx(ctx, nil)
+	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return 0, a, e
 	}

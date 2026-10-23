@@ -22,23 +22,6 @@ type DAVFile struct {
 	Owner    string
 }
 
-func (s *Store) InitDAV(ctx context.Context) error {
-	_, e := s.DB.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS dav_revision(id INTEGER PRIMARY KEY CHECK(id=1),value INTEGER NOT NULL,modified INTEGER NOT NULL);
-INSERT OR IGNORE INTO dav_revision VALUES(1,0,unixepoch());
-CREATE TABLE IF NOT EXISTS dav_ids(id INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,local_id INTEGER NOT NULL,position INTEGER NOT NULL DEFAULT 2147483647,UNIQUE(kind,local_id));
-CREATE TABLE IF NOT EXISTS dav_files(name TEXT PRIMARY KEY,size INTEGER NOT NULL,etag TEXT NOT NULL,modified INTEGER NOT NULL,revision INTEGER NOT NULL,owner TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS dav_chunks(name TEXT NOT NULL REFERENCES dav_files(name) ON DELETE CASCADE,ordinal INTEGER NOT NULL,data BLOB NOT NULL,PRIMARY KEY(name,ordinal));
-CREATE TABLE IF NOT EXISTS dav_lock(id INTEGER PRIMARY KEY CHECK(id=1),owner TEXT NOT NULL,modified INTEGER NOT NULL,revision INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS dav_observed(owner TEXT PRIMARY KEY,revision INTEGER NOT NULL);
-CREATE TRIGGER IF NOT EXISTS dav_li AFTER INSERT ON links BEGIN UPDATE dav_revision SET value=value+1,modified=unixepoch() WHERE id=1; END;
-CREATE TRIGGER IF NOT EXISTS dav_lu AFTER UPDATE OF url,title,description,collection_id ON links WHEN NEW.url IS NOT OLD.url OR NEW.title IS NOT OLD.title OR NEW.description IS NOT OLD.description OR NEW.collection_id IS NOT OLD.collection_id BEGIN UPDATE dav_revision SET value=value+1,modified=unixepoch() WHERE id=1; END;
-CREATE TRIGGER IF NOT EXISTS dav_ld AFTER DELETE ON links BEGIN DELETE FROM dav_ids WHERE kind='bookmark' AND local_id=OLD.id;UPDATE dav_revision SET value=value+1,modified=unixepoch() WHERE id=1; END;
-CREATE TRIGGER IF NOT EXISTS dav_ci AFTER INSERT ON collections BEGIN UPDATE dav_revision SET value=value+1,modified=unixepoch() WHERE id=1; END;
-CREATE TRIGGER IF NOT EXISTS dav_cu AFTER UPDATE OF name,parent_id ON collections WHEN NEW.name IS NOT OLD.name OR NEW.parent_id IS NOT OLD.parent_id BEGIN UPDATE dav_revision SET value=value+1,modified=unixepoch() WHERE id=1; END;
-CREATE TRIGGER IF NOT EXISTS dav_cd AFTER DELETE ON collections BEGIN DELETE FROM dav_ids WHERE kind='folder' AND local_id=OLD.id;UPDATE dav_revision SET value=value+1,modified=unixepoch() WHERE id=1; END;`)
-	return e
-}
-
 func ensureDAVIDs(ctx context.Context, tx *sql.Tx) error {
 	_, e := tx.ExecContext(ctx, `INSERT INTO dav_ids(kind,local_id) SELECT 'folder',id FROM collections WHERE NOT EXISTS(SELECT 1 FROM dav_ids WHERE kind='folder' AND local_id=collections.id) ORDER BY id;
 INSERT INTO dav_ids(kind,local_id) SELECT 'bookmark',id FROM links WHERE (url LIKE 'http://%' OR url LIKE 'https://%') AND NOT EXISTS(SELECT 1 FROM dav_ids WHERE kind='bookmark' AND local_id=links.id) ORDER BY id;`)
@@ -110,10 +93,7 @@ func saveDAVFile(ctx context.Context, tx *sql.Tx, name, owner string, rev int64,
 // WriteDAVSnapshot stages into a caller-owned disk file under one transaction.
 // Uploaded bytes remain exact until metadata changes; then canonical XML is regenerated.
 func (s *Store) WriteDAVSnapshot(ctx context.Context, w io.Writer) (DAVFile, error) {
-	if e := s.InitDAV(ctx); e != nil {
-		return DAVFile{}, e
-	}
-	tx, e := s.DB.BeginTx(ctx, nil)
+	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return DAVFile{}, e
 	}
@@ -189,7 +169,7 @@ func checkDAVLease(ctx context.Context, tx *sql.Tx, owner string, checkRevision 
 	return nil
 }
 func (s *Store) DAVLock(ctx context.Context, owner string, set bool) (time.Time, error) {
-	tx, e := s.DB.BeginTx(ctx, nil)
+	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return time.Time{}, e
 	}
@@ -228,7 +208,7 @@ func (s *Store) DAVLock(ctx context.Context, owner string, set bool) (time.Time,
 }
 func (s *Store) DAVLockTime(ctx context.Context) (time.Time, error) {
 	var modified int64
-	e := s.DB.QueryRowContext(ctx, "SELECT modified FROM dav_lock WHERE id=1").Scan(&modified)
+	e := s.db.QueryRowContext(ctx, "SELECT modified FROM dav_lock WHERE id=1").Scan(&modified)
 	if e == nil && time.Since(time.Unix(modified, 0)) >= 15*time.Minute {
 		return time.Time{}, sql.ErrNoRows
 	}
@@ -239,11 +219,11 @@ func (s *Store) DAVLockTime(ctx context.Context) (time.Time, error) {
 // prevents a browser resuming after sleep from refreshing its lock then pushing
 // an old cached tree over native edits made while its lease was expired.
 func (s *Store) ConfirmDAVRead(ctx context.Context, owner string, revision int64) error {
-	_, e := s.DB.ExecContext(ctx, "INSERT INTO dav_observed(owner,revision) SELECT ?,? WHERE EXISTS(SELECT 1 FROM dav_lock WHERE owner=?) ON CONFLICT(owner) DO UPDATE SET revision=excluded.revision", owner, revision, owner)
+	_, e := s.db.ExecContext(ctx, "INSERT INTO dav_observed(owner,revision) SELECT ?,? WHERE EXISTS(SELECT 1 FROM dav_lock WHERE owner=?) ON CONFLICT(owner) DO UPDATE SET revision=excluded.revision", owner, revision, owner)
 	return e
 }
 func (s *Store) StageDAV(ctx context.Context, owner string, r io.Reader) error {
-	tx, e := s.DB.BeginTx(ctx, nil)
+	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return e
 	}
@@ -264,7 +244,7 @@ func (s *Store) StageDAV(ctx context.Context, owner string, r io.Reader) error {
 	return tx.Commit()
 }
 func (s *Store) WriteDAVTemp(ctx context.Context, owner string, w io.Writer) (DAVFile, error) {
-	tx, e := s.DB.BeginTx(ctx, nil)
+	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return DAVFile{}, e
 	}
@@ -282,7 +262,7 @@ func (s *Store) WriteDAVTemp(ctx context.Context, owner string, w io.Writer) (DA
 	return f, tx.Commit()
 }
 func (s *Store) DeleteDAVTemp(ctx context.Context, owner string) error {
-	_, e := s.DB.ExecContext(ctx, "DELETE FROM dav_files WHERE name='temp' AND owner=?", owner)
+	_, e := s.db.ExecContext(ctx, "DELETE FROM dav_files WHERE name='temp' AND owner=?", owner)
 	return e
 }
 
@@ -294,7 +274,7 @@ func (s *Store) ApplyDAV(ctx context.Context, owner string, r io.ReadSeeker, exp
 	if _, e = r.Seek(0, io.SeekStart); e != nil {
 		return e
 	}
-	tx, e := s.DB.BeginTx(ctx, nil)
+	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return e
 	}

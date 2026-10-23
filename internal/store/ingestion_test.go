@@ -28,9 +28,6 @@ func TestDocumentStorageStreamingAndRollback(t *testing.T) {
 			t.Run(fmt.Sprintf("standalone=%t/%s", standalone, tc.name), func(t *testing.T) {
 				s := testStore(t)
 				ctx := context.Background()
-				if err := s.InitAssets(ctx); err != nil {
-					t.Fatal(err)
-				}
 				var src io.Reader = io.LimitReader(repeatedByteReader{}, tc.size)
 				if tc.name == "interrupted" {
 					src = io.MultiReader(src, interruptedFile{})
@@ -69,13 +66,13 @@ func TestDocumentStorageStreamingAndRollback(t *testing.T) {
 					}
 					for _, table := range []string{"assets", "asset_chunks"} {
 						var count int
-						if err := s.DB.QueryRow("SELECT count(*) FROM " + table).Scan(&count); err != nil || count != 0 {
+						if err := s.db.QueryRow("SELECT count(*) FROM " + table).Scan(&count); err != nil || count != 0 {
 							t.Fatalf("partial %s retained: %d (%v)", table, count, err)
 						}
 					}
 				}
 				var links int
-				if err := s.DB.QueryRow("SELECT count(*) FROM links").Scan(&links); err != nil || links != wantLinks {
+				if err := s.db.QueryRow("SELECT count(*) FROM links").Scan(&links); err != nil || links != wantLinks {
 					t.Fatalf("bookmarks: got %d, want %d (%v)", links, wantLinks, err)
 				}
 			})
@@ -97,13 +94,10 @@ func TestDocumentStorageExistingDatabaseAndRestart(t *testing.T) {
 		}
 	})
 	ctx := context.Background()
-	if err := s.InitAssets(ctx); err != nil {
-		t.Fatal(err)
-	}
 	id := createLink(t, s, Link{URL: "https://example.com/existing", Notes: "Keep notes", Tags: []string{"reference"}})
 	// Seed the pre-refactor asset schema directly, without either ingestion path.
 	const legacyBody = "%PDF-1.7\nExisting attachment"
-	if _, err := s.DB.Exec(`INSERT INTO assets(id,link_id,name,media_type,kind,size,created_at) VALUES(41,?,'old.pdf','application/pdf','pdf',?,'2026-01-01T00:00:00Z');
+	if _, err := s.db.Exec(`INSERT INTO assets(id,link_id,name,media_type,kind,size,created_at) VALUES(41,?,'old.pdf','application/pdf','pdf',?,'2026-01-01T00:00:00Z');
 INSERT INTO asset_chunks(asset_id,ordinal,data) VALUES(41,0,?)`, id, len(legacyBody), []byte(legacyBody)); err != nil {
 		t.Fatal(err)
 	}

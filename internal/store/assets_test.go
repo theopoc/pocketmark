@@ -28,9 +28,6 @@ func TestAssetStreamingRollbackAndCascade(t *testing.T) {
 	}
 	defer s.Close()
 	ctx := context.Background()
-	if err = s.InitAssets(ctx); err != nil {
-		t.Fatal(err)
-	}
 	linkID, err := s.Create(ctx, Link{URL: "https://example.com"})
 	if err != nil {
 		t.Fatal(err)
@@ -51,7 +48,7 @@ func TestAssetStreamingRollbackAndCascade(t *testing.T) {
 	defer cancel()
 	if err = s.WriteAsset(deadline, a.ID, assetWriterFunc(func(p []byte) (int, error) {
 		var count int
-		e := s.DB.QueryRowContext(deadline, "SELECT count(*) FROM links").Scan(&count)
+		e := s.db.QueryRowContext(deadline, "SELECT count(*) FROM links").Scan(&count)
 		return len(p), e
 	})); err != nil {
 		t.Fatalf("download retained sole SQLite connection: %v", err)
@@ -68,7 +65,7 @@ func TestAssetStreamingRollbackAndCascade(t *testing.T) {
 		t.Fatal(err)
 	}
 	var count int
-	if err = s.DB.QueryRow("SELECT count(*) FROM asset_chunks").Scan(&count); err != nil || count != 0 {
+	if err = s.db.QueryRow("SELECT count(*) FROM asset_chunks").Scan(&count); err != nil || count != 0 {
 		t.Fatalf("orphaned chunks %d %v", count, err)
 	}
 }
@@ -80,9 +77,6 @@ func TestAssetCountLimit(t *testing.T) {
 	}
 	defer s.Close()
 	ctx := context.Background()
-	if e = s.InitAssets(ctx); e != nil {
-		t.Fatal(e)
-	}
 	id, e := s.Create(ctx, Link{URL: "https://example.com"})
 	if e != nil {
 		t.Fatal(e)

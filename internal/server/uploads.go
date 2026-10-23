@@ -58,7 +58,7 @@ func (a *Server) stageUpload(w http.ResponseWriter, r *http.Request, noun string
 		fail(w, 415, "upload a PDF, PNG, JPEG, GIF, WebP or HTML/SingleFile document")
 		return nil, false
 	}
-	f, err := a.temporaryDataFile(r.Context(), ".upload-*")
+	f, err := a.Store.TemporaryFile(".upload-*")
 	if err != nil {
 		handleError(w, err)
 		return nil, false

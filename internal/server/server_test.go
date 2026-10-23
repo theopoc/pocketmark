@@ -179,9 +179,7 @@ func TestCRUDSearchAndGetCannotMutate(t *testing.T) {
 			t.Fatalf("filter %s returned %+v", query, page)
 		}
 	}
-	if _, err := a.Store.DB.Exec("UPDATE links SET status='ready' WHERE id=?", link.ID); err != nil {
-		t.Fatal(err)
-	}
+	finishTestCapture(t, a.Store, link.ID, "", nil)
 	for _, mutationPath := range []string{path + "/capture", "/api/logout", "/api/import"} {
 		w = request(a, "GET", mutationPath, "", true, nil)
 		if w.Code < 400 {
@@ -238,9 +236,7 @@ func TestArchiveAlwaysDownloadsSandboxed(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw := []byte(`<html><script>alert(document.cookie)</script></html>`)
-	if _, err := a.Store.DB.Exec("UPDATE links SET archive=? WHERE id=?", raw, id); err != nil {
-		t.Fatal(err)
-	}
+	finishTestCapture(t, a.Store, id, "", raw)
 	path := fmt.Sprintf("/api/links/%d/archive", id)
 	requireStatus(t, request(a, "GET", path, "", false, nil), 401)
 	w := request(a, "GET", path, "", true, nil)
@@ -281,5 +277,16 @@ func TestValidateOrigin(t *testing.T) {
 		if err := ValidateOrigin(origin); err == nil {
 			t.Errorf("accepted bad origin %q", origin)
 		}
+	}
+}
+
+func finishTestCapture(t *testing.T, s *store.Store, id int64, content string, archive []byte) {
+	t.Helper()
+	link, err := s.Next(context.Background())
+	if err != nil || link.ID != id {
+		t.Fatalf("claim capture %d: %+v (%v)", id, link, err)
+	}
+	if err = s.Finish(context.Background(), link, "", "", content, archive, nil); err != nil {
+		t.Fatal(err)
 	}
 }

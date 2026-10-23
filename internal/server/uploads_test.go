@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -55,12 +56,14 @@ func uploadedAsset(t *testing.T, w *httptest.ResponseRecorder, standalone bool) 
 
 func requireNoStagedUploads(t *testing.T, a *Server) {
 	t.Helper()
-	var seq int
-	var name, dbPath string
-	if err := a.Store.DB.QueryRow("PRAGMA database_list").Scan(&seq, &name, &dbPath); err != nil {
+	f, err := a.Store.TemporaryFile(".inspect-*")
+	if err != nil {
 		t.Fatal(err)
 	}
-	paths, err := filepath.Glob(filepath.Join(filepath.Dir(dbPath), ".*upload-*"))
+	dir := filepath.Dir(f.Name())
+	f.Close()
+	os.Remove(f.Name())
+	paths, err := filepath.Glob(filepath.Join(dir, ".*upload-*"))
 	if err != nil || len(paths) != 0 {
 		t.Fatalf("staged uploads remain: %v (%v)", paths, err)
 	}
@@ -146,17 +149,24 @@ func TestDocumentUploadLimitsRollbackAndCleanup(t *testing.T) {
 						t.Fatalf("wrong size at exact limit: %+v", asset)
 					}
 				}
-				for table, want := range map[string]int{"links": wantLinks, "assets": wantAssets} {
-					var got int
-					if err := a.Store.DB.QueryRow("SELECT count(*) FROM " + table).Scan(&got); err != nil || got != want {
-						t.Fatalf("%s count: got %d, want %d (%v)", table, got, want, err)
-					}
+				stats, err := a.Store.Stats(context.Background())
+				if err != nil || stats.Links != wantLinks {
+					t.Fatalf("bookmark count: %+v (%v)", stats, err)
 				}
-				if wantAssets == 0 {
-					var chunks int
-					if err := a.Store.DB.QueryRow("SELECT count(*) FROM asset_chunks").Scan(&chunks); err != nil || chunks != 0 {
-						t.Fatalf("partial chunks retained: %d (%v)", chunks, err)
+				page, err := a.Store.List(context.Background(), store.Filter{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				count := 0
+				for _, link := range page.Links {
+					assets, err := a.Store.Assets(context.Background(), link.ID)
+					if err != nil {
+						t.Fatal(err)
 					}
+					count += len(assets)
+				}
+				if count != wantAssets {
+					t.Fatalf("asset count: got %d, want %d", count, wantAssets)
 				}
 				requireNoStagedUploads(t, a)
 			})
@@ -223,7 +233,7 @@ func TestDocumentUploadsKeepDatabaseAvailableAndSlotsSeparate(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
-			if err := a.Store.DB.PingContext(ctx); err != nil {
+			if err := a.Store.Ping(ctx); err != nil {
 				t.Fatalf("slow upload retained sole SQLite connection: %v", err)
 			}
 			requireStatus(t, postDocument(a, path, "application/pdf", sizedPDF(32)), 409)

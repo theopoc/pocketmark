@@ -73,7 +73,7 @@ func (s *Store) UpdateCollection(ctx context.Context, id int64, c Collection) er
 	if c.ParentID != nil && *c.ParentID <= 0 {
 		c.ParentID = nil
 	}
-	tx, e := s.DB.BeginTx(ctx, nil)
+	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return e
 	}
@@ -134,7 +134,7 @@ func (s *Store) Bulk(ctx context.Context, b BulkChange) error {
 	default:
 		return errors.New("invalid bulk action")
 	}
-	tx, e := s.DB.BeginTx(ctx, nil)
+	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return e
 	}
@@ -190,7 +190,7 @@ func (s *Store) Annotations(ctx context.Context, linkID int64) ([]Annotation, er
 	if e != nil {
 		return nil, e
 	}
-	rows, e := s.DB.QueryContext(ctx, "SELECT id,link_id,quote,start_offset,end_offset,note,color,created_at FROM annotations WHERE link_id=? ORDER BY start_offset,id", linkID)
+	rows, e := s.db.QueryContext(ctx, "SELECT id,link_id,quote,start_offset,end_offset,note,color,created_at FROM annotations WHERE link_id=? ORDER BY start_offset,id", linkID)
 	if e != nil {
 		return nil, e
 	}
@@ -216,7 +216,7 @@ func (s *Store) SaveAnnotation(ctx context.Context, linkID, id int64, a Annotati
 	if a.Color != "yellow" && a.Color != "green" && a.Color != "blue" && a.Color != "pink" {
 		return 0, errors.New("invalid highlight color")
 	}
-	tx, e := s.DB.BeginTx(ctx, nil)
+	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return 0, e
 	}
@@ -251,6 +251,6 @@ func (s *Store) SaveAnnotation(ctx context.Context, linkID, id int64, a Annotati
 	return id, tx.Commit()
 }
 func (s *Store) DeleteAnnotation(ctx context.Context, linkID, id int64) error {
-	r, e := s.DB.ExecContext(ctx, "DELETE FROM annotations WHERE id=? AND link_id=?", id, linkID)
+	r, e := s.db.ExecContext(ctx, "DELETE FROM annotations WHERE id=? AND link_id=?", id, linkID)
 	return affected(r, e)
 }

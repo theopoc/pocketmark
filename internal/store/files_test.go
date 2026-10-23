@@ -16,16 +16,13 @@ func (interruptedFile) Read(p []byte) (int, error) {
 func TestFileUploadAtomicRollback(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
-	if e := s.InitAssets(ctx); e != nil {
-		t.Fatal(e)
-	}
 	l := Link{URL: "pocketmark-file:" + strings.Repeat("a", 64), Title: "file.pdf"}
 	if _, _, e := s.CreateFile(ctx, l, Asset{Name: "file.pdf", MediaType: "application/pdf", Kind: "pdf"}, interruptedFile{}); e == nil {
 		t.Fatal("interrupted file accepted")
 	}
 	for _, table := range []string{"links", "assets", "asset_chunks"} {
 		var n int
-		if e := s.DB.QueryRow("SELECT count(*) FROM " + table).Scan(&n); e != nil || n != 0 {
+		if e := s.db.QueryRow("SELECT count(*) FROM " + table).Scan(&n); e != nil || n != 0 {
 			t.Fatalf("partial %s: %d %v", table, n, e)
 		}
 	}
