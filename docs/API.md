@@ -153,7 +153,7 @@ Annotation colors: `yellow`, `green`, `blue`, `pink`. Each bookmark supports up 
 | `PUT /api/account` | Owner-only `{username,password}`. Password 12–1024 bytes, username 1–120 bytes. Empty passwords are rejected; password sign-in cannot be disabled. Issues a replacement owner cookie. |
 | `GET /api/tokens` | Owner-only array `{id,name,createdAt,active,lastUsedAt}`; never returns secrets. |
 | `POST /api/tokens` | Owner-only `{name}` → `{id,name,createdAt,active,lastUsedAt,token}`; raw key appears once. Max 32 keys. |
-| `PATCH /api/tokens/{id}` | Owner-only `{active:boolean}` → `{ok:true}`. Disable temporarily or reactivate the same key; 404 for missing/revoked keys. |
+| `PATCH /api/tokens/{id}` | Owner-only `{name?:string,active?:boolean}` → `{ok:true}`. Supply name, active or both. Rename (1–120 UTF-8 bytes after trimming), disable temporarily or reactivate the same key; 404 for missing/deleted keys. Renaming preserves the secret, status and usage history unless active is explicitly supplied. |
 | `DELETE /api/tokens/{id}` | Owner-only permanent, immediate revocation. |
 
 Keys are active on creation. Disabling a key blocks subsequent API and WebDAV authentication without changing its secret; reactivation restores access. In-flight requests may finish. Disabled keys count toward the 32-key limit. `lastUsedAt` is a UTC RFC3339 timestamp recorded on successful credential authentication, even if the requested operation is later rejected. An empty string means no recorded use; activity before this feature was enabled cannot be recovered. Existing keys remain active when upgraded.

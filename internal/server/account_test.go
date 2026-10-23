@@ -82,7 +82,7 @@ func TestAPIKeyDisableReactivateAndActivity(t *testing.T) {
 		t.Fatal("WebDAV activity not recorded")
 	}
 	requireStatus(t, request(a, "PATCH", path, `{"active":false}`, false, bearer), 403)
-	for _, body := range []string{`{}`, `{"active":null}`, `{"active":"false"}`, `{"active":false,"name":"rename"}`} {
+	for _, body := range []string{`{}`, `{"active":null}`, `{"active":"false"}`, `{"active":false,"unexpected":"rename"}`} {
 		requireStatus(t, request(a, "PATCH", path, body, true, nil), 400)
 	}
 	requireStatus(t, request(a, "PATCH", path, `{"active":false}`, true, map[string]string{"Origin": "https://untrusted.example"}), 403)
@@ -104,6 +104,45 @@ func TestAPIKeyDisableReactivateAndActivity(t *testing.T) {
 	requireStatus(t, request(a, "DELETE", path, "", true, nil), 200)
 	requireStatus(t, request(a, "PATCH", path, `{"active":true}`, true, nil), 404)
 	requireStatus(t, request(a, "GET", "/api/stats", "", false, bearer), 401)
+}
+
+func TestAPIKeyRenameValidationAndAuthorization(t *testing.T) {
+	a := newTestServer(t, "", false)
+	w := request(a, "POST", "/api/tokens", `{"name":"Original"}`, true, nil)
+	requireStatus(t, w, 201)
+	var key apiToken
+	if err := json.Unmarshal(w.Body.Bytes(), &key); err != nil {
+		t.Fatal(err)
+	}
+	path := fmt.Sprintf("/api/tokens/%d", key.ID)
+	bearer := map[string]string{"Authorization": "Bearer " + key.Token}
+	requireStatus(t, request(a, "PATCH", path, `{"name":"Escalated"}`, false, bearer), 403)
+	requireStatus(t, request(a, "PATCH", path, `{"name":"Cross-site"}`, true, map[string]string{"Origin": "https://untrusted.example"}), 403)
+	for _, body := range []string{`{"name":null}`, `{"name":123}`, `{"name":""}`, `{"name":"   ","active":false}`, `{"name":"` + strings.Repeat("é", 61) + `"}`, `{"name":"Valid","unexpected":true}`} {
+		requireStatus(t, request(a, "PATCH", path, body, true, nil), 400)
+	}
+	keys, err := a.Store.APIKeys(context.Background())
+	if err != nil || len(keys) != 1 || keys[0].Name != "Original" || !keys[0].Active {
+		t.Fatalf("invalid rename mutated key: %+v (%v)", keys, err)
+	}
+	used := keys[0].LastUsedAt
+	w = request(a, "PATCH", path, `{"name":"  Renamed sync  "}`, true, nil)
+	requireStatus(t, w, 200)
+	if strings.Contains(w.Body.String(), key.Token) {
+		t.Fatal("rename returned secret")
+	}
+	keys, err = a.Store.APIKeys(context.Background())
+	if err != nil || keys[0].Name != "Renamed sync" || keys[0].ID != key.ID || keys[0].CreatedAt != key.CreatedAt || keys[0].LastUsedAt != used || !keys[0].Active {
+		t.Fatalf("rename changed unrelated fields: %+v (%v)", keys, err)
+	}
+	requireStatus(t, request(a, "GET", "/api/stats", "", false, bearer), 200)
+	requireStatus(t, request(a, "PATCH", path, `{"name":"Paused sync","active":false}`, true, nil), 200)
+	requireStatus(t, request(a, "PATCH", path, `{"name":"Paused renamed"}`, true, nil), 200)
+	requireStatus(t, request(a, "GET", "/api/stats", "", false, bearer), 401)
+	owner := passwordLogin(t, a).Result().Cookies()[0].String()
+	requireStatus(t, request(a, "PATCH", path, `{"name":"Back online","active":true}`, false, map[string]string{"Cookie": owner}), 200)
+	requireStatus(t, request(a, "GET", "/api/stats", "", false, bearer), 200)
+	requireStatus(t, request(a, "PATCH", "/api/tokens/999", `{"name":"Missing"}`, true, nil), 404)
 }
 func TestExtensionBearerRequiredAndDAV(t *testing.T) {
 	a := newTestServer(t, "", false)
