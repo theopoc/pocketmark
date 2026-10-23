@@ -12,7 +12,7 @@ Preuves distantes consultées :
 
 - [Protect main](https://github.com/theopoc/pocketmark/rules/25546851) : actif, PR obligatoire, zéro approbation externe exigée, conversations résolues, historique linéaire, `CI passed` fourni par GitHub Actions (`15368`), branche à jour, suppression et force push interdits, aucun acteur de bypass.
 - [Protect release tags](https://github.com/theopoc/pocketmark/rules/25546853) : mise à jour et suppression des tags `v*` interdites, aucun bypass.
-- Paramètres du dépôt : squash seul et suppression automatique de branche. Permissions Actions par défaut en lecture ; création de PR autorisée pour Release Please. La politique globale de SHA n'est pas imposée côté serveur ; les workflows versionnés épinglent déjà leurs actions.
+- Paramètres du dépôt : squash seul et suppression automatique de branche. Le titre de squash était `COMMIT_OR_PR_TITLE` ; cet audit l’a réglé sur `PR_TITLE` et a vérifié la réponse API pour aligner le message proposé avec le titre contrôlé, même avec un seul commit. Permissions Actions par défaut en lecture ; création de PR autorisée pour Release Please. La politique globale de SHA n'est pas imposée côté serveur ; les workflows versionnés épinglent déjà leurs actions.
 - [CI initiale de main](https://github.com/theopoc/pocketmark/actions/runs/40013260599) réussie ; [release initiale](https://github.com/theopoc/pocketmark/actions/runs/40013260552) échouée sur `fromJSON` avec sortie PR vide. La PR #25 apporte le fallback et les régressions d'expressions.
 - Pour cette branche, consulter [les runs CI de l'audit](https://github.com/theopoc/pocketmark/actions/workflows/ci.yml?query=branch%3Aci%2Fpipeline-audit). La preuve de livraison est le run réussi correspondant à la dernière révision de la PR, pas un run antérieur ou un simple test local.
 
@@ -20,7 +20,7 @@ Preuves distantes consultées :
 
 | Critère /2 | Initial | Branche corrigée | Justification et limite |
 | --- | ---: | ---: | --- |
-| 1. Flow et PR | 1,5 | 2 | Branches dédiées et squash existants ; titre Conventional vérifié, événements `edited` couverts, modèle de PR et procédure de merge ajoutés. Le mainteneur doit conserver le titre proposé au squash. |
+| 1. Flow et PR | 1,5 | 2 | Branches dédiées et squash existants ; titre Conventional vérifié et proposé au squash (`PR_TITLE`), événements `edited` couverts, modèle de PR et procédure de merge ajoutés. Le mainteneur peut encore éditer le titre au squash et doit conserver son format. |
 | 2. Protection de main | 2 | 2 | Rulesets actifs vérifiés, source du check et mise à jour stricte imposées, sans bypass. Zéro reviewer externe reste proportionné à un projet personnel. |
 | 3. Contrat des gates | 1,5 | 2 | Agrégateur `always()` existant ; nouvelles régressions exécutant son script réel, refus des résultats vides, et détection d'un job oublié dans `needs`. |
 | 4. Qualité et tests | 2 | 2 | Formatting/vet, intégrité et tidy Go, syntaxe, race tests, tests UI/extension et packaging. Aucun seuil global de couverture arbitraire ajouté. |
