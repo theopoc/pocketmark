@@ -35,6 +35,20 @@ def fixture(root, wrong_machine=False, extra_member=False, missing_debugger=Fals
 
 
 class ReleaseVerificationTests(unittest.TestCase):
+    def test_only_missing_releases_and_matching_empty_drafts_are_accepted(self):
+        VERIFY.verify_release_state([[]], "v0.1.0", COMMIT)
+        draft = {"tag_name": "v0.1.0", "draft": True, "prerelease": False,
+                 "target_commitish": COMMIT, "assets": []}
+        VERIFY.verify_release_state([[{"tag_name": "v0.0.1"}], [draft]], "v0.1.0", COMMIT)
+        for change in ({"draft": False}, {"prerelease": True}, {"target_commitish": "main"},
+                       {"assets": [{"name": "partial-upload"}]}):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                VERIFY.verify_release_state([[draft | change]], "v0.1.0", COMMIT)
+        for response in ({}, {"status": "403"}, {"status": "404"}, {"message": "Bad credentials"},
+                         [], [[draft], [draft]], [[None]]):
+            with self.subTest(response=response), self.assertRaises(ValueError):
+                VERIFY.verify_release_state(response, "v0.1.0", COMMIT)
+
     def test_only_approved_assets_are_copied(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

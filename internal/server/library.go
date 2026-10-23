@@ -1,8 +1,8 @@
 package server
 
 import (
-	"log"
 	"net/http"
+	"pocketmark/internal/observability"
 	"pocketmark/internal/store"
 	"strconv"
 )
@@ -86,7 +86,7 @@ func (a *Server) registerLibrary(mux *http.ServeMux) {
 		w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
 		w.Header().Set("Content-Disposition", `attachment; filename="pocketmark-bookmarks.html"`)
 		if e := a.Store.ExportHTML(r.Context(), w); e != nil {
-			log.Printf("HTML export: %v", e)
+			observability.Error(r.Context(), "html_export_failed", e)
 		}
 	})
 }

@@ -11,6 +11,8 @@ release:
     owner: theopoc
     name: pocketmark
   name_template: 'Pocketmark {{ .Tag }}'
+  use_existing_draft: true
+  mode: keep-existing
   replace_existing_artifacts: false
   extra_files:
     - glob: artifacts/verified/pocketmark-linux-amd64.tar.gz
