@@ -13,7 +13,7 @@ make build
 ./bin/pocketmark
 ```
 
-Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account. On later visits, sign in with your username and password. Once signed in, open **API keys** to create or revoke a key for each extension or client.
+Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account. On later visits, sign in with your username and password. Once signed in, open **Settings → API keys** to create or revoke a key for each extension or client.
 
 Existing installations keep their credentials and keys. If no password was configured before upgrading, follow [account recovery](API.md#existing-installations-and-account-recovery); public account creation cannot claim an existing library.
 
