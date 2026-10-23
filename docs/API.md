@@ -30,6 +30,12 @@ provenance and update instructions are in the adjacent `vendor/README.md`.
 
 Base URL: `http://127.0.0.1:8090`. API endpoints require an owner session, recovery token or named API key unless explicitly public. First-run setup and login are public. `/healthz` is unauthenticated and returns `{"status":"ok"}` when SQLite is reachable. Named keys cannot access account/key management or full backups.
 
+`GET /metrics` exposes Prometheus text metrics using the same session/bearer
+authentication. Responses include a server-generated `X-Request-ID` for log
+correlation. See [observability](OBSERVABILITY.md) for metrics, JSON log fields and
+optional OpenTelemetry tracing; `/metrics` is operational and outside the native
+JSON API specification.
+
 For these examples, load your local token without putting its value directly in the command:
 
 ```sh

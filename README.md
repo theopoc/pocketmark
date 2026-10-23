@@ -99,4 +99,5 @@ make test-extension
 - [User guide](docs/GUIDE.md) — configuration, migration and full backups.
 - [Browser extension](extension/README.md) — installation and capture tools.
 - [API](docs/API.md) — endpoints and request limits.
+- [Observability](docs/OBSERVABILITY.md) — JSON logs, authenticated metrics and optional OpenTelemetry traces.
 - [Development and CI](docs/CI.md) — checks and releases.
