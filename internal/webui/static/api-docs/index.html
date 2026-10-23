@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#15161b">
+  <title>API documentation — Pocketmark</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/api-docs/vendor/swagger-ui.css">
+  <link rel="stylesheet" href="/api-docs/docs.css">
+  <script src="/api-docs/vendor/swagger-ui-bundle.js" defer></script>
+  <script src="/api-docs/docs.js" defer></script>
+</head>
+<body class="api-docs">
+  <a class="skip-link" href="#swagger-ui">Skip to API reference</a>
+  <header class="docs-header">
+    <a class="brand" href="/" aria-label="Back to Pocketmark"><img src="/icon.svg" width="29" height="32" alt="">Pocketmark</a>
+    <nav class="reader-actions" aria-label="Documentation">
+      <a class="button subtle" href="/">Back to library</a>
+      <button id="docs-theme" class="button subtle" type="button" aria-label="Dark mode" aria-pressed="true">Dark</button>
+    </nav>
+  </header>
+  <main class="docs-main">
+    <section class="docs-intro" aria-labelledby="docs-title">
+      <div><h1 id="docs-title">API documentation</h1><p class="muted">Explore Pocketmark’s API and try requests on this instance.</p></div>
+      <a class="button subtle" href="/api-docs/openapi.json" download="pocketmark-openapi.json">Download OpenAPI</a>
+    </section>
+    <section class="docs-access" aria-labelledby="docs-access-title">
+      <details>
+        <summary><h2 id="docs-access-title">Use your session or an API key</h2></summary>
+        <p>Your signed-in session works here automatically. For an integration, create a dedicated key under <a href="/">API keys in the library</a>, then enter it in <strong>Authorize</strong>. Keys are kept in this tab’s memory and cleared on reload.</p>
+        <p class="muted">Account settings, key management and full backups require the owner session or recovery token.</p>
+      </details>
+      <p class="muted">“Try it out” sends real requests to your library.</p>
+    </section>
+    <p id="docs-status" class="muted" role="status">Loading API reference…</p>
+    <div id="docs-error" class="error-banner" role="alert" hidden>The API reference could not load. <button id="docs-retry" class="button subtle" type="button">Try again</button> or <a href="/api-docs/openapi.json">open the OpenAPI specification</a>.</div>
+    <noscript><p>Enable JavaScript to use Swagger UI, or <a href="/api-docs/openapi.json">read the OpenAPI specification</a>.</p></noscript>
+    <div id="swagger-ui" tabindex="-1" aria-label="API reference" aria-busy="true"></div>
+    <footer class="docs-footer muted">Swagger UI · Native HTTP API. <span>Floccus uses WebDAV at <code>/dav/</code>; WebDAV is outside this OpenAPI reference.</span></footer>
+  </main>
+</body>
+</html>

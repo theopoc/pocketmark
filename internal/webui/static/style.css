@@ -84,6 +84,7 @@ kbd { font-size: 11px; line-height: 1.4; font-family: inherit; display: inline-f
 .sidebar-tools { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); padding-top: 13px; gap: 2px; }
 .sidebar-tools .nav-item { font-size: 12px; padding: 9px 8px; gap: 7px; }
 .sidebar-tools .icon { width: 15px; height: 15px; }
+.api-documentation-link { text-decoration: none; font-size: 12px; margin-top: 4px; }
 .main-content { min-width: 0; outline: none; }
 .topbar { min-height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 32px; border-bottom: 1px solid var(--line); gap: 16px; }
 .topbar-location, .breadcrumb { display: flex; align-items: center; min-width: 0; gap: 13px; }
