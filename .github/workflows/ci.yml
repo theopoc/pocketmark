@@ -52,6 +52,19 @@ jobs:
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
       - name: Test release packaging
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+      - name: Check out workflow regression tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: workflow-tools
+          persist-credentials: false
+      - name: Test release workflow expressions
+        run: |
+          npm install --prefix "$RUNNER_TEMP/release-expressions" --no-save --no-package-lock \
+            --ignore-scripts --no-audit --no-fund @actions/expressions@0.3.61
+          ACTIONS_EXPRESSIONS_PATH="$RUNNER_TEMP/release-expressions/node_modules/@actions/expressions/dist/index.js" \
+            RELEASE_WORKFLOW_PATH="$GITHUB_WORKSPACE/workflow-tools/.github/workflows/release.yml" \
+            node --test workflow-tools/scripts/test_release_expressions.mjs
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           version: v2.18.3
