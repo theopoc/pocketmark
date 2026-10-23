@@ -2,6 +2,7 @@ name: Release
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
   workflow_dispatch:
 
@@ -13,43 +14,88 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  release-please:
+    name: Prepare release PR and draft
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    outputs:
+      tag: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
+        id: release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          target-branch: main
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+      # GITHUB_TOKEN-created PRs do not emit pull_request workflow runs.
+      # workflow_dispatch is an explicit exception and checks the PR's own SHA.
+      - name: Run CI on the release PR
+        if: steps.release.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ fromJSON(steps.release.outputs.pr).number }}
+        run: |
+          branch=$(gh pr view "$PR_NUMBER" --json headRefName --jq .headRefName)
+          gh workflow run ci.yml --ref "$branch"
+
   validate:
     name: Validate release ref
+    needs: release-please
+    if: >-
+      always() && (needs.release-please.outputs.tag != '' ||
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    outputs:
+      revision: ${{ steps.source.outputs.revision }}
+      tag: ${{ steps.source.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.release-please.outputs.tag || github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Require a version tag on main, or a manual dry run
+        id: source
         env:
-          RELEASE_REF: ${{ github.ref }}
+          RELEASE_REF: ${{ needs.release-please.outputs.tag || github.ref_name }}
           EVENT_NAME: ${{ github.event_name }}
         shell: bash
         run: |
           if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
             echo 'Manual run: assemble and verify packages without publishing a release.'
           else
-            [[ "$RELEASE_REF" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+            [[ "$RELEASE_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+            echo "tag=$RELEASE_REF" >> "$GITHUB_OUTPUT"
           fi
           git merge-base --is-ancestor HEAD origin/main
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   verify:
     name: Verify release source
     needs: validate
     uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.validate.outputs.revision }}
     permissions:
       contents: read
 
   assemble:
     name: Package and verify with GoReleaser
-    needs: verify
+    needs: [validate, verify]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.validate.outputs.revision }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -67,6 +113,7 @@ jobs:
       - name: Package tested binaries and allowlisted extension files
         env:
           EVENT_NAME: ${{ github.event_name }}
+          REVISION: ${{ needs.validate.outputs.revision }}
         shell: bash
         run: |
           if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
@@ -75,7 +122,7 @@ jobs:
             goreleaser release --skip=publish --clean --config .goreleaser.yaml
           fi
           python3 scripts/verify_release.py --directory dist --metadata artifacts \
-            --commit "$GITHUB_SHA" --output artifacts/verified
+            --commit "$REVISION" --output artifacts/verified
       - name: Exercise publication configuration without publishing
         run: goreleaser release --snapshot --skip=archive --clean --config .goreleaser-publish.yaml
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -87,8 +134,8 @@ jobs:
 
   publish:
     name: Publish GitHub release
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: assemble
+    if: github.event_name == 'push'
+    needs: [validate, assemble]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -96,6 +143,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.validate.outputs.revision }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -109,18 +157,17 @@ jobs:
       - name: Recheck assets and require an unpublished version
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          REVISION: ${{ needs.validate.outputs.revision }}
         shell: bash
         run: |
-          python3 scripts/verify_release.py --directory artifacts/verified --commit "$GITHUB_SHA"
-          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > "$RUNNER_TEMP/release-state.json"; then
-            echo 'Refusing to overwrite an existing release.' >&2
-            exit 1
-          fi
-          python3 - "$RUNNER_TEMP/release-state.json" <<'PY'
+          python3 scripts/verify_release.py --directory artifacts/verified --commit "$REVISION"
+          # Listing with write access includes drafts; the tag endpoint is for published releases.
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RUNNER_TEMP/release-state.json"
+          python3 - "$RUNNER_TEMP/release-state.json" "$RELEASE_TAG" "$REVISION" <<'PY'
           import json, sys
-          if str(json.load(open(sys.argv[1])).get('status')) != '404':
-              raise SystemExit('Could not establish that this release does not exist.')
+          from scripts.verify_release import verify_release_state
+          verify_release_state(json.load(open(sys.argv[1])), sys.argv[2], sys.argv[3])
           PY
       - name: Publish exactly the verified artifacts with GoReleaser
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
@@ -132,11 +179,11 @@ jobs:
 
   container:
     name: Publish and verify GHCR image
-    needs: publish
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [validate, publish]
+    if: github.event_name == 'push'
     uses: ./.github/workflows/container-release.yml
     with:
-      tag: ${{ github.ref_name }}
+      tag: ${{ needs.validate.outputs.tag }}
     permissions:
       contents: read
       checks: read
