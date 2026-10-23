@@ -132,6 +132,16 @@ Release Please remains the normal version entry point. After the GitHub release 
 
 Because the image is unchanged, its OCI revision is the source SHA and its OCI version label remains `sha-<commit>`, including when pulled via a semantic version tag. Both native platforms pull/smoke-test the published version tag and verify that digest after publication. These jobs publish to GHCR and GitHub only; they do not deploy to a server.
 
+Both SHA and version workflows call `scripts/qualify_image.py` to qualify the published image. The module owns the native pull, exact index-digest check, platform and OCI-label checks, Compose smoke test and anonymous-access check. The expected OCI version is derived from the source revision. Smoke tests run against the verified local image ID so a subsequent tag change cannot replace the tested bytes. Credentials, permissions, runner matrices and artifact retention remain in the workflows. Local PR images continue to use `scripts/smoke_docker.py` directly.
+
+For each invocation with complete arguments and a writable report destination, qualification writes a JSON report on success or failure and exits nonzero on failure. Its `stage` identifies the first failed check; `checks` records completed checks, and `smoke_checks` retains the successful smoke evidence. Expected source/image metadata is included only after input validation. Raw subprocess output, HTTP errors and credentials are excluded; untrusted failure messages are replaced by fixed diagnostics. No later check runs after a failure. CI retains this report even when qualification fails.
+
+```sh
+python3 scripts/qualify_image.py --image "ghcr.io/theopoc/pocketmark:$TAG" \
+  --digest "$DIGEST" --revision "$REVISION" --platform linux/arm64 \
+  --report reports/published-arm64.json
+```
+
 The main binaries and provenance artifacts are retained for 90 days, subject to repository retention policy. Missing/expired artifacts, a deleted digest, a failed main run or a pre-migration commit without SHA-image evidence block publication rather than silently rebuilding. Rerun the original main CI for recoverable failures; for old commits without this pipeline, create a new validated main revision/version. Build attestations are disabled so the index contains exactly two runnable platforms; this pipeline does not claim signed provenance or an SBOM. Untagged intermediate images can remain after failed builds.
 
 GHCR authentication uses the repository's short-lived `GITHUB_TOKEN`; the source label links the package to this repository. The source repository is public; GHCR package visibility is separate and must remain private. Consumers need authenticated read access. Release calls the container workflow directly because releases created with `GITHUB_TOKEN` do not emit another workflow's `release:published` event.

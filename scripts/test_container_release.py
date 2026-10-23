@@ -1,6 +1,5 @@
 """Fail closed on mutable version tags, incomplete indexes and registry errors."""
 import copy
-import io
 import importlib.util
 import json
 import os
@@ -9,7 +8,6 @@ import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
-import urllib.error
 
 SPEC = importlib.util.spec_from_file_location("container_release", Path(__file__).with_name("container_release.py"))
 RELEASE = importlib.util.module_from_spec(SPEC)
@@ -130,19 +128,6 @@ class ContainerReleaseTests(unittest.TestCase):
                 execute.assert_not_called()
                 self.assertEqual(json.loads((root / "report.json").read_text())["platforms"], EXPECTED)
 
-    def test_anonymous_access_is_denied_and_network_errors_fail_closed(self):
-        for status in (401, 403, 404, 500):
-            failure = urllib.error.HTTPError("https://ghcr.io/token", status, "synthetic", {}, None)
-            with self.subTest(status=status), patch.object(RELEASE.urllib.request, "urlopen", side_effect=failure):
-                if status == 500:
-                    with self.assertRaises(ValueError):
-                        RELEASE.private("ghcr.io/example/pocketmark", "v0.1.0")
-                else:
-                    RELEASE.private("ghcr.io/example/pocketmark", "v0.1.0")
-        with patch.object(RELEASE.urllib.request, "urlopen",
-                          side_effect=[io.BytesIO(b'{"token":"synthetic-anonymous-token"}'), io.BytesIO(b'{}')]):
-            with self.assertRaises(ValueError):
-                RELEASE.private("ghcr.io/example/pocketmark", "v0.1.0")
 
 
 if __name__ == "__main__":

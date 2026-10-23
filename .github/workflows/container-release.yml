@@ -114,16 +114,8 @@ jobs:
           ARCH: ${{ matrix.arch }}
           REVISION: ${{ needs.prepare.outputs.revision }}
         run: |
-          docker pull --platform "linux/$ARCH" "$IMAGE:$TAG"
-          docker image inspect "$IMAGE:$TAG" --format '{{json .RepoDigests}}' > repo-digests.json
-          python3 - "$IMAGE@$DIGEST" <<'PY'
-          import json, sys
-          if sys.argv[1] not in json.load(open('repo-digests.json')):
-              raise SystemExit('Published tag does not resolve to the verified index digest.')
-          PY
-          python3 scripts/smoke_docker.py --image "$IMAGE:$TAG" --platform "linux/$ARCH" \
-            --revision "$REVISION" --version "sha-$REVISION" --output "reports/published-$ARCH.json"
-          python3 scripts/container_release.py private --image "$IMAGE" --tag "$TAG"
+          python3 scripts/qualify_image.py --image "$IMAGE:$TAG" --digest "$DIGEST" \
+            --revision "$REVISION" --platform "linux/$ARCH" --report "reports/published-$ARCH.json"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

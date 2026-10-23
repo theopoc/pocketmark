@@ -7,9 +7,6 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
-import urllib.error
-import urllib.parse
-import urllib.request
 
 from validated_ci import wait
 
@@ -117,29 +114,6 @@ def publish(image, tag, revision, directory, report):
     print(report.read_text())
 
 
-def private(image, tag):
-    image_tag(tag)
-    require(re.fullmatch(r"ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+", image), "invalid registry image")
-    repository = image.removeprefix("ghcr.io/")
-    query = urllib.parse.urlencode({"service": "ghcr.io", "scope": f"repository:{repository}:pull"})
-    try:
-        with urllib.request.urlopen("https://ghcr.io/token?" + query, timeout=30) as response:
-            token = json.load(response)["token"]
-        request = urllib.request.Request(f"https://ghcr.io/v2/{repository}/manifests/{tag}", headers={
-            "Authorization": "Bearer " + token,
-            "Accept": "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json",
-        })
-        with urllib.request.urlopen(request, timeout=30):
-            pass
-    except urllib.error.HTTPError as error:
-        status = error.code
-        error.close()
-        require(status in (401, 403, 404), "cannot establish private registry access")
-        print("Anonymous pull is denied for the authenticated, successfully pulled release image.")
-        return
-    raise ValueError("release image is anonymously readable; expected a private package")
-
-
 def promote(image, tag, revision, run_id):
     """Copy the validated main index byte-for-byte; never build or retag another commit."""
     tag_name(tag)
@@ -183,17 +157,12 @@ def main():
         publication.add_argument("--" + name, required=True)
     publication.add_argument("--directory", type=Path, required=True)
     publication.add_argument("--report", type=Path, required=True)
-    privacy = commands.add_parser("private")
-    privacy.add_argument("--image", required=True)
-    privacy.add_argument("--tag", required=True)
     promotion = commands.add_parser("promote")
     for name in ("image", "tag", "revision", "run-id"):
         promotion.add_argument("--" + name, required=True)
     args = parser.parse_args()
     if args.command == "prepare":
         prepare(args.tag)
-    elif args.command == "private":
-        private(args.image, args.tag)
     elif args.command == "promote":
         promote(args.image, args.tag, args.revision, args.run_id)
     elif args.command == "record":

@@ -11,7 +11,13 @@ class ImageFlowTests(unittest.TestCase):
         self.assertNotIn("docker/build-push-action", release)
         self.assertNotIn("docker build ", release)
         self.assertIn("scripts/container_release.py promote", release)
-        self.assertIn('--version "sha-$REVISION"', release)
+
+    def test_published_images_use_the_same_qualification_module(self):
+        for name in ("main-image.yml", "container-release.yml"):
+            workflow = (ROOT / ".github/workflows" / name).read_text()
+            self.assertIn("python3 scripts/qualify_image.py", workflow)
+            self.assertNotIn("repo-digests.json", workflow)
+            self.assertNotIn("container_release.py private", workflow)
 
     def test_pr_and_final_main_images_run_browser_tests(self):
         ci = (ROOT / ".github/workflows/ci.yml").read_text()
