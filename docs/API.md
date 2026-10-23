@@ -170,7 +170,7 @@ curl --fail-with-body -X PUT \
   --data-binary @/private/path/account.json "$POCKETMARK_URL/api/account"
 ```
 
-Use the local server address or HTTPS, delete the private JSON file afterward, and sign in normally with the new credentials. The server's `access-token` file / `POCKETMARK_TOKEN` remains an administrative API recovery credential and session-signing secret; it is never accepted by `/api/login`. Keep it private and preserve it with server backups. Ordinary integrations should use named keys from the signed-in **API keys** menu.
+Use the local server address or HTTPS, delete the private JSON file afterward, and sign in normally with the new credentials. The server's `access-token` file / `POCKETMARK_TOKEN` remains an administrative API recovery credential and session-signing secret; it is never accepted by `/api/login`. Keep it private and preserve it with server backups. Ordinary integrations should use named keys from the signed-in **Settings → API keys** section.
 
 ## Compatibility and synchronization
 

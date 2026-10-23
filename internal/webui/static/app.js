@@ -1026,8 +1026,20 @@
     $("login-help").textContent = setupRequired ? "Choose a password of at least 12 characters. This instance has one personal account." : passwordEnabled ? "Use your Pocketmark username and password." : "Your existing library needs a password. Ask the server administrator to configure it using the account recovery instructions.";
     $("login-submit").disabled = !setupRequired && !passwordEnabled;
   }
-  async function loadTokens() {
+  let settingsSession = 0;
+  function setTokenVisibility(visible) {
+    $("new-token-value").type = visible ? "text" : "password";
+    $("toggle-token").textContent = visible ? "Hide key" : "Show key";
+    $("toggle-token").setAttribute("aria-label", visible ? "Hide API key" : "Show API key");
+  }
+  function clearNewToken() {
+    $("new-token-value").value = "";
+    $("new-token").hidden = true;
+    setTokenVisibility(false);
+  }
+  async function loadTokens(session = settingsSession) {
     const tokens = await api("/api/tokens");
+    if (session !== settingsSession) return;
     $("token-list").replaceChildren();
     if (!tokens?.length) $("token-list").append(el("p", "small muted", "No API keys yet."));
     for (const token of tokens || []) {
@@ -1042,22 +1054,26 @@
       row.append(revoke); $("token-list").append(row);
     }
   }
-  $("api-keys-button").addEventListener("click", async () => {
-    $("tokens-error").textContent = "";
-    $("new-token-value").value = ""; $("new-token").hidden = true;
-    $("api-keys-dialog").showModal();
-    try { await loadTokens(); } catch (error) { $("tokens-error").textContent = error.message; }
-  });
   $("settings-button").addEventListener("click", async () => {
+    const session = ++settingsSession;
     $("settings-error").textContent = "";
-    $("new-token-value").value = ""; $("new-token").hidden = true;
+    $("tokens-error").textContent = "";
+    $("token-list").replaceChildren(el("p", "small muted", "Loading API keys…"));
+    clearNewToken();
     $("account-password").value = "";
     $("settings-dialog").showModal();
-    try {
-      const account = await api("/api/account");
-      $("account-username").value = account.username || "";
-      $("account-status").textContent = account.passwordEnabled ? "Password sign-in is enabled." : "Password sign-in is not configured.";
-    } catch (error) { $("settings-error").textContent = error.message; }
+    await Promise.all([
+      loadTokens(session).catch((error) => {
+        if (session !== settingsSession) return;
+        $("token-list").replaceChildren();
+        $("tokens-error").textContent = error.message;
+      }),
+      api("/api/account").then((account) => {
+        if (session !== settingsSession) return;
+        $("account-username").value = account.username || "";
+        $("account-status").textContent = account.passwordEnabled ? "Password sign-in is enabled." : "Password sign-in is not configured.";
+      }).catch((error) => { if (session === settingsSession) $("settings-error").textContent = error.message; }),
+    ]);
   });
   $("account-form").addEventListener("submit", async (event) => {
     event.preventDefault(); event.submitter.disabled = true; $("settings-error").textContent = "";
@@ -1067,16 +1083,20 @@
     } catch (error) { $("settings-error").textContent = error.message; } finally { event.submitter.disabled = false; }
   });
   $("token-form").addEventListener("submit", async (event) => {
+    const session = settingsSession;
     event.preventDefault(); event.submitter.disabled = true; $("tokens-error").textContent = "";
     try {
       const token = await api("/api/tokens", { method: "POST", body: JSON.stringify({ name: $("token-name").value.trim() }) });
+      if (session !== settingsSession) return;
+      setTokenVisibility(false);
       $("new-token-value").value = token.token; $("new-token").hidden = false; $("token-name").value = "";
-      await loadTokens();
-    } catch (error) { $("tokens-error").textContent = error.message; } finally { event.submitter.disabled = false; }
+      $("new-token-value").focus();
+      await loadTokens(session);
+    } catch (error) { if (session === settingsSession) $("tokens-error").textContent = error.message; } finally { event.submitter.disabled = false; }
   });
-  $("copy-token").addEventListener("click", async () => { try { await navigator.clipboard.writeText($("new-token-value").value); toast("Key copied."); } catch { $("new-token-value").select(); toast("Select and copy the key."); } });
-  $("settings-dialog").addEventListener("close", () => { $("account-password").value = ""; });
-  $("api-keys-dialog").addEventListener("close", () => { $("new-token-value").value = ""; $("new-token").hidden = true; });
+  $("toggle-token").addEventListener("click", () => setTokenVisibility($("new-token-value").type === "password"));
+  $("copy-token").addEventListener("click", async () => { try { await navigator.clipboard.writeText($("new-token-value").value); toast("Key copied."); } catch { setTokenVisibility(true); $("new-token-value").select(); toast("Select and copy the key."); } });
+  $("settings-dialog").addEventListener("close", () => { settingsSession++; $("account-password").value = ""; clearNewToken(); });
   $("export-button").addEventListener("click", () => $("export-dialog").showModal());
 
   function openSharedLink() {

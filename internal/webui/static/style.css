@@ -229,7 +229,10 @@ body:has(dialog[open]) { overflow: hidden; }
 .help-details li + li { margin-top: 8px; }
 .help-details code { overflow-wrap: anywhere; }
 #new-token { margin: 16px 0; padding: 16px; border-radius: 8px; background: var(--accent-soft); }
-#new-token input { font-family: ui-monospace, monospace; margin-bottom: 8px; }
+#new-token input { font-family: ui-monospace, monospace; }
+#new-token label { margin-top: 0; }
+.token-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.token-actions .button { min-height: 44px; }
 /* Reader: comfortable measure inside the same product language. */
 .reader-modal { width: min(920px,calc(100vw - 40px)); padding: 24px 40px 40px; }
 .reader-heading-label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 550; }
