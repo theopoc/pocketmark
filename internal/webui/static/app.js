@@ -1084,10 +1084,14 @@
       const row = el("li", "token-row");
       const details = el("div", "token-details");
       const heading = el("div", "token-name-row");
-      const rename = el("button", "text-button token-rename", "Rename");
+      const rename = el("button", "icon-button token-rename");
+      rename.append(icon("edit"));
       rename.type = "button";
       rename.setAttribute("aria-label", `Rename ${token.name}`);
-      heading.append(el("strong", "token-name", token.name), el("span", `token-status${token.active ? " is-active" : ""}`, token.active ? "Active" : "Disabled"), rename);
+      rename.title = `Rename ${token.name}`;
+      const nameGroup = el("div", "token-name-group");
+      nameGroup.append(el("strong", "token-name", token.name), rename);
+      heading.append(nameGroup, el("span", `token-status${token.active ? " is-active" : ""}`, token.active ? "Active" : "Disabled"));
       const metadata = el("dl", "token-metadata");
       for (const [label, value] of [["Created", token.createdAt], ["Last used", token.lastUsedAt]]) {
         const group = el("div", "");
