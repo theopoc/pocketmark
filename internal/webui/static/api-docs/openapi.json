@@ -1,0 +1,3171 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Pocketmark HTTP API",
+    "version": "1.0.0",
+    "description": "Native API for your personal bookmark library. JSON errors have an error field. Browser requests use the existing owner session automatically; integrations send `Authorization: Bearer <key>`. Named keys cannot manage the account, API keys or full backups. First-run setup, login and health are public. Mutations enforce same-origin browser checks; configure POCKETMARK_ORIGIN to the exact public origin behind a reverse proxy. Limits measured in bytes are UTF-8 byte limits, not character counts. At most eight concurrent requests; excess work returns 503. “Try it out” performs real operations on this instance. WebDAV /dav/ and removed Linkwarden compatibility routes are outside this reference."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "This Pocketmark instance"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Authentication",
+      "description": "Password sign-in and first-run setup."
+    },
+    {
+      "name": "Bookmarks",
+      "description": "Search, save and organize bookmarks."
+    },
+    {
+      "name": "Collections",
+      "description": "Nested folders for your library."
+    },
+    {
+      "name": "Tags",
+      "description": "Frequent tags and the full directory."
+    },
+    {
+      "name": "Captures & files",
+      "description": "Capture pages, upload files and read saved content."
+    },
+    {
+      "name": "Annotations",
+      "description": "Highlights anchored to captured text."
+    },
+    {
+      "name": "Import & export",
+      "description": "Move metadata or download a full owner backup."
+    },
+    {
+      "name": "Account & keys",
+      "description": "Owner-only credentials and integration keys."
+    },
+    {
+      "name": "Library",
+      "description": "Library totals and capture counts."
+    },
+    {
+      "name": "Health",
+      "description": "Public database availability check."
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    },
+    {
+      "ownerSession": []
+    }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "operationId": "health",
+        "tags": [
+          "Health"
+        ],
+        "summary": "Check database health",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/setup": {
+      "get": {
+        "operationId": "setupStatus",
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Check first-run setup",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupStatus"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "security": []
+      },
+      "post": {
+        "operationId": "setup",
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Create the first owner account",
+        "responses": {
+          "201": {
+            "description": "Account created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "headers": {
+              "Set-Cookie": {
+                "description": "Seven-day HttpOnly, SameSite=Strict pocketmark session cookie. Secure when HTTPS is configured.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "description": "Only permitted on a new, empty instance. Existing installations cannot be claimed through setup. Shares the login rate limit.",
+        "requestBody": {
+          "required": true,
+          "description": "4 KiB JSON limit. Username 1–120 bytes; password 12–1024 bytes.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Credentials"
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/login": {
+      "post": {
+        "operationId": "login",
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Sign in with a password",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "headers": {
+              "Set-Cookie": {
+                "description": "Seven-day HttpOnly, SameSite=Strict pocketmark session cookie. Secure when HTTPS is configured.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "4 KiB JSON limit. Only username/password are accepted; tokens cannot log in.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Credentials"
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/logout": {
+      "post": {
+        "operationId": "logout",
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Sign out",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "description": "Expires the browser session cookie. Does not revoke API keys or the recovery token."
+      }
+    },
+    "/api/session": {
+      "get": {
+        "operationId": "session",
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Check authentication",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/api/account": {
+      "get": {
+        "operationId": "account",
+        "tags": [
+          "Account & keys"
+        ],
+        "summary": "Read account settings",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "x-owner-only": true,
+        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. "
+      },
+      "put": {
+        "operationId": "setAccount",
+        "tags": [
+          "Account & keys"
+        ],
+        "summary": "Change owner credentials",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            },
+            "headers": {
+              "Set-Cookie": {
+                "description": "Seven-day HttpOnly, SameSite=Strict pocketmark session cookie. Secure when HTTPS is configured.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "x-owner-only": true,
+        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. Invalidates older owner cookies and issues a replacement. Named keys remain valid.",
+        "requestBody": {
+          "required": true,
+          "description": "4 KiB JSON limit. Username 1–120 bytes; password 12–1024 bytes. Password sign-in cannot be disabled.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Credentials"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tokens": {
+      "get": {
+        "operationId": "listKeys",
+        "tags": [
+          "Account & keys"
+        ],
+        "summary": "List API keys",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/APIKey"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "x-owner-only": true,
+        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. Never returns the secret token."
+      },
+      "post": {
+        "operationId": "createKey",
+        "tags": [
+          "Account & keys"
+        ],
+        "summary": "Create an API key",
+        "responses": {
+          "201": {
+            "description": "Key created; secret is returned once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIKey"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "x-owner-only": true,
+        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. ",
+        "requestBody": {
+          "required": true,
+          "description": "4 KiB JSON limit. At most 32 keys per instance.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeyInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tokens/{id}": {
+      "delete": {
+        "operationId": "revokeKey",
+        "tags": [
+          "Account & keys"
+        ],
+        "summary": "Revoke an API key",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "x-owner-only": true,
+        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. Revocation takes effect immediately."
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "description": "Bookmark, collection or key ID, according to the endpoint."
+        }
+      ]
+    },
+    "/api/stats": {
+      "get": {
+        "operationId": "stats",
+        "tags": [
+          "Library"
+        ],
+        "summary": "Read library counts",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stats"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/api/tags": {
+      "get": {
+        "operationId": "frequentTags",
+        "tags": [
+          "Tags"
+        ],
+        "summary": "List frequent tags",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Tag"
+                  },
+                  "maxItems": 200
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "description": "At most 200 tags, ordered by count descending then name."
+      }
+    },
+    "/api/tags/browse": {
+      "get": {
+        "operationId": "browseTags",
+        "tags": [
+          "Tags"
+        ],
+        "summary": "Browse the tag directory",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagBrowse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "description": "Alphabetical order grouped by A–Z, followed by # for other initials. Groups contain distinct tag counts across all matching pages.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Literal ASCII case-insensitive substring; at most 512 UTF-8 bytes. % and _ are literal.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "One-based page; 40 tags per page.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000,
+              "default": 1
+            }
+          },
+          {
+            "name": "jump",
+            "in": "query",
+            "required": false,
+            "description": "Jump to the first matching tag under A–Z or #. Encode # as %23. The response reports the resolved page.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z#]$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/collections": {
+      "get": {
+        "operationId": "listCollections",
+        "tags": [
+          "Collections"
+        ],
+        "summary": "List collections",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Collection"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createCollection",
+        "tags": [
+          "Collections"
+        ],
+        "summary": "Create a collection",
+        "responses": {
+          "201": {
+            "description": "Collection created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Collection"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "64 KiB JSON limit.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectionInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/collections/{id}": {
+      "put": {
+        "operationId": "updateCollection",
+        "tags": [
+          "Collections"
+        ],
+        "summary": "Update a collection",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "description": "Rejects self-parenting and cycles. Omitted description is preserved; an empty string clears it.",
+        "requestBody": {
+          "required": true,
+          "description": "64 KiB JSON limit.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectionInput"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteCollection",
+        "tags": [
+          "Collections"
+        ],
+        "summary": "Delete a collection",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "description": "Moves direct bookmarks to the inbox and makes child collections roots."
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "description": "Bookmark, collection or key ID, according to the endpoint."
+        }
+      ]
+    },
+    "/api/links": {
+      "get": {
+        "operationId": "listLinks",
+        "tags": [
+          "Bookmarks"
+        ],
+        "summary": "Search bookmarks",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "description": "Filters combine with AND, except exact URL lookup. List records omit captured text. Pages contain up to 40 records.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Space-separated literal prefix terms, case/diacritic insensitive. Searches metadata, notes, tags and captured text; at most 512 UTF-8 bytes.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "collection",
+            "in": "query",
+            "required": false,
+            "description": "Exact collection ID; 0 selects the inbox. Does not include descendants.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "description": "Exact tag name.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "favorite",
+            "in": "query",
+            "required": false,
+            "description": "1 selects favorites only.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          },
+          {
+            "name": "unread",
+            "in": "query",
+            "required": false,
+            "description": "1 selects unread bookmarks only.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "One-based page. Omitted, invalid or nonpositive values become 1.",
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "maximum": 1000000
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "description": "Result order.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "newest",
+                "oldest",
+                "title",
+                "title_desc",
+                "updated"
+              ],
+              "default": "newest"
+            }
+          },
+          {
+            "name": "fuzzy",
+            "in": "query",
+            "required": false,
+            "description": "1 enables bounded edit-distance-one metadata matching; captured bodies are excluded.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          },
+          {
+            "name": "url",
+            "in": "query",
+            "required": false,
+            "description": "Exact duplicate URL lookup, at most 4096 UTF-8 bytes; bypasses other filters.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "createLink",
+        "tags": [
+          "Bookmarks"
+        ],
+        "summary": "Create a bookmark",
+        "responses": {
+          "201": {
+            "description": "Bookmark created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Link"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "100 KiB JSON limit. New bookmarks start pending; captures run only when the worker is enabled.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/links/{id}": {
+      "get": {
+        "operationId": "getLink",
+        "tags": [
+          "Bookmarks"
+        ],
+        "summary": "Read a bookmark",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Link"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "description": "Includes captured content when available."
+      },
+      "put": {
+        "operationId": "updateLink",
+        "tags": [
+          "Bookmarks"
+        ],
+        "summary": "Replace bookmark fields",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Link"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "description": "Omitted tags/flags/notes are cleared. A changed URL clears the old capture and queues a new one. Editing other fields preserves the capture. Standalone files must retain their URL.",
+        "requestBody": {
+          "required": true,
+          "description": "100 KiB JSON limit. Send every editable field to retain; this is a replacement, not a partial patch.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkInput"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteLink",
+        "tags": [
+          "Bookmarks"
+        ],
+        "summary": "Delete a bookmark",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "description": "Also deletes its capture, attachments and annotations."
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "description": "Bookmark, collection or key ID, according to the endpoint."
+        }
+      ]
+    },
+    "/api/links/bulk": {
+      "post": {
+        "operationId": "bulkLinks",
+        "tags": [
+          "Bookmarks"
+        ],
+        "summary": "Apply a bulk action",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "updated": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 500
+                    }
+                  },
+                  "required": [
+                    "updated"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "description": "One transaction; any failure rolls back every change. tags replaces all tags, move uses collectionId, favorite/read use value, capture queues website bookmarks.",
+        "requestBody": {
+          "required": true,
+          "description": "64 KiB JSON limit. Select 1–500 unique positive IDs.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/links/{id}/capture": {
+      "post": {
+        "operationId": "captureLink",
+        "tags": [
+          "Captures & files"
+        ],
+        "summary": "Queue or retry capture",
+        "responses": {
+          "202": {
+            "description": "Capture queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "description": "No request body. A processing bookmark or standalone file returns 404. When the worker is disabled the job remains queued."
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "description": "Bookmark, collection or key ID, according to the endpoint."
+        }
+      ]
+    },
+    "/api/links/{id}/archive": {
+      "get": {
+        "operationId": "downloadArchive",
+        "tags": [
+          "Captures & files"
+        ],
+        "summary": "Download captured HTML",
+        "responses": {
+          "200": {
+            "description": "Original HTML as an attachment named page.html",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "Attachment filename.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "description": "Bookmark, collection or key ID, according to the endpoint."
+        }
+      ]
+    },
+    "/api/links/{id}/annotations": {
+      "get": {
+        "operationId": "listAnnotations",
+        "tags": [
+          "Annotations"
+        ],
+        "summary": "List highlights and notes",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Annotation"
+                  },
+                  "maxItems": 200
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "description": "Stale anchors remain visible rather than being silently moved after a content change."
+      },
+      "post": {
+        "operationId": "createAnnotation",
+        "tags": [
+          "Annotations"
+        ],
+        "summary": "Create a highlight",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "format": "int64",
+                      "minimum": 1
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "32 KiB JSON limit. At most 200 annotations per bookmark. Offsets count Unicode code points.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnotationInput"
+              }
+            }
+          }
+        }
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "description": "Bookmark, collection or key ID, according to the endpoint."
+        }
+      ]
+    },
+    "/api/links/{id}/annotations/{annotationId}": {
+      "put": {
+        "operationId": "updateAnnotation",
+        "tags": [
+          "Annotations"
+        ],
+        "summary": "Replace a highlight",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "format": "int64",
+                      "minimum": 1
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "32 KiB JSON limit. At most 200 annotations per bookmark. Offsets count Unicode code points.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnotationInput"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteAnnotation",
+        "tags": [
+          "Annotations"
+        ],
+        "summary": "Delete a highlight",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "description": "Bookmark, collection or key ID, according to the endpoint."
+        },
+        {
+          "name": "annotationId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "description": "Annotation ID belonging to this bookmark."
+        }
+      ]
+    },
+    "/api/links/{id}/assets": {
+      "get": {
+        "operationId": "listAssets",
+        "tags": [
+          "Captures & files"
+        ],
+        "summary": "List attachments",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Asset"
+                  },
+                  "maxItems": 32
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      },
+      "post": {
+        "operationId": "uploadAsset",
+        "tags": [
+          "Captures & files"
+        ],
+        "summary": "Attach a file",
+        "responses": {
+          "201": {
+            "description": "Attachment saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Asset"
+                }
+              }
+            },
+            "headers": {
+              "X-Pocketmark-Warning": {
+                "description": "The HTML file was saved but reader indexing failed or exceeded extraction limits.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "Raw bytes, not multipart form data. At most 20 MiB and 32 attachments per bookmark. Content is sniffed; HTML is indexed for reading/search when extraction succeeds.",
+          "content": {
+            "application/pdf": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/gif": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "text/html": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "description": "Optional filename, at most 240 UTF-8 bytes without path separators. Defaults to document.pdf, page.html or image.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "description": "Bookmark, collection or key ID, according to the endpoint."
+        }
+      ]
+    },
+    "/api/files": {
+      "post": {
+        "operationId": "createFile",
+        "tags": [
+          "Captures & files"
+        ],
+        "summary": "Upload a standalone file",
+        "responses": {
+          "201": {
+            "description": "File and bookmark created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileResult"
+                }
+              }
+            },
+            "headers": {
+              "X-Pocketmark-Warning": {
+                "description": "The HTML file was saved but reader indexing failed or exceeded extraction limits.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "Raw PDF/image/HTML bytes, not multipart form data; at most 20 MiB. Creates a bookmark with a server-managed pocketmark-file URL.",
+          "content": {
+            "application/pdf": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/gif": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "text/html": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "description": "Required filename, 1–240 UTF-8 bytes without path separators.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "collection",
+            "in": "query",
+            "required": false,
+            "description": "Destination collection; omit or use 0 for the inbox.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ]
+      }
+    },
+    "/api/assets/{assetId}": {
+      "get": {
+        "operationId": "downloadAsset",
+        "tags": [
+          "Captures & files"
+        ],
+        "summary": "Download an attachment",
+        "responses": {
+          "200": {
+            "description": "Original bytes, streamed as an attachment with restrictive CSP",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "Attachment filename.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteAsset",
+        "tags": [
+          "Captures & files"
+        ],
+        "summary": "Delete an attachment",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      },
+      "parameters": [
+        {
+          "name": "assetId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "description": "Attachment ID."
+        }
+      ]
+    },
+    "/api/links/{id}/preserve": {
+      "post": {
+        "operationId": "preserveLink",
+        "tags": [
+          "Captures & files"
+        ],
+        "summary": "Preserve an offline HTML copy",
+        "responses": {
+          "201": {
+            "description": "Offline attachment created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreserveResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "description": "No request body. Fetches a passive HTML page with bounded embedded resources and SSRF filtering. Scripts are not executed. Some resources may be omitted; inspect the returned counts."
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "description": "Bookmark, collection or key ID, according to the endpoint."
+        }
+      ]
+    },
+    "/api/links/{id}/reader": {
+      "get": {
+        "operationId": "readHTML",
+        "tags": [
+          "Captures & files"
+        ],
+        "summary": "Read sandboxed HTML",
+        "responses": {
+          "200": {
+            "description": "Sandboxed structural HTML reader",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "413": {
+            "$ref": "#/components/responses/413"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "description": "At most 2 MiB input and 1 MiB output. Upload or capture HTML first. The response has a sandbox CSP and cannot run scripts.",
+        "parameters": [
+          {
+            "name": "asset",
+            "in": "query",
+            "required": false,
+            "description": "HTML attachment belonging to this bookmark. When omitted, prefers the latest uploaded HTML attachment, then the captured page.",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "description": "Bookmark, collection or key ID, according to the endpoint."
+        }
+      ]
+    },
+    "/api/import": {
+      "post": {
+        "operationId": "importJSON",
+        "tags": [
+          "Import & export"
+        ],
+        "summary": "Import bookmark JSON",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "description": "Transactional metadata import. Duplicate URLs and unsupported uploaded-file types are skipped; invalid records roll back the import. Does not import captured assets or annotations.",
+        "requestBody": {
+          "required": true,
+          "description": "Raw Pocketmark v1 or legacy export JSON, not multipart. Extra source fields are accepted. At most 8 MiB, 10,000 links and 2,000 collections.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": true,
+                "example": {
+                  "format": "pocketmark",
+                  "version": 1,
+                  "collections": [],
+                  "links": [
+                    {
+                      "url": "https://go.dev/doc/",
+                      "title": "Go documentation",
+                      "tags": [
+                        "go"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/import/html": {
+      "post": {
+        "operationId": "importHTML",
+        "tags": [
+          "Import & export"
+        ],
+        "summary": "Import browser bookmarks",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "Raw Netscape bookmark HTML, not multipart. At most 8 MiB; nested folders are imported transactionally.",
+          "content": {
+            "text/html": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/export": {
+      "get": {
+        "operationId": "exportJSON",
+        "tags": [
+          "Import & export"
+        ],
+        "summary": "Export bookmark metadata",
+        "responses": {
+          "200": {
+            "description": "Pocketmark v1 JSON download; excludes assets and annotations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataExport"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "Attachment filename.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/api/export/html": {
+      "get": {
+        "operationId": "exportHTML",
+        "tags": [
+          "Import & export"
+        ],
+        "summary": "Export browser bookmarks",
+        "responses": {
+          "200": {
+            "description": "Netscape bookmark HTML download; excludes saved files and captures",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "Attachment filename.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        }
+      }
+    },
+    "/api/backup": {
+      "get": {
+        "operationId": "backup",
+        "tags": [
+          "Import & export"
+        ],
+        "summary": "Download a full backup",
+        "responses": {
+          "200": {
+            "description": "ZIP stream containing a consistent SQLite snapshot and restore instructions",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "Attachment filename.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "x-owner-only": true,
+        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. Includes captures, attachments, annotations and account settings. Keep the recovery token separately. Restore into an empty data directory while the server is stopped, following RESTORE.txt."
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Paste a dedicated API key without the Bearer prefix. Named keys have library access only. Account/key management and backups require the owner session or administrative recovery token. Authorization is not persisted across reloads."
+      },
+      "ownerSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "pocketmark",
+        "description": "Existing HttpOnly owner session, sent automatically by the browser. Sign in from the library or POST /api/login; do not paste a cookie here. Browsers cannot set HttpOnly cookies from Swagger’s Authorize dialog."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "example": "sign in required"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "OK": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "Session": {
+        "type": "object",
+        "properties": {
+          "authenticated": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        },
+        "required": [
+          "authenticated"
+        ]
+      },
+      "Credentials": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "Username; 1–120 UTF-8 bytes after trimming when setting credentials.",
+            "example": "reader"
+          },
+          "password": {
+            "type": "string",
+            "description": "Password; 12–1024 UTF-8 bytes when setting credentials.",
+            "format": "password",
+            "writeOnly": true
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "username",
+          "password"
+        ]
+      },
+      "SetupStatus": {
+        "type": "object",
+        "properties": {
+          "setupRequired": {
+            "type": "boolean"
+          },
+          "passwordEnabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "setupRequired",
+          "passwordEnabled"
+        ]
+      },
+      "Account": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "passwordEnabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "username",
+          "passwordEnabled"
+        ]
+      },
+      "APIKey": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "token": {
+            "type": "string",
+            "description": "Only returned on creation. Copy once; it cannot be retrieved later.",
+            "readOnly": true
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "createdAt"
+        ]
+      },
+      "KeyInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "1–120 UTF-8 bytes after trimming.",
+            "example": "My integration"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ]
+      },
+      "Stats": {
+        "type": "object",
+        "properties": {
+          "links": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "collections": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pending": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Includes pending and processing captures."
+          },
+          "failed": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "links",
+          "collections",
+          "pending",
+          "failed"
+        ]
+      },
+      "Tag": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "name",
+          "count"
+        ]
+      },
+      "TagBrowse": {
+        "type": "object",
+        "properties": {
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "letter": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "count",
+                "letter"
+              ]
+            }
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "letter": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "letter",
+                "count"
+              ]
+            },
+            "maxItems": 27
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "enum": [
+              40
+            ]
+          }
+        },
+        "required": [
+          "tags",
+          "groups",
+          "total",
+          "page",
+          "pageSize"
+        ]
+      },
+      "CollectionInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "1–120 UTF-8 bytes after trimming.",
+            "example": "Reading"
+          },
+          "parentId": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "nullable": true,
+            "description": "Null or omitted creates a root collection."
+          },
+          "description": {
+            "type": "string",
+            "description": "At most 8 KiB UTF-8. On update, omitted/null preserves the description; an empty string clears it.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "example": {
+          "name": "Reading",
+          "parentId": null,
+          "description": ""
+        }
+      },
+      "Collection": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "description": "1–120 UTF-8 bytes after trimming.",
+            "example": "Reading"
+          },
+          "parentId": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "nullable": true,
+            "description": "Null or omitted creates a root collection."
+          },
+          "description": {
+            "type": "string",
+            "description": "At most 8 KiB UTF-8. On update, omitted/null preserves the description; an empty string clears it.",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "parentId"
+        ]
+      },
+      "LinkInput": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "HTTP(S) URL without embedded credentials, at most 4096 UTF-8 bytes. Existing standalone files retain their pocketmark-file URL.",
+            "example": "https://go.dev/doc/"
+          },
+          "title": {
+            "type": "string",
+            "description": "At most 1 KiB UTF-8. Empty defaults to the URL.",
+            "example": "Go documentation"
+          },
+          "description": {
+            "type": "string",
+            "description": "At most 8 KiB UTF-8."
+          },
+          "notes": {
+            "type": "string",
+            "description": "At most 64 KiB UTF-8."
+          },
+          "collectionId": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "nullable": true,
+            "description": "Null or omitted selects the inbox."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "At most 80 UTF-8 bytes after trimming."
+            },
+            "maxItems": 32,
+            "example": [
+              "go",
+              "reference"
+            ]
+          },
+          "favorite": {
+            "type": "boolean",
+            "default": false
+          },
+          "read": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "url"
+        ],
+        "example": {
+          "url": "https://go.dev/doc/",
+          "title": "Go documentation",
+          "description": "Language reference",
+          "notes": "Read the concurrency section",
+          "collectionId": null,
+          "tags": [
+            "go",
+            "reference"
+          ],
+          "favorite": false,
+          "read": false
+        }
+      },
+      "Link": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "type": {
+            "type": "string",
+            "description": "Website or standalone file.",
+            "enum": [
+              "url",
+              "file"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "description": "HTTP(S) URL without embedded credentials, at most 4096 UTF-8 bytes. Existing standalone files retain their pocketmark-file URL.",
+            "example": "https://go.dev/doc/"
+          },
+          "title": {
+            "type": "string",
+            "description": "At most 1 KiB UTF-8. Empty defaults to the URL.",
+            "example": "Go documentation"
+          },
+          "description": {
+            "type": "string",
+            "description": "At most 8 KiB UTF-8."
+          },
+          "notes": {
+            "type": "string",
+            "description": "At most 64 KiB UTF-8."
+          },
+          "collectionId": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "nullable": true,
+            "description": "Null or omitted selects the inbox."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "At most 80 UTF-8 bytes after trimming."
+            },
+            "maxItems": 32,
+            "example": [
+              "go",
+              "reference"
+            ]
+          },
+          "favorite": {
+            "type": "boolean"
+          },
+          "read": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "processing",
+              "ready",
+              "failed"
+            ]
+          },
+          "error": {
+            "type": "string",
+            "description": "Capture failure, when present."
+          },
+          "content": {
+            "type": "string",
+            "description": "Captured text; omitted from list responses."
+          },
+          "searchSnippet": {
+            "type": "string",
+            "description": "Search excerpt, when available. Match delimiters are U+001E and U+001F."
+          },
+          "archiveAvailable": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "url",
+          "title",
+          "description",
+          "notes",
+          "collectionId",
+          "tags",
+          "favorite",
+          "read",
+          "status",
+          "archiveAvailable",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "LinkPage": {
+        "type": "object",
+        "properties": {
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Link"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "enum": [
+              40
+            ]
+          }
+        },
+        "required": [
+          "links",
+          "total",
+          "page",
+          "pageSize"
+        ]
+      },
+      "BulkInput": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            },
+            "minItems": 1,
+            "maxItems": 500,
+            "uniqueItems": true
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "delete",
+              "move",
+              "tags",
+              "favorite",
+              "read",
+              "capture"
+            ]
+          },
+          "collectionId": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "nullable": true,
+            "description": "Destination for move; null selects the inbox."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "At most 80 UTF-8 bytes after trimming."
+            },
+            "maxItems": 32,
+            "example": [
+              "go",
+              "reference"
+            ]
+          },
+          "value": {
+            "type": "boolean",
+            "description": "New flag value for favorite/read."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "ids",
+          "action"
+        ]
+      },
+      "AnnotationInput": {
+        "type": "object",
+        "properties": {
+          "quote": {
+            "type": "string",
+            "description": "Must match the current captured text. At most 16 KiB UTF-8."
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Inclusive Unicode code-point offset, not UTF-16 code units."
+          },
+          "end": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Exclusive Unicode code-point offset; greater than start."
+          },
+          "note": {
+            "type": "string",
+            "description": "At most 8 KiB UTF-8."
+          },
+          "color": {
+            "type": "string",
+            "enum": [
+              "yellow",
+              "green",
+              "blue",
+              "pink"
+            ],
+            "default": "yellow"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "quote",
+          "start",
+          "end"
+        ]
+      },
+      "Annotation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "linkId": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "quote": {
+            "type": "string",
+            "description": "Must match the current captured text. At most 16 KiB UTF-8."
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Inclusive Unicode code-point offset, not UTF-16 code units."
+          },
+          "end": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Exclusive Unicode code-point offset; greater than start."
+          },
+          "note": {
+            "type": "string",
+            "description": "At most 8 KiB UTF-8."
+          },
+          "color": {
+            "type": "string",
+            "enum": [
+              "yellow",
+              "green",
+              "blue",
+              "pink"
+            ],
+            "default": "yellow"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "stale": {
+            "type": "boolean",
+            "description": "True when the original quote no longer matches the content."
+          }
+        },
+        "required": [
+          "id",
+          "linkId",
+          "quote",
+          "start",
+          "end",
+          "note",
+          "color",
+          "createdAt",
+          "stale"
+        ]
+      },
+      "Asset": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "linkId": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string"
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "pdf",
+              "image",
+              "html",
+              "offline",
+              "upload"
+            ]
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "maximum": 20971520
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "linkId",
+          "name",
+          "mediaType",
+          "kind",
+          "size",
+          "createdAt"
+        ]
+      },
+      "FileResult": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "$ref": "#/components/schemas/Link"
+          },
+          "asset": {
+            "$ref": "#/components/schemas/Asset"
+          }
+        },
+        "required": [
+          "link",
+          "asset"
+        ]
+      },
+      "PreserveResult": {
+        "type": "object",
+        "properties": {
+          "asset": {
+            "$ref": "#/components/schemas/Asset"
+          },
+          "embedded": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "omitted": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "asset",
+          "embedded",
+          "omitted"
+        ]
+      },
+      "ImportResult": {
+        "type": "object",
+        "properties": {
+          "imported": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "skipped": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "imported",
+          "skipped"
+        ]
+      },
+      "MetadataExport": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "type": "string",
+            "enum": [
+              "pocketmark"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "enum": [
+              1
+            ]
+          },
+          "collections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Collection"
+            }
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Link"
+            }
+          }
+        },
+        "required": [
+          "format",
+          "version",
+          "collections",
+          "links"
+        ]
+      }
+    },
+    "responses": {
+      "400": {
+        "description": "Invalid JSON, field limits, duplicate URL, invalid references or an interrupted/oversized upload.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "invalid JSON or request too large"
+            }
+          }
+        }
+      },
+      "401": {
+        "description": "Missing or invalid session or bearer credential.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "sign in required"
+            }
+          }
+        }
+      },
+      "403": {
+        "description": "Rejected browser origin or operation restricted to the owner.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "origin rejected"
+            }
+          }
+        }
+      },
+      "404": {
+        "description": "Record or capture not found, or bookmark currently processing.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "not found or currently processing"
+            }
+          }
+        }
+      },
+      "409": {
+        "description": "A conflicting operation is in progress, setup is unavailable, or the key limit was reached.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "another import is in progress"
+            }
+          }
+        }
+      },
+      "413": {
+        "description": "The HTML attachment exceeds the reader’s 2 MiB input limit.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "rich reader accepts HTML up to 2 MiB; download the larger archive"
+            }
+          }
+        }
+      },
+      "415": {
+        "description": "Unsupported content type. JSON operations require application/json.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "Content-Type must be application/json"
+            }
+          }
+        }
+      },
+      "429": {
+        "description": "Too many login/setup attempts. The instance allows ten attempts per minute.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "too many login attempts; retry in a minute"
+            }
+          }
+        },
+        "headers": {
+          "Retry-After": {
+            "description": "Seconds before retrying.",
+            "schema": {
+              "type": "integer",
+              "example": 60
+            }
+          }
+        }
+      },
+      "503": {
+        "description": "Server busy (eight concurrent requests maximum), or database unavailable.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "server busy; try again shortly"
+            }
+          }
+        }
+      }
+    }
+  }
+}

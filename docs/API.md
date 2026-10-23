@@ -1,5 +1,33 @@
 # Pocketmark HTTP API
 
+## Interactive API documentation
+
+Open **API documentation** at the bottom of the library navigation, or visit
+`/api-docs/` on your instance. Swagger UI lists the native HTTP API with request
+schemas, filters, responses and errors. Search by tag or path, expand an operation,
+then use **Try it out** to send a real request to your instance. Mutations affect
+your library, including deletions.
+
+Your existing owner session is sent automatically. Integrations can use
+**Authorize** with a dedicated API key, without the `Bearer` prefix. Authorization
+is held in tab memory and cleared on reload. Named keys retain their existing
+restrictions: account settings, key management and full backups require an owner
+session or recovery token. The documentation and specification are public static
+files; API data still requires authentication.
+
+Download the OpenAPI 3.0.3 specification from the page or
+`/api-docs/openapi.json`. Its server URL is relative to the current instance, so it
+works behind a reverse proxy without hard-coded hosts. Swagger UI is version-pinned
+and embedded locally, with no CDN or external validator; it loads only on the docs
+page. The library remains dependency-free. WebDAV `/dav/` uses a separate protocol
+and is not included in the OpenAPI reference.
+
+The canonical specification lives in
+`internal/webui/static/api-docs/openapi.json`. When changing routes or payloads,
+update it alongside this document. `make test` checks route coverage, local schema
+references, security declarations and documentation delivery. Upstream asset
+provenance and update instructions are in the adjacent `vendor/README.md`.
+
 Base URL: `http://127.0.0.1:8090`. API endpoints require an owner session, recovery token or named API key unless explicitly public. First-run setup and login are public. `/healthz` is unauthenticated and returns `{"status":"ok"}` when SQLite is reachable. Named keys cannot access account/key management or full backups.
 
 For these examples, load your local token without putting its value directly in the command:
