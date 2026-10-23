@@ -17,3 +17,12 @@ Run `make check`, `make test`, `make test-extension` and `make build` for code c
 Use disposable data and browser/device profiles for integration work. Keep access tokens, personal databases, `.env` files, raw request logs, tool sessions, downloaded clients and generated binaries outside commits. Curated synthetic screenshots and benchmark summaries in `docs/` are maintained evidence, not application data. Review staged paths and run a redacted secret scan before pushing.
 
 Keep commits focused and use Conventional Commits. [CI and release instructions](docs/CI.md) define the required checks and tag-based release process. Releases must use the artifacts tested by CI and publish only after every gate passes. A version tag is an explicit publication action; create one only when requested.
+
+## Development workflow
+
+1. Work on a dedicated branch, read the relevant implementation and tests, and make focused changes.
+2. Run the applicable local checks above, review the diff and staged paths, and complete the redacted secret scan before committing.
+3. Commit with a Conventional Commit message and push the branch to the remote.
+4. Create a pull request targeting `main` (or update the existing PR for the branch). Describe the resulting behavior and validation performed.
+5. Monitor CI for the latest pushed commit. Fix failures, rerun the relevant local checks, and push corrections until every required check, including `CI passed`, is green. Pending, failed, cancelled or skipped required checks do not satisfy this gate.
+6. Before reporting completion, verify that the PR head matches the validated commit and provide the PR link and CI result. If CI cannot complete, report the blocker explicitly. Merge only when requested.
