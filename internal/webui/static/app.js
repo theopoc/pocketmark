@@ -2,7 +2,7 @@
 
 (() => {
   const $ = (id) => document.getElementById(id);
-  const state = { filter: "all", collection: null, tag: "", query: "", page: 1, pageSize: 40, total: 0, links: [], collections: [], editing: null, request: 0, timer: null, signedIn: false, sort: "newest", fuzzy: false, selected: new Set(), editingCollection: null };
+  const state = { filter: "all", collection: null, tag: "", query: "", page: 1, pageSize: 40, total: 0, links: [], collections: [], editing: null, request: 0, timer: null, signedIn: false, sort: "newest", fuzzy: false, editingCollection: null };
   let toastTimer;
   let expandedBookmarkActions = null;
   let searchTimer;
@@ -20,7 +20,6 @@
   const activeMotion = new Map();
   let themeTransition = null;
   let renderedLibraryRoute = null;
-  const selectionLabels = new Map();
   const sharedParams = new URLSearchParams(location.search);
   let editorBaseline = null;
   let editorSession = 0;
@@ -55,8 +54,9 @@
     $("search").value = state.query; $("tags-search").value = restored.tagsQuery;
     $("sort-order").value = state.sort; $("fuzzy-search").checked = state.fuzzy;
     $("tags-view").hidden = !showingTags; $("library-view").hidden = showingTags;
-    if (!initial && previous !== workspace.routeSearch(route())) { state.selected.clear(); selectionLabels.clear(); }
+    if (!initial && previous !== workspace.routeSearch(route())) bulk.clear();
     reader.close();
+    bulk.close();
     document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
     await refresh();
     if (request !== routeRequest) return;
@@ -250,9 +250,11 @@
     clearTimeout(tagsTimer);
     tagsRequest++;
     state.signedIn = false;
+    bulk.clear();
     state.request++;
     clearTimeout(state.timer);
     reader.close();
+    bulk.close();
     document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
     $("app-view").hidden = true;
     $("login-view").hidden = false;
@@ -290,6 +292,11 @@
 
   const reader = globalThis.PocketmarkReader.create({
     api, drafts, toast, onEdit: openEditor, onChange: () => refresh(true), onSessionExpired: showLogin,
+  });
+
+  const bulk = globalThis.PocketmarkBulk.create({
+    api, toast, onChange: () => refresh(true), onSelectionChange: renderLinks, fillCollections,
+    defaultCollection: () => state.filter === "collection" ? state.collection : null, onSessionExpired: showLogin,
   });
 
   function collectionLabel(id) {
@@ -353,8 +360,7 @@
     state.collection = collection;
     state.tag = tag;
     state.page = 1;
-    state.selected.clear();
-    selectionLabels.clear();
+    bulk.clear();
     commitRoute();
     $("tags-view").hidden = true;
     $("library-view").hidden = false;
@@ -608,15 +614,12 @@
       favorite.addEventListener("click", () => updateLink(link, { favorite: !link.favorite }, favorite));
       const select = el("input", "bookmark-select");
       select.type = "checkbox";
-      select.checked = state.selected.has(link.id);
+      select.checked = bulk.has(link.id);
       select.dataset.focusKey = `link:${link.id}:select`;
       select.setAttribute("aria-label", `Select ${link.title || link.url}`);
       select.addEventListener("change", () => {
-        if (select.checked && state.selected.size >= 500) { select.checked = false; toast("Select up to 500 bookmarks at a time.", true); return; }
-        if (select.checked) { state.selected.add(link.id); selectionLabels.set(link.id, link.title || link.url); }
-        else { state.selected.delete(link.id); selectionLabels.delete(link.id); }
+        select.checked = bulk.select(link, select.checked);
         card.classList.toggle("is-selected", select.checked);
-        updateSelection();
       });
       card.classList.toggle("is-selected", select.checked);
       const selectTarget = el("label", "bookmark-select-target");
@@ -689,7 +692,7 @@
         button.disabled = true;
         try {
           await api(`/api/links/${link.id}`, { method: "DELETE" });
-          state.selected.delete(link.id); selectionLabels.delete(link.id);
+          bulk.select(link, false);
           if (state.links.length === 1 && state.page > 1) state.page--;
           await refresh();
           toast("Bookmark deleted.");
@@ -715,7 +718,7 @@
       card.append(top, body, footer);
       grid.append(card);
     }
-    updateSelection();
+    bulk.render(state.links);
     $("empty-state").hidden = state.links.length > 0;
     const filtered = !!state.query || state.filter !== "all" || !!state.tag;
     $("empty-title").textContent = filtered ? "No bookmarks found" : "Your library starts here";
@@ -1137,70 +1140,8 @@
     $("collection-name").focus();
   }
 
-  function updateSelection() {
-    const count = state.links.filter((link) => state.selected.has(link.id)).length;
-    const outside = state.selected.size - count;
-    $("selected-count").textContent = `${state.selected.size} selected${outside ? ` · ${outside} outside these results` : ""}`;
-    $("selected-count").hidden = !state.selected.size;
-    $("bulk-open").hidden = !state.selected.size;
-    $("bulk-open").disabled = !state.selected.size;
-    $("clear-selection").hidden = !state.selected.size;
-    $("select-page").checked = state.links.length > 0 && count === state.links.length;
-    $("select-page").indeterminate = count > 0 && count < state.links.length;
-  }
-  $("select-page").addEventListener("change", () => {
-    for (const link of state.links) {
-      if (!$("select-page").checked) { state.selected.delete(link.id); selectionLabels.delete(link.id); }
-      else if (state.selected.size < 500) { state.selected.add(link.id); selectionLabels.set(link.id, link.title || link.url); }
-    }
-    renderLinks();
-  });
-  $("clear-selection").addEventListener("click", () => { state.selected.clear(); selectionLabels.clear(); renderLinks(); });
   $("sort-order").addEventListener("change", () => { state.sort = $("sort-order").value; state.page = 1; commitRoute(); refresh(); });
   $("fuzzy-search").addEventListener("change", () => { state.fuzzy = $("fuzzy-search").checked; state.page = 1; commitRoute(); refresh(); });
-  $("bulk-open").addEventListener("click", () => {
-    $("bulk-form").reset();
-    fillCollections($("bulk-collection"), state.filter === "collection" ? state.collection : null);
-    $("bulk-error").textContent = "";
-    $("bulk-title").textContent = `${state.selected.size} selected bookmark${state.selected.size === 1 ? "" : "s"}`;
-    const visible = state.links.filter((link) => state.selected.has(link.id)).length;
-    const outside = state.selected.size - visible;
-    $("bulk-scope").textContent = outside ? `${outside} selected bookmark${outside === 1 ? " is" : "s are"} outside the current results. Review the full selection before applying an action.` : "This action applies to the bookmarks listed below.";
-    $("bulk-review").open = outside > 0;
-    $("bulk-items").replaceChildren(...[...state.selected].map((id) => el("li", "", selectionLabels.get(id) || `Bookmark ${id}`)));
-    updateBulkAction();
-    $("bulk-dialog").showModal();
-    $("bulk-action").focus();
-  });
-  function updateBulkAction() {
-    const action = $("bulk-action").value;
-    $("bulk-move-fields").hidden = action !== "move";
-    $("bulk-tags-fields").hidden = action !== "tags";
-    $("bulk-value-fields").hidden = !["favorite", "read"].includes(action);
-    $("bulk-value-label").textContent = action === "read" ? "Reading status" : "Favorite status";
-    $("bulk-value").options[0].textContent = action === "read" ? "Read" : "Favorite";
-    $("bulk-value").options[1].textContent = action === "read" ? "To read" : "Not favorite";
-    const labels = { move: "Move", tags: "Replace tags on", favorite: "Update favorites for", read: "Update reading status for", capture: "Refresh captures for", delete: "Delete" };
-    $("bulk-apply").textContent = action ? `${labels[action]} ${state.selected.size} bookmark${state.selected.size === 1 ? "" : "s"}` : "Choose an action";
-    $("bulk-apply").disabled = !action;
-  }
-  $("bulk-action").addEventListener("change", updateBulkAction);
-  $("bulk-form").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const action = $("bulk-action").value;
-    if (action === "delete" && !confirm(`Delete ${state.selected.size} selected bookmarks and their saved content?`)) return;
-    event.submitter.disabled = true;
-    $("bulk-error").textContent = "";
-    try {
-      await api("/api/links/bulk", { method: "POST", body: JSON.stringify({ ids: [...state.selected], action, collectionId: $("bulk-collection").value ? Number($("bulk-collection").value) : null, tags: [...new Set($("bulk-tags").value.split(",").map((tag) => tag.trim()).filter(Boolean))], value: $("bulk-value").value === "true" }) });
-      state.selected.clear();
-      selectionLabels.clear();
-      $("bulk-dialog").close();
-      await refresh();
-      toast("Selected bookmarks updated.");
-    } catch (error) { $("bulk-error").textContent = error.message; } finally { event.submitter.disabled = false; }
-  });
-
   $("upload-file-button").addEventListener("click", () => $("library-file").click());
   $("library-file").addEventListener("change", async () => {
     const file = $("library-file").files[0];
