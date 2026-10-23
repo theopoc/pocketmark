@@ -19,6 +19,18 @@ def require(condition, message):
         raise ValueError(message)
 
 
+def verify_release_state(release, tag, commit):
+    """Only create a missing release or finish the empty draft at this revision."""
+    if str(release.get("status")) == "404":
+        return
+    require(release.get("tag_name") == tag and release.get("draft") is True
+            and release.get("prerelease") is False
+            and release.get("target_commitish") == commit
+            and release.get("assets") == [],
+            "expected a missing release or an empty stable draft at the verified revision; "
+            "refusing to overwrite an existing release")
+
+
 def regular(path):
     require(not path.is_symlink() and path.is_file() and path.stat().st_size > 0, f"invalid release file: {path}")
     return path
