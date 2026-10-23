@@ -1,0 +1,36 @@
+minimum_pre_commit_version: '4.0.0'
+default_install_hook_types: [pre-commit]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-json
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-toml
+      - id: end-of-file-fixer
+        exclude: ^internal/webui/static/api-docs/vendor/
+      - id: trailing-whitespace
+        exclude: ^internal/webui/static/api-docs/vendor/
+        args: [--markdown-linebreak-ext=md]
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e # v8.30.1
+    hooks:
+      - id: gitleaks
+  - repo: local
+    hooks:
+      - id: gofmt
+        name: Format Go sources
+        entry: gofmt -w
+        language: system
+        types: [go]
+      - id: javascript-syntax
+        name: Check JavaScript syntax
+        entry: bash -c 'for source do node --check "$source" || exit; done' --
+        language: system
+        types: [javascript]
