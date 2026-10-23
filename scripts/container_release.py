@@ -47,9 +47,12 @@ def prepare(tag):
     require(re.fullmatch(REVISION, revision), "invalid source revision")
     run("git", "merge-base", "--is-ancestor", revision, "origin/main")
     checks = json.loads(run("gh", "api", "--method", "GET", f"repos/{repo}/commits/{revision}/check-runs",
-                            "-f", "check_name=Verify release source / CI passed", "-f", "per_page=100"))
-    require(any(check["conclusion"] == "success" and check["app"]["slug"] == "github-actions"
-                for check in checks["check_runs"]), "the release commit must have passed the complete release CI")
+                            "-f", "per_page=100"))
+    # A recovery workflow checks out the tag but its checks belong to the workflow ref.
+    # The ordinary main CI calls the same complete suite on the tagged revision.
+    require(any(check["name"] in ("CI passed", "Verify release source / CI passed")
+                and check["conclusion"] == "success" and check["app"]["slug"] == "github-actions"
+                for check in checks["check_runs"]), "the release commit must have passed the complete CI")
     output(tag=tag, revision=revision, image="ghcr.io/" + repo.lower())
 
 

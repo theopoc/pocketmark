@@ -22,6 +22,30 @@ INDEX = {"schemaVersion": 2, "digest": "sha256:" + "d" * 64,
 
 
 class ContainerReleaseTests(unittest.TestCase):
+    def test_prepare_accepts_complete_ci_at_tag_revision_for_recovery(self):
+        release = {"tag_name": "v0.1.0", "draft": False, "prerelease": False, "published_at": "synthetic"}
+        for name, conclusion, app, accepted in (
+            ("CI passed", "success", "github-actions", True),
+            ("Verify release source / CI passed", "success", "github-actions", True),
+            ("Quality and release configuration", "success", "github-actions", False),
+            ("CI passed", "failure", "github-actions", False),
+            ("CI passed", None, "github-actions", False),
+            ("CI passed", "success", "untrusted-app", False),
+        ):
+            checks = {"check_runs": [{"name": name, "conclusion": conclusion, "app": {"slug": app}}]}
+            with self.subTest(name=name, conclusion=conclusion, app=app), \
+                    patch.dict(os.environ, {"GITHUB_REPOSITORY": "example/pocketmark"}), \
+                    patch.object(RELEASE, "run", side_effect=[json.dumps(release), REVISION, "", json.dumps(checks)]) as execute, \
+                    patch.object(RELEASE, "output") as emit:
+                if accepted:
+                    RELEASE.prepare("v0.1.0")
+                    emit.assert_called_once_with(tag="v0.1.0", revision=REVISION, image="ghcr.io/example/pocketmark")
+                else:
+                    with self.assertRaises(ValueError):
+                        RELEASE.prepare("v0.1.0")
+                    emit.assert_not_called()
+                self.assertIn(f"repos/example/pocketmark/commits/{REVISION}/check-runs", execute.call_args.args)
+
     def test_only_stable_safe_tags_are_accepted(self):
         self.assertEqual(RELEASE.tag_name("v0.1.0"), "v0.1.0")
         for tag in ("main", "v01.2.3", "v1.0.0-rc1", "v1.2.3\nINJECT=value", "../main"):

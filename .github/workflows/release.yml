@@ -5,6 +5,17 @@ on:
     branches: [main]
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing stable tag to verify or resume (empty uses the selected ref)'
+        required: false
+        default: ''
+        type: string
+      publish:
+        description: 'Publish the specified existing tag after all checks pass'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -39,7 +50,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ fromJSON(steps.release.outputs.pr).number }}
+          PR_NUMBER: ${{ fromJSON(steps.release.outputs.pr || '{}').number }}
         run: |
           branch=$(gh pr view "$PR_NUMBER" --json headRefName --jq .headRefName)
           gh workflow run ci.yml --ref "$branch"
@@ -56,27 +67,31 @@ jobs:
     outputs:
       revision: ${{ steps.source.outputs.revision }}
       tag: ${{ steps.source.outputs.tag }}
+      publish: ${{ steps.source.outputs.publish }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.release-please.outputs.tag || github.sha }}
+          ref: ${{ needs.release-please.outputs.tag || inputs.tag || github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Require a version tag on main, or a manual dry run
         id: source
         env:
-          RELEASE_REF: ${{ needs.release-please.outputs.tag || github.ref_name }}
-          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_REF: ${{ needs.release-please.outputs.tag || inputs.tag || github.ref_name }}
+          REQUESTED_TAG: ${{ inputs.tag }}
+          PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
         shell: bash
         run: |
-          if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
-            echo 'Manual run: assemble and verify packages without publishing a release.'
-          else
+          if [[ "$PUBLISH" == true || -n "$REQUESTED_TAG" ]]; then
             [[ "$RELEASE_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
             echo "tag=$RELEASE_REF" >> "$GITHUB_OUTPUT"
           fi
+          if [[ "$PUBLISH" != true ]]; then
+            echo 'Manual dry run: assemble and verify packages without publishing a release.'
+          fi
           git merge-base --is-ancestor HEAD origin/main
           echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
 
   verify:
     name: Verify release source
@@ -112,11 +127,11 @@ jobs:
           install-only: true
       - name: Package tested binaries and allowlisted extension files
         env:
-          EVENT_NAME: ${{ github.event_name }}
+          PUBLISH: ${{ needs.validate.outputs.publish }}
           REVISION: ${{ needs.validate.outputs.revision }}
         shell: bash
         run: |
-          if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
+          if [[ "$PUBLISH" != true ]]; then
             goreleaser release --snapshot --clean --config .goreleaser.yaml
           else
             goreleaser release --skip=publish --clean --config .goreleaser.yaml
@@ -134,7 +149,7 @@ jobs:
 
   publish:
     name: Publish GitHub release
-    if: github.event_name == 'push'
+    if: needs.validate.outputs.publish == 'true'
     needs: [validate, assemble]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -180,7 +195,7 @@ jobs:
   container:
     name: Publish and verify GHCR image
     needs: [validate, publish]
-    if: github.event_name == 'push'
+    if: needs.validate.outputs.publish == 'true'
     uses: ./.github/workflows/container-release.yml
     with:
       tag: ${{ needs.validate.outputs.tag }}

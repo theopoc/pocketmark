@@ -4,7 +4,7 @@ GitHub Actions runs on pushes to `main`, pull requests targeting `main`, and man
 
 | Gate | Checks and outputs |
 | --- | --- |
-| Quality | Go formatting/vet, module checksums and tidy drift, JavaScript/Python syntax, extension regression tests, workflow/shell validation with actionlint, release-verification tests and both GoReleaser configurations. |
+| Quality | Go formatting/vet, module checksums and tidy drift, JavaScript/Python syntax, extension regression tests, workflow/shell validation with actionlint, release-verification tests, actual release expressions evaluated with the pinned GitHub Actions expressions library, and both GoReleaser configurations. |
 | Security | Gitleaks scans the complete checked-out Git history with redacted output. Govulncheck checks reachable Go dependency/standard-library vulnerabilities using the application's SQLite tags. |
 | Test/build, AMD64 and ARM64 | Native Linux runners execute all Go race tests with coverage; musl builds static executables; the exact executables and build metadata become packaging inputs. |
 | Docker, both architectures | Builds the normal Dockerfile natively and tests the actual hardened Compose configuration: health, authentication, FTS5, enabled capture rejecting a loopback destination, backup integrity, restart persistence and zero OOM/limit events. Each run owns and cleans its synthetic volume/network/container. |
@@ -31,6 +31,15 @@ docker build -t pocketmark:ci .
 python3 scripts/smoke_docker.py --image pocketmark:ci
 ```
 
+The release expression regression checks use `@actions/expressions` only as a temporary CI/test tool; it is not an application or frontend dependency. They read the expression directly from the workflow and cover missing/empty PR outputs after a version PR is merged, ordinary opened PRs, and malformed output. Reproduce them locally with:
+
+```sh
+npm install --prefix /tmp/pocketmark-release-expressions --no-save --no-package-lock \
+  --ignore-scripts --no-audit --no-fund @actions/expressions@0.3.61
+ACTIONS_EXPRESSIONS_PATH=/tmp/pocketmark-release-expressions/node_modules/@actions/expressions/dist/index.js \
+  node --test scripts/test_release_expressions.mjs
+```
+
 Release tooling uses **GoReleaser OSS 2.18.3**, pinned in Actions. No Pro license or additional secret is required. Linux binaries require `musl-gcc` and matching native architecture because SQLite uses CGO. The native CI jobs compile and test them; GoReleaser's OSS `meta` archives then package those exact binaries with installation instructions. It generates the extension ZIPs and `SHA256SUMS` too. The single extension ZIP contains nine explicitly named production files, including its background worker, and declares `debugger` access. Tests and local data are never globbed into release archives.
 
 For a local packaging rehearsal, download the `linux-amd64` and `linux-arm64` CI artifacts into `artifacts/linux-amd64/` and `artifacts/linux-arm64/`, retaining their executable and `.buildinfo.txt` files. With GoReleaser 2.18.3 installed, run:
@@ -54,17 +63,23 @@ Only then does the write-enabled job recheck that bundle and require a missing r
 
 Enable **Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create and approve pull requests** for Release Please to open its version PRs. The workflow never approves or merges PRs. The built-in `GITHUB_TOKEN` does not trigger `pull_request` workflows for bot changes, so the Release Please job explicitly dispatches the read-only CI workflow on the PR branch after creating/updating it. These checks run at the PR head revision and satisfy the normal CI requirement without a PAT.
 
-If verification fails, the release stays a draft and the container is not published. Rerun the failed jobs after resolving the failure. If publication partially uploaded files, inspect and remove those draft assets before retrying; the guard deliberately rejects non-empty drafts. For a failure after GitHub publication, rerun the container jobs or use the backfill dispatch below.
+If verification fails, the release stays a draft and the container is not published. Rerun the failed jobs after resolving the failure. If the workflow itself needed a fix, use the corrected workflow to resume the existing immutable tag:
+
+```sh
+gh workflow run release.yml --repo theopoc/pocketmark --ref main -f tag=v0.1.0 -F publish=true
+```
+
+This reruns the complete CI and packaging at the tag's exact revision before publishing. It does not move the tag or package the corrected workflow's current source. To rehearse that recovery without publication, omit `publish=true`. If publication partially uploaded files, inspect and remove those draft assets before retrying; the guard deliberately rejects non-empty drafts. For a failure after GitHub publication, rerun the container jobs or use the backfill dispatch below.
 
 Expected assets are Linux AMD64/ARM64 `.tar.gz` files, their `.buildinfo.txt` files, the Chrome extension ZIP, and `SHA256SUMS`. Binary archives are static; extensions are unpacked/loaded manually. [Binary installation instructions](RELEASE_INSTALL.md).
 
-Manually dispatching **Release** performs the complete verification and assembly as a **dry run**, on a commit belonging to `main`. Both GoReleaser configurations are exercised in snapshot mode, which disables publication. Its `verified-release` artifact contains the same asset set and checksums. GitHub and container publication stay skipped even when a manual run targets a tag. No product version is published merely by committing or pushing `main`.
+Manually dispatching **Release** defaults to complete verification and assembly as a **dry run**, on a commit belonging to `main`. Both GoReleaser configurations are exercised in snapshot mode, which disables publication. Its `verified-release` artifact contains the same asset set and checksums. GitHub and container publication stay skipped even when a manual run targets a tag, unless the explicit `publish` input is enabled with a stable tag. No product version is published merely by committing or pushing `main`.
 
 ## GHCR images
 
 After each successful tagged GoReleaser release, `container-release.yml` publishes `ghcr.io/theopoc/pocketmark:vMAJOR.MINOR.PATCH` for **Linux AMD64 and ARM64**. Release calls this reusable workflow directly: a release created with `GITHUB_TOKEN` does not trigger another workflow's `release:published` event ([GitHub documentation](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)).
 
-The workflow requires a published stable release, its immutable tag on `main`, and a successful complete release CI check at that revision. It checks out that exact source revision separately from the pipeline helpers. Each platform builds natively with the release's existing Dockerfile; SQLite/CGO, the non-root runtime and RAM settings are preserved.
+The workflow requires a published stable release, its immutable tag on `main`, and a successful complete CI check at that revision, from either ordinary CI or the reusable release CI. Both run the same suite; accepting ordinary CI also permits recovery from a corrected workflow whose check runs belong to a newer workflow revision. It checks out that exact source revision separately from the pipeline helpers. Each platform builds natively with the release's existing Dockerfile; SQLite/CGO, the non-root runtime and RAM settings are preserved.
 
 Images first reach GHCR by digest, without a product version tag. Native runners pull those exact registry digests and run the hardened Compose smoke test, also checking architecture and OCI source/version labels. Only after both platforms succeed does an index assign the version tag to those two tested digests. An existing tag is accepted only if it already contains the exact same digests; differing content is never replaced. No `latest` or moving minor-version alias is published.
 
