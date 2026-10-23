@@ -525,7 +525,7 @@
         "tags": [
           "Account & keys"
         ],
-        "summary": "Disable or reactivate an API key",
+        "summary": "Rename, disable or reactivate an API key",
         "responses": {
           "200": {
             "description": "Successful response",
@@ -557,7 +557,7 @@
           }
         },
         "x-owner-only": true,
-        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. Disabling blocks subsequent API and WebDAV authentication; reactivation restores access with the same key. Revoked keys cannot be reactivated.",
+        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. Disabling blocks subsequent API and WebDAV authentication; reactivation restores access with the same key. Revoked keys cannot be reactivated. Supply name, active, or both. Renaming preserves the credential, creation date and usage history and does not reactivate a disabled key.",
         "requestBody": {
           "required": true,
           "description": "4 KiB JSON limit.",
@@ -568,12 +568,27 @@
                 "properties": {
                   "active": {
                     "type": "boolean"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "description": "1–120 UTF-8 bytes after trimming; changes only the display name."
                   }
                 },
-                "required": [
-                  "active"
-                ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "name"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "active"
+                    ]
+                  }
+                ]
               }
             }
           }

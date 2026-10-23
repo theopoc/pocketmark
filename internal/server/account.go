@@ -210,16 +210,24 @@ func (a *Server) updateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var b struct {
-		Active *bool `json:"active"`
+		Active *bool   `json:"active"`
+		Name   *string `json:"name"`
 	}
 	if !decode(w, r, &b, 4096) {
 		return
 	}
-	if b.Active == nil {
-		fail(w, 400, "active must be a boolean")
+	if b.Active == nil && b.Name == nil {
+		fail(w, 400, "provide a name or an active boolean")
 		return
 	}
-	err := a.Store.SetAPIKeyActive(r.Context(), id(r), *b.Active)
+	if b.Name != nil {
+		*b.Name = strings.TrimSpace(*b.Name)
+		if *b.Name == "" || len(*b.Name) > 120 {
+			fail(w, 400, "name must contain 1–120 bytes")
+			return
+		}
+	}
+	err := a.Store.UpdateAPIKey(r.Context(), id(r), b.Name, b.Active)
 	if errors.Is(err, sql.ErrNoRows) {
 		fail(w, 404, "key not found")
 		return

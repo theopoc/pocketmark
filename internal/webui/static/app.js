@@ -1029,10 +1029,13 @@
   let settingsSession = 0;
   let tokenCount = 0;
   let tokensBusy = false;
+  let editingTokenID = null;
   function setTokensBusy(busy) {
     tokensBusy = busy;
-    $("token-form").querySelector("button[type='submit']").disabled = busy || tokenCount >= 32;
-    $("token-list").querySelectorAll("button").forEach((button) => { button.disabled = busy; });
+    $("token-form").querySelector("button[type='submit']").disabled = busy || editingTokenID !== null || tokenCount >= 32;
+    $("token-list").querySelectorAll("button, .token-rename-form input").forEach((control) => {
+      control.disabled = busy || (editingTokenID !== null && !control.closest(".token-rename-form"));
+    });
   }
   function setTokenVisibility(visible) {
     $("new-token-value").type = visible ? "text" : "password";
@@ -1071,7 +1074,7 @@
     time.title = date.toLocaleString(undefined, { timeZoneName: "short" });
     return time;
   }
-  function renderTokens(tokens, session, focusID) {
+  function renderTokens(tokens, session, focusID, focusAction = "toggle") {
     $("token-list").replaceChildren();
     tokenCount = tokens.length;
     $("token-count").textContent = `${tokens.filter((token) => token.active).length} active · ${tokens.length} of 32 keys`;
@@ -1081,7 +1084,14 @@
       const row = el("li", "token-row");
       const details = el("div", "token-details");
       const heading = el("div", "token-name-row");
-      heading.append(el("strong", "token-name", token.name), el("span", `token-status${token.active ? " is-active" : ""}`, token.active ? "Active" : "Disabled"));
+      const rename = el("button", "icon-button token-rename");
+      rename.append(icon("edit"));
+      rename.type = "button";
+      rename.setAttribute("aria-label", `Rename ${token.name}`);
+      rename.title = `Rename ${token.name}`;
+      const nameGroup = el("div", "token-name-group");
+      nameGroup.append(el("strong", "token-name", token.name), rename);
+      heading.append(nameGroup, el("span", `token-status${token.active ? " is-active" : ""}`, token.active ? "Active" : "Disabled"));
       const metadata = el("dl", "token-metadata");
       for (const [label, value] of [["Created", token.createdAt], ["Last used", token.lastUsedAt]]) {
         const group = el("div", "");
@@ -1091,14 +1101,65 @@
       details.append(heading, metadata);
       const actions = el("div", "token-row-actions");
       const toggle = el("button", "button subtle", token.active ? "Disable" : "Reactivate");
-      const revoke = el("button", "text-button token-revoke", "Revoke");
+      const revoke = el("button", "button subtle token-revoke", "Delete key");
       toggle.type = revoke.type = "button";
       toggle.setAttribute("aria-label", `${token.active ? "Disable" : "Reactivate"} ${token.name}`);
       toggle.title = token.active ? "Pause access without changing the key" : "Restore access with the same key";
-      revoke.setAttribute("aria-label", `Revoke ${token.name} permanently`);
+      revoke.setAttribute("aria-label", `Delete ${token.name} permanently`);
+      revoke.title = "Permanently remove this key and its access";
+      rename.addEventListener("click", () => {
+        if (tokensBusy || editingTokenID !== null) return;
+        editingTokenID = token.id;
+        $("tokens-error").textContent = ""; $("tokens-feedback").textContent = "";
+        const form = el("form", "token-rename-form");
+        const label = el("label", "", "Key name");
+        const input = el("input", ""); input.id = `token-rename-${token.id}`;
+        label.htmlFor = input.id;
+        input.value = token.name; input.required = true; input.maxLength = 120;
+        input.autocomplete = "off";
+        const help = el("p", "small muted", "Only the name changes. Your apps keep using the same key.");
+        help.id = `token-rename-help-${token.id}`; input.setAttribute("aria-describedby", help.id);
+        const error = el("p", "form-error"); error.setAttribute("role", "alert");
+        const buttons = el("div", "token-edit-actions");
+        const save = el("button", "button primary", "Save name"); save.type = "submit";
+        const cancel = el("button", "button subtle", "Cancel"); cancel.type = "button";
+        function cancelRename() {
+          if (tokensBusy) return;
+          editingTokenID = null; renderTokens(tokens, session, token.id, "rename");
+        }
+        cancel.addEventListener("click", cancelRename);
+        input.addEventListener("input", () => { input.setCustomValidity(""); error.textContent = ""; });
+        form.addEventListener("keydown", (event) => {
+          if (event.key !== "Escape") return;
+          event.preventDefault(); event.stopPropagation(); cancelRename();
+        });
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          if (tokensBusy || session !== settingsSession) return;
+          const name = input.value.trim();
+          if (!name || new TextEncoder().encode(name).length > 120) {
+            input.setCustomValidity("Enter a name of 1–120 bytes. Shorten names with accented letters or emoji if needed.");
+            input.reportValidity(); return;
+          }
+          if (name === token.name) { cancelRename(); return; }
+          setTokensBusy(true); form.setAttribute("aria-busy", "true"); error.textContent = "";
+          try {
+            await api(`/api/tokens/${token.id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+            if (session !== settingsSession) return;
+            token.name = name; editingTokenID = null; tokensBusy = false;
+            renderTokens(tokens, session, token.id, "rename");
+            $("tokens-feedback").textContent = `Key renamed to “${name}”.`;
+          } catch (failure) {
+            if (session !== settingsSession) return;
+            error.textContent = failure.message; setTokensBusy(false); form.removeAttribute("aria-busy"); input.focus();
+          }
+        });
+        buttons.append(save, cancel); form.append(label, input, help, buttons, error);
+        heading.hidden = true; details.prepend(form); setTokensBusy(false); input.focus(); input.select();
+      });
       async function changeKey(remove) {
-        if (tokensBusy) return;
-        if (remove && !confirm(`Permanently revoke “${token.name}”? Apps using it will lose access. This cannot be undone. You can disable the key instead to pause access.`)) return;
+        if (tokensBusy || editingTokenID !== null) return;
+        if (remove && !confirm(`Delete API key “${token.name}” permanently? Apps using it will lose access. This cannot be undone. To pause access, cancel and disable the key instead.`)) return;
         $("tokens-error").textContent = ""; $("tokens-feedback").textContent = "";
         setTokensBusy(true);
         row.setAttribute("aria-busy", "true");
@@ -1111,7 +1172,7 @@
           tokensBusy = false;
           renderTokens(tokens, session, remove ? tokens[0]?.id : token.id);
           if (remove && !tokens.length) $("token-name").focus();
-          $("tokens-feedback").textContent = `“${token.name}” ${remove ? "revoked permanently" : active ? "reactivated" : "disabled. Apps using this key can no longer connect"}.`;
+          $("tokens-feedback").textContent = `“${token.name}” ${remove ? "deleted permanently" : active ? "reactivated" : "disabled. Apps using this key can no longer connect"}.`;
         } catch (error) {
           if (session !== settingsSession) return;
           $("tokens-error").textContent = error.message;
@@ -1122,15 +1183,16 @@
       toggle.addEventListener("click", () => changeKey(false));
       revoke.addEventListener("click", () => changeKey(true));
       actions.append(toggle, revoke); row.append(details, actions); $("token-list").append(row);
-      if (focusID === token.id) toggle.focus();
+      if (focusID === token.id) (focusAction === "rename" ? rename : toggle).focus();
     }
+    setTokensBusy(tokensBusy);
   }
   $("settings-button").addEventListener("click", async () => {
     const session = ++settingsSession;
     $("settings-error").textContent = "";
     $("tokens-error").textContent = "";
     $("tokens-feedback").textContent = "";
-    tokensBusy = false; tokenCount = 0;
+    tokensBusy = false; tokenCount = 0; editingTokenID = null;
     $("token-count").textContent = "";
     $("token-form").querySelector("button[type='submit']").disabled = true;
     $("token-list").replaceChildren(el("li", "token-empty muted", "Loading API keys…"));
@@ -1156,7 +1218,7 @@
   $("token-form").addEventListener("submit", async (event) => {
     const session = settingsSession;
     event.preventDefault();
-    if (tokensBusy || tokenCount >= 32) return;
+    if (tokensBusy || editingTokenID !== null || tokenCount >= 32) return;
     setTokensBusy(true); $("tokens-error").textContent = ""; $("tokens-feedback").textContent = "";
     try {
       const token = await api("/api/tokens", { method: "POST", body: JSON.stringify({ name: $("token-name").value.trim() }) });
@@ -1169,7 +1231,7 @@
   });
   $("toggle-token").addEventListener("click", () => setTokenVisibility($("new-token-value").type === "password"));
   $("copy-token").addEventListener("click", async () => { try { await navigator.clipboard.writeText($("new-token-value").value); toast("Key copied."); } catch { setTokenVisibility(true); $("new-token-value").select(); toast("Select and copy the key."); } });
-  $("settings-dialog").addEventListener("close", () => { settingsSession++; $("account-password").value = ""; clearNewToken(); });
+  $("settings-dialog").addEventListener("close", () => { settingsSession++; editingTokenID = null; $("account-password").value = ""; clearNewToken(); });
   $("export-button").addEventListener("click", () => $("export-dialog").showModal());
 
   function openSharedLink() {
