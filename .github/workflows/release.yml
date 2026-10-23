@@ -162,7 +162,8 @@ jobs:
         shell: bash
         run: |
           python3 scripts/verify_release.py --directory artifacts/verified --commit "$REVISION"
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > "$RUNNER_TEMP/release-state.json" || true
+          # Listing with write access includes drafts; the tag endpoint is for published releases.
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RUNNER_TEMP/release-state.json"
           python3 - "$RUNNER_TEMP/release-state.json" "$RELEASE_TAG" "$REVISION" <<'PY'
           import json, sys
           from scripts.verify_release import verify_release_state

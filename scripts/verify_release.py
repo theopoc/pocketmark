@@ -19,10 +19,16 @@ def require(condition, message):
         raise ValueError(message)
 
 
-def verify_release_state(release, tag, commit):
+def verify_release_state(pages, tag, commit):
     """Only create a missing release or finish the empty draft at this revision."""
-    if str(release.get("status")) == "404":
+    require(isinstance(pages, list) and bool(pages)
+            and all(isinstance(page, list) and all(isinstance(item, dict) for item in page) for page in pages),
+            "expected a complete paginated release listing")
+    matches = [release for page in pages for release in page if release.get("tag_name") == tag]
+    require(len(matches) <= 1, "ambiguous release state")
+    if not matches:
         return
+    release = matches[0]
     require(release.get("tag_name") == tag and release.get("draft") is True
             and release.get("prerelease") is False
             and release.get("target_commitish") == commit
