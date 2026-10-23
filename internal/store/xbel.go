@@ -253,10 +253,7 @@ UNION ALL SELECT d.id,d.local_id,d.kind,d.position FROM dav_ids d JOIN links l O
 	return enc.Flush()
 }
 func (s *Store) ExportXBEL(ctx context.Context, w io.Writer) (string, error) {
-	if e := s.InitDAV(ctx); e != nil {
-		return "", e
-	}
-	tx, e := s.DB.BeginTx(ctx, nil)
+	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return "", e
 	}
@@ -271,14 +268,11 @@ func (s *Store) ExportXBEL(ctx context.Context, w io.Writer) (string, error) {
 var ErrSyncConflict = errors.New("library changed; download and merge before uploading")
 
 func (s *Store) ReplaceXBEL(ctx context.Context, r io.Reader, expected string) error {
-	if e := s.InitDAV(ctx); e != nil {
-		return e
-	}
 	root, e := readXBEL(r)
 	if e != nil {
 		return e
 	}
-	tx, e := s.DB.BeginTx(ctx, nil)
+	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return e
 	}

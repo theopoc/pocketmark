@@ -160,7 +160,7 @@ func TestSearchExcerptBoundsAndOrdinaryLists(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
 	id := createLink(t, s, Link{URL: "https://example.com/snippet", Title: "Compact result"})
-	if _, err := s.DB.Exec("UPDATE links SET content=? WHERE id=?", "<script>not executable</script> needle "+strings.Repeat("界", 1200), id); err != nil {
+	if _, err := s.db.Exec("UPDATE links SET content=? WHERE id=?", "<script>not executable</script> needle "+strings.Repeat("界", 1200), id); err != nil {
 		t.Fatal(err)
 	}
 	for _, filter := range []Filter{{Query: "needle"}, {Query: "Compact", Fuzzy: true}, {}} {

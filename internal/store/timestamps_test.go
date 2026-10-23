@@ -32,7 +32,7 @@ INSERT INTO compat_tags(id,name) VALUES(9,'Legacy tag');`)
 		t.Helper()
 		var dates [3]string
 		for i, query := range []string{"SELECT created_at FROM library_metadata WHERE id=1", "SELECT created_at FROM collections WHERE id=7", "SELECT created_at FROM compat_tags WHERE id=9"} {
-			if err := s.DB.QueryRow(query).Scan(&dates[i]); err != nil {
+			if err := s.db.QueryRow(query).Scan(&dates[i]); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := time.Parse(time.RFC3339Nano, dates[i]); err != nil {
@@ -43,16 +43,16 @@ INSERT INTO compat_tags(id,name) VALUES(9,'Legacy tag');`)
 	}
 	want := readDates()
 	var description string
-	if err := s.DB.QueryRow("SELECT description FROM collections WHERE id=7").Scan(&description); err != nil || description != "" {
+	if err := s.db.QueryRow("SELECT description FROM collections WHERE id=7").Scan(&description); err != nil || description != "" {
 		t.Fatalf("legacy collection description should migrate to empty: %q (%v)", description, err)
 	}
 	if want[0] != want[1] || want[0] != want[2] {
 		t.Fatalf("legacy rows should use the recorded upgrade date: %v", want)
 	}
-	if _, err = s.DB.Exec("UPDATE collections SET name='Renamed' WHERE id=7"); err != nil {
+	if _, err = s.db.Exec("UPDATE collections SET name='Renamed' WHERE id=7"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.DB.Exec("UPDATE compat_tags SET name='Renamed' WHERE id=9"); err != nil {
+	if _, err = s.db.Exec("UPDATE compat_tags SET name='Renamed' WHERE id=9"); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.Close(); err != nil {
@@ -71,16 +71,16 @@ INSERT INTO compat_tags(id,name) VALUES(9,'Legacy tag');`)
 func TestCreationTimestampsCoverNativeAndImportWriters(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
-	if _, err := s.DB.Exec("UPDATE library_metadata SET created_at='2001-01-01T00:00:00Z' WHERE id=1"); err != nil {
+	if _, err := s.db.Exec("UPDATE library_metadata SET created_at='2001-01-01T00:00:00Z' WHERE id=1"); err != nil {
 		t.Fatal(err)
 	}
 	cid := createCollection(t, s, "Native", nil)
-	if _, err := s.DB.Exec("INSERT INTO collections(name) VALUES('Imported')"); err != nil {
+	if _, err := s.db.Exec("INSERT INTO collections(name) VALUES('Imported')"); err != nil {
 		t.Fatal(err)
 	}
 	lid := createLink(t, s, Link{URL: "https://example.com", Tags: []string{"native-tag"}})
 	var original string
-	if err := s.DB.QueryRow("SELECT created_at FROM compat_tags WHERE name='native-tag'").Scan(&original); err != nil {
+	if err := s.db.QueryRow("SELECT created_at FROM compat_tags WHERE name='native-tag'").Scan(&original); err != nil {
 		t.Fatal(err)
 	}
 	l := getLink(t, s, lid)
@@ -92,13 +92,13 @@ func TestCreationTimestampsCoverNativeAndImportWriters(t *testing.T) {
 		t.Fatal(err)
 	}
 	var current string
-	if err := s.DB.QueryRow("SELECT created_at FROM compat_tags WHERE name='native-tag'").Scan(&current); err != nil {
+	if err := s.db.QueryRow("SELECT created_at FROM compat_tags WHERE name='native-tag'").Scan(&current); err != nil {
 		t.Fatal(err)
 	}
 	if current != original {
 		t.Fatal("native tag edit reset creation date")
 	}
-	rows, err := s.DB.Query("SELECT created_at FROM collections UNION ALL SELECT created_at FROM compat_tags")
+	rows, err := s.db.Query("SELECT created_at FROM collections UNION ALL SELECT created_at FROM compat_tags")
 	if err != nil {
 		t.Fatal(err)
 	}

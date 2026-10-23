@@ -49,11 +49,13 @@ func TestNativeCollectionAllowsFullDescriptionAndPreservesOnRename(t *testing.T)
 	}
 	// Raising the transport envelope does not relax the stored field bound.
 	requireStatus(t, request(a, "PUT", path, encode("Rejected", description+"x"), true, nil), 400)
-	var storedName, storedDescription string
-	if err := a.Store.DB.QueryRow("SELECT name,description FROM collections WHERE id=?", created.ID).Scan(&storedName, &storedDescription); err != nil {
+	w = request(a, "GET", "/api/collections", "", true, nil)
+	requireStatus(t, w, 200)
+	if err := json.Unmarshal(w.Body.Bytes(), &collections); err != nil {
 		t.Fatal(err)
 	}
-	if storedName != "Renamed" || storedDescription != description {
+	if len(collections) != 1 || collections[0].Name != "Renamed" || collections[0].Description != description {
 		t.Fatal("oversized update partially modified collection")
 	}
+
 }

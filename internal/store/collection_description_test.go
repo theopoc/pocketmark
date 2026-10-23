@@ -57,7 +57,7 @@ func TestCollectionDescriptionPersistsAcrossNativeRenameMoveAndJSONExport(t *tes
 		t.Fatal(err)
 	}
 	var got string
-	if err = s.DB.QueryRow("SELECT description FROM collections WHERE id=?", cid).Scan(&got); err != nil || got != "" {
+	if err = s.db.QueryRow("SELECT description FROM collections WHERE id=?", cid).Scan(&got); err != nil || got != "" {
 		t.Fatalf("explicit description clear failed: %q (%v)", got, err)
 	}
 }
@@ -78,7 +78,7 @@ func TestCollectionDescriptionBoundsBeforeMutation(t *testing.T) {
 		t.Fatal("oversized collection edit accepted")
 	}
 	var name, description string
-	if err = s.DB.QueryRow("SELECT name,description FROM collections WHERE id=?", cid).Scan(&name, &description); err != nil {
+	if err = s.db.QueryRow("SELECT name,description FROM collections WHERE id=?", cid).Scan(&name, &description); err != nil {
 		t.Fatal(err)
 	}
 	if name != "Bounded" || description != limit {
@@ -90,7 +90,7 @@ func TestCollectionDescriptionBoundsBeforeMutation(t *testing.T) {
 		t.Fatal("oversized imported description accepted")
 	}
 	var count int
-	if err = s.DB.QueryRow("SELECT count(*) FROM collections").Scan(&count); err != nil || count != 1 {
+	if err = s.db.QueryRow("SELECT count(*) FROM collections").Scan(&count); err != nil || count != 1 {
 		t.Fatalf("rejected create/import partially persisted: count %d (%v)", count, err)
 	}
 }

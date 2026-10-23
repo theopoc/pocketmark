@@ -72,7 +72,7 @@ func (s *Store) Import(ctx context.Context, r io.Reader) (ImportResult, error) {
 	if n > 10000 {
 		return result, errors.New("import supports at most 10000 links per file")
 	}
-	tx, e := s.DB.BeginTx(ctx, nil)
+	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return result, e
 	}
@@ -206,7 +206,7 @@ func (s *Store) Import(ctx context.Context, r io.Reader) (ImportResult, error) {
 
 // Export uses a consistent read transaction and streams bookmarks one at a time.
 func (s *Store) Export(ctx context.Context, w io.Writer) error {
-	tx, e := s.DB.BeginTx(ctx, nil)
+	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return e
 	}

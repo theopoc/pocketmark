@@ -69,9 +69,8 @@ func TestStandaloneHTMLIndexedAndRejectedUploadLeavesNoRecord(t *testing.T) {
 		t.Fatalf("%+v %v", p, e)
 	}
 	requireStatus(t, request(a, "GET", fmt.Sprintf("/api/links/%d/reader", p.Links[0].ID), "", true, nil), 200)
-	var count int
-	_ = a.Store.DB.QueryRow("SELECT count(*) FROM links").Scan(&count)
-	if count != 1 {
+	stats, err := a.Store.Stats(context.Background())
+	if err != nil || stats.Links != 1 {
 		t.Fatal("invalid upload left record")
 	}
 }

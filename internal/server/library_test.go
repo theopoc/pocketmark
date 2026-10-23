@@ -21,7 +21,7 @@ func TestLibraryHTTPBulkAndHTML(t *testing.T) {
 	id := p.Links[0].ID
 	requireStatus(t, request(a, "POST", "/api/links/bulk", fmt.Sprintf(`{"ids":[%d],"action":"favorite","value":true}`, id), true, nil), 200)
 	requireStatus(t, request(a, "GET", "/api/export/html", "", true, nil), 200)
-	_, _ = a.Store.DB.Exec("UPDATE links SET content='Sample text' WHERE id=?", id)
+	finishTestCapture(t, a.Store, id, "Sample text", nil)
 	requireStatus(t, request(a, "POST", fmt.Sprintf("/api/links/%d/annotations", id), `{"quote":"Sample","start":0,"end":6,"note":"Useful","color":"blue"}`, true, nil), 200)
 	w := request(a, "GET", fmt.Sprintf("/api/links/%d/annotations", id), "", true, nil)
 	requireStatus(t, w, 200)

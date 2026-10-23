@@ -3,26 +3,19 @@ package server
 import (
 	"archive/zip"
 	"bytes"
-	"context"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"mime"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
-	"time"
 
 	"pocketmark/internal/capture"
 	"pocketmark/internal/store"
 )
 
 func (a *Server) registerAssets(mux *http.ServeMux) {
-	if err := a.Store.InitAssets(context.Background()); err != nil {
-		panic(fmt.Sprintf("initialize attachments: %v", err))
-	}
 	// One expensive archive/upload/backup at a time. Downloads stream one 64 KiB
 	// SQLite chunk at a time and share the existing server request limit.
 	gate := make(chan struct{}, 1)
@@ -88,7 +81,7 @@ func (a *Server) uploadAsset(w http.ResponseWriter, r *http.Request) {
 		upload.file.Seek(0, io.SeekStart)
 		parsed, parseErr := capture.ExtractDocument(upload.file)
 		if parseErr == nil {
-			_, parseErr = a.Store.DB.ExecContext(r.Context(), `UPDATE links SET content=?,title=CASE WHEN title=url AND ?<>'' THEN ? ELSE title END, description=CASE WHEN description='' THEN ? ELSE description END,status='ready',error='',updated_at=? WHERE id=? AND url=?`, parsed.Content, parsed.Title, parsed.Title, parsed.Description, time.Now().UTC().Format(time.RFC3339Nano), id(r), link.URL)
+			parseErr = a.Store.IndexDocument(r.Context(), id(r), link.URL, parsed.Title, parsed.Description, parsed.Content)
 		}
 		if parseErr != nil {
 			w.Header().Set("X-Pocketmark-Warning", "Archive saved, but reader indexing failed; oversized HTML tokens may exceed the 2 MiB limit")
@@ -118,25 +111,13 @@ func (a *Server) deleteAsset(w http.ResponseWriter, r *http.Request) {
 	respond(w, 200, map[string]bool{"ok": true})
 }
 
-func (a *Server) temporaryDataFile(ctx context.Context, pattern string) (*os.File, error) {
-	var seq int
-	var name, path string
-	e := a.Store.DB.QueryRowContext(ctx, "PRAGMA database_list").Scan(&seq, &name, &path)
-	if e != nil {
-		return nil, e
-	}
-	if path == "" {
-		return nil, errors.New("file-backed database required")
-	}
-	return os.CreateTemp(filepath.Dir(path), pattern)
-}
 func (a *Server) preserveOffline(w http.ResponseWriter, r *http.Request) {
 	link, e := a.Store.Get(r.Context(), id(r))
 	if e != nil {
 		handleError(w, e)
 		return
 	}
-	f, e := a.temporaryDataFile(r.Context(), ".offline-*.html")
+	f, e := a.Store.TemporaryFile(".offline-*.html")
 	if e != nil {
 		handleError(w, e)
 		return
@@ -165,46 +146,25 @@ func (a *Server) richReader(w http.ResponseWriter, r *http.Request) {
 		handleError(w, e)
 		return
 	}
-	var src io.Reader
-	raw := r.URL.Query().Get("asset")
-	if raw == "" {
-		var latest int64
-		if a.Store.DB.QueryRowContext(r.Context(), `SELECT id FROM assets WHERE link_id=? AND media_type='text/html' AND kind='html' ORDER BY id DESC LIMIT 1`, link.ID).Scan(&latest) == nil {
-			raw = strconv.FormatInt(latest, 10)
-		}
+	var assetID *int64
+	if raw := r.URL.Query().Get("asset"); raw != "" {
+		value, _ := strconv.ParseInt(raw, 10, 64)
+		assetID = &value
 	}
-	if raw != "" {
-		assetID, _ := strconv.ParseInt(raw, 10, 64)
-		asset, e := a.Store.Asset(r.Context(), assetID)
-		if e != nil || asset.LinkID != link.ID || asset.MediaType != "text/html" {
-			fail(w, 404, "HTML attachment not found")
-			return
-		}
-		if asset.Size > 2<<20 {
-			fail(w, 413, "rich reader accepts HTML up to 2 MiB; download the larger archive")
-			return
-		}
-		var body bytes.Buffer
-		if e = a.Store.WriteAsset(r.Context(), asset.ID, &body); e != nil {
+	body, e := a.Store.ReaderDocument(r.Context(), link.ID, assetID)
+	if e != nil {
+		switch {
+		case errors.Is(e, store.ErrHTMLAssetNotFound), errors.Is(e, store.ErrNoReaderDocument):
+			fail(w, 404, e.Error())
+		case errors.Is(e, store.ErrReaderTooLarge):
+			fail(w, 413, e.Error())
+		default:
 			handleError(w, e)
-			return
 		}
-		src = &body
-	} else {
-		var body []byte
-		e = a.Store.DB.QueryRowContext(r.Context(), "SELECT archive FROM links WHERE id=?", link.ID).Scan(&body)
-		if e != nil {
-			handleError(w, e)
-			return
-		}
-		if len(body) == 0 {
-			fail(w, 404, "capture or upload an HTML page first")
-			return
-		}
-		src = bytes.NewReader(body)
+		return
 	}
 	var output bytes.Buffer
-	if e = capture.Reader(src, &output, link.URL); e != nil {
+	if e = capture.Reader(bytes.NewReader(body), &output, link.URL); e != nil {
 		fail(w, 400, e.Error())
 		return
 	}
@@ -220,28 +180,12 @@ func (a *Server) backup(w http.ResponseWriter, r *http.Request) {
 	if !a.requireOwner(w, r) {
 		return
 	}
-	f, e := a.temporaryDataFile(r.Context(), ".backup-*.db")
+	f, e := a.Store.Snapshot(r.Context())
 	if e != nil {
 		handleError(w, e)
 		return
 	}
-	path := f.Name()
-	f.Close()
-	os.Remove(path)
-	defer os.Remove(path)
-	if _, e = a.Store.DB.ExecContext(r.Context(), "VACUUM INTO ?", path); e != nil {
-		handleError(w, e)
-		return
-	}
-	if e = os.Chmod(path, 0600); e != nil {
-		handleError(w, e)
-		return
-	}
-	f, e = os.Open(path)
-	if e != nil {
-		handleError(w, e)
-		return
-	}
+	defer os.Remove(f.Name())
 	defer f.Close()
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", `attachment; filename="pocketmark-backup.zip"`)
