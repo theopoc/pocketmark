@@ -8,7 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -19,13 +19,20 @@ import (
 	"time"
 
 	"pocketmark/internal/capture"
+	"pocketmark/internal/observability"
 	"pocketmark/internal/server"
 	"pocketmark/internal/store"
 )
 
 func main() {
+	if err := observability.ConfigureLogging(os.Stderr, os.Getenv("POCKETMARK_LOG_LEVEL")); err != nil {
+		observability.ConfigureLogging(os.Stderr, "INFO")
+		slog.Error("logging_configuration_failed", "error", err.Error())
+		os.Exit(1)
+	}
 	if e := run(); e != nil {
-		log.Fatal(e)
+		observability.Error(context.Background(), "process_failed", e)
+		os.Exit(1)
 	}
 }
 func run() error {
@@ -33,6 +40,11 @@ func run() error {
 	data := flag.String("data", env("POCKETMARK_DATA", "./data"), "data directory")
 	noCapture := flag.Bool("no-capture", os.Getenv("POCKETMARK_CAPTURE") == "false", "disable background page capture")
 	flag.Parse()
+	traceConfig, err := observability.TraceConfigFromEnv()
+	if err != nil {
+		slog.Error("telemetry_configuration_failed", "error", err.Error())
+		return err
+	}
 	// A soft Go heap budget, not an RSS cap; SQLite/native allocations are separate.
 	if os.Getenv("GOMEMLIMIT") == "" {
 		debug.SetMemoryLimit(32 * 1024 * 1024)
@@ -72,7 +84,6 @@ func run() error {
 		} else {
 			token = strings.TrimSpace(string(raw))
 		}
-		log.Printf("Access token file: %s", path)
 	}
 	if len(token) < 24 {
 		return errors.New("access token must contain at least 24 characters")
@@ -88,17 +99,29 @@ func run() error {
 	defer s.Close()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	observer := observability.New(slog.Default(), nil)
+	shutdownTracing, e := observer.EnableTracing(ctx, traceConfig)
+	if e != nil {
+		return e
+	}
+	defer func() {
+		flush, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := shutdownTracing(flush); err != nil {
+			observability.Error(flush, "trace_shutdown_failed", err)
+		}
+	}()
 	done := make(chan struct{})
 	if !*noCapture {
-		go func() { defer close(done); worker(ctx, s) }()
+		go func() { defer close(done); worker(ctx, s, observer) }()
 	} else {
 		close(done)
 	}
-	handler := server.New(s, token, origin, os.Getenv("POCKETMARK_SECURE_COOKIE") == "true" || strings.HasPrefix(origin, "https://"))
-	srv := &http.Server{Addr: *addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 * 1024}
+	handler := server.New(s, token, origin, os.Getenv("POCKETMARK_SECURE_COOKIE") == "true" || strings.HasPrefix(origin, "https://"), observer)
+	srv := &http.Server{Addr: *addr, Handler: handler, ErrorLog: observability.HTTPErrorLog(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 * 1024}
 	errCh := make(chan error, 1)
 	go func() {
-		log.Printf("Pocketmark listening at http://%s (data: %s)", *addr, dir)
+		slog.Info("server_started", "listen", *addr, "capture_enabled", !*noCapture, "otel_enabled", traceConfig.Enabled)
 		errCh <- srv.ListenAndServe()
 	}()
 	select {
@@ -112,6 +135,7 @@ func run() error {
 		srv.Close()
 	}
 	<-done
+	slog.Info("server_stopped")
 	if e != nil && !errors.Is(e, http.ErrServerClosed) {
 		return fmt.Errorf("HTTP server: %w", e)
 	}
@@ -123,7 +147,7 @@ func env(key, fallback string) string {
 	}
 	return fallback
 }
-func worker(ctx context.Context, s *store.Store) {
+func worker(ctx context.Context, s *store.Store, observer *observability.Observer) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -143,7 +167,7 @@ func worker(ctx context.Context, s *store.Store) {
 			if ctx.Err() != nil {
 				return
 			}
-			log.Printf("capture queue: %v", e)
+			observer.QueueError(ctx, e)
 			select {
 			case <-ctx.Done():
 				return
@@ -151,12 +175,13 @@ func worker(ctx context.Context, s *store.Store) {
 				continue
 			}
 		}
-		result, fetchErr := capture.Fetch(ctx, l.URL)
+		captureCtx, finish := observer.Capture(ctx, l.ID)
+		result, fetchErr := capture.Fetch(captureCtx, l.URL)
 		if ctx.Err() != nil {
+			finish(fetchErr, nil)
 			return
 		} // processing jobs are recovered at the next start.
-		if e = s.Finish(ctx, l, result.Title, result.Description, result.Content, result.HTML, fetchErr); e != nil {
-			log.Printf("save capture %d: %v", l.ID, e)
-		}
+		e = s.Finish(captureCtx, l, result.Title, result.Description, result.Content, result.HTML, fetchErr)
+		finish(fetchErr, e)
 	}
 }

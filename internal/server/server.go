@@ -11,7 +11,6 @@ import (
 	"errors"
 	"io"
 	"io/fs"
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -19,12 +18,14 @@ import (
 	"sync"
 	"time"
 
+	"pocketmark/internal/observability"
 	"pocketmark/internal/store"
 	"pocketmark/internal/webui"
 )
 
 type Server struct {
 	Store      *store.Store
+	observer   *observability.Observer
 	token      string
 	secure     bool
 	origin     string
@@ -37,8 +38,14 @@ type Server struct {
 	passwordMu sync.Mutex
 }
 
-func New(s *store.Store, token, origin string, secure bool) *Server {
+func New(s *store.Store, token, origin string, secure bool, observers ...*observability.Observer) *Server {
 	a := &Server{Store: s, token: token, origin: strings.TrimSuffix(origin, "/"), secure: secure, mux: http.NewServeMux(), requests: make(chan struct{}, 8), imports: make(chan struct{}, 1)}
+	if len(observers) > 0 && observers[0] != nil {
+		a.observer = observers[0]
+	} else {
+		a.observer = observability.New(nil, nil)
+	}
+	a.mux.HandleFunc("GET /metrics", a.observer.Metrics)
 	a.registerAccount(a.mux)
 	a.registerLibrary(a.mux)
 	a.registerDAV(a.mux)
@@ -78,6 +85,10 @@ func New(s *store.Store, token, origin string, secure bool) *Server {
 	return a
 }
 func (a *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	_, pattern := a.mux.Handler(r)
+	a.observer.HTTP(w, r, observability.Route(pattern), a.serveHTTP)
+}
+func (a *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Frame-Options", "DENY")
@@ -99,7 +110,7 @@ func (a *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/dav/") {
+	if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/dav/") || r.URL.Path == "/metrics" {
 		w.Header().Set("Cache-Control", "no-store")
 	}
 	select {
@@ -131,7 +142,7 @@ func (a *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	publicAPI := r.URL.Path == "/api/login" || r.URL.Path == "/api/setup"
-	if strings.HasPrefix(r.URL.Path, "/api/") && !publicAPI && !a.authenticated(r) {
+	if (strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/metrics") && !publicAPI && !a.authenticated(r) {
 		fail(w, 401, "sign in required")
 		return
 	}
@@ -227,7 +238,7 @@ func respond(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if e := json.NewEncoder(w).Encode(v); e != nil {
-		log.Printf("write response: %v", e)
+		observability.Error(observability.ResponseContext(w), "response_write_failed", e)
 	}
 }
 func fail(w http.ResponseWriter, status int, message string) {
@@ -238,7 +249,7 @@ func handleError(w http.ResponseWriter, e error) {
 		fail(w, 404, "not found or currently processing")
 		return
 	}
-	log.Printf("request: %v", e)
+	observability.Error(observability.ResponseContext(w), "request_failed", e)
 	fail(w, 400, "request could not be saved; check field limits, collection, or duplicate URL")
 }
 func id(r *http.Request) int64 { v, _ := strconv.ParseInt(r.PathValue("id"), 10, 64); return v }
@@ -402,7 +413,7 @@ func (a *Server) exportData(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", `attachment; filename="pocketmark-export.json"`)
 	if e := a.Store.Export(r.Context(), w); e != nil {
-		log.Printf("export: %v", e)
+		observability.Error(r.Context(), "export_failed", e)
 	}
 }
 
