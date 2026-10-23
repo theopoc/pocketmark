@@ -149,6 +149,62 @@ func TestOpenRollsBackFailedSchemaInitialization(t *testing.T) {
 	}
 }
 
+func TestLegacyAPIKeysMigrateAndKeepActivityAcrossRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.db")
+	legacy, err := sql.Open("pocketmark-sqlite3", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = legacy.Exec(`CREATE TABLE api_tokens(id INTEGER PRIMARY KEY,name TEXT NOT NULL,hash TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL);
+INSERT INTO api_tokens VALUES(7,'Legacy sync','legacy hash','2025-01-02T03:04:05Z')`)
+	legacy.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	var expected APIKey
+	for restart := 0; restart < 3; restart++ {
+		s, err := Open(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		keys, err := s.APIKeys(ctx)
+		if err != nil || len(keys) != 1 {
+			s.Close()
+			t.Fatalf("keys: %+v (%v)", keys, err)
+		}
+		if restart == 0 {
+			if keys[0].ID != 7 || keys[0].Name != "Legacy sync" || keys[0].CreatedAt != "2025-01-02T03:04:05Z" || !keys[0].Active || keys[0].LastUsedAt != "" {
+				t.Fatalf("legacy key changed: %+v", keys[0])
+			}
+			if !s.AuthenticateAPIKey(ctx, "legacy hash") {
+				t.Fatal("legacy key rejected")
+			}
+			if err := s.SetAPIKeyActive(ctx, 7, false); err != nil {
+				t.Fatal(err)
+			}
+			keys, err = s.APIKeys(ctx)
+			if err != nil || keys[0].LastUsedAt == "" {
+				t.Fatalf("activity: %+v (%v)", keys, err)
+			}
+			expected = keys[0]
+		} else if keys[0] != expected || s.AuthenticateAPIKey(ctx, "legacy hash") {
+			t.Fatalf("disabled key changed after restart: %+v", keys[0])
+		}
+		if restart == 2 {
+			if err := s.SetAPIKeyActive(ctx, 7, true); err != nil {
+				t.Fatal(err)
+			}
+			if !s.AuthenticateAPIKey(ctx, "legacy hash") {
+				t.Fatal("migrated key could not reactivate")
+			}
+		}
+		if err := s.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestLegacyAccountSchemaNeverBecomesClaimable(t *testing.T) {
 	for _, fixture := range []string{
 		`CREATE TABLE account(id INTEGER PRIMARY KEY,username TEXT NOT NULL,salt TEXT NOT NULL,hash TEXT NOT NULL)`,

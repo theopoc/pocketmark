@@ -1023,6 +1023,13 @@
     $("login-submit").disabled = !setupRequired && !passwordEnabled;
   }
   let settingsSession = 0;
+  let tokenCount = 0;
+  let tokensBusy = false;
+  function setTokensBusy(busy) {
+    tokensBusy = busy;
+    $("token-form").querySelector("button[type='submit']").disabled = busy || tokenCount >= 32;
+    $("token-list").querySelectorAll("button").forEach((button) => { button.disabled = busy; });
+  }
   function setTokenVisibility(visible) {
     $("new-token-value").type = visible ? "text" : "password";
     $("toggle-token").textContent = visible ? "Hide key" : "Show key";
@@ -1036,34 +1043,98 @@
   async function loadTokens(session = settingsSession) {
     const tokens = await api("/api/tokens");
     if (session !== settingsSession) return;
+    renderTokens(tokens, session);
+  }
+  function tokenLoadError(error, session) {
+    if (session !== settingsSession) return;
+    $("tokens-error").textContent = error.message;
+    const retry = el("button", "button subtle", "Retry loading keys");
+    retry.type = "button";
+    retry.addEventListener("click", async () => {
+      retry.disabled = true; retry.textContent = "Loading API keys…";
+      $("tokens-error").textContent = "";
+      try { await loadTokens(session); }
+      catch (error) { tokenLoadError(error, session); }
+    });
+    const item = el("li", "token-empty"); item.append(retry);
+    $("token-list").replaceChildren(item);
+  }
+  function tokenDate(value) {
+    const date = new Date(value);
+    if (!value || Number.isNaN(date.getTime())) return el("span", "muted", "No recorded use");
+    const time = el("time", "", date.toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }));
+    time.dateTime = value;
+    time.title = date.toLocaleString(undefined, { timeZoneName: "short" });
+    return time;
+  }
+  function renderTokens(tokens, session, focusID) {
     $("token-list").replaceChildren();
-    if (!tokens?.length) $("token-list").append(el("p", "small muted", "No API keys yet."));
+    tokenCount = tokens.length;
+    $("token-count").textContent = `${tokens.filter((token) => token.active).length} active · ${tokens.length} of 32 keys`;
+    $("token-form").querySelector("button[type='submit']").disabled = tokensBusy || tokenCount >= 32;
+    if (!tokens.length) $("token-list").append(el("li", "token-empty muted", "No API keys yet. Create a key to connect your first app."));
     for (const token of tokens || []) {
-      const row = el("div", "asset-item"); row.append(el("span", "", token.name));
-      const revoke = el("button", "text-button", "Revoke");
-      revoke.addEventListener("click", async () => {
-        if (!confirm(`Revoke “${token.name}”? Apps using it will lose access.`)) return;
-        revoke.disabled = true;
-        try { await api(`/api/tokens/${token.id}`, { method: "DELETE" }); await loadTokens(); }
-        catch (error) { $("tokens-error").textContent = error.message; revoke.disabled = false; }
-      });
-      row.append(revoke); $("token-list").append(row);
+      const row = el("li", "token-row");
+      const details = el("div", "token-details");
+      const heading = el("div", "token-name-row");
+      heading.append(el("strong", "token-name", token.name), el("span", `token-status${token.active ? " is-active" : ""}`, token.active ? "Active" : "Disabled"));
+      const metadata = el("dl", "token-metadata");
+      for (const [label, value] of [["Created", token.createdAt], ["Last used", token.lastUsedAt]]) {
+        const group = el("div", "");
+        const detail = el("dd", ""); detail.append(tokenDate(value));
+        group.append(el("dt", "", label), detail); metadata.append(group);
+      }
+      details.append(heading, metadata);
+      const actions = el("div", "token-row-actions");
+      const toggle = el("button", "button subtle", token.active ? "Disable" : "Reactivate");
+      const revoke = el("button", "text-button token-revoke", "Revoke");
+      toggle.type = revoke.type = "button";
+      toggle.setAttribute("aria-label", `${token.active ? "Disable" : "Reactivate"} ${token.name}`);
+      toggle.title = token.active ? "Pause access without changing the key" : "Restore access with the same key";
+      revoke.setAttribute("aria-label", `Revoke ${token.name} permanently`);
+      async function changeKey(remove) {
+        if (tokensBusy) return;
+        if (remove && !confirm(`Permanently revoke “${token.name}”? Apps using it will lose access. This cannot be undone. You can disable the key instead to pause access.`)) return;
+        $("tokens-error").textContent = ""; $("tokens-feedback").textContent = "";
+        setTokensBusy(true);
+        row.setAttribute("aria-busy", "true");
+        const active = !token.active;
+        try {
+          await api(`/api/tokens/${token.id}`, remove ? { method: "DELETE" } : { method: "PATCH", body: JSON.stringify({ active }) });
+          if (session !== settingsSession) return;
+          if (remove) tokens = tokens.filter((key) => key.id !== token.id);
+          else token.active = active;
+          tokensBusy = false;
+          renderTokens(tokens, session, remove ? tokens[0]?.id : token.id);
+          if (remove && !tokens.length) $("token-name").focus();
+          $("tokens-feedback").textContent = `“${token.name}” ${remove ? "revoked permanently" : active ? "reactivated" : "disabled. Apps using this key can no longer connect"}.`;
+        } catch (error) {
+          if (session !== settingsSession) return;
+          $("tokens-error").textContent = error.message;
+          setTokensBusy(false);
+          row.removeAttribute("aria-busy");
+        }
+      }
+      toggle.addEventListener("click", () => changeKey(false));
+      revoke.addEventListener("click", () => changeKey(true));
+      actions.append(toggle, revoke); row.append(details, actions); $("token-list").append(row);
+      if (focusID === token.id) toggle.focus();
     }
   }
   $("settings-button").addEventListener("click", async () => {
     const session = ++settingsSession;
     $("settings-error").textContent = "";
     $("tokens-error").textContent = "";
-    $("token-list").replaceChildren(el("p", "small muted", "Loading API keys…"));
+    $("tokens-feedback").textContent = "";
+    tokensBusy = false; tokenCount = 0;
+    $("token-count").textContent = "";
+    $("token-form").querySelector("button[type='submit']").disabled = true;
+    $("token-list").replaceChildren(el("li", "token-empty muted", "Loading API keys…"));
     clearNewToken();
     $("account-password").value = "";
     $("settings-dialog").showModal();
     await Promise.all([
-      loadTokens(session).catch((error) => {
-        if (session !== settingsSession) return;
-        $("token-list").replaceChildren();
-        $("tokens-error").textContent = error.message;
-      }),
+      loadTokens(session).catch((error) => tokenLoadError(error, session)),
       api("/api/account").then((account) => {
         if (session !== settingsSession) return;
         $("account-username").value = account.username || "";
@@ -1080,7 +1151,9 @@
   });
   $("token-form").addEventListener("submit", async (event) => {
     const session = settingsSession;
-    event.preventDefault(); event.submitter.disabled = true; $("tokens-error").textContent = "";
+    event.preventDefault();
+    if (tokensBusy || tokenCount >= 32) return;
+    setTokensBusy(true); $("tokens-error").textContent = ""; $("tokens-feedback").textContent = "";
     try {
       const token = await api("/api/tokens", { method: "POST", body: JSON.stringify({ name: $("token-name").value.trim() }) });
       if (session !== settingsSession) return;
@@ -1088,7 +1161,7 @@
       $("new-token-value").value = token.token; $("new-token").hidden = false; $("token-name").value = "";
       $("new-token-value").focus();
       await loadTokens(session);
-    } catch (error) { if (session === settingsSession) $("tokens-error").textContent = error.message; } finally { event.submitter.disabled = false; }
+    } catch (error) { if (session === settingsSession) $("tokens-error").textContent = error.message; } finally { if (session === settingsSession) setTokensBusy(false); }
   });
   $("toggle-token").addEventListener("click", () => setTokenVisibility($("new-token-value").type === "password"));
   $("copy-token").addEventListener("click", async () => { try { await navigator.clipboard.writeText($("new-token-value").value); toast("Key copied."); } catch { setTokenVisibility(true); $("new-token-value").select(); toast("Select and copy the key."); } });
