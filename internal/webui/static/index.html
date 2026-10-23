@@ -133,15 +133,83 @@
   <dialog id="api-keys-dialog" class="modal settings-modal" aria-labelledby="api-keys-title"><div class="dialog-heading"><h2 id="api-keys-title">API keys</h2><button type="button" class="icon-button close-dialog" aria-label="Close"><span data-icon="close" aria-hidden="true"></span></button></div><form id="token-form"><p class="small muted">Create one key for each app or extension. Revoke it here when no longer needed.</p><label for="token-name">Key name</label><input id="token-name" required maxlength="100" placeholder="My browser extension"><button class="button subtle" type="submit">Create key</button></form><div id="new-token" hidden><p>Copy this key now. It will only be shown once.</p><input id="new-token-value" readonly aria-label="New API key"><button id="copy-token" class="button subtle">Copy key</button></div><div id="token-list"></div><p id="tokens-error" class="form-error" role="alert"></p></dialog>
   <dialog id="settings-dialog" class="modal settings-modal" aria-labelledby="settings-title"><div class="dialog-heading"><h2 id="settings-title">Settings</h2><button type="button" class="icon-button close-dialog" aria-label="Close"><span data-icon="close" aria-hidden="true"></span></button></div><section class="settings-section" aria-labelledby="backup-title"><h3 id="backup-title">Backup &amp; restore</h3><p class="small muted">A full backup keeps your bookmarks, captures, attachments, highlights and account settings together.</p><a class="button subtle" href="/api/backup">Download full backup</a><details class="help-details"><summary>How to restore a backup</summary><ol class="small muted"><li>Stop Pocketmark before restoring.</li><li>Unzip the backup and follow its RESTORE instructions. Use an empty data directory and keep your existing access-token file or POCKETMARK_TOKEN separately.</li><li>Restore file ownership if needed, then restart Pocketmark.</li></ol><p class="small muted">JSON and browser HTML exports contain bookmark metadata, not captures or attached files.</p></details></section><section class="settings-section"><details class="help-details"><summary>Password sign-in</summary><form id="account-form"><p id="account-status" class="small muted"></p><label for="account-username">Username</label><input id="account-username" autocomplete="username" required><label for="account-password">New password</label><input id="account-password" type="password" minlength="12" autocomplete="new-password" required><p class="small muted">At least 12 characters.</p><button class="button primary" type="submit">Save password</button></form></details><p id="settings-error" class="form-error" role="alert"></p></section><section class="settings-section"><details class="help-details"><summary>Browser bookmark sync</summary><p class="small muted">In Floccus, add a WebDAV account using this server’s address with <code>/dav/</code> appended and the file <code>bookmarks.xbel</code>. Use any username with a dedicated API key as the password. Create a key from API keys in the navigation.</p><p class="small muted">Sync includes bookmarks and collection folders. Uploading a Floccus file replaces the synchronized bookmark tree; deletions in that file remove matching bookmarks.</p></details></section><section class="settings-section"><details class="help-details"><summary>Mobile &amp; browser</summary><p class="small muted">Install this page from your browser’s menu to use Pocketmark as a mobile app. Share a link to it where your browser supports web share targets. The companion extension saves the current page, its rendered HTML, or a screenshot.</p></details></section></dialog>
   <dialog id="export-dialog" class="modal compact-modal" aria-labelledby="export-title"><div class="dialog-heading"><h2 id="export-title">Export bookmarks</h2><button type="button" class="icon-button close-dialog" aria-label="Close"><span data-icon="close" aria-hidden="true"></span></button></div><p class="muted">Choose a portable format. Saved files and captures are stored in your data directory and are not included in these metadata exports.</p><p class="small muted">To keep captures, files and account settings, <a href="/api/backup">download a full backup</a> instead. Restore instructions are included.</p><div class="reader-actions"><a class="button primary" href="/api/export">Pocketmark JSON</a><a class="button subtle" href="/api/export/html">Browser bookmarks HTML</a></div></dialog>
-  <dialog id="help-dialog" class="modal settings-modal" aria-labelledby="help-title"><div class="dialog-heading"><h2 id="help-title">Help</h2><button type="button" class="icon-button close-dialog" aria-label="Close help"><span data-icon="close" aria-hidden="true"></span></button></div><label for="help-search">Search help</label><input id="help-search" type="search" placeholder="Search, tags, captures, backup…"><p id="help-results" class="small muted" role="status"></p><div id="help-topics">
-  <details class="help-details"><summary>Find a saved page</summary><p class="small muted">Search looks through titles, URLs, descriptions, notes, tags and captured text. A highlighted excerpt shows the match. In View options, Include near matches also finds similar words in bookmark metadata; it does not search captured text. Clear the active chips to remove filters.</p></details>
-  <details class="help-details"><summary>Save and organize bookmarks</summary><p class="small muted">Choose Add bookmark and paste a URL. Pick a collection, or leave it in Inbox. In Tags, choose an existing tag or type a new name and press Enter. Use All tags to browse your full index. Select bookmark checkboxes, then Actions, to update several at once.</p></details>
-  <details class="help-details"><summary>Read, highlight and add notes</summary><p class="small muted">Open a bookmark’s title to read its saved text. Reading options contains text size, formatted view, printing and capture controls. Select a passage before choosing Highlight. Use the Notes shortcut at the top of the reader to write and save your notes.</p></details>
-  <details class="help-details"><summary>Recover a failed or missing capture</summary><p class="small muted">Open the bookmark to see the capture status and reason. In Reading options, choose Refresh capture. If a site requires signing in or blocks capture, use Visit original, then attach an HTML snapshot or PDF under Files. Text-only captures cannot provide a formatted page.</p></details>
-  <details class="help-details"><summary>Keep and recover a draft</summary><p class="small muted">Unsaved bookmark edits, notes and annotations remain in this tab when you close a dialog. When browser storage is available, they also survive a reload. A warning appears before leaving with unsaved work. Save before closing the tab or signing out; Discard draft removes only your unsaved changes.</p></details>
-  <details class="help-details"><summary>Back up and restore your library</summary><p class="small muted">Settings → Backup &amp; restore downloads the full library, captures, files and account settings. Keep the ZIP private. Stop Pocketmark, restore into an empty data directory using the included RESTORE.txt instructions, then restart. Keep your access-token file or POCKETMARK_TOKEN separately. JSON and HTML exports contain bookmark metadata only.</p></details>
-  <details class="help-details"><summary>Use keyboard shortcuts</summary><p class="small muted">Press / to search or N to add a bookmark, except while typing in a field. Press Escape to close a dialog; unsaved edits remain as a draft. Use Tab and Shift+Tab to move between controls, then Enter or Space to activate them.</p></details>
-  <details class="help-details"><summary>Connect an extension or sync app</summary><p class="small muted">Create a dedicated key under API keys for each extension or sync app. Browser sign-in uses your username and password. Settings contains Floccus WebDAV instructions and mobile installation guidance. Floccus uploads replace the synchronized bookmark tree, so review sync settings before uploading.</p></details>
-  </div><div id="help-empty" hidden><p class="muted">No help topics found. Try “tags”, “capture” or “backup”.</p><button id="help-clear" type="button" class="button subtle">Clear help search</button></div></dialog>
+  <dialog id="help-dialog" class="modal help-modal" aria-labelledby="help-title">
+    <header class="help-header">
+      <div class="dialog-heading"><h2 id="help-title">Help</h2><button type="button" class="icon-button close-dialog" aria-label="Close help"><span data-icon="close" aria-hidden="true"></span></button></div>
+      <label class="sr-only" for="help-search">Search help</label>
+      <input id="help-search" type="search" placeholder="Search help" autofocus>
+      <p id="help-results" class="small muted" role="status" aria-atomic="true"></p>
+    </header>
+    <div class="help-body">
+      <div id="help-topics">
+        <details>
+          <summary>Bookmarks, collections &amp; tags<span data-icon="chevron-right" aria-hidden="true"></span></summary>
+          <div class="help-answer">
+            <ol><li>Choose <strong>Add bookmark</strong> and paste a URL.</li><li>Pick a collection, or leave it in <strong>Inbox</strong>.</li><li>In <strong>Tags</strong>, choose an existing tag or type a new name and press <kbd>Enter</kbd>.</li></ol>
+            <p>Browse your full index in <strong>All tags</strong>. To edit several bookmarks at once, select their checkboxes, then choose <strong>Actions</strong>.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Search &amp; filters<span data-icon="chevron-right" aria-hidden="true"></span></summary>
+          <div class="help-answer">
+            <p>Search covers titles, URLs, descriptions, notes, tags and captured text. A highlighted excerpt shows the match.</p>
+            <p>In <strong>View options</strong>, <strong>Include near matches</strong> also finds similar words in bookmark metadata. It does not search captured text.</p>
+            <p>Clear the active chips to remove filters.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Reading, highlights &amp; notes<span data-icon="chevron-right" aria-hidden="true"></span></summary>
+          <div class="help-answer">
+            <p>Open a bookmark’s title to read its saved text. <strong>Reading options</strong> contains text size, formatted view, printing and capture controls.</p>
+            <ul><li>Select a passage, then choose <strong>Highlight</strong>.</li><li>Use <strong>Notes</strong> at the top of the reader to write and save your notes.</li></ul>
+          </div>
+        </details>
+        <details>
+          <summary>Failed or missing captures<span data-icon="chevron-right" aria-hidden="true"></span></summary>
+          <div class="help-answer">
+            <ol><li>Open the bookmark to check its capture status and reason.</li><li>In <strong>Reading options</strong>, choose <strong>Refresh capture</strong>.</li><li>If the site requires signing in or blocks capture, use <strong>Visit original</strong>, then attach an HTML snapshot or PDF under <strong>Files</strong>.</li></ol>
+            <p>Text-only captures cannot provide a formatted page.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Unsaved drafts<span data-icon="chevron-right" aria-hidden="true"></span></summary>
+          <div class="help-answer">
+            <p>Unsaved bookmark edits, notes and annotations stay in this tab when you close a dialog. They also survive a reload when browser storage is available. A warning appears before leaving with unsaved work.</p>
+            <p>Save before closing the tab or signing out. <strong>Discard draft</strong> removes only your unsaved changes.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Backup &amp; restore<span data-icon="chevron-right" aria-hidden="true"></span></summary>
+          <div class="help-answer">
+            <p><strong>Settings → Backup &amp; restore</strong> downloads the full library, captures, files and account settings. Keep the ZIP private.</p>
+            <ol><li>Stop Pocketmark.</li><li>Restore into an empty data directory, following the included <code>RESTORE.txt</code> instructions.</li><li>Restart Pocketmark.</li></ol>
+            <p>Keep your access-token file or <code>POCKETMARK_TOKEN</code> separately. JSON and HTML exports contain bookmark metadata only.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Extensions &amp; browser sync<span data-icon="chevron-right" aria-hidden="true"></span></summary>
+          <div class="help-answer">
+            <p>Create a dedicated key under <strong>API keys</strong> for each extension or sync app. Browser sign-in uses your username and password.</p>
+            <p><strong>Settings</strong> contains Floccus WebDAV instructions and mobile installation guidance.</p>
+            <p>Floccus uploads replace the synchronized bookmark tree. Review sync settings before uploading.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Keyboard shortcuts<span data-icon="chevron-right" aria-hidden="true"></span></summary>
+          <div class="help-answer">
+            <dl class="help-shortcuts">
+              <div><dt><kbd>/</kbd></dt><dd>Search bookmarks</dd></div>
+              <div><dt><kbd>N</kbd></dt><dd>Add a bookmark</dd></div>
+              <div><dt><kbd>Escape</kbd></dt><dd>Close a dialog; unsaved edits stay as a draft</dd></div>
+              <div><dt><kbd>Tab</kbd> / <kbd>Shift</kbd> + <kbd>Tab</kbd></dt><dd>Move between controls</dd></div>
+              <div><dt><kbd>Enter</kbd> / <kbd>Space</kbd></dt><dd>Activate a control</dd></div>
+            </dl>
+            <p>The <kbd>/</kbd> and <kbd>N</kbd> shortcuts work when you are not typing in a field.</p>
+          </div>
+        </details>
+      </div>
+      <div id="help-empty" hidden><p>No matching topics.</p><p class="muted">Try “tags”, “capture” or “backup”.</p><button id="help-clear" type="button" class="button subtle">Clear search</button></div>
+    </div>
+  </dialog>
 </body>
 </html>

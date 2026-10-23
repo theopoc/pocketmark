@@ -1004,12 +1004,16 @@
       topic.open = !!query && match;
       if (match) matches++;
     });
-    $("help-results").textContent = `${matches} help topic${matches === 1 ? "" : "s"}`;
+    $("help-results").textContent = query ? `${matches} topic${matches === 1 ? "" : "s"} found` : "";
     $("help-empty").hidden = matches > 0;
   }
   $("help-search").addEventListener("input", updateHelp);
   $("help-clear").addEventListener("click", () => { $("help-search").value = ""; updateHelp(); $("help-search").focus(); });
-  $("help-button").addEventListener("click", () => { $("help-search").value = ""; updateHelp(); $("help-dialog").showModal(); });
+  $("help-button").addEventListener("click", () => {
+    $("help-search").value = ""; updateHelp();
+    $("help-dialog").showModal();
+    document.querySelector("#help-dialog .help-body").scrollTop = 0;
+  });
 
   function configureLogin(passwordEnabled = true) {
     $("login-title").textContent = setupRequired ? "Create your account" : "Welcome back";
