@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"io"
 	"strings"
@@ -48,6 +49,16 @@ func (s *Store) SaveAsset(ctx context.Context, a Asset, src io.Reader) (Asset, e
 	if count >= 32 {
 		return a, errors.New("a bookmark can have at most 32 attachments")
 	}
+	a, err = insertAsset(ctx, tx, a, src, "attachment")
+	if err != nil {
+		return a, err
+	}
+	return a, tx.Commit()
+}
+
+// insertAsset writes metadata and bounded chunks inside the caller's transaction.
+// It never commits: standalone files must commit their bookmark and bytes together.
+func insertAsset(ctx context.Context, tx *sql.Tx, a Asset, src io.Reader, noun string) (Asset, error) {
 	a.CreatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	result, err := tx.ExecContext(ctx, `INSERT INTO assets(link_id,name,media_type,kind,created_at) VALUES(?,?,?,?,?)`, a.LinkID, a.Name, a.MediaType, a.Kind, a.CreatedAt)
 	if err != nil {
@@ -63,7 +74,7 @@ func (s *Store) SaveAsset(ctx context.Context, a Asset, src io.Reader) (Asset, e
 		if n > 0 {
 			a.Size += int64(n)
 			if a.Size > MaxAssetSize {
-				return a, errors.New("attachment exceeds 20 MiB")
+				return a, errors.New(noun + " exceeds 20 MiB")
 			}
 			if _, err = tx.ExecContext(ctx, `INSERT INTO asset_chunks VALUES(?,?,?)`, a.ID, ordinal, buf[:n]); err != nil {
 				return a, err
@@ -77,12 +88,12 @@ func (s *Store) SaveAsset(ctx context.Context, a Asset, src io.Reader) (Asset, e
 		}
 	}
 	if a.Size == 0 {
-		return a, errors.New("empty attachment")
+		return a, errors.New("empty " + noun)
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE assets SET size=? WHERE id=?`, a.Size, a.ID); err != nil {
 		return a, err
 	}
-	return a, tx.Commit()
+	return a, nil
 }
 
 func (s *Store) Assets(ctx context.Context, linkID int64) ([]Asset, error) {
