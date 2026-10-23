@@ -1,12 +1,8 @@
 package server
 
 import (
-	"bufio"
-	"bytes"
 	"io"
-	"mime"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
@@ -37,53 +33,14 @@ func (a *Server) createFile(w http.ResponseWriter, r *http.Request) {
 		}
 		collection = &id
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, store.MaxAssetSize)
-	reader := bufio.NewReaderSize(r.Body, 512)
-	prefix, e := reader.Peek(512)
-	if e != nil && e != io.EOF {
-		fail(w, 400, "cannot read file")
+	upload, ok := a.stageUpload(w, r, "file")
+	if !ok {
 		return
 	}
-	media := http.DetectContentType(prefix)
-	if bytes.HasPrefix(prefix, []byte("%PDF-")) {
-		media = "application/pdf"
-	}
-	declared, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if declared == "text/html" && (media == "text/plain; charset=utf-8" || strings.HasPrefix(media, "text/html")) {
-		media = "text/html"
-	}
-	if strings.HasPrefix(media, "text/html") {
-		media = "text/html"
-	}
-	kind := ""
-	switch media {
-	case "application/pdf":
-		kind = "pdf"
-	case "image/png", "image/jpeg", "image/gif", "image/webp":
-		kind = "image"
-	case "text/html":
-		kind = "html"
-	default:
-		fail(w, 415, "upload a PDF, PNG, JPEG, GIF, WebP or HTML/SingleFile document")
-		return
-	}
-	// Spool the request before opening a database transaction, keeping a slow
-	// upload from occupying the single SQLite connection needed by other readers.
-	f, e := a.temporaryDataFile(r.Context(), ".file-upload-*")
-	if e != nil {
-		handleError(w, e)
-		return
-	}
-	defer os.Remove(f.Name())
-	defer f.Close()
-	if _, e = io.Copy(f, reader); e != nil {
-		fail(w, 400, "file exceeds 20 MiB or upload was interrupted")
-		return
-	}
+	defer upload.cleanup()
 	l := store.Link{URL: "pocketmark-file:" + randomSecret(), Title: name, CollectionID: collection}
-	if kind == "html" {
-		_, _ = f.Seek(0, io.SeekStart)
-		parsed, parseErr := capture.ExtractDocument(f)
+	if upload.kind == "html" {
+		parsed, parseErr := capture.ExtractDocument(upload.file)
 		if parseErr == nil {
 			l.Content = parsed.Content
 			l.Description = parsed.Description
@@ -91,11 +48,11 @@ func (a *Server) createFile(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-Pocketmark-Warning", "File saved without reader indexing; HTML extraction limits were exceeded")
 		}
 	}
-	if _, e = f.Seek(0, io.SeekStart); e != nil {
+	if _, e := upload.file.Seek(0, io.SeekStart); e != nil {
 		handleError(w, e)
 		return
 	}
-	id, asset, e := a.Store.CreateFile(r.Context(), l, store.Asset{Name: name, MediaType: media, Kind: kind}, f)
+	id, asset, e := a.Store.CreateFile(r.Context(), l, store.Asset{Name: name, MediaType: upload.mediaType, Kind: upload.kind}, upload.file)
 	if e != nil {
 		handleError(w, e)
 		return

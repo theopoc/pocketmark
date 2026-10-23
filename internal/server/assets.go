@@ -2,7 +2,6 @@ package server
 
 import (
 	"archive/zip"
-	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -14,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"pocketmark/internal/capture"
@@ -65,41 +63,14 @@ func (a *Server) uploadAsset(w http.ResponseWriter, r *http.Request) {
 		handleError(w, e)
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, store.MaxAssetSize)
-	reader := bufio.NewReaderSize(r.Body, 512)
-	prefix, e := reader.Peek(512)
-	if e != nil && e != io.EOF {
-		fail(w, 400, "cannot read attachment")
+	upload, ok := a.stageUpload(w, r, "attachment")
+	if !ok {
 		return
 	}
-	media := http.DetectContentType(prefix)
-	if bytes.HasPrefix(prefix, []byte("%PDF-")) {
-		media = "application/pdf"
-	}
-	declared, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	// Some SingleFile files start with long comments; the caller may identify
-	// these as HTML. They remain untrusted downloadable bytes, never inline.
-	if declared == "text/html" && (media == "text/plain; charset=utf-8" || strings.HasPrefix(media, "text/html")) {
-		media = "text/html"
-	}
-	if strings.HasPrefix(media, "text/html") {
-		media = "text/html"
-	}
-	kind := "upload"
-	switch media {
-	case "application/pdf":
-		kind = "pdf"
-	case "image/png", "image/jpeg", "image/gif", "image/webp":
-		kind = "image"
-	case "text/html":
-		kind = "html"
-	default:
-		fail(w, 415, "upload a PDF, PNG, JPEG, GIF, WebP or HTML/SingleFile document")
-		return
-	}
+	defer upload.cleanup()
 	name := r.URL.Query().Get("name")
 	if name == "" {
-		switch kind {
+		switch upload.kind {
 		case "pdf":
 			name = "document.pdf"
 		case "html":
@@ -108,29 +79,14 @@ func (a *Server) uploadAsset(w http.ResponseWriter, r *http.Request) {
 			name = "image"
 		}
 	}
-	f, e := a.temporaryDataFile(r.Context(), ".upload-*")
-	if e != nil {
-		handleError(w, e)
-		return
-	}
-	defer os.Remove(f.Name())
-	defer f.Close()
-	if _, e = io.Copy(f, reader); e != nil {
-		fail(w, 400, "attachment exceeds 20 MiB or upload was interrupted")
-		return
-	}
-	if _, e = f.Seek(0, io.SeekStart); e != nil {
-		handleError(w, e)
-		return
-	}
-	asset, e := a.Store.SaveAsset(r.Context(), store.Asset{LinkID: id(r), Name: name, MediaType: media, Kind: kind}, f)
+	asset, e := a.Store.SaveAsset(r.Context(), store.Asset{LinkID: id(r), Name: name, MediaType: upload.mediaType, Kind: upload.kind}, upload.file)
 	if e != nil {
 		fail(w, 400, e.Error())
 		return
 	}
-	if kind == "html" {
-		f.Seek(0, io.SeekStart)
-		parsed, parseErr := capture.ExtractDocument(f)
+	if upload.kind == "html" {
+		upload.file.Seek(0, io.SeekStart)
+		parsed, parseErr := capture.ExtractDocument(upload.file)
 		if parseErr == nil {
 			_, parseErr = a.Store.DB.ExecContext(r.Context(), `UPDATE links SET content=?,title=CASE WHEN title=url AND ?<>'' THEN ? ELSE title END, description=CASE WHEN description='' THEN ? ELSE description END,status='ready',error='',updated_at=? WHERE id=? AND url=?`, parsed.Content, parsed.Title, parsed.Title, parsed.Description, time.Now().UTC().Format(time.RFC3339Nano), id(r), link.URL)
 		}
