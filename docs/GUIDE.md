@@ -137,6 +137,8 @@ Within `internal/store/`, files are grouped by responsibility and import format;
 
 ## Further reading
 
+- [Architecture and module ownership](ARCHITECTURE.md)
+
 - [Release installation](RELEASE_INSTALL.md) · [Container images](CI.md#ghcr-images)
 - [Archive limits](ARCHIVES.md) · [Feature coverage](FEATURES.md)
 - [Client compatibility](REAL_CLIENTS.md)
