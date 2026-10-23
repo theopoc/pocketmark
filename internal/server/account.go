@@ -43,6 +43,7 @@ func (a *Server) registerAccount(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/account", a.setAccount)
 	mux.HandleFunc("GET /api/tokens", a.tokens)
 	mux.HandleFunc("POST /api/tokens", a.createToken)
+	mux.HandleFunc("PATCH /api/tokens/{id}", a.updateToken)
 	mux.HandleFunc("DELETE /api/tokens/{id}", a.deleteToken)
 }
 func (a *Server) owner(r *http.Request) bool {
@@ -157,14 +158,12 @@ func (a *Server) validAPIKey(r *http.Request, key string) bool {
 		return false
 	}
 	sum := sha256.Sum256([]byte(key))
-	return a.Store.HasAPIKeyHash(r.Context(), hex.EncodeToString(sum[:]))
+	return a.Store.AuthenticateAPIKey(r.Context(), hex.EncodeToString(sum[:]))
 }
 
 type apiToken struct {
-	ID        int64  `json:"id"`
-	Name      string `json:"name"`
-	CreatedAt string `json:"createdAt"`
-	Token     string `json:"token,omitempty"`
+	store.APIKey
+	Token string `json:"token,omitempty"`
 }
 
 func (a *Server) tokens(w http.ResponseWriter, r *http.Request) {
@@ -204,7 +203,32 @@ func (a *Server) createToken(w http.ResponseWriter, r *http.Request) {
 		handleError(w, err)
 		return
 	}
-	respond(w, 201, apiToken{ID: key.ID, Name: key.Name, CreatedAt: key.CreatedAt, Token: token})
+	respond(w, 201, apiToken{APIKey: key, Token: token})
+}
+func (a *Server) updateToken(w http.ResponseWriter, r *http.Request) {
+	if !a.requireOwner(w, r) {
+		return
+	}
+	var b struct {
+		Active *bool `json:"active"`
+	}
+	if !decode(w, r, &b, 4096) {
+		return
+	}
+	if b.Active == nil {
+		fail(w, 400, "active must be a boolean")
+		return
+	}
+	err := a.Store.SetAPIKeyActive(r.Context(), id(r), *b.Active)
+	if errors.Is(err, sql.ErrNoRows) {
+		fail(w, 404, "key not found")
+		return
+	}
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+	respond(w, 200, map[string]bool{"ok": true})
 }
 func (a *Server) deleteToken(w http.ResponseWriter, r *http.Request) {
 	if !a.requireOwner(w, r) {

@@ -151,9 +151,12 @@ Annotation colors: `yellow`, `green`, `blue`, `pink`. Each bookmark supports up 
 | `POST /api/setup` | Public first-run `{username,password}` → 201 and an owner cookie. Only a new, empty instance can create its single account; later attempts return 409. Same password limits and shared login rate limit. |
 | `GET /api/account` | Owner-only `{username,passwordEnabled}`. |
 | `PUT /api/account` | Owner-only `{username,password}`. Password 12–1024 bytes, username 1–120 bytes. Empty passwords are rejected; password sign-in cannot be disabled. Issues a replacement owner cookie. |
-| `GET /api/tokens` | Owner-only array `{id,name,createdAt}`; never returns secrets. |
-| `POST /api/tokens` | Owner-only `{name}` → `{id,name,createdAt,token}`; raw key appears once. Max 32 keys. |
-| `DELETE /api/tokens/{id}` | Owner-only immediate revocation. |
+| `GET /api/tokens` | Owner-only array `{id,name,createdAt,active,lastUsedAt}`; never returns secrets. |
+| `POST /api/tokens` | Owner-only `{name}` → `{id,name,createdAt,active,lastUsedAt,token}`; raw key appears once. Max 32 keys. |
+| `PATCH /api/tokens/{id}` | Owner-only `{active:boolean}` → `{ok:true}`. Disable temporarily or reactivate the same key; 404 for missing/revoked keys. |
+| `DELETE /api/tokens/{id}` | Owner-only permanent, immediate revocation. |
+
+Keys are active on creation. Disabling a key blocks subsequent API and WebDAV authentication without changing its secret; reactivation restores access. In-flight requests may finish. Disabled keys count toward the 32-key limit. `lastUsedAt` is a UTC RFC3339 timestamp recorded on successful credential authentication, even if the requested operation is later rejected. An empty string means no recorded use; activity before this feature was enabled cannot be recovered. Existing keys remain active when upgraded.
 
 The included extension uses bearer authentication with narrowly recognized `chrome-extension://`/`moz-extension://` CORS origins; no credentialed cross-origin cookies are allowed. Ordinary cross-site browser mutations remain rejected. Extension-origin authentication uses dedicated bearer API keys.
 

@@ -519,7 +519,66 @@
           },
           "description": "Bookmark, collection or key ID, according to the endpoint."
         }
-      ]
+      ],
+      "patch": {
+        "operationId": "setKeyActive",
+        "tags": [
+          "Account & keys"
+        ],
+        "summary": "Disable or reactivate an API key",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          }
+        },
+        "x-owner-only": true,
+        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. Disabling blocks subsequent API and WebDAV authentication; reactivation restores access with the same key. Revoked keys cannot be reactivated.",
+        "requestBody": {
+          "required": true,
+          "description": "4 KiB JSON limit.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "active": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "active"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
     },
     "/api/stats": {
       "get": {
@@ -2339,12 +2398,22 @@
             "type": "string",
             "description": "Only returned on creation. Copy once; it cannot be retrieved later.",
             "readOnly": true
+          },
+          "active": {
+            "type": "boolean",
+            "description": "Whether the key can authenticate API and WebDAV requests."
+          },
+          "lastUsedAt": {
+            "type": "string",
+            "description": "UTC RFC3339 timestamp of the last successful credential authentication, or an empty string if no use has been recorded. Historical use before the feature was enabled is unavailable."
           }
         },
         "required": [
           "id",
           "name",
-          "createdAt"
+          "createdAt",
+          "active",
+          "lastUsedAt"
         ]
       },
       "KeyInput": {

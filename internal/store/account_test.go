@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 )
 
 func TestAPIKeyLimitAndRevocation(t *testing.T) {
@@ -38,5 +39,44 @@ func TestAPIKeyLimitAndRevocation(t *testing.T) {
 	}
 	if _, err = s.CreateAPIKey(ctx, "replacement", fmt.Sprintf("%064x", 33)); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAPIKeyActivityAndDisable(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	key, err := s.CreateAPIKey(ctx, "client", "test hash")
+	if err != nil || !key.Active || key.LastUsedAt != "" {
+		t.Fatalf("new key: %+v (%v)", key, err)
+	}
+	if !s.AuthenticateAPIKey(ctx, "test hash") || s.AuthenticateAPIKey(ctx, "unknown") {
+		t.Fatal("authentication mismatch")
+	}
+	keys, err := s.APIKeys(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	used := keys[0].LastUsedAt
+	if _, err := time.Parse(time.RFC3339Nano, used); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetAPIKeyActive(ctx, key.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if s.AuthenticateAPIKey(ctx, "test hash") || s.HasAPIKeyHash(ctx, "test hash") {
+		t.Fatal("disabled key accepted")
+	}
+	keys, err = s.APIKeys(ctx)
+	if err != nil || keys[0].Active || keys[0].LastUsedAt != used {
+		t.Fatalf("disabled activity changed: %+v (%v)", keys, err)
+	}
+	if err := s.SetAPIKeyActive(ctx, key.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if !s.AuthenticateAPIKey(ctx, "test hash") {
+		t.Fatal("reactivated key rejected")
+	}
+	if err := s.SetAPIKeyActive(ctx, key.ID+1, true); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("missing key: %v", err)
 	}
 }

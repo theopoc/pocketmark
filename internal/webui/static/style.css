@@ -233,6 +233,29 @@ body:has(dialog[open]) { overflow: hidden; }
 #new-token label { margin-top: 0; }
 .token-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .token-actions .button { min-height: 44px; }
+.token-heading, .token-name-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.token-heading { justify-content: space-between; }
+#settings-dialog .token-heading h3 { margin: 0; }
+#token-list { list-style: none; margin: 16px 0 0; padding: 0; border-top: 1px solid var(--line); }
+.token-row { display: flex; align-items: center; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+.token-details { flex: 1; min-width: 0; }
+.token-name { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.token-status { display: inline-flex; align-items: center; gap: 6px; padding: 2px 7px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); background: var(--surface); font-size: 11px; font-weight: 550; }
+.token-status::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.token-status.is-active { color: var(--success); }
+.token-metadata { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; margin: 10px 0 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.token-metadata dt { color: var(--muted); margin-bottom: 2px; }
+.token-metadata dd { margin: 0; overflow-wrap: anywhere; }
+.token-row-actions { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+.token-row-actions button { min-height: 36px; }
+#token-list .token-revoke { color: var(--danger); }
+.token-empty { padding: 20px 0; font-size: 13px; }
+#tokens-feedback:empty { display: none; }
+@media (max-width: 600px) {
+  .token-row { align-items: stretch; flex-direction: column; gap: 12px; }
+  .token-row-actions { flex-direction: row; gap: 16px; }
+  .token-row-actions button { min-height: 44px; }
+}
 /* Reader: comfortable measure inside the same product language. */
 .reader-modal { width: min(920px,calc(100vw - 40px)); padding: 24px 40px 40px; }
 .reader-heading-label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 550; }

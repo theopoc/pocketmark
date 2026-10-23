@@ -16,9 +16,11 @@ type SetupState struct {
 }
 
 type APIKey struct {
-	ID        int64  `json:"id"`
-	Name      string `json:"name"`
-	CreatedAt string `json:"createdAt"`
+	ID         int64  `json:"id"`
+	Name       string `json:"name"`
+	CreatedAt  string `json:"createdAt"`
+	Active     bool   `json:"active"`
+	LastUsedAt string `json:"lastUsedAt"`
 }
 
 var ErrAPIKeyLimit = errors.New("at most 32 API keys")
@@ -57,11 +59,27 @@ func (s *Store) SaveAccount(ctx context.Context, a Account) error {
 
 func (s *Store) HasAPIKeyHash(ctx context.Context, hash string) bool {
 	var one int
-	return s.db.QueryRowContext(ctx, "SELECT 1 FROM api_tokens WHERE hash=?", hash).Scan(&one) == nil
+	return s.db.QueryRowContext(ctx, "SELECT 1 FROM api_tokens WHERE hash=? AND active=1", hash).Scan(&one) == nil
+}
+
+// AuthenticateAPIKey checks the current persisted state and records successful
+// credential use in one write. Disabled and unknown keys never change history.
+func (s *Store) AuthenticateAPIKey(ctx context.Context, hash string) bool {
+	r, err := s.db.ExecContext(ctx, "UPDATE api_tokens SET last_used_at=? WHERE hash=? AND active=1", time.Now().UTC().Format(time.RFC3339Nano), hash)
+	if err != nil {
+		return false
+	}
+	n, err := r.RowsAffected()
+	return err == nil && n == 1
+}
+
+func (s *Store) SetAPIKeyActive(ctx context.Context, id int64, active bool) error {
+	r, err := s.db.ExecContext(ctx, "UPDATE api_tokens SET active=? WHERE id=?", active, id)
+	return affected(r, err)
 }
 
 func (s *Store) APIKeys(ctx context.Context) ([]APIKey, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT id,name,created_at FROM api_tokens ORDER BY id")
+	rows, err := s.db.QueryContext(ctx, "SELECT id,name,created_at,active,last_used_at FROM api_tokens ORDER BY id")
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +87,7 @@ func (s *Store) APIKeys(ctx context.Context) ([]APIKey, error) {
 	keys := []APIKey{}
 	for rows.Next() {
 		var key APIKey
-		if err := rows.Scan(&key.ID, &key.Name, &key.CreatedAt); err != nil {
+		if err := rows.Scan(&key.ID, &key.Name, &key.CreatedAt, &key.Active, &key.LastUsedAt); err != nil {
 			return nil, err
 		}
 		keys = append(keys, key)
@@ -78,7 +96,7 @@ func (s *Store) APIKeys(ctx context.Context) ([]APIKey, error) {
 }
 
 func (s *Store) CreateAPIKey(ctx context.Context, name, hash string) (APIKey, error) {
-	key := APIKey{Name: name, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	key := APIKey{Name: name, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Active: true}
 	r, err := s.db.ExecContext(ctx, "INSERT INTO api_tokens(name,hash,created_at) SELECT ?,?,? WHERE (SELECT COUNT(*) FROM api_tokens)<32", name, hash, key.CreatedAt)
 	if err != nil {
 		return key, err

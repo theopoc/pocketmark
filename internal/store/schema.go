@@ -59,6 +59,9 @@ PRAGMA user_version=1;
 	if err = initLibraryTimestamps(ctx, tx); err != nil {
 		return err
 	}
+	if err = initAPIKeyActivity(ctx, tx); err != nil {
+		return fmt.Errorf("initialize API key activity: %w", err)
+	}
 	if err = initAssets(ctx, tx); err != nil {
 		return fmt.Errorf("initialize attachments: %w", err)
 	}
@@ -66,6 +69,24 @@ PRAGMA user_version=1;
 		return fmt.Errorf("initialize WebDAV: %w", err)
 	}
 	return tx.Commit()
+}
+
+func initAPIKeyActivity(ctx context.Context, tx *sql.Tx) error {
+	for _, column := range []struct{ name, definition string }{
+		{"active", "INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1))"},
+		{"last_used_at", "TEXT NOT NULL DEFAULT ''"},
+	} {
+		var exists int
+		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM pragma_table_info('api_tokens') WHERE name=?", column.name).Scan(&exists); err != nil {
+			return err
+		}
+		if exists == 0 {
+			if _, err := tx.ExecContext(ctx, "ALTER TABLE api_tokens ADD COLUMN "+column.name+" "+column.definition); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // initLibraryTimestamps upgrades databases whose collections and tags did not
