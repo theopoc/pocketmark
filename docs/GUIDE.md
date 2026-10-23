@@ -119,8 +119,16 @@ For the extended feature workload, use `python3 scripts/benchmark_capture.py --f
 | `cmd/pocketmark/` | Configuration, lifecycle and capture worker. |
 | `internal/capture/` | Bounded HTTP fetch, network checks and HTML text extraction. |
 | `internal/server/` | Authentication and HTTP API. |
-| `internal/store/` | SQLite schema, full-text search and migration. |
+| `internal/store/` | SQLite persistence, schema upgrades, full-text search and bookmark import/export. |
 | `internal/webui/` | Embedded interface assets. |
+
+Within `internal/store/`, files are grouped by responsibility and import format; all remain in the same Go package.
+
+| Files | Responsibility |
+| --- | --- |
+| [schema.go](../internal/store/schema.go), `schema*_test.go` | Atomic schema initialization and legacy-database upgrades, including restart regressions. |
+| [import_json.go](../internal/store/import_json.go), `import_json_test.go` | JSON metadata import/export, hierarchy merging and rollback. |
+| [import_html.go](../internal/store/import_html.go), `import_html_test.go` | Netscape HTML bookmark import/export and format round-trip regressions. |
 
 | Documentation | Purpose |
 | --- | --- |
