@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, edited]
+  schedule:
+    # Recheck advisories and runner/tool drift even when main has no new commits.
+    - cron: '23 5 * * 1'
   workflow_dispatch:
   workflow_call:
     inputs:
@@ -38,6 +42,9 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
+      - name: Validate the squash commit title
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/check_pr_title.py
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -168,7 +175,11 @@ jobs:
           python3 - <<'PY'
           import json, os
           results = json.loads(os.environ['RESULTS'])
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('## CI gates\n\n| Job | Result |\n| --- | --- |\n')
+              for name, job in results.items():
+                  summary.write(f"| {name} | {job['result']} |\n")
           failures = [name for name, job in results.items() if job['result'] != 'success']
-          if failures:
-              raise SystemExit('Unsuccessful CI jobs: ' + ', '.join(failures))
+          if failures or not results:
+              raise SystemExit('Unsuccessful CI jobs: ' + ', '.join(failures or ['missing results']))
           PY
