@@ -9,8 +9,9 @@ updates:
     commit-message:
       prefix: ci
     groups:
-      actions:
+      actions-minor-patch:
         patterns: ['*']
+        update-types: [minor, patch]
   - package-ecosystem: gomod
     directory: /
     schedule:
