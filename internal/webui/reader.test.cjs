@@ -1,0 +1,321 @@
+"use strict";
+const { test } = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const { create } = require("./static/reader.js");
+const workspace = require("./static/workspace.js");
+
+function deferred() {
+  let resolve, reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+const tick = () => new Promise(setImmediate);
+const link = (id, changes = {}) => ({ id, url: `https://example.com/${id}`, title: `Page ${id}`, content: `Text ${id}`, notes: "Saved notes", description: "Description", tags: ["keep"], collectionId: 7, favorite: true, read: false, status: "ready", ...changes });
+
+// A small browser adapter exercises the production module and its DOM events.
+// IDs and section controls come from the shipped document, not an alternate UI.
+class Element {
+  constructor(tag = "div", id = "") {
+    Object.assign(this, { tagName: tag.toUpperCase(), id, value: "", hidden: false, disabled: false, open: false, dataset: {}, style: {}, attributes: {}, children: [], events: new Map(), scrollTop: 0, text: "" });
+  }
+  set textContent(value) { this.text = String(value); this.children = []; }
+  get textContent() { return this.text + this.children.map(child => child.textContent).join(""); }
+  append(...nodes) {
+    for (const node of nodes) {
+      if (node.tagName === "#FRAGMENT") { this.append(...node.children); continue; }
+      node.parentNode = this; this.children.push(node);
+    }
+  }
+  replaceChildren(...nodes) { this.children = []; this.text = ""; this.append(...nodes); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  removeAttribute(name) { delete this.attributes[name]; if (name === "src") this.src = ""; }
+  addEventListener(type, fn) { if (!this.events.has(type)) this.events.set(type, []); this.events.get(type).push(fn); }
+  dispatchEvent(event) { for (const fn of this.events.get(event.type) || []) fn(event); return true; }
+  querySelector(selector) {
+    assert.equal(selector, "button[type=submit]");
+    if (!this.submit) { this.submit = new Element("button"); this.append(this.submit); }
+    return this.submit;
+  }
+  contains(node) { for (; node; node = node.parentNode) if (node === this) return true; return false; }
+  showModal() { this.open = true; }
+  close() { if (this.open) { this.open = false; queueMicrotask(() => this.dispatchEvent({ type: "close" })); } }
+  click() { if (!this.disabled) this.dispatchEvent({ type: "click" }); }
+  focus() { this.focused = true; }
+  scrollIntoView(options) { this.scrollOptions = options; }
+}
+async function fire(node, type, extra = {}) {
+  const event = { type, target: node, submitter: node.querySelector && type === "submit" ? node.querySelector("button[type=submit]") : undefined, preventDefault() {}, ...extra };
+  await Promise.all((node.events.get(type) || []).map(fn => fn(event)));
+}
+function setup({ handler, head } = {}) {
+  const elements = new Map(), sections = [];
+  const html = fs.readFileSync(`${__dirname}/static/index.html`, "utf8");
+  for (const match of html.matchAll(/<([a-z][a-z0-9]*)\b[^>]*\bid="([^"]+)"[^>]*>/g)) elements.set(match[2], new Element(match[1], match[2]));
+  for (const match of html.matchAll(/data-reader-section="([^"]+)"/g)) { const node = new Element("button"); node.dataset.readerSection = match[1]; sections.push(node); }
+  const get = id => { assert.ok(elements.has(id), `unknown shipped element ${id}`); return elements.get(id); };
+  const document = new Element("document");
+  Object.assign(document, {
+    getElementById: get, createElement: tag => new Element(tag), createTextNode: text => { const node = new Element("#text"); node.textContent = text; return node; }, createDocumentFragment: () => new Element("#fragment"),
+    querySelectorAll: selector => selector === "[data-highlight-selection]" ? [get("reader-highlight"), get("annotate-selection")] : selector === "[data-reader-section]" ? sections : assert.fail(`unexpected selector ${selector}`),
+  });
+  const records = new Map([[1, link(1)], [2, link(2)]]), annotations = new Map(), assets = new Map(), calls = [], notices = [], edits = [], changes = [], headCalls = [], windows = [];
+  const drafts = workspace.createDrafts();
+  let expired = 0;
+  const browser = { document, matchMedia: () => ({ matches: true }), confirm: () => true, getSelection: () => null, open: (...args) => windows.push(args), Event: class { constructor(type) { this.type = type; } },
+    fetch: async (path, options) => { headCalls.push({ path, options }); return head ? head(path, options) : { ok: true, status: 200 }; },
+  };
+  async function api(path, options = {}) {
+    calls.push({ path, ...options });
+    const fallback = () => {
+      const match = path.match(/^\/api\/links\/(\d+)(?:\/(annotations|assets|capture|preserve))?$/);
+      if (!match) throw Error(`unexpected request ${path}`);
+      const id = Number(match[1]), section = match[2];
+      if (section === "annotations") return structuredClone(annotations.get(id) || []);
+      if (section === "assets") return structuredClone(assets.get(id) || []);
+      if (section === "capture") return { ok: true };
+      if (section === "preserve") return { embedded: 2, omitted: 0 };
+      if (options.method === "PUT") { records.set(id, { ...records.get(id), ...JSON.parse(options.body) }); return structuredClone(records.get(id)); }
+      return structuredClone(records.get(id));
+    };
+    return handler ? handler(path, options, fallback) : fallback();
+  }
+  const reader = create({ api, drafts, toast: (...args) => notices.push(args), onEdit: value => edits.push(value), onChange: async () => changes.push(true), onSessionExpired: () => expired++ }, browser);
+  return { reader, get, document, browser, records, annotations, assets, calls, notices, edits, changes, headCalls, windows, drafts, expired: () => expired };
+}
+
+test("opening a later bookmark ignores reversed document and section responses", async () => {
+  const first = deferred();
+  const env = setup({ handler: (path, options, fallback) => path === "/api/links/1" ? first.promise : fallback() });
+  const old = env.reader.open(1);
+  await env.reader.open(2);
+  first.resolve(link(1)); await old;
+  assert.equal(env.get("reader-title").textContent, "Page 2");
+  assert.equal(env.calls.filter(call => call.path.startsWith("/api/links/1/")).length, 0);
+
+  const notes = deferred(), files = deferred();
+  const other = setup({ handler: (path, options, fallback) => path === "/api/links/1/annotations" ? notes.promise : path === "/api/links/1/assets" ? files.promise : fallback() });
+  const loading = other.reader.open(1); await tick();
+  await other.reader.open(2);
+  notes.resolve([{ id: 4, quote: "Old", start: 0, end: 3, note: "Old note" }]); files.resolve([{ id: 8, name: "old.html", mediaType: "text/html", size: 10 }]); await loading;
+  assert.equal(other.get("reader-title").textContent, "Page 2");
+  assert.doesNotMatch(other.get("annotation-list").textContent, /Old/);
+  assert.doesNotMatch(other.get("asset-list").textContent, /old.html/);
+});
+
+test("closing before a response and queued close events cannot repopulate a new reader", async () => {
+  const response = deferred();
+  const env = setup({ handler: (path, options, fallback) => path === "/api/links/1" ? response.promise : fallback() });
+  const loading = env.reader.open(1);
+  env.reader.close();
+  await env.reader.open(2);
+  response.resolve(link(1)); await loading;
+  assert.equal(env.get("reader-dialog").open, true);
+  assert.equal(env.get("reader-title").textContent, "Page 2");
+  assert.equal(env.get("reader-layout").src, "");
+});
+
+test("partial section errors leave text usable and retry only the failed section", async () => {
+  let fail = true;
+  const env = setup({ handler: (path, options, fallback) => {
+    if (path.endsWith("/assets") && fail) throw Error("Files unavailable");
+    return fallback();
+  } });
+  await env.reader.open(1);
+  assert.equal(env.get("reader-content").textContent, "Text 1");
+  assert.equal(env.get("assets-retry").hidden, false);
+  assert.equal(env.get("annotations-error").hidden, true);
+  fail = false;
+  await fire(env.get("assets-retry"), "click");
+  assert.equal(env.get("assets-error").hidden, true);
+  assert.equal(env.calls.filter(call => call.path.endsWith("/annotations")).length, 1);
+});
+
+test("notes saved while typing preserve newer notes and unrelated editor drafts", async () => {
+  const save = deferred();
+  const env = setup({ handler: (path, options, fallback) => options.method === "PUT" ? save.promise : fallback() });
+  env.drafts.put("bookmark:1", { ...workspace.editableBookmark(link(1)), title: "Unfinished title" }, workspace.editableBookmark(link(1)));
+  await env.reader.open(1);
+  env.get("reader-notes").value = "Submitted notes"; await fire(env.get("reader-notes"), "input");
+  const saving = fire(env.get("reader-notes-form"), "submit");
+  env.get("reader-notes").value = "Newer notes"; await fire(env.get("reader-notes"), "input");
+  save.resolve({ ok: true }); await saving;
+  assert.equal(env.drafts.get("bookmark:1").title, "Unfinished title");
+  assert.equal(env.drafts.get("bookmark:1").notes, "Newer notes");
+  assert.equal(env.get("reader-notes-draft").hidden, false);
+  const body = JSON.parse(env.calls.find(call => call.method === "PUT").body);
+  assert.equal(body.notes, "Submitted notes");
+  assert.equal(body.favorite, true);
+  assert.deepEqual(body.tags, ["keep"]);
+});
+
+test("an older note save cannot change a newly opened document or its submit button", async () => {
+  const save = deferred();
+  const env = setup({ handler: (path, options, fallback) => options.method === "PUT" ? save.promise : fallback() });
+  await env.reader.open(1);
+  env.get("reader-notes").value = "Saved for one"; await fire(env.get("reader-notes"), "input");
+  const saving = fire(env.get("reader-notes-form"), "submit");
+  await env.reader.open(2);
+  env.get("reader-notes").value = "New draft for two"; await fire(env.get("reader-notes"), "input");
+  save.resolve({ ok: true }); await saving;
+  assert.equal(env.get("reader-title").textContent, "Page 2");
+  assert.equal(env.get("reader-notes").value, "New draft for two");
+  assert.equal(env.drafts.get("bookmark:2").notes, "New draft for two");
+});
+
+test("session expiry closes the reader, retains drafts and ignores other late sections", async () => {
+  const files = deferred();
+  const env = setup({ handler: (path, options, fallback) => {
+    if (path.endsWith("/assets")) return files.promise;
+    if (path.endsWith("/annotations")) throw Object.assign(Error("Expired"), { status: 401 });
+    return fallback();
+  } });
+  env.drafts.put("bookmark:1", { notes: "Keep this draft" }, {});
+  const opening = env.reader.open(1); await tick();
+  assert.equal(env.get("reader-dialog").open, false);
+  files.resolve([{ id: 8, name: "late.html", mediaType: "text/html", size: 10 }]); await opening;
+  assert.equal(env.expired(), 1);
+  assert.equal(env.drafts.get("bookmark:1").notes, "Keep this draft");
+  assert.doesNotMatch(env.get("asset-list").textContent, /late.html/);
+});
+
+test("formatted-view requests cannot override text mode or a new document", async () => {
+  const head = deferred();
+  const env = setup({ head: () => head.promise });
+  env.assets.set(1, [{ id: 8, name: "page.html", mediaType: "text/html", size: 100 }]);
+  await env.reader.open(1);
+  const showing = fire(env.get("reader-layout-mode"), "click");
+  await fire(env.get("reader-text-mode"), "click");
+  head.resolve({ ok: true, status: 200 }); await showing;
+  assert.equal(env.get("reader-layout").hidden, true);
+  assert.equal(env.get("reader-layout").src, "");
+  assert.equal(env.headCalls[0].options.credentials, "same-origin");
+});
+
+test("capture completion cannot overwrite a different reader's status", async () => {
+  const capture = deferred();
+  const env = setup({ handler: (path, options, fallback) => path.endsWith("/capture") ? capture.promise : fallback() });
+  await env.reader.open(1);
+  const pending = fire(env.get("reader-capture"), "click");
+  await env.reader.open(2);
+  capture.resolve({ ok: true }); await pending;
+  assert.equal(env.get("reader-status").textContent, "Captured text");
+  assert.equal(env.get("reader-recheck").hidden, true);
+  assert.equal(env.get("reader-capture").disabled, false);
+});
+
+test("reader edits return the selected record and standalone files hide network actions", async () => {
+  const env = setup();
+  env.records.set(1, link(1, { type: "file", url: "pocketmark-file:opaque" }));
+  await env.reader.open(1);
+  assert.equal(env.get("reader-original").hidden, true);
+  assert.equal(env.get("reader-capture").hidden, true);
+  assert.equal(env.get("preserve-page").hidden, true);
+  await fire(env.get("reader-edit"), "click");
+  assert.equal(env.edits[0].id, 1);
+  assert.equal(env.get("reader-dialog").open, false);
+});
+
+
+test("formatted-view response after switching documents cannot restore an old iframe", async () => {
+  const head = deferred();
+  const env = setup({ head: () => head.promise });
+  env.assets.set(1, [{ id: 8, name: "page.html", mediaType: "text/html", size: 100 }]);
+  await env.reader.open(1);
+  const showing = fire(env.get("reader-layout-mode"), "click");
+  await env.reader.open(2);
+  head.resolve({ ok: true, status: 200 }); await showing;
+  assert.equal(env.get("reader-title").textContent, "Page 2");
+  assert.equal(env.get("reader-layout").hidden, true);
+  assert.equal(env.get("reader-layout").src, "");
+});
+
+test("formatted view uses same-origin credentials and expires the reader on 401", async () => {
+  const env = setup({ head: async () => ({ ok: false, status: 401 }) });
+  env.records.set(1, link(1, { archiveAvailable: true }));
+  await env.reader.open(1);
+  await fire(env.get("reader-layout-mode"), "click");
+  assert.equal(env.expired(), 1);
+  assert.equal(env.get("reader-dialog").open, false);
+  assert.equal(env.get("reader-layout").src, "");
+  assert.equal(env.headCalls[0].options.credentials, "same-origin");
+});
+
+test("highlights use Unicode offsets and preserve edits made during annotation save", async () => {
+  const save = deferred();
+  const env = setup({ handler: (path, options, fallback) => options.method === "POST" ? save.promise : fallback() });
+  const content = "A😀 café <img>";
+  env.records.set(1, link(1, { content }));
+  await env.reader.open(1);
+  const root = env.get("reader-content"), text = root.children[0];
+  const offset = content.indexOf("café");
+  env.browser.getSelection = () => ({ rangeCount: 1, isCollapsed: false, getRangeAt: () => ({ startContainer: text, endContainer: text, startOffset: offset, toString: () => "café", cloneRange: () => ({ selectNodeContents() {}, setEnd() {}, toString: () => content.slice(0, offset) }) }) });
+  await fire(env.get("reader-highlight"), "click");
+  assert.equal(env.get("annotation-dialog").open, true);
+  assert.equal(env.get("annotation-quote").textContent, "café");
+  env.get("annotation-note").value = "Submitted note"; await fire(env.get("annotation-form"), "input");
+  const saving = fire(env.get("annotation-form"), "submit");
+  env.get("annotation-note").value = "Newer note"; await fire(env.get("annotation-form"), "input");
+  const body = JSON.parse(env.calls.find(call => call.method === "POST").body);
+  assert.equal(body.start, 3);
+  assert.equal(body.end, 7);
+  assert.equal(body.quote, "café");
+  save.resolve({ id: 17 }); await saving;
+  assert.equal(env.drafts.get("annotation:1:17").note, "Newer note");
+  assert.equal(env.get("annotation-dialog").open, true);
+  assert.equal(root.textContent, content);
+});
+
+test("annotation completion cannot close or overwrite another document's annotation", async () => {
+  const save = deferred();
+  const env = setup({ handler: (path, options, fallback) => options.method === "PUT" ? save.promise : fallback() });
+  for (const id of [1, 2]) env.annotations.set(id, [{ id: id + 10, quote: "Text", start: 0, end: 4, note: `Note ${id}`, color: "yellow" }]);
+  const editButton = () => env.get("annotation-list").children[0].children.at(-1).children[0];
+  await env.reader.open(1);
+  await fire(editButton(), "click");
+  env.get("annotation-note").value = "Submitted for one"; await fire(env.get("annotation-form"), "input");
+  const saving = fire(env.get("annotation-form"), "submit");
+  await env.reader.open(2);
+  await fire(editButton(), "click");
+  env.get("annotation-note").value = "Draft for two"; await fire(env.get("annotation-form"), "input");
+  save.resolve({ id: 11 }); await saving;
+  assert.equal(env.get("annotation-dialog").open, true);
+  assert.equal(env.get("annotation-note").value, "Draft for two");
+  assert.equal(env.drafts.get("annotation:2:12").note, "Draft for two");
+  assert.equal(env.get("annotation-form").querySelector("button[type=submit]").disabled, false);
+});
+
+test("an old file upload cannot release another document's active upload control", async () => {
+  const first = deferred(), second = deferred();
+  const env = setup({ handler: (path, options, fallback) => options.method === "POST" && path.includes("/assets?") ? (path.includes("/1/") ? first.promise : second.promise) : fallback() });
+  await env.reader.open(1);
+  env.get("asset-file").files = [{ name: "one.pdf", size: 32, type: "application/pdf" }];
+  const uploading = fire(env.get("asset-file"), "change");
+  await env.reader.open(2);
+  env.get("asset-file").files = [{ name: "two.pdf", size: 32, type: "application/pdf" }];
+  const newer = fire(env.get("asset-file"), "change");
+  first.resolve({ id: 18 }); await uploading;
+  assert.equal(env.get("asset-file").disabled, true);
+  assert.equal(env.get("reader-title").textContent, "Page 2");
+  second.resolve({ id: 19 }); await newer;
+  assert.equal(env.get("asset-file").disabled, false);
+  assert.equal(env.calls.filter(call => call.path === "/api/links/1/assets").length, 1);
+});
+
+test("the shipped script order and worker cache include the reader without private data", () => {
+  const html = fs.readFileSync(`${__dirname}/static/index.html`, "utf8");
+  const scripts = [...html.matchAll(/<script src="([^"]+)"[^>]*>/g)].map(match => match[1]);
+  assert.ok(scripts.indexOf("/workspace.js") < scripts.indexOf("/reader.js"));
+  assert.ok(scripts.indexOf("/reader.js") < scripts.indexOf("/app.js"));
+  const vm = require("node:vm"), handlers = new Map();
+  const context = vm.createContext({ self: { addEventListener: (name, handler) => handlers.set(name, handler) }, URL });
+  vm.runInContext(fs.readFileSync(`${__dirname}/static/sw.js`, "utf8"), context);
+  assert.equal(vm.runInContext('ASSETS.includes("/reader.js")', context), true);
+  assert.equal(vm.runInContext('ASSETS.some(path => path.startsWith("/api/") || path === "/")', context), false);
+  for (const pathname of ["/api/links/1", "/api/links/1/reader", "/"]) {
+    let intercepted = false;
+    context.self.location = { origin: "https://pocketmark.test" };
+    handlers.get("fetch")({ request: { method: "GET", url: `https://pocketmark.test${pathname}` }, respondWith() { intercepted = true; } });
+    assert.equal(intercepted, false);
+  }
+});

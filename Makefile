@@ -17,6 +17,7 @@ check: fmt-check
 	go vet -tags '$(GO_TAGS)' ./...
 	node --check internal/webui/static/theme.js
 	node --check internal/webui/static/workspace.js
+	node --check internal/webui/static/reader.js
 	node --check internal/webui/static/app.js
 	node --check internal/webui/static/sw.js
 	node --check internal/webui/static/api-docs/docs.js

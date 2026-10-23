@@ -1,0 +1,408 @@
+"use strict";
+
+((root) => {
+  const workspace = typeof module !== "undefined" && module.exports ? require("./workspace.js") : root.PocketmarkWorkspace;
+
+  // The reader owns its DOM events and session state. Callers only open/close it;
+  // the browser adapter and application callbacks keep its implementation testable.
+  function create({ api: request, drafts, toast, onEdit, onChange, onSessionExpired }, browser = root) {
+    const document = browser.document, window = browser;
+    const $ = (id) => document.getElementById(id);
+    const { editableBookmark: editable, bookmarkDraftKey: draftKey, safeURL, domain } = workspace;
+    const state = { reading: null, readerRequest: 0, annotations: [], annotationDraft: null, readerSelection: null };
+    let annotationSession = 0;
+    let readerAssets = [];
+    let readerLayoutURL = "";
+    let layoutRequest = 0;
+
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    }
+    function isCurrent(token) { return token === state.readerRequest && $("reader-dialog").open; }
+    function invalidate() {
+      state.readerRequest++; layoutRequest++; annotationSession++;
+      state.reading = null; state.annotationDraft = null; state.readerSelection = null;
+      state.annotations = []; readerAssets = []; readerLayoutURL = "";
+      $("reader-layout").removeAttribute("src");
+    }
+    function close() {
+      invalidate();
+      if ($("annotation-dialog").open) $("annotation-dialog").close();
+      if ($("reader-dialog").open) $("reader-dialog").close();
+    }
+    function expireSession() { close(); onSessionExpired(); }
+    async function api(path, options) {
+      try { return await request(path, options); }
+      catch (error) { if (error.status === 401) expireSession(); throw error; }
+    }
+    $("reader-dialog").addEventListener("close", () => { if (!$("reader-dialog").open) invalidate(); });
+    $("annotation-dialog").addEventListener("close", () => {
+      if (!$("annotation-dialog").open) { annotationSession++; state.annotationDraft = null; }
+    });
+
+    async function openReader(id, recheck = false) {
+      const scroll = recheck ? $("reader-dialog").scrollTop : 0;
+      const request = ++state.readerRequest;
+      annotationSession++;
+      state.annotationDraft = null;
+      if ($("annotation-dialog").open) $("annotation-dialog").close();
+      if (!recheck) $("reader-options").open = false;
+      layoutRequest++;
+      state.reading = null;
+      readerAssets = []; readerLayoutURL = "";
+      state.readerSelection = null;
+      $("reader-title").textContent = "Opening your bookmark…";
+      $("reader-domain").textContent = "";
+      $("reader-content").textContent = "";
+      $("reader-content").hidden = false;
+      $("reader-layout").hidden = true;
+      $("reader-layout").removeAttribute("src");
+      $("reader-layout-mode").setAttribute("aria-pressed", "false");
+      $("reader-layout-mode").disabled = true;
+      $("reader-print").disabled = true;
+      $("reader-size").disabled = false;
+      document.querySelectorAll("[data-highlight-selection]").forEach((button) => { button.disabled = true; });
+      $("reader-text-mode").setAttribute("aria-pressed", "true");
+      $("annotation-list").replaceChildren();
+      $("asset-list").replaceChildren();
+      state.annotations = [];
+      $("reader-status").textContent = "";
+      $("reader-mode-hint").textContent = "Checking saved HTML…";
+      $("reader-recheck").hidden = true;
+      for (const section of ["annotations", "assets"]) { $(section + "-error").hidden = true; $(section + "-retry").hidden = true; $(section + "-retry").disabled = false; }
+      $("reader-notes").value = "";
+      $("asset-file").value = "";
+      $("asset-file").disabled = false;
+      $("preserve-page").disabled = false;
+      $("reader-notes-form").querySelector("button[type=submit]").disabled = false;
+      $("reader-error").textContent = "";
+      $("reader-original").hidden = true;
+      $("reader-archive").hidden = true;
+      $("reader-capture").disabled = true;
+      $("reader-edit").disabled = true;
+      $("reader-notes-form").hidden = true;
+      if (!$("reader-dialog").open) $("reader-dialog").showModal();
+      try {
+        const link = await api(`/api/links/${id}`);
+        if (!isCurrent(request)) return;
+        state.reading = link;
+        $("reader-title").textContent = link.title || link.url;
+        $("reader-domain").textContent = link.type === "file" ? "Saved file" : domain(link.url);
+        $("reader-capture").hidden = link.type === "file";
+        $("preserve-page").hidden = link.type === "file";
+        const url = safeURL(link.url);
+        $("reader-original").hidden = !url;
+        if (url) $("reader-original").href = url;
+        $("reader-archive").hidden = !link.archiveAvailable;
+        $("reader-archive").href = `/api/links/${id}/archive`;
+        $("reader-archive").setAttribute("download", "");
+        $("reader-content").textContent = link.content || link.description || "No readable content captured yet. Visit the original page, or try refreshing the capture.";
+        $("reader-status").textContent = { ready: "Captured text", failed: `Capture failed. ${workspace.captureFailure(link.error)} Open Reading options to retry, or attach a snapshot under Files.`, pending: "Capture queued. You can check its status here.", processing: "Capture in progress. You can check its status here." }[link.status] || "";
+        $("reader-recheck").hidden = !["pending", "processing"].includes(link.status);
+        const draft = drafts.get(draftKey(link));
+        $("reader-notes").value = draft?.notes ?? link.notes ?? "";
+        $("reader-notes-draft").hidden = !draft || draft.notes === (link.notes || "");
+        $("reader-capture").disabled = false;
+        $("reader-edit").disabled = false;
+        $("reader-notes-form").hidden = false;
+        document.querySelectorAll("[data-highlight-selection]").forEach((button) => { button.disabled = !link.content; });
+        const loaded = await Promise.allSettled([loadAnnotations(id, request), loadAssets(id, request)]);
+        if (!isCurrent(request)) return;
+        loaded.forEach((result, i) => { if (result.status === "rejected") readerSectionError(i ? "assets" : "annotations", result.reason); });
+        if (recheck) $("reader-dialog").scrollTop = scroll;
+      } catch (error) {
+        if (!isCurrent(request)) return;
+        $("reader-title").textContent = "Could not open this bookmark";
+        $("reader-error").textContent = error.message;
+        $("reader-status").textContent = error.message;
+      }
+    }
+
+    function readerSectionError(section, error) {
+      $(section + "-error").textContent = `Could not load ${section === "assets" ? "saved files" : "highlights"}. ${error.message}`;
+      $(section + "-error").hidden = false; $(section + "-retry").hidden = false;
+      if (section === "assets") $("reader-mode-hint").textContent = "Could not check saved HTML. Retry saved files below; text view remains available.";
+    }
+    for (const section of ["annotations", "assets"]) $(section + "-retry").addEventListener("click", async () => {
+      if (!state.reading) return;
+      const id = state.reading.id, request = state.readerRequest;
+      $(section + "-retry").disabled = true;
+      try { await (section === "assets" ? loadAssets(id, request) : loadAnnotations(id, request)); if (isCurrent(request)) { $(section + "-error").hidden = true; $(section + "-retry").hidden = true; } }
+      catch (error) { if (isCurrent(request)) readerSectionError(section, error); }
+      finally { if (isCurrent(request)) $(section + "-retry").disabled = false; }
+    });
+    $("reader-recheck").addEventListener("click", () => { if (state.reading) openReader(state.reading.id, true); });
+    document.querySelectorAll("[data-reader-section]").forEach((button) => button.addEventListener("click", () => {
+      const target = $(button.dataset.readerSection);
+      if (target.id === "reader-content" && target.hidden) $("reader-text-mode").click();
+      target.tabIndex = -1;
+      target.focus({ preventScroll: true });
+      target.scrollIntoView({ block: "start", behavior: browser.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    }));
+    $("reader-notes").addEventListener("input", () => {
+      if (!state.reading) return;
+      const draft = drafts.get(draftKey(state.reading)) || editable(state.reading);
+      draft.notes = $("reader-notes").value;
+      drafts.put(draftKey(state.reading), draft, editable(state.reading));
+      $("reader-notes-draft").hidden = draft.notes === (state.reading.notes || "");
+    });
+    $("discard-reader-notes").addEventListener("click", () => {
+      if (!state.reading || !browser.confirm("Discard these unsaved notes?")) return;
+      $("reader-notes").value = state.reading.notes || "";
+      $("reader-notes").dispatchEvent(new browser.Event("input"));
+    });
+
+
+    $("reader-edit").addEventListener("click", () => {
+      const link = state.reading;
+      if (!link) return;
+      close();
+      onEdit(link);
+    });
+    $("reader-capture").addEventListener("click", async () => {
+      if (!state.reading) return;
+      const id = state.reading.id, request = state.readerRequest;
+      $("reader-capture").disabled = true;
+      $("reader-error").textContent = "";
+      try {
+        await api(`/api/links/${id}/capture`, { method: "POST" });
+        if (isCurrent(request)) {
+          $("reader-status").textContent = "Capture queued. Check its status here without closing the reader.";
+          $("reader-recheck").hidden = false;
+          toast("Capture queued.");
+        }
+        await onChange();
+      } catch (error) { if (isCurrent(request)) $("reader-error").textContent = error.message; } finally { if (isCurrent(request)) $("reader-capture").disabled = false; }
+    });
+    $("reader-notes-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!state.reading) return;
+      const button = event.submitter;
+      const link = state.reading, request = state.readerRequest, key = draftKey(link);
+      button.disabled = true;
+      $("reader-error").textContent = "";
+      try {
+        const notes = $("reader-notes").value;
+        await api(`/api/links/${link.id}`, { method: "PUT", body: JSON.stringify({ ...editable(link), notes }) });
+        link.notes = notes;
+        const remaining = drafts.get(key) || (isCurrent(request) ? editable(link) : null);
+        if (remaining && isCurrent(request)) remaining.notes = $("reader-notes").value;
+        if (remaining) drafts.put(key, remaining, editable(link));
+        if (isCurrent(request)) $("reader-notes-draft").hidden = $("reader-notes").value === notes;
+        toast("Notes saved.");
+        await onChange();
+      } catch (error) { if (isCurrent(request)) $("reader-error").textContent = error.message; else toast(error.message, true); }
+      finally { if (isCurrent(request)) button.disabled = false; }
+    });
+
+
+    function renderReaderText() {
+      const content = state.reading?.content || "";
+      const root = $("reader-content");
+      root.replaceChildren();
+      if (!content) { root.textContent = state.reading?.description || "No readable content captured yet."; return; }
+      const points = Array.from(content);
+      const notes = state.annotations.filter((item) => !item.stale && item.start >= 0 && item.end <= points.length && item.start < item.end && points.slice(item.start, item.end).join("") === item.quote);
+      // Split overlapping highlights into bounded segments without trusting any captured markup.
+      const boundaries = [...new Set([0, points.length, ...notes.flatMap((item) => [item.start, item.end])])].sort((a, b) => a - b);
+      const fragment = document.createDocumentFragment();
+      for (let i = 1; i < boundaries.length; i++) {
+        const start = boundaries[i - 1], end = boundaries[i];
+        const text = points.slice(start, end).join("");
+        const note = notes.find((item) => item.start <= start && item.end >= end);
+        if (!note) { fragment.append(document.createTextNode(text)); continue; }
+        const mark = el("mark", `highlight-${["yellow", "green", "blue", "pink"].includes(note.color) ? note.color : "yellow"}`, text);
+        mark.title = note.note || "Saved highlight";
+        mark.addEventListener("click", () => editAnnotation(note));
+        fragment.append(mark);
+      }
+      root.append(fragment);
+    }
+
+    async function loadAnnotations(id, request = state.readerRequest) {
+      if (!isCurrent(request) || state.reading?.id !== id) return;
+      const annotations = await api(`/api/links/${id}/annotations`);
+      if (!isCurrent(request) || state.reading?.id !== id) return;
+      state.annotations = annotations || [];
+      renderReaderText();
+      $("annotation-list").replaceChildren();
+      for (const annotation of state.annotations) {
+        const row = el("article", "annotation-item");
+        row.append(el("blockquote", `highlight-${annotation.color}`, annotation.quote), el("p", "", annotation.note || "Highlight"));
+        if (annotation.stale) row.append(el("p", "small muted", "The captured text has changed. This highlight belongs to an earlier capture."));
+        const edit = el("button", "text-button", "Edit note");
+        edit.addEventListener("click", () => editAnnotation(annotation));
+        const remove = el("button", "text-button", "Delete");
+        remove.addEventListener("click", async () => {
+          if (!browser.confirm("Delete this annotation?")) return;
+          remove.disabled = true;
+          try { await api(`/api/links/${id}/annotations/${annotation.id}`, { method: "DELETE" }); await loadAnnotations(id, request); }
+          catch (error) { toast(error.message, true); remove.disabled = false; }
+        });
+        const actions = el("div", "reader-actions"); actions.append(edit, remove); row.append(actions);
+        $("annotation-list").append(row);
+      }
+      if (!state.annotations.length) $("annotation-list").append(el("p", "small muted", "No highlights yet."));
+    }
+
+    function editAnnotation(annotation) {
+      annotationSession++;
+      $("annotation-form").querySelector("button[type=submit]").disabled = false;
+      state.annotationDraft = annotation;
+      $("annotation-quote").textContent = annotation.quote;
+      $("annotation-note").value = annotation.note || "";
+      $("annotation-color").value = annotation.color || "yellow";
+      const draft = drafts.get(annotationKey());
+      if (draft) { $("annotation-note").value = draft.note; $("annotation-color").value = draft.color; }
+      $("annotation-draft-notice").hidden = !draft;
+      $("annotation-error").textContent = "";
+      $("annotation-dialog").showModal();
+    }
+    function annotationKey() { const item = state.annotationDraft; return `annotation:${state.reading?.id}:${item?.id || `${item?.start}:${item?.end}`}`; }
+    $("annotation-form").addEventListener("input", () => {
+      if (!state.annotationDraft) return;
+      drafts.put(annotationKey(), { note: $("annotation-note").value, color: $("annotation-color").value }, { note: state.annotationDraft.note || "", color: state.annotationDraft.color || "yellow" });
+    });
+    $("annotation-color").addEventListener("change", () => $("annotation-form").dispatchEvent(new browser.Event("input")));
+    function rememberReaderSelection() {
+      const selection = window.getSelection(), root = $("reader-content");
+      if (!state.reading?.content || !selection?.rangeCount || selection.isCollapsed) return null;
+      const range = selection.getRangeAt(0);
+      if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return null;
+      const prefix = range.cloneRange(); prefix.selectNodeContents(root); prefix.setEnd(range.startContainer, range.startOffset);
+      const start = Array.from(prefix.toString()).length, quote = range.toString();
+      if (!quote.trim()) return null;
+      state.readerSelection = { linkId: state.reading.id, quote, start, end: start + Array.from(quote).length };
+      return state.readerSelection;
+    }
+    document.addEventListener("selectionchange", rememberReaderSelection);
+    $("reader-content").addEventListener("pointerdown", () => { state.readerSelection = null; });
+    document.querySelectorAll("[data-highlight-selection]").forEach((button) => {
+      button.addEventListener("pointerdown", (event) => { rememberReaderSelection(); event.preventDefault(); });
+      button.addEventListener("click", () => {
+        const passage = rememberReaderSelection() || state.readerSelection;
+        if (!passage || passage.linkId !== state.reading?.id) { toast("Select a passage in the text reader first.", true); return; }
+        editAnnotation({ quote: passage.quote, start: passage.start, end: passage.end, color: "yellow", note: "" });
+      });
+    });
+    $("annotation-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!state.reading || !state.annotationDraft) return;
+      const session = annotationSession, linkID = state.reading.id, request = state.readerRequest;
+      const key = annotationKey(), draft = state.annotationDraft;
+      const submitted = { note: $("annotation-note").value, color: $("annotation-color").value };
+      event.submitter.disabled = true;
+      $("annotation-error").textContent = "";
+      try {
+        const saved = await api(`/api/links/${linkID}/annotations${draft.id ? `/${draft.id}` : ""}`, { method: draft.id ? "PUT" : "POST", body: JSON.stringify({ quote: draft.quote, start: draft.start, end: draft.end, ...submitted }) });
+        const latest = session === annotationSession && isCurrent(request) ? { note: $("annotation-note").value, color: $("annotation-color").value } : drafts.get(key) || submitted;
+        drafts.delete(key);
+        const savedKey = `annotation:${linkID}:${saved.id}`;
+        drafts.put(savedKey, latest, submitted);
+        if (session === annotationSession && isCurrent(request)) {
+          state.annotationDraft = { ...draft, ...submitted, id: saved.id };
+          if (!drafts.get(savedKey)) $("annotation-dialog").close();
+        }
+        if (isCurrent(request)) await loadAnnotations(linkID, request);
+        toast("Annotation saved.");
+      } catch (error) { if (session === annotationSession && isCurrent(request)) $("annotation-error").textContent = error.message; }
+      finally { if (session === annotationSession && isCurrent(request)) event.submitter.disabled = false; }
+    });
+    $("reader-size").addEventListener("change", () => { $("reader-content").style.fontSize = `${$("reader-size").value}px`; });
+    function readerMode(layout) {
+      state.readerSelection = null;
+      $("reader-layout").hidden = !layout; $("reader-content").hidden = layout;
+      if (!layout) $("reader-layout").removeAttribute("src");
+      $("reader-layout-mode").setAttribute("aria-pressed", String(layout)); $("reader-text-mode").setAttribute("aria-pressed", String(!layout));
+      $("reader-size").disabled = layout;
+      document.querySelectorAll("[data-highlight-selection]").forEach((button) => { button.disabled = layout || !state.reading?.content; });
+    }
+    function readerAvailability() {
+      if (!state.reading) return;
+      const snapshot = workspace.readerSnapshot(state.reading, readerAssets);
+      readerLayoutURL = snapshot.url;
+      $("reader-layout-mode").disabled = !snapshot.url; $("reader-print").disabled = !snapshot.url;
+      $("reader-mode-hint").textContent = snapshot.message;
+      if (!snapshot.url) readerMode(false);
+    }
+    $("reader-layout-mode").addEventListener("click", async () => {
+      if (!readerLayoutURL) return;
+      const request = ++layoutRequest, readingRequest = state.readerRequest, url = readerLayoutURL;
+      $("reader-layout-mode").disabled = true;
+      $("reader-mode-hint").textContent = "Opening formatted view…";
+      try {
+        const response = await browser.fetch(url, { method: "HEAD", credentials: "same-origin" });
+        if (request !== layoutRequest || !isCurrent(readingRequest) || url !== readerLayoutURL) return;
+        if (response.status === 401) { expireSession(); return; }
+        if (!response.ok) throw new Error("Formatted view is unavailable. Read the text or retry after saving an HTML capture.");
+        $("reader-layout").src = url; readerMode(true);
+        $("reader-mode-hint").textContent = "Formatted page · Text size and highlighting are available in Text & highlights.";
+      } catch (error) {
+        if (request !== layoutRequest || !isCurrent(readingRequest) || url !== readerLayoutURL) return;
+        readerMode(false); $("reader-mode-hint").textContent = error.message;
+      } finally { if (request === layoutRequest && isCurrent(readingRequest) && url === readerLayoutURL) $("reader-layout-mode").disabled = !readerLayoutURL; }
+    });
+    $("reader-text-mode").addEventListener("click", () => { layoutRequest++; readerMode(false); readerAvailability(); });
+    $("reader-print").addEventListener("click", () => {
+      if (!readerLayoutURL) return;
+      window.open(readerLayoutURL, "_blank", "noopener,noreferrer");
+      toast("Use your browser’s Print command, then Save as PDF. Upload the PDF below to keep it here.");
+    });
+
+    async function loadAssets(id, request = state.readerRequest) {
+      if (!isCurrent(request) || state.reading?.id !== id) return;
+      const assets = await api(`/api/links/${id}/assets`);
+      if (!isCurrent(request) || state.reading?.id !== id) return;
+      readerAssets = assets || [];
+      readerAvailability();
+      $("asset-list").replaceChildren();
+      for (const asset of assets || []) {
+        const row = el("div", "asset-item");
+        const download = el("a", "", asset.name); download.href = `/api/assets/${asset.id}`; download.setAttribute("download", "");
+        row.append(download, el("span", "small muted", `${(asset.size / 1024).toFixed(1)} KiB`));
+        if (asset.mediaType === "text/html" && asset.size <= 2 * 1024 * 1024) {
+          const read = el("button", "text-button", "Read");
+          read.addEventListener("click", () => { readerLayoutURL = `/api/links/${id}/reader?asset=${asset.id}`; $("reader-layout-mode").disabled = false; $("reader-print").disabled = false; $("reader-layout-mode").click(); });
+          row.append(read);
+        }
+        const remove = el("button", "text-button", "Delete");
+        remove.addEventListener("click", async () => {
+          if (!browser.confirm(`Delete saved file “${asset.name}”?`)) return;
+          remove.disabled = true;
+          try { await api(`/api/assets/${asset.id}`, { method: "DELETE" }); await loadAssets(id, request); }
+          catch (error) { toast(error.message, true); remove.disabled = false; }
+        });
+        row.append(remove); $("asset-list").append(row);
+      }
+      if (!assets?.length) $("asset-list").append(el("p", "small muted", "No additional files saved."));
+    }
+
+    $("asset-file").addEventListener("change", async () => {
+      const file = $("asset-file").files[0];
+      if (!file || !state.reading) return;
+      const id = state.reading.id, request = state.readerRequest;
+      $("asset-file").disabled = true;
+      try {
+        if (file.size > 20 * 1024 * 1024) throw new Error("Choose a file smaller than 20 MiB.");
+        await api(`/api/links/${id}/assets?name=${encodeURIComponent(file.name)}`, { method: "POST", headers: { "Content-Type": file.type || (/\.html?$/i.test(file.name) ? "text/html" : "application/octet-stream") }, body: file });
+        await loadAssets(id, request); toast("File saved.");
+      } catch (error) { toast(error.message, true); } finally { if (isCurrent(request)) { $("asset-file").value = ""; $("asset-file").disabled = false; } }
+    });
+    $("preserve-page").addEventListener("click", async () => {
+      if (!state.reading) return;
+      const id = state.reading.id, request = state.readerRequest;
+      $("preserve-page").disabled = true;
+      try {
+        const result = await api(`/api/links/${id}/preserve`, { method: "POST" });
+        await loadAssets(id, request); toast(`Page saved with ${result.embedded || 0} resources.${result.omitted ? ` ${result.omitted} resources could not be embedded.` : ""}`);
+      } catch (error) { toast(error.message, true); } finally { if (isCurrent(request)) $("preserve-page").disabled = false; }
+    });
+
+    return { open: openReader, close };
+  }
+  if (typeof module !== "undefined" && module.exports) module.exports = { create };
+  else root.PocketmarkReader = { create };
+})(globalThis);

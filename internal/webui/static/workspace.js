@@ -134,7 +134,20 @@
     if (status >= 500) return "The server could not complete this action. Check that Pocketmark is running correctly, then try again. Unsaved changes stay in this tab.";
     return message || "This action could not be completed. Check the details and try again.";
   }
-  const workspace = { readRoute, routeSearch, createDrafts, readerSnapshot, tagValues, searchExcerpt, captureFailure, bookmarkIssues, requestFailure };
+  function safeURL(value) {
+    try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) ? url.href : null; } catch { return null; }
+  }
+
+  function domain(value) {
+    try { return new URL(value).hostname.replace(/^www\./, ""); } catch { return "Saved link"; }
+  }
+
+  function editableBookmark(link) {
+    return { url: link.url, title: link.title || "", description: link.description || "", notes: link.notes || "", collectionId: link.collectionId ?? null, tags: link.tags || [], favorite: !!link.favorite, read: !!link.read };
+  }
+
+  function bookmarkDraftKey(link) { return `bookmark:${link?.id || "new"}`; }
+  const workspace = { editableBookmark, bookmarkDraftKey, safeURL, domain, readRoute, routeSearch, createDrafts, readerSnapshot, tagValues, searchExcerpt, captureFailure, bookmarkIssues, requestFailure };
   if (typeof module !== "undefined" && module.exports) module.exports = workspace;
   else root.PocketmarkWorkspace = workspace;
 })(globalThis);
