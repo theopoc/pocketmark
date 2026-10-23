@@ -74,7 +74,13 @@ func (s *Store) AuthenticateAPIKey(ctx context.Context, hash string) bool {
 }
 
 func (s *Store) SetAPIKeyActive(ctx context.Context, id int64, active bool) error {
-	r, err := s.db.ExecContext(ctx, "UPDATE api_tokens SET active=? WHERE id=?", active, id)
+	return s.UpdateAPIKey(ctx, id, nil, &active)
+}
+
+// UpdateAPIKey changes only supplied metadata; the credential and usage history
+// remain intact, including when a disabled key is renamed.
+func (s *Store) UpdateAPIKey(ctx context.Context, id int64, name *string, active *bool) error {
+	r, err := s.db.ExecContext(ctx, "UPDATE api_tokens SET name=COALESCE(?,name),active=COALESCE(?,active) WHERE id=?", name, active, id)
 	return affected(r, err)
 }
 

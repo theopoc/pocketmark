@@ -240,6 +240,8 @@ body:has(dialog[open]) { overflow: hidden; }
 .token-row { display: flex; align-items: center; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--line); }
 .token-details { flex: 1; min-width: 0; }
 .token-name { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.token-name-group { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
+.token-name-group .token-name { min-width: 0; }
 .token-status { display: inline-flex; align-items: center; gap: 6px; padding: 2px 7px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); background: var(--surface); font-size: 11px; font-weight: 550; }
 .token-status::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .token-status.is-active { color: var(--success); }
@@ -248,13 +250,19 @@ body:has(dialog[open]) { overflow: hidden; }
 .token-metadata dd { margin: 0; overflow-wrap: anywhere; }
 .token-row-actions { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
 .token-row-actions button { min-height: 36px; }
-#token-list .token-revoke { color: var(--danger); }
+#token-list .token-revoke { color: var(--danger); border-color: var(--danger); }
+.token-name-row .token-rename { min-width: 36px; min-height: 36px; }
+.token-rename-form label { margin-top: 0; }
+.token-edit-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.token-edit-actions .button { min-height: 36px; }
 .token-empty { padding: 20px 0; font-size: 13px; }
 #tokens-feedback:empty { display: none; }
 @media (max-width: 600px) {
   .token-row { align-items: stretch; flex-direction: column; gap: 12px; }
   .token-row-actions { flex-direction: row; gap: 16px; }
   .token-row-actions button { min-height: 44px; }
+  .token-name-row .token-rename, .token-edit-actions .button { min-height: 44px; }
+  .token-name-row .token-rename { min-width: 44px; }
 }
 /* Reader: comfortable measure inside the same product language. */
 .reader-modal { width: min(920px,calc(100vw - 40px)); padding: 24px 40px 40px; }
