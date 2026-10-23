@@ -5,13 +5,13 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"log"
 	"mime"
 	"net/http"
 	"os"
 	"strconv"
 
 	"pocketmark/internal/capture"
+	"pocketmark/internal/observability"
 	"pocketmark/internal/store"
 )
 
@@ -100,7 +100,7 @@ func (a *Server) downloadAsset(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
 	w.Header().Set("Content-Length", strconv.FormatInt(asset.Size, 10))
 	if e = a.Store.WriteAsset(r.Context(), asset.ID, w); e != nil {
-		log.Printf("download attachment: %v", e)
+		observability.Error(r.Context(), "attachment_download_failed", e)
 	}
 }
 func (a *Server) deleteAsset(w http.ResponseWriter, r *http.Request) {
@@ -192,11 +192,11 @@ func (a *Server) backup(w http.ResponseWriter, r *http.Request) {
 	z := zip.NewWriter(w)
 	entry, e := z.CreateHeader(&zip.FileHeader{Name: "pocketmark.db", Method: zip.Store})
 	if e != nil {
-		log.Printf("backup ZIP: %v", e)
+		observability.Error(r.Context(), "backup_zip_failed", e)
 		return
 	}
 	if _, e = io.Copy(entry, f); e != nil {
-		log.Printf("backup stream: %v", e)
+		observability.Error(r.Context(), "backup_stream_failed", e)
 		return
 	}
 	entry, e = z.CreateHeader(&zip.FileHeader{Name: "RESTORE.txt", Method: zip.Store})
@@ -204,10 +204,10 @@ func (a *Server) backup(w http.ResponseWriter, r *http.Request) {
 		_, e = io.WriteString(entry, "Stop Pocketmark. Extract pocketmark.db into an EMPTY data directory (never leave old -wal/-shm files). Set file permissions to 0600 and owner to the service user. Reuse the existing access-token file or POCKETMARK_TOKEN environment value to retain login sessions and token signing. Start Pocketmark. The database includes bookmarks, collections, annotations, all captured HTML and uploaded attachments. Keep this sensitive backup private.\n")
 	}
 	if e != nil {
-		log.Printf("backup instructions: %v", e)
+		observability.Error(r.Context(), "backup_instructions_failed", e)
 		return
 	}
 	if e = z.Close(); e != nil {
-		log.Printf("finish backup: %v", e)
+		observability.Error(r.Context(), "backup_finish_failed", e)
 	}
 }
