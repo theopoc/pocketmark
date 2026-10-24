@@ -1,0 +1,215 @@
+name: Main image
+
+on:
+  workflow_call:
+    inputs:
+      revision:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: main-image-${{ github.repository }}-${{ inputs.revision }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  prepare:
+    name: Validate main source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      revision: ${{ steps.release.outputs.revision }}
+      image: ${{ steps.release.outputs.image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.revision }}
+          fetch-depth: 0
+          persist-credentials: false
+      - id: release
+        env:
+          REVISION: ${{ inputs.revision }}
+        run: |
+          git merge-base --is-ancestor "$REVISION" origin/main
+          {
+            echo "revision=$REVISION"
+            echo "tag=sha-$REVISION"
+            echo "image=ghcr.io/${GITHUB_REPOSITORY,,}"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build and test registry image (${{ matrix.arch }})
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check out the immutable release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.revision }}
+          path: release-source
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Build the native image without a version tag
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: release-source
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=${{ needs.prepare.outputs.image }},push-by-digest=true,name-canonical=true,push=true,oci-mediatypes=true
+          provenance: false
+          sbom: false
+          labels: |
+            org.opencontainers.image.title=Pocketmark
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.revision }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.tag }}
+          cache-from: type=gha,scope=container-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=container-${{ matrix.arch }}
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: 'false'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Install isolated browser test tooling
+        run: |
+          npm ci --prefix e2e --ignore-scripts --no-audit --no-fund
+          ./e2e/node_modules/.bin/playwright install --with-deps chromium
+      - name: Pull and test the exact registry digest before tagging
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          ARCH: ${{ matrix.arch }}
+          REVISION: ${{ needs.prepare.outputs.revision }}
+          VERSION: ${{ needs.prepare.outputs.tag }}
+        run: |
+          docker pull --platform "linux/$ARCH" "$IMAGE@$DIGEST"
+          python3 scripts/smoke_docker.py --image "$IMAGE@$DIGEST" --platform "linux/$ARCH" \
+            --revision "$REVISION" --version "$VERSION" --browser --output "reports/registry-$ARCH.json"
+          python3 scripts/container_release.py record --arch "$ARCH" --digest "$DIGEST" \
+            --revision "$REVISION" --output "digests/$ARCH.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: container-digest-${{ matrix.arch }}
+          path: digests/*.json
+          if-no-files-found: error
+          retention-days: 90
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: container-build-evidence-${{ matrix.arch }}
+          path: reports/*.json
+          retention-days: 90
+
+  publish:
+    name: Publish the tested SHA index
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.publish.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: container-digest-*
+          merge-multiple: true
+          path: digests
+          digest-mismatch: error
+      - name: Publish only the two successfully tested digests
+        id: publish
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          REVISION: ${{ needs.prepare.outputs.revision }}
+        run: |
+          python3 scripts/container_release.py publish --image "$IMAGE" --tag "$TAG" \
+            --revision "$REVISION" --directory digests --report reports/container-index.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: container-index
+          path: reports/container-index.json
+          if-no-files-found: error
+          retention-days: 90
+
+  verify:
+    name: Smoke test SHA tag (${{ matrix.arch }})
+    needs: [prepare, publish]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Pull the published tag and test it natively
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          DIGEST: ${{ needs.publish.outputs.digest }}
+          ARCH: ${{ matrix.arch }}
+          REVISION: ${{ needs.prepare.outputs.revision }}
+        run: |
+          python3 scripts/qualify_image.py --image "$IMAGE:$TAG" --digest "$DIGEST" \
+            --revision "$REVISION" --platform "linux/$ARCH" --report "reports/published-$ARCH.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: container-published-evidence-${{ matrix.arch }}
+          path: reports/*.json
+          if-no-files-found: error
+          retention-days: 90
