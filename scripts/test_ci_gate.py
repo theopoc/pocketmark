@@ -20,9 +20,12 @@ NEEDS = [name.strip() for name in re.search(r'^    needs: \[([^\]]+)\]$', GATE, 
 class WorkflowGateTests(unittest.TestCase):
     def test_every_prerequisite_is_required_and_gate_always_runs(self):
         jobs = set(re.findall(r'^  ([\w-]+):$', JOBS, re.M))
-        self.assertEqual(set(NEEDS), jobs - {'required'})
+        self.assertEqual(set(NEEDS), jobs - {'required', 'main-image'})
         self.assertIn('    if: always()\n', GATE)
         self.assertIn('    name: CI passed\n', GATE)
+        publication = JOBS.split('\n  main-image:\n', 1)[1]
+        self.assertIn('    needs: required\n', publication)
+        self.assertIn("if: github.event_name == 'push' && github.ref == 'refs/heads/main'", publication)
 
     def run_gate(self, results):
         with tempfile.TemporaryDirectory() as directory:

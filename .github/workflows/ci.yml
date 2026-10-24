@@ -10,20 +10,13 @@ on:
     # Recheck advisories and runner/tool drift even when main has no new commits.
     - cron: '23 5 * * 1'
   workflow_dispatch:
-  workflow_call:
-    inputs:
-      ref:
-        description: Source ref selected by the release workflow
-        required: false
-        default: ''
-        type: string
 
 permissions:
   contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
 
 defaults:
   run:
@@ -40,8 +33,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref || github.sha }}
+          ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
+      - name: Select extension regressions
+        id: changes
+        run: python3 scripts/extension_changes.py
       - name: Validate the squash commit title
         if: github.event_name == 'pull_request'
         run: python3 scripts/check_pr_title.py
@@ -55,6 +52,7 @@ jobs:
       - run: go mod tidy -diff
       - run: make check
       - run: make test-extension
+        if: steps.changes.outputs.extension == 'true'
       - name: Validate workflow syntax and shell commands
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
       - name: Test release packaging
@@ -86,14 +84,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref || github.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
       - name: Scan the complete history for secrets
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_VERSION: '8.30.1'
@@ -121,7 +119,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref || github.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -144,16 +142,23 @@ jobs:
           mkdir -p "artifacts/linux-$RELEASE_ARCH"
           cp bin/pocketmark "artifacts/linux-$RELEASE_ARCH/pocketmark"
           go version -m bin/pocketmark > "artifacts/linux-$RELEASE_ARCH/pocketmark-linux-$RELEASE_ARCH.buildinfo.txt"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Install isolated browser test tooling
+        run: |
+          npm ci --prefix e2e --ignore-scripts --no-audit --no-fund
+          ./e2e/node_modules/.bin/playwright install --with-deps chromium
       - name: Build and test the native container
         run: |
           docker build --tag pocketmark:ci .
-          python3 scripts/smoke_docker.py --image pocketmark:ci --output reports/docker-smoke.json
+          python3 scripts/smoke_docker.py --image pocketmark:ci --browser --output reports/docker-smoke.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux-${{ matrix.arch }}
           path: artifacts/linux-${{ matrix.arch }}/*
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 90
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -185,3 +190,14 @@ jobs:
           if failures or not results:
               raise SystemExit('Unsuccessful CI jobs: ' + ', '.join(failures or ['missing results']))
           PY
+
+  main-image:
+    name: Validate final SHA image
+    needs: required
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/main-image.yml
+    with:
+      revision: ${{ github.sha }}
+    permissions:
+      contents: read
+      packages: write

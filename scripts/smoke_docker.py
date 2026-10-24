@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import secrets
 import subprocess
@@ -32,6 +33,7 @@ def main():
     parser.add_argument("--platform", choices=("linux/amd64", "linux/arm64"))
     parser.add_argument("--revision", help="Require this OCI source revision label")
     parser.add_argument("--version", help="Require this OCI version label")
+    parser.add_argument("--browser", action="store_true", help="Run essential Chromium journeys on this disposable instance")
     args = parser.parse_args()
     project = "pocketmark-smoke-" + secrets.token_hex(6)
     config = json.loads(docker("compose", "-f", str(ROOT / "compose.yaml"), "config", "--format", "json"))
@@ -93,6 +95,10 @@ def main():
             else:
                 raise RuntimeError("unauthenticated API access succeeded")
             checks["health_auth_hardening_limits"] = True
+            if args.browser:
+                subprocess.run(["node", str(ROOT / "e2e/browser.mjs")],
+                               env={**os.environ, "E2E_BASE_URL": base}, check=True, timeout=180)
+                checks["browser_journeys"] = True
             collection = call("/api/collections", {"name": "Smoke collection", "description": "Synthetic CI data"})
             link = call("/api/links", {"url": "http://127.0.0.1/private-ci-fixture", "title": "Smoke bookmark",
                                         "collectionId": collection["id"], "tags": ["ci"]})
