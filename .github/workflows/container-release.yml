@@ -36,7 +36,6 @@ jobs:
       tag: ${{ steps.release.outputs.tag }}
       revision: ${{ steps.release.outputs.revision }}
       image: ${{ steps.release.outputs.image }}
-      run_id: ${{ steps.release.outputs.run_id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -48,14 +47,133 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag }}
         run: python3 scripts/container_release.py prepare --tag "$RELEASE_TAG"
 
-  publish:
-    name: Promote the validated SHA index without rebuilding
+  build:
+    name: Build image (${{ matrix.arch }})
     needs: prepare
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check out the immutable release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.revision }}
+          path: release-source
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Build the native image without a version tag
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: release-source
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=${{ needs.prepare.outputs.image }},push-by-digest=true,name-canonical=true,push=true,oci-mediatypes=true
+          provenance: false
+          sbom: false
+          labels: |
+            org.opencontainers.image.title=Pocketmark
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.revision }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.tag }}
+          cache-from: type=gha,scope=container-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=container-${{ matrix.arch }}
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: 'false'
+      - name: Record the candidate digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          ARCH: ${{ matrix.arch }}
+          REVISION: ${{ needs.prepare.outputs.revision }}
+        run: |
+          python3 scripts/container_release.py record --arch "$ARCH" --digest "$DIGEST" \
+            --revision "$REVISION" --output "digests/$ARCH.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: container-digest-${{ matrix.arch }}
+          path: digests/*.json
+          if-no-files-found: error
+          retention-days: 7
+
+  test:
+    name: Test image (${{ matrix.arch }})
+    needs: [prepare, build]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: container-digest-${{ matrix.arch }}
+          path: digests
+          digest-mismatch: error
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Install browser test tooling
+        run: |
+          npm ci --prefix e2e --ignore-scripts --no-audit --no-fund
+          ./e2e/node_modules/.bin/playwright install --with-deps chromium
+      - name: Test the exact candidate digest before tagging
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}
+          ARCH: ${{ matrix.arch }}
+          REVISION: ${{ needs.prepare.outputs.revision }}
+          VERSION: ${{ needs.prepare.outputs.tag }}
+        run: |
+          digest=$(python3 -c 'import json, os; print(json.load(open("digests/" + os.environ["ARCH"] + ".json"))["digest"])')
+          docker pull --platform "linux/$ARCH" "$IMAGE@$digest"
+          python3 scripts/smoke_docker.py --image "$IMAGE@$digest" --platform "linux/$ARCH" \
+            --revision "$REVISION" --version "$VERSION" --browser --output "reports/registry-$ARCH.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: container-test-evidence-${{ matrix.arch }}
+          path: reports/*.json
+          retention-days: 7
+
+  publish:
+    name: Publish the tested version index
+    needs: [prepare, test]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
-      actions: read
       packages: write
     outputs:
       digest: ${{ steps.publish.outputs.digest }}
@@ -69,17 +187,27 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
-      - name: Assign the version tag to the exact validated main digest
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: container-digest-*
+          merge-multiple: true
+          path: digests
+          digest-mismatch: error
+      - name: Publish only the two successfully tested digests
         id: publish
         env:
-          GH_TOKEN: ${{ github.token }}
           IMAGE: ${{ needs.prepare.outputs.image }}
           TAG: ${{ needs.prepare.outputs.tag }}
           REVISION: ${{ needs.prepare.outputs.revision }}
-          RUN_ID: ${{ needs.prepare.outputs.run_id }}
         run: |
-          python3 scripts/container_release.py promote --image "$IMAGE" --tag "$TAG" \
-            --revision "$REVISION" --run-id "$RUN_ID"
+          python3 scripts/container_release.py publish --image "$IMAGE" --tag "$TAG" \
+            --revision "$REVISION" --directory digests --report reports/container-index.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: container-index
+          path: reports/container-index.json
+          if-no-files-found: error
+          retention-days: 7
 
   verify:
     name: Test published tag (${{ matrix.arch }})

@@ -27,18 +27,14 @@ env:
 
 jobs:
   quality:
-    name: Quality and release configuration
+    name: Quality
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 0
           persist-credentials: false
-      - name: Select extension regressions
-        id: changes
-        run: python3 scripts/extension_changes.py
       - name: Validate the squash commit title
         if: github.event_name == 'pull_request'
         run: python3 scripts/check_pr_title.py
@@ -51,26 +47,8 @@ jobs:
       - run: go mod verify
       - run: go mod tidy -diff
       - run: make check
-      - run: make test-extension
-        if: steps.changes.outputs.extension == 'true'
       - name: Validate workflow syntax and shell commands
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
-      - name: Test release packaging
-        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
-      - name: Check out workflow regression tooling
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          path: workflow-tools
-          persist-credentials: false
-      - name: Test workflow expressions
-        run: |
-          npm install --prefix "$RUNNER_TEMP/release-expressions" --no-save --no-package-lock \
-            --ignore-scripts --no-audit --no-fund @actions/expressions@0.3.61
-          ACTIONS_EXPRESSIONS_PATH="$RUNNER_TEMP/release-expressions/node_modules/@actions/expressions/dist/index.js" \
-            RELEASE_WORKFLOW_PATH="$GITHUB_WORKSPACE/workflow-tools/.github/workflows/release.yml" \
-            DEPENDABOT_WORKFLOW_PATH="$GITHUB_WORKSPACE/workflow-tools/.github/workflows/dependabot-auto-merge.yml" \
-            node --test workflow-tools/scripts/test_*_expressions.mjs
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           version: v2.18.3
@@ -95,8 +73,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_VERSION: '8.30.1'
-          # Use the action's full-history mode, including reusable release CI.
-          # Push/PR mode only scans an event range and may ignore inputs.ref.
+          # Use the action's full-history mode instead of an event range.
           GITHUB_EVENT_NAME: workflow_dispatch
           GITLEAKS_ENABLE_COMMENTS: 'false'
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
@@ -104,10 +81,10 @@ jobs:
       - name: Check reachable dependency vulnerabilities
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 -tags=sqlite_fts5,sqlite_omit_load_extension ./...
 
-  test-build:
-    name: Test, build and Docker (${{ matrix.arch }})
+  test:
+    name: Tests (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 25
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -124,8 +101,49 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
       - name: Race tests and coverage
         run: make test TEST_FLAGS='-race -p 1 -count=1 -covermode=atomic -coverprofile=coverage.out'
+      - run: make test-extension
+      - name: Test release packaging
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+      - name: Test workflow expressions
+        run: |
+          npm install --prefix "$RUNNER_TEMP/release-expressions" --no-save --no-package-lock \
+            --ignore-scripts --no-audit --no-fund @actions/expressions@0.3.61
+          ACTIONS_EXPRESSIONS_PATH="$RUNNER_TEMP/release-expressions/node_modules/@actions/expressions/dist/index.js" \
+            RELEASE_WORKFLOW_PATH="$GITHUB_WORKSPACE/.github/workflows/release.yml" \
+            DEPENDABOT_WORKFLOW_PATH="$GITHUB_WORKSPACE/.github/workflows/dependabot-auto-merge.yml" \
+            node --test scripts/test_*_expressions.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: coverage-${{ matrix.arch }}
+          path: coverage.out
+          retention-days: 7
+
+  build:
+    name: Build (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
       - name: Install the static C toolchain
         run: |
           sudo apt-get update
@@ -142,36 +160,17 @@ jobs:
           mkdir -p "artifacts/linux-$RELEASE_ARCH"
           cp bin/pocketmark "artifacts/linux-$RELEASE_ARCH/pocketmark"
           go version -m bin/pocketmark > "artifacts/linux-$RELEASE_ARCH/pocketmark-linux-$RELEASE_ARCH.buildinfo.txt"
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
-      - name: Install isolated browser test tooling
-        run: |
-          npm ci --prefix e2e --ignore-scripts --no-audit --no-fund
-          ./e2e/node_modules/.bin/playwright install --with-deps chromium
-      - name: Build and test the native container
-        run: |
-          docker build --tag pocketmark:ci .
-          python3 scripts/smoke_docker.py --image pocketmark:ci --browser --output reports/docker-smoke.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux-${{ matrix.arch }}
           path: artifacts/linux-${{ matrix.arch }}/*
           if-no-files-found: error
           retention-days: 90
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: evidence-${{ matrix.arch }}
-          path: |
-            coverage.out
-            reports/docker-smoke.json
-          retention-days: 7
 
   required:
     name: CI passed
     if: always()
-    needs: [quality, security, test-build]
+    needs: [quality, security, test, build]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -190,14 +189,3 @@ jobs:
           if failures or not results:
               raise SystemExit('Unsuccessful CI jobs: ' + ', '.join(failures or ['missing results']))
           PY
-
-  main-image:
-    name: Validate final SHA image
-    needs: required
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: ./.github/workflows/main-image.yml
-    with:
-      revision: ${{ github.sha }}
-    permissions:
-      contents: read
-      packages: write

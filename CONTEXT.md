@@ -6,11 +6,8 @@ Pocketmark is a personal bookmark manager. The delivery vocabulary below describ
 
 ### Image delivery
 
-**SHA image**:
-A Pocketmark image identified by its source commit and retained as the candidate for a version release.
-
 **Version image**:
-A Pocketmark image identified by a stable product version, containing the same image content as its corresponding SHA image.
+A Pocketmark image identified by a stable product version and the corresponding source revision, qualified on every supported platform before distribution.
 
 **Published-image qualification**:
 The checks establishing that a distributed Pocketmark image matches the expected image content, source revision and platform, works under the supported container configuration, and remains private.

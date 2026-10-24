@@ -6,7 +6,6 @@ import os
 from pathlib import Path
 import re
 import subprocess
-import tempfile
 
 from validated_ci import wait
 
@@ -24,12 +23,6 @@ def tag_name(tag):
     require(re.fullmatch(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", tag),
             "expected a stable vMAJOR.MINOR.PATCH tag")
     return tag
-
-
-def image_tag(tag):
-    if re.fullmatch("sha-" + REVISION, tag):
-        return tag
-    return tag_name(tag)
 
 
 def run(*args):
@@ -52,8 +45,8 @@ def prepare(tag):
     revision = run("git", "rev-parse", f"refs/tags/{tag}^{{}}")
     require(re.fullmatch(REVISION, revision), "invalid source revision")
     run("git", "merge-base", "--is-ancestor", revision, "origin/main")
-    run_id = wait(revision)
-    output(tag=tag, revision=revision, image="ghcr.io/" + repo.lower(), run_id=str(run_id))
+    wait(revision)
+    output(tag=tag, revision=revision, image="ghcr.io/" + repo.lower())
 
 
 def validate_index(index, expected):
@@ -85,7 +78,7 @@ def inspect(reference, missing_ok=False):
 
 
 def publish(image, tag, revision, directory, report):
-    image_tag(tag)
+    tag_name(tag)
     require(re.fullmatch(REVISION, revision), "invalid source revision")
     require(re.fullmatch(r"ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+", image), "invalid registry image")
     expected = {}
@@ -114,34 +107,6 @@ def publish(image, tag, revision, directory, report):
     print(report.read_text())
 
 
-def promote(image, tag, revision, run_id):
-    """Copy the validated main index byte-for-byte; never build or retag another commit."""
-    tag_name(tag)
-    require(re.fullmatch(REVISION, revision), "invalid source revision")
-    repo = os.environ["GITHUB_REPOSITORY"]
-    require(image == "ghcr.io/" + repo.lower(), "unexpected registry image")
-    with tempfile.TemporaryDirectory() as directory:
-        run("gh", "run", "download", str(run_id), "--repo", repo,
-            "--name", "container-index", "--dir", directory)
-        record = json.loads((Path(directory) / "container-index.json").read_text())
-    require(record["revision"] == revision and record["image"] == image + ":sha-" + revision,
-            "SHA-image evidence belongs to another source")
-    require(re.fullmatch(DIGEST, record["digest"]), "invalid validated index digest")
-    source = image + "@" + record["digest"]
-    index = inspect(source)
-    validate_index(index, record["platforms"])
-    require(index["digest"] == record["digest"], "validated index changed")
-    destination = image + ":" + tag
-    existing = inspect(destination, missing_ok=True)
-    if existing is None:
-        # A single index source without annotations preserves its exact digest.
-        run("docker", "buildx", "imagetools", "create", "--tag", destination, source)
-        existing = inspect(destination)
-    validate_index(existing, record["platforms"])
-    require(existing["digest"] == record["digest"], "version tag differs from validated SHA image")
-    output(digest=record["digest"])
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -157,14 +122,9 @@ def main():
         publication.add_argument("--" + name, required=True)
     publication.add_argument("--directory", type=Path, required=True)
     publication.add_argument("--report", type=Path, required=True)
-    promotion = commands.add_parser("promote")
-    for name in ("image", "tag", "revision", "run-id"):
-        promotion.add_argument("--" + name, required=True)
     args = parser.parse_args()
     if args.command == "prepare":
         prepare(args.tag)
-    elif args.command == "promote":
-        promote(args.image, args.tag, args.revision, args.run_id)
     elif args.command == "record":
         require(re.fullmatch(DIGEST, args.digest) and re.fullmatch(REVISION, args.revision), "invalid image provenance")
         args.output.parent.mkdir(parents=True, exist_ok=True)
