@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/theopoc/pocketmark/compare/v0.2.0...v0.2.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* **compose:** use published GHCR image ([#38](https://github.com/theopoc/pocketmark/issues/38)) ([1eef406](https://github.com/theopoc/pocketmark/commit/1eef406c6f30e6f291eaa50fa355709f749ba82c))
+
 ## [0.2.0](https://github.com/theopoc/pocketmark/compare/v0.1.0...v0.2.0) (2026-10-24)
 
 
