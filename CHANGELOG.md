@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0](https://github.com/theopoc/pocketmark/compare/v0.1.0...v0.2.0) (2026-10-24)
+
+
+### Features
+
+* rename API keys in Settings ([#22](https://github.com/theopoc/pocketmark/issues/22)) ([1f28d5b](https://github.com/theopoc/pocketmark/commit/1f28d5b2bdefa281ac499365f12d5959551cb11b))
+
+
+### Bug Fixes
+
+* **ci:** handle releases without an open PR ([#25](https://github.com/theopoc/pocketmark/issues/25)) ([7b1e252](https://github.com/theopoc/pocketmark/commit/7b1e25277482392ed986b12c11aa7be6ccaff586))
+* **compose:** add explicit healthcheck ([#26](https://github.com/theopoc/pocketmark/issues/26)) ([9ea82aa](https://github.com/theopoc/pocketmark/commit/9ea82aac8e81a0aeb5c542c2966c15d8bd09263f))
+
 ## 0.1.0 (2026-10-23)
 
 
