@@ -13,8 +13,8 @@ RUN = {"id": 7, "head_sha": REVISION, "event": "push", "head_branch": "main",
 
 
 class ValidatedCITests(unittest.TestCase):
-    def test_missing_or_expired_image_and_binary_evidence_blocks_publication(self):
-        artifacts = [{"name": name, "expired": False} for name in ("linux-amd64", "linux-arm64", "container-index")]
+    def test_missing_or_expired_binaries_block_publication(self):
+        artifacts = [{"name": name, "expired": False} for name in ("linux-amd64", "linux-arm64")]
         CI.require_artifacts(artifacts)
         for index in range(len(artifacts)):
             with self.subTest(index=index), self.assertRaises(ValueError):

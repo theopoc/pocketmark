@@ -94,7 +94,7 @@ jobs:
           echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
 
   verify:
-    name: Require validated main image and binaries
+    name: Require validated main binaries
     needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 60
