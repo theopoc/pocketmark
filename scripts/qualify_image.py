@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DIGEST = r"sha256:[0-9a-f]{64}"
 REVISION = r"[0-9a-f]{40}"
 VERSION = r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
-IMAGE = rf"(ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+):(sha-{REVISION}|{VERSION})"
+IMAGE = rf"(ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+):({VERSION})"
 SMOKE_CHECKS = ("health_auth_hardening_limits", "sqlite_fts5_and_capture_ssrf_rejection",
                 "full_backup", "restart_persistence_and_no_oom")
 
@@ -57,13 +57,12 @@ def qualify(image, digest, revision, platform, report_path):
     result = {"schema_version": 1, "status": "failed", "stage": "input", "checks": {}}
     try:
         reference = re.fullmatch(IMAGE, image)
-        require(reference is not None, "expected a GHCR SHA or stable version image")
+        require(reference is not None, "expected a GHCR stable version image")
         require(re.fullmatch(DIGEST, digest) is not None, "invalid expected index digest")
         require(re.fullmatch(REVISION, revision) is not None, "invalid expected source revision")
         require(platform in ("linux/amd64", "linux/arm64"), "unsupported image platform")
         repository, tag = reference.groups()
-        version = "sha-" + revision
-        require(not tag.startswith("sha-") or tag == version, "SHA tag differs from expected source revision")
+        version = tag
         result["expected"] = {"image": image, "digest": digest, "revision": revision,
                               "platform": platform, "version": version}
         result["checks"]["input"] = True

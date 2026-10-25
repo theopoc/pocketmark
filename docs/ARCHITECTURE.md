@@ -6,7 +6,7 @@ Pocketmark keeps one Go process, SQLite/FTS5 and a dependency-free embedded web 
 
 | Module | Owns | Main test surface |
 | --- | --- | --- |
-| `cmd/pocketmark/` | Configuration, lifecycle and the bounded capture worker. | Store queue/recovery tests and CI container smoke tests. |
+| `cmd/pocketmark/` | Configuration, lifecycle and the bounded capture worker. | Store queue/recovery tests and release container smoke tests. |
 | `internal/capture/` | Network filtering, pinned DNS, redirects, extraction and bounded passive snapshots. | Capture, layout and offline tests. |
 | `internal/server/` | HTTP authentication, request limits, routes, shared upload staging and work slots. | Real HTTP handler tests with disposable stores. |
 | `internal/store/` | Atomic schema initialization/upgrades, account persistence, library mutations, queue transitions and chunked documents. | Fresh and legacy database tests, restart/rollback and concurrent access regressions. |
@@ -36,6 +36,6 @@ Workflow tests use an in-memory adapter to control capture/network failures. Sto
 
 ## Verification scope
 
-Run `make check`, `make test`, `make test-extension` and `make build`. CI additionally gates secrets, reachable vulnerabilities, release packaging, and native AMD64/ARM64 Docker behavior. The deterministic suite tests regressions; it does not replace [RAM measurements](BENCHMARK.md) or real-client observations.
+Run `make check`, `make test`, `make test-extension` and `make build`. CI additionally gates secrets, reachable vulnerabilities and release tooling, with separate native AMD64/ARM64 test and build jobs. Native Docker smoke tests and Chromium journeys run only during release. The deterministic suite tests regressions; it does not replace [RAM measurements](BENCHMARK.md) or real-client observations.
 
 Keep modules together when their rules change together. Splitting the capture worker or other files solely for their size does not add depth; introduce a new seam only when it hides a real responsibility or supports a concrete adapter.

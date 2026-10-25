@@ -1,17 +1,19 @@
 # CI and release
 
-GitHub Actions runs on pushes to `main`, pull requests targeting `main` (including title edits), manual dispatch, and every Monday at 05:23 UTC. The weekly run uses the complete suite to detect new vulnerability advisories and runner/tool drift without a source change; it never calls the release workflow. Scheduled runs start only after this configuration reaches the default branch; GitHub can delay them or disable them after 60 days of inactivity in a public repository. Release Please also runs on pushes to `main`, preparing a version PR or handing a merged version PR to the release pipeline. A release waits for the successful complete main CI at the tagged commit and reuses its binaries and validated image. Every gate must pass; failed, skipped or cancelled prerequisite jobs fail the final `CI passed` check.
+GitHub Actions runs on pushes to `main`, pull requests targeting `main` (including title edits), manual dispatch, and every Monday at 05:23 UTC. The weekly run uses the complete suite to detect new vulnerability advisories and runner/tool drift without a source change; it never calls the release workflow. Scheduled runs start only after this configuration reaches the default branch; GitHub can delay them or disable them after 60 days of inactivity in a public repository. Release Please also runs on pushes to `main`, preparing a version PR or handing a merged version PR to the release pipeline. A release waits for the successful complete main CI at the tagged commit and reuses its native binaries. Docker images are built only for a published release. Every source gate must pass; failed, skipped or cancelled prerequisite jobs fail the final `CI passed` check.
 
-| Gate | Checks and outputs |
+| Phase | Checks and outputs |
 | --- | --- |
-| Quality | Conventional Commit PR title, Go formatting/vet, module checksums and tidy drift, JavaScript/Python syntax, extension regression tests when affected files changed, workflow/shell validation with actionlint, release-verification tests, actual release expressions evaluated with the pinned GitHub Actions expressions library, and both GoReleaser configurations. |
-| Security | Gitleaks scans the complete checked-out Git history with redacted output. Govulncheck checks reachable Go dependency/standard-library vulnerabilities using the application's SQLite tags. |
-| Test/build, AMD64 and ARM64 | Native Linux runners execute all Go race tests with coverage; musl builds static executables; the exact executables and build metadata become packaging inputs. |
-| Docker, both architectures | Builds the normal Dockerfile natively and tests the actual hardened Compose configuration: health, authentication, FTS5, enabled capture rejecting a loopback destination, backup integrity, restart persistence and zero OOM/limit events. Essential Chromium journeys exercise first-run setup, rejected and successful password login, bookmark creation/search/edit/delete, reload persistence and logout against that real container. Each run owns and cleans its synthetic volume/network/container and browser profile. |
-| Final main image | After all source gates pass, build native registry images, run browser E2E and Compose smoke tests against their exact digests, publish `sha-<40-character-commit>` only after both platforms pass, then pull/smoke-test that tag. |
-| Artifacts | Main/PR executables and main image provenance are retained for 90 days; ordinary coverage/smoke evidence and release bundles for seven days. |
+| Quality | Conventional Commit PR title, formatting/vet, module checksums and tidy drift, syntax, actionlint and GoReleaser configuration. |
+| Security | Redacted full-history Gitleaks scan and reachable Go vulnerabilities with the SQLite tags. |
+| Tests, AMD64 and ARM64 | Native Go race tests with coverage, embedded UI and extension regressions, release-tool tests and actual workflow expression regressions. |
+| Build, AMD64 and ARM64 | Separate native musl builds produce static binaries and build metadata, retained for 90 days as release inputs. |
+| CI passed | Requires quality, security, tests and build to succeed. |
+| Docker release | Build native candidates by digest, test Compose and Chromium on both architectures, publish the tested version index, then qualify the published tag. Runs only for a published stable release. |
 
-Actions use full commit SHAs; tool modules, pre-commit hooks and the Gitleaks engine are version-pinned. Gitleaks uses the official action rather than a custom installer. Review and update these pins deliberately. PR CI has read-only repository permissions, timeouts and cancellation of superseded branch runs. Main runs are not cancelled by newer pushes: an older commit may be awaiting a release. Only the post-gate main-image jobs receive registry write access. It executes pull-request code without publication credentials. The separate Dependabot auto-merge workflow uses `pull_request_target` with `contents:write` and `pull-requests:write`, but never checks out or executes PR code. Release Please receives `contents:write` and `pull-requests:write` to maintain version PRs and draft releases, plus `actions:write` to dispatch CI on the bot PR's branch. GitHub release publication separately receives `contents:write`; GHCR build/index jobs receive `packages:write`. No personal access token, external registry secret or paid security service is required for publication.
+Actions use full commit SHAs; tool modules, pre-commit hooks and the Gitleaks engine are version-pinned. PR/main CI has read-only permissions and never builds or publishes Docker images. Superseded branch runs are cancelled; main runs are retained because a release may need their binaries. Coverage, container evidence and release bundles are retained for seven days.
+
+The separate Dependabot workflow only reads verified PR metadata before enabling auto-merge; it never executes PR code. Release Please can maintain version PRs/drafts and dispatch CI on its branch. GitHub publication receives `contents:write`; only release image build/index jobs receive `packages:write`. Publication uses the short-lived `GITHUB_TOKEN` and needs no personal token or additional registry secret.
 
 The module toolchain baseline is declared in `go.mod`; the Docker builder version is declared separately in `Dockerfile`. Review their alignment when either changes and keep both toolchains patched. A numerically newer Go minor version does not imply its patch level contains every security fix. Govulncheck remains blocking rather than suppressing standard-library reports.
 
@@ -78,7 +80,7 @@ python3 scripts/smoke_docker.py --image pocketmark:ci --browser
 
 The browser dependency is pinned and locked under `e2e/`; it is test tooling only and is not copied into the application image. The browser runs on the CI runner, outside the server's 128 MiB container limit. These Chromium desktop journeys are separate from extension regressions and do not qualify Firefox, Safari, native mobile clients or full accessibility.
 
-Extension regressions run only when `extension/`, `Makefile`, the CI workflow or the extension-selection tooling changes. PR selection uses the complete branch diff from its merge base, including deleted and renamed files; main pushes compare all commits since the push's previous SHA. Manual branch dispatches (including Release Please PRs) compare to main; manual/scheduled runs already on main inspect the last commit. Only the test step is conditional, so `quality` still succeeds normally when no extension tests are needed; failures and unexpected job skips still block `CI passed`.
+Extension regressions run unconditionally in the test phase. They are inexpensive, so there is no Git-diff selector or conditional test skip to maintain. Container and Chromium journeys run during release; ordinary PR/main CI covers Go, embedded UI, extension and release-tool regressions without Docker.
 
 The release expression regression checks use `@actions/expressions` only as a temporary CI/test tool; it is not an application or frontend dependency. They read the expression directly from the workflow and cover missing/empty PR outputs after a version PR is merged, ordinary opened PRs, and malformed output. Reproduce them locally with:
 
@@ -106,7 +108,7 @@ Use artifacts built from the current clean commit; verification rejects another 
 
 The normal release entry point is **merging the Release Please version PR**. On each push to `main`, Release Please reads Conventional Commits and opens or updates a PR containing `CHANGELOG.md`, `version.txt` and `.release-please-manifest.json`. `feat:` requests a minor bump, `fix:` a patch bump, and `!` or a `BREAKING CHANGE:` footer a major bump. Commits such as `docs:` and `ci:` alone do not request a release. With no previous published tags/releases, the first version is `0.1.0`. The Chrome extension keeps its independent manifest version.
 
-Review and squash-merge the version PR when ready to publish; keep its generated title and release metadata. Release Please creates an immutable `vMAJOR.MINOR.PATCH` tag and a **draft** GitHub release. The remaining jobs run directly in the same Release workflow: they do not rely on the tag/release events suppressed by `GITHUB_TOKEN`. The workflow validates the tag and ancestry, waits for the entire main CI run at that exact commit (including final image validation), downloads that run’s tested executables with digest validation, and runs `.goreleaser.yaml` to package them. It accepts neither PR CI nor a green `CI passed` while the final image jobs are still running. It does not rebuild binaries or images during release. Verification checks checksums, archive contents, executable permissions, ELF architecture, clean source revision and extension permissions before retaining the publication bundle.
+Review and squash-merge the version PR when ready to publish; keep its generated title and release metadata. Release Please creates an immutable `vMAJOR.MINOR.PATCH` tag and a **draft** GitHub release. The remaining jobs run directly in the same Release workflow: they do not rely on the tag/release events suppressed by `GITHUB_TOKEN`. The workflow validates the tag and ancestry, waits for the entire main CI run at that exact commit (including the separate test and build jobs), downloads that run’s tested executables with digest validation, and runs `.goreleaser.yaml` to package them. It accepts neither PR CI nor an incomplete main run. Release packaging reuses the downloaded binaries without rebuilding them; the container workflow builds Docker separately after GitHub publication. Verification checks checksums, archive contents, executable permissions, ELF architecture, clean source revision and extension permissions before retaining the publication bundle.
 
 Only then does the write-enabled job recheck that bundle and require a missing release or an empty stable draft targeting the verified commit. It runs `.goreleaser-publish.yaml` to upload those same files and publish the release, retaining Release Please's notes. This separate configuration disables builds and checksums; `--skip=archive` also prevents repackaging. GitHub assets are not rebuilt during publication, tags are not moved and published releases are not overwritten. After GitHub publication succeeds, the workflow calls the container workflow below. An explicitly requested manual tag push still follows the same validation/publication path.
 
@@ -126,60 +128,50 @@ Manually dispatching **Release** defaults to complete verification and assembly 
 
 ## GHCR images
 
-The main CI invokes `main-image.yml` after `CI passed`. It builds native Linux AMD64 and ARM64 images from the merged commit, pushes them by digest, and runs Compose smoke tests plus Chromium E2E against those exact registry bytes. Only after both platforms pass does it create `ghcr.io/theopoc/pocketmark:sha-<40-character-commit>`. Fresh runners pull that tag, verify the index digest, repeat smoke tests and check that anonymous pulls are denied. The complete CI run must succeed before release can use it.
+Docker builds occur only in `container-release.yml`, after GitHub release publication or an explicit retry for an already published stable release. The workflow validates the immutable tag, ancestry on main and successful complete main CI with retained binaries. Ordinary main pushes, PRs, the weekly CI and release dry runs never build Docker.
 
-Release Please remains the normal version entry point. After the GitHub release is published, `container-release.yml` downloads the `container-index` evidence from the successful main run at the release revision. It validates the recorded source, both platform digests and registry index, then copies that single existing index to `vMAJOR.MINOR.PATCH`. **No Docker build occurs during release.** Both tags must have the exact same index digest. An existing version tag is accepted only if it already resolves to that same digest; differing content is never replaced. No `latest` or moving minor alias is published. [Docker index-copy semantics](https://github.com/docker/buildx/blob/master/docs/reference/buildx_imagetools_create.md).
+The release image flow has separate build and test phases. Native AMD64/ARM64 builders push untagged candidate digests. Fresh native test jobs pull those exact digests and run hardened Compose smoke tests plus Chromium journeys. Only when both pass does publication create `vMAJOR.MINOR.PATCH` from those tested digests. The published tag is then pulled and qualified on both architectures: exact index digest, platform, source revision, version label, health/authentication, FTS5, SSRF filtering, backup, restart persistence and anonymous-access denial. No `latest` or moving minor alias is published.
 
-Because the image is unchanged, its OCI revision is the source SHA and its OCI version label remains `sha-<commit>`, including when pulled via a semantic version tag. Both native platforms pull/smoke-test the published version tag and verify that digest after publication. These jobs publish to GHCR and GitHub only; they do not deploy to a server.
+The OCI revision is the release source SHA and the OCI version is `vMAJOR.MINOR.PATCH`. Images are built once per release attempt; no SHA-tag promotion or image evidence from main CI is involved. Existing version tags must already contain the same platform digests; differing content is never replaced. A retry that produces different bytes therefore fails safely instead of overwriting an existing version.
 
-Both SHA and version workflows call `scripts/qualify_image.py` to qualify the published image. The module owns the native pull, exact index-digest check, platform and OCI-label checks, Compose smoke test and anonymous-access check. The expected OCI version is derived from the source revision. Smoke tests run against the verified local image ID so a subsequent tag change cannot replace the tested bytes. Credentials, permissions, runner matrices and artifact retention remain in the workflows. Local PR images continue to use `scripts/smoke_docker.py` directly.
+Main binaries are retained for 90 days, subject to repository retention policy. Missing/expired binaries or a failed main CI block publication rather than silently rebuilding release archives. Rerun the original main CI for recoverable failures. Build attestations are disabled so the index contains exactly two runnable platforms; this pipeline does not claim signed provenance or an SBOM. Untagged candidates may remain after a failed release attempt.
 
-For each invocation with complete arguments and a writable report destination, qualification writes a JSON report on success or failure and exits nonzero on failure. Its `stage` identifies the first failed check; `checks` records completed checks, and `smoke_checks` retains the successful smoke evidence. Expected source/image metadata is included only after input validation. Raw subprocess output, HTTP errors and credentials are excluded; untrusted failure messages are replaced by fixed diagnostics. No later check runs after a failure. CI retains this report even when qualification fails.
+GHCR package visibility is separate from the public source repository and must remain private; consumers need authenticated read access. These workflows publish artifacts and do not deploy to a server. Release calls the container workflow directly because publication using `GITHUB_TOKEN` does not trigger another workflow's `release:published` event. [GitHub event semantics](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
+
+To retry the container workflow for an already published release without moving its Git tag or changing its GitHub assets:
 
 ```sh
-python3 scripts/qualify_image.py --image "ghcr.io/theopoc/pocketmark:$TAG" \
-  --digest "$DIGEST" --revision "$REVISION" --platform linux/arm64 \
-  --report reports/published-arm64.json
+gh workflow run container-release.yml --repo theopoc/pocketmark --ref main -f tag=v0.3.0
 ```
 
-The main binaries and provenance artifacts are retained for 90 days, subject to repository retention policy. Missing/expired artifacts, a deleted digest, a failed main run or a pre-migration commit without SHA-image evidence block publication rather than silently rebuilding. Rerun the original main CI for recoverable failures; for old commits without this pipeline, create a new validated main revision/version. Build attestations are disabled so the index contains exactly two runnable platforms; this pipeline does not claim signed provenance or an SBOM. Untagged intermediate images can remain after failed builds.
-
-GHCR authentication uses the repository's short-lived `GITHUB_TOKEN`; the source label links the package to this repository. The source repository is public; GHCR package visibility is separate and must remain private. Consumers need authenticated read access. Release calls the container workflow directly because releases created with `GITHUB_TOKEN` do not emit another workflow's `release:published` event.
-
-To retry container promotion for an already published release without moving its Git tag or changing its GitHub assets:
+This dispatch builds and tests real release candidates and can publish the version image; it is not a dry run. Authenticated clients can then pull it:
 
 ```sh
-gh workflow run container-release.yml --repo theopoc/pocketmark --ref main -f tag=v0.1.0
-```
-
-Unlike the Release dry run, this dispatch promotes a real version tag. It still requires successful main CI and retained evidence for that exact release source. Authenticated clients can use:
-
-```sh
-docker pull ghcr.io/theopoc/pocketmark:v0.1.0
+docker pull ghcr.io/theopoc/pocketmark:v0.3.0
 ```
 
 ### Development and publication flow
 
 ```mermaid
 flowchart TD
-    M["main"] --> F["Feature or fix branch · local checks"]
-    F --> PR["PR to main"]
-    PR --> Q["Lint and quality · conditional extension tests"]
+    PR["PR to main"] --> Q["Quality"]
     PR --> S["Security"]
-    PR --> T["Unit/integration tests · image build · browser E2E"]
+    PR --> T["Tests · AMD64 / ARM64"]
+    PR --> B["Build · AMD64 / ARM64"]
     Q --> G["CI passed"]
     S --> G
     T --> G
-    G --> R["Review and squash merge"]
-    R --> C["Main CI · final image build"]
-    C --> E["E2E on exact registry digests · SHA tag · smoke tests"]
-    E --> V["Validated image and retained binaries"]
-    R --> RP["Release Please version PR"]
-    RP --> MERGE["Review and merge version PR"]
-    MERGE --> TAG["Immutable version tag and draft release"]
-    TAG --> WAIT["Wait for successful main CI at tagged SHA"]
-    V --> WAIT
+    B --> G
+    G --> M["Review and squash merge"]
+    M --> CI["Main CI · retain native binaries"]
+    M --> RP["Release Please version PR"]
+    RP --> R["Review and merge version PR"]
+    R --> TAG["Version tag and draft"]
+    TAG --> WAIT["Require complete main CI at tagged SHA"]
+    CI --> WAIT
     WAIT --> PUB["Package existing binaries · publish GitHub release"]
-    PUB --> PROMOTE["Promote same image digest to version tag"]
-    PROMOTE --> SMOKE["Post-publication smoke tests"]
+    PUB --> DB["Docker build · native candidate digests"]
+    DB --> DT["Docker tests · Compose and Chromium"]
+    DT --> DP["Publish tested version index"]
+    DP --> V["Qualify published tag · both architectures"]
 ```

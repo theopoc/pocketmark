@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Wait for the complete main CI run, including final SHA-image validation."""
+"""Wait for the complete main CI run, and retained native binaries."""
 import argparse
 import json
 import os
@@ -25,9 +25,9 @@ def successful_run(runs, revision, repo):
 
 def require_artifacts(artifacts):
     available = {artifact["name"] for artifact in artifacts if not artifact.get("expired", True)}
-    expected = {"linux-amd64", "linux-arm64", "container-index"}
+    expected = {"linux-amd64", "linux-arm64"}
     if not expected <= available:
-        raise ValueError("Main CI is missing retained binaries or SHA-image evidence: " + ", ".join(sorted(expected - available)))
+        raise ValueError("Main CI is missing retained binaries: " + ", ".join(sorted(expected - available)))
 
 
 def wait(revision, timeout=3300):
@@ -47,7 +47,7 @@ def wait(revision, timeout=3300):
             require_artifacts([artifact for page in pages for artifact in page["artifacts"]])
             return run_id
         if time.monotonic() >= deadline:
-            raise TimeoutError("No successful main CI with a validated SHA image; rerun CI for this main commit.")
+            raise TimeoutError("No successful main CI with retained native binaries; rerun CI for this main commit.")
         time.sleep(15)
 
 

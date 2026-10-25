@@ -19,7 +19,7 @@ IMAGE_ID = "sha256:" + "c" * 64
 REPOSITORY = "ghcr.io/example/pocketmark"
 DETAILS = {"Id": IMAGE_ID, "RepoDigests": [REPOSITORY + "@" + DIGEST], "Os": "linux", "Architecture": "arm64",
            "Config": {"Labels": {"org.opencontainers.image.revision": REVISION,
-                                 "org.opencontainers.image.version": "sha-" + REVISION}}}
+                                 "org.opencontainers.image.version": "v1.2.3"}}}
 
 
 class QualificationTests(unittest.TestCase):
@@ -39,7 +39,7 @@ class QualificationTests(unittest.TestCase):
                 return json.dumps([details])
             if kind == "smoke":
                 self.assertEqual(args[args.index("--image") + 1], IMAGE_ID)
-                self.assertEqual(args[args.index("--version") + 1], "sha-" + REVISION)
+                self.assertEqual(args[args.index("--version") + 1], "v1.2.3")
                 smoke = {"image_id": IMAGE_ID, "checks": {name: True for name in QUALIFY.SMOKE_CHECKS}}
                 smoke.update(smoke_changes or {})
                 Path(args[args.index("--output") + 1]).write_text(json.dumps(smoke))
@@ -56,16 +56,14 @@ class QualificationTests(unittest.TestCase):
             self.assertNotIn("secret-output", path.read_text())
             return result, calls, privacy.call_count
 
-    def test_sha_and_version_tags_share_the_same_qualification_and_expected_label(self):
-        for tag in ("sha-" + REVISION, "v1.2.3"):
-            with self.subTest(tag=tag):
-                result, _, privacy_calls = self.run_qualification(tag=tag)
-                self.assertEqual(result["status"], "passed")
-                self.assertEqual(result["stage"], "complete")
-                self.assertEqual(result["expected"]["version"], "sha-" + REVISION)
-                self.assertEqual(result["image_id"], IMAGE_ID)
-                self.assertEqual(set(result["checks"]), {"input", "pull", "digest", "labels", "smoke", "privacy"})
-                self.assertEqual(privacy_calls, 1)
+    def test_version_image_qualification_checks_the_release_version(self):
+        result, _, privacy_calls = self.run_qualification()
+        self.assertEqual(result["status"], "passed")
+        self.assertEqual(result["stage"], "complete")
+        self.assertEqual(result["expected"]["version"], "v1.2.3")
+        self.assertEqual(result["image_id"], IMAGE_ID)
+        self.assertEqual(set(result["checks"]), {"input", "pull", "digest", "labels", "smoke", "privacy"})
+        self.assertEqual(privacy_calls, 1)
 
     def test_invalid_inputs_produce_report_without_running_tools(self):
         for changes in ({"image": "local:ci"}, {"digest": "secret-token"}, {"revision": "bad"},
