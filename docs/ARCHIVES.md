@@ -50,6 +50,7 @@ rendered markup. Larger files remain downloadable.
 | `POST /api/files?name=document.pdf&collection=123` | Create standalone file and payload atomically; optional collection |
 | `POST /api/links/{id}/assets?name=page.html` | Raw binary body with its MIME Content-Type; returns attachment metadata |
 | `GET /api/assets/{assetId}` | Force-download original bytes |
+| `GET /api/assets/{assetId}/view` | Inline image/PDF or isolated HTML preview |
 | `DELETE /api/assets/{assetId}` | Delete metadata and all chunks |
 | `POST /api/links/{id}/preserve` | Create offline HTML; returns `{asset, embedded, omitted}` |
 | `GET /api/links/{id}/reader?asset=123` | Sandboxed reader; `asset` is optional |
@@ -57,9 +58,20 @@ rendered markup. Larger files remain downloadable.
 
 Native attachment uploads, manual preservation, rich-reader generation and backup
 share one work slot; standalone uploads share the import slot.
-A competing operation on the same slot receives HTTP 409. Untrusted archives
-are always downloaded as attachments and never rendered on the application's
-origin. The API does not upload to a third-party service.
+A competing operation on the same slot receives HTTP 409. Original downloads always use attachment disposition. The **View** action in
+**Reader → Files** opens an integrated viewer for raster images, PDFs and HTML,
+including standalone files. Its selector switches between saved attachments;
+**Download original** remains available. PDF display uses the browser's native
+viewer and may depend on browser settings.
+
+HTML previews retain saved styles and embedded images/fonts up to the full
+20 MiB attachment limit, independently of the structural reader's 2 MiB limit.
+They use an opaque CSP sandbox with scripts, forms, frames and network resources
+blocked. Refresh redirects and external links are disabled. Missing resources
+stay missing; this preserves the saved appearance, not live-site interactivity.
+Preparation uses bounded tokenization and temporary disk files in the existing
+single work slot; no browser process or resident cache is added. Closing the
+viewer unloads its content. Untrusted HTML never gains the application's origin. The API does not upload to a third-party service.
 
 Backup uses SQLite `VACUUM INTO` to include committed WAL data in a consistent
 snapshot. The temporary snapshot is written in the data directory, then streamed

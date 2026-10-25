@@ -33,6 +33,7 @@ func (a *Server) registerAssets(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/links/{id}/assets", a.listAssets)
 	mux.HandleFunc("POST /api/links/{id}/assets", limited(a.uploadAsset))
 	mux.HandleFunc("GET /api/assets/{assetId}", a.downloadAsset)
+	mux.HandleFunc("GET /api/assets/{assetId}/view", limited(a.viewAsset))
 	mux.HandleFunc("DELETE /api/assets/{assetId}", a.deleteAsset)
 	mux.HandleFunc("POST /api/links/{id}/preserve", limited(a.preserveOffline))
 	mux.HandleFunc("GET /api/links/{id}/reader", limited(a.richReader))
@@ -109,6 +110,81 @@ func (a *Server) deleteAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, 200, map[string]bool{"ok": true})
+}
+
+func (a *Server) viewAsset(w http.ResponseWriter, r *http.Request) {
+	asset, err := a.Store.Asset(r.Context(), assetID(r))
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+	policy := "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'"
+	switch asset.MediaType {
+	case "text/html":
+		policy += "; sandbox; style-src 'unsafe-inline' data:; img-src data:; font-src data:"
+	case "image/png", "image/jpeg", "image/gif", "image/webp":
+		policy += "; sandbox"
+	case "application/pdf":
+		// Chromium's native PDF viewer needs its same-origin plugin. HTML remains
+		// separately sandboxed; nosniff prevents interpreting these bytes as HTML.
+		policy += "; object-src 'self'"
+	default:
+		fail(w, 415, "this file type cannot be previewed")
+		return
+	}
+	var preview *os.File
+	if asset.MediaType == "text/html" && r.Method != http.MethodHead {
+		// Disk staging releases SQLite between chunks and finishes preparation
+		// before committing a success response. The shared work slot bounds RAM.
+		source, err := a.Store.TemporaryFile(".preview-source-*")
+		if err != nil {
+			handleError(w, err)
+			return
+		}
+		defer os.Remove(source.Name())
+		defer source.Close()
+		if err = a.Store.WriteAsset(r.Context(), asset.ID, source); err != nil {
+			handleError(w, err)
+			return
+		}
+		if _, err = source.Seek(0, io.SeekStart); err != nil {
+			handleError(w, err)
+			return
+		}
+		preview, err = a.Store.TemporaryFile(".preview-html-*")
+		if err != nil {
+			handleError(w, err)
+			return
+		}
+		defer os.Remove(preview.Name())
+		defer preview.Close()
+		if err = capture.Preview(source, preview); err != nil {
+			fail(w, 422, "could not prepare this HTML preview; download the original instead")
+			return
+		}
+		if _, err = preview.Seek(0, io.SeekStart); err != nil {
+			handleError(w, err)
+			return
+		}
+	}
+	w.Header().Set("Content-Type", asset.MediaType)
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": asset.Name}))
+	w.Header().Set("Content-Security-Policy", policy)
+	w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+	if asset.MediaType != "text/html" {
+		w.Header().Set("Content-Length", strconv.FormatInt(asset.Size, 10))
+	}
+	if r.Method == http.MethodHead {
+		return
+	}
+	if preview != nil {
+		_, err = io.Copy(w, preview)
+	} else {
+		err = a.Store.WriteAsset(r.Context(), asset.ID, w)
+	}
+	if err != nil {
+		observability.Error(r.Context(), "attachment_preview_failed", err)
+	}
 }
 
 func (a *Server) preserveOffline(w http.ResponseWriter, r *http.Request) {

@@ -18,6 +18,7 @@ check: fmt-check
 	node --check internal/webui/static/theme.js
 	node --check internal/webui/static/workspace.js
 	node --check internal/webui/static/reader.js
+	node --check internal/webui/static/asset-preview.js
 	node --check internal/webui/static/bulk.js
 	node --check internal/webui/static/tag-picker.js
 	node --check internal/webui/static/app.js

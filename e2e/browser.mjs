@@ -4,7 +4,8 @@ import { chromium } from 'playwright';
 
 const base = new URL(process.env.E2E_BASE_URL);
 assert.equal(base.hostname, '127.0.0.1', 'E2E requires a disposable loopback instance');
-const browser = await chromium.launch();
+// Use full Chromium's headless mode: the headless shell omits the native PDF viewer.
+const browser = await chromium.launch({ channel: 'chromium' });
 try {
   const page = await browser.newPage();
   page.setDefaultTimeout(15_000);
@@ -60,6 +61,68 @@ try {
   await card(revised).getByRole('button', { name: `Edit bookmark: ${revised}`, exact: true }).click();
   assert.equal(await page.locator('#bookmark-notes').inputValue(), 'Persisted browser notes');
   await page.locator('#bookmark-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+
+  // Preserve synthetic files through real HTTP/SQLite and view them without a
+  // download. The HTML intentionally tries scripts, refresh and remote loads.
+  const links = await (await page.request.get(new URL('/api/links', base).href)).json();
+  const saved = links.links.find(link => link.title === revised);
+  assert.ok(saved);
+  const fixture = await browser.newPage();
+  await fixture.setContent('<h1>Synthetic PDF and image capture</h1>');
+  const pdf = await fixture.pdf();
+  const png = await fixture.screenshot();
+  await fixture.close();
+  const html = `<!doctype html><style>h1 { color: rgb(12, 34, 56); } body { background: rgb(245, 240, 230); }</style>
+    <h1>Original saved appearance</h1><img id="embedded" src="data:image/png;base64,${png.toString('base64')}">
+    <script>parent.previewCompromised = true</script><img src="/preview-leak">
+    <iframe src="/preview-frame-leak"></iframe><style>@import url('/preview-style-leak');</style>
+    <meta http-equiv="refresh" content="0;url=/preview-navigation-leak"><base href="/preview-base-leak">
+    <a href="/preview-link-leak" target="_top">External link</a><svg><a href="#safe"><set attributeName="href" to="/preview-svg-leak"/><text y="20">SVG link</text></a></svg>` + '<!-- padding -->'.repeat(145000);
+  const legacy = Buffer.concat([Buffer.from('<!doctype html><meta charset="windows-1252"><h1>Caf'), Buffer.from([0xe9, 0x20, 0x80]), Buffer.from('</h1>')]);
+  for (const [name, media, data] of [['legacy.html', 'text/html', legacy], ['capture.html', 'text/html', Buffer.from(html)], ['capture.png', 'image/png', png], ['capture.pdf', 'application/pdf', pdf]]) {
+    const response = await page.request.post(new URL(`/api/links/${saved.id}/assets?name=${name}`, base).href, { headers: { 'Content-Type': media }, data });
+    assert.equal(response.status(), 201, await response.text());
+  }
+  let downloads = 0;
+  const leakedRequests = [];
+  page.on('download', () => downloads++);
+  page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/preview-')) leakedRequests.push(request.url()); });
+  await card(revised).getByRole('button', { name: revised, exact: true }).click();
+  const previews = '**/api/assets/*/view';
+  await page.route(previews, route => route.request().method() === 'GET'
+    ? route.fulfill({ status: 422, contentType: 'application/json', body: '{"error":"Synthetic preparation failure"}' })
+    : route.continue());
+  await page.getByRole('button', { name: 'View capture.html', exact: true }).click();
+  const viewer = page.locator('#asset-viewer');
+  await viewer.waitFor({ state: 'visible' });
+  await page.locator('#asset-viewer-status').filter({ hasText: 'Could not open this preview' }).waitFor();
+  assert.equal(await page.locator('#asset-viewer-content iframe').count(), 0, 'failed preparation must not open an error document as a capture');
+  await page.unroute(previews);
+  await page.getByRole('button', { name: 'Retry preview', exact: true }).click();
+  const capture = page.frameLocator('#asset-viewer-content iframe').frameLocator('iframe');
+  await capture.getByRole('heading', { name: 'Original saved appearance' }).waitFor();
+  assert.equal(await capture.locator('h1').evaluate(node => getComputedStyle(node).color), 'rgb(12, 34, 56)');
+  assert.equal(await capture.locator('#embedded').evaluate(node => node.complete && node.naturalWidth > 0), true);
+  assert.equal(await capture.locator('a').first().getAttribute('href'), null);
+  assert.equal(await capture.locator('set, animate').count(), 0);
+  assert.equal(await page.evaluate(() => window.previewCompromised), undefined);
+  assert.equal(await page.frameLocator('#asset-viewer-content iframe').locator('iframe').getAttribute('sandbox'), '');
+  await page.locator('#asset-viewer-select').selectOption({ label: 'legacy.html' });
+  await capture.getByRole('heading', { name: 'Café €' }).waitFor();
+  await page.locator('#asset-viewer-select').selectOption({ label: 'capture.png' });
+  await page.waitForFunction(() => { const image = document.querySelector('#asset-viewer-content img'); return image?.complete && image.naturalWidth > 0; });
+  const nativeViewer = page.waitForEvent('framenavigated', { predicate: frame => frame.url().startsWith('chrome-extension://') });
+  await page.locator('#asset-viewer-select').selectOption({ label: 'capture.pdf' });
+  await page.waitForFunction(() => document.getElementById('asset-viewer-status').textContent === 'capture.pdf');
+  assert.equal(await page.locator('#asset-viewer-content iframe').getAttribute('sandbox'), null);
+  await (await nativeViewer).locator('pdf-viewer').waitFor({ state: 'attached' });
+  assert.equal(downloads, 0, 'viewing captures must not trigger downloads');
+  assert.deepEqual(leakedRequests, [], 'HTML preview must not execute scripts, navigate or fetch external resources');
+  await page.getByRole('button', { name: 'Close preview', exact: true }).click();
+  await viewer.waitFor({ state: 'hidden' });
+  assert.equal(await page.locator('#asset-viewer-content').innerHTML(), '');
+  await page.getByRole('button', { name: 'Close reader', exact: true }).click();
+
   page.once('dialog', dialog => dialog.accept());
   await card(revised).getByRole('button', { name: `Delete bookmark: ${revised}`, exact: true }).click();
   await card(revised).waitFor({ state: 'detached' });
@@ -69,7 +132,7 @@ try {
   await page.reload();
   await page.locator('#login-view').waitFor({ state: 'visible' });
   assert.deepEqual(errors, [], 'browser must not throw uncaught JavaScript errors');
-  console.log('Browser E2E passed: setup, login rejection/login, CRUD, search, reload persistence, logout.');
+  console.log('Browser E2E passed: setup, login rejection/login, CRUD, search, reload persistence, image/PDF/HTML previews and isolation, logout.');
 } finally {
   await browser.close();
 }

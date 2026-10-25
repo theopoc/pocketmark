@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"os"
@@ -14,6 +15,88 @@ import (
 
 	"pocketmark/internal/store"
 )
+
+func TestAssetPreviewsPreserveLayoutAndRequireAuthentication(t *testing.T) {
+	a := newTestServer(t, "", false)
+	linkID, err := a.Store.Create(context.Background(), store.Link{URL: "https://example.com/preview"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	png, _ := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6XcAAAAASUVORK5CYII=")
+	for _, file := range []struct{ name, media, body string }{
+		{"page.html", "text/html", `<!doctype html><style>body{color:rgb(1,2,3)}</style><h1>Saved &amp; styled</h1><img src="data:image/png;base64,abc"><meta http-equiv="REFRESH" content="0;url=https://attacker.test"><base href="https://attacker.test"><a href="https://attacker.test" ping="https://attacker.test" target="_top">Leave</a><a href="#saved">Jump</a><script>parent.compromised=true</script>`},
+		{"long.html", "text/html", "<!doctype html><p>Large saved capture</p>" + strings.Repeat("<!-- preserved -->", 140000)},
+		{"image.png", "image/png", string(png)},
+		{"file.pdf", "application/pdf", "%PDF-1.4\nsynthetic fixture\n%%EOF"},
+	} {
+		t.Run(file.name, func(t *testing.T) {
+			w := request(a, "POST", "/api/links/"+strconv.FormatInt(linkID, 10)+"/assets?name="+file.name, file.body, true, map[string]string{"Content-Type": file.media})
+			requireStatus(t, w, 201)
+			var asset store.Asset
+			if err := json.Unmarshal(w.Body.Bytes(), &asset); err != nil {
+				t.Fatal(err)
+			}
+			path := "/api/assets/" + strconv.FormatInt(asset.ID, 10)
+			requireStatus(t, request(a, "GET", path+"/view", "", false, nil), 401)
+			requireStatus(t, request(a, "HEAD", path+"/view", "", false, nil), 401)
+			w = request(a, "GET", path+"/view", "", true, nil)
+			requireStatus(t, w, 200)
+			if w.Header().Get("Content-Type") != file.media || !strings.HasPrefix(w.Header().Get("Content-Disposition"), "inline;") || w.Header().Get("Cache-Control") != "no-store" || w.Header().Get("X-Content-Type-Options") != "nosniff" || w.Header().Get("X-Frame-Options") != "SAMEORIGIN" {
+				t.Fatalf("incorrect preview headers: %v", w.Header())
+			}
+			policy := w.Header().Get("Content-Security-Policy")
+			if !strings.Contains(policy, "default-src 'none'") || !strings.Contains(policy, "frame-ancestors 'self'") {
+				t.Fatalf("unsafe preview policy: %s", policy)
+			}
+			if file.media == "text/html" {
+				if !strings.Contains(policy, "; sandbox;") || strings.Contains(policy, "allow-scripts") || strings.Contains(policy, "allow-same-origin") {
+					t.Fatalf("HTML must have an opaque, scriptless sandbox: %s", policy)
+				}
+				if file.name == "page.html" {
+					body := w.Body.String()
+					for _, want := range []string{"<style>body{color:rgb(1,2,3)}</style>", "Saved &amp; styled", `src="data:image/png;base64,abc"`, `href="#saved"`} {
+						if !strings.Contains(body, want) {
+							t.Errorf("lost saved appearance: %q", want)
+						}
+					}
+					if strings.Contains(body, "attacker.test") || strings.Contains(body, "<base") {
+						t.Fatal("preview allows navigation out of the saved page")
+					}
+				}
+			} else if w.Body.String() != file.body {
+				t.Fatal("preview changed original PDF/image bytes")
+			}
+			head := request(a, "HEAD", path+"/view", "", true, nil)
+			requireStatus(t, head, 200)
+			if head.Body.Len() != 0 || head.Header().Get("Content-Security-Policy") != policy {
+				t.Fatal("HEAD must expose preview policy without rendering a body")
+			}
+			download := request(a, "GET", path, "", true, nil)
+			if download.Body.String() != file.body || !strings.HasPrefix(download.Header().Get("Content-Disposition"), "attachment;") {
+				t.Fatal("preview changed the saved download")
+			}
+			requireStatus(t, request(a, "DELETE", path, "", true, nil), 200)
+			requireStatus(t, request(a, "GET", path+"/view", "", true, nil), 404)
+		})
+	}
+}
+
+func TestHTMLPreviewShellIsTheOnlyPageAllowedToFrameBlobs(t *testing.T) {
+	a := newTestServer(t, "", false)
+	w := request(a, "GET", "/asset-preview.html", "", false, nil)
+	requireStatus(t, w, 200)
+	policy := w.Header().Get("Content-Security-Policy")
+	if !strings.Contains(policy, "frame-src blob:") || !strings.Contains(policy, "frame-ancestors 'self'") || !strings.Contains(policy, "default-src 'none'") || w.Header().Get("X-Frame-Options") != "SAMEORIGIN" {
+		t.Fatalf("unsafe preview shell policy: %s", policy)
+	}
+	for _, path := range []string{"/", "/reader.js"} {
+		w = request(a, "GET", path, "", false, nil)
+		policy = w.Header().Get("Content-Security-Policy")
+		if strings.Contains(policy, "blob:") || strings.Contains(policy, "unsafe-inline") || w.Header().Get("X-Frame-Options") != "DENY" {
+			t.Fatalf("library policy weakened at %s: %s", path, policy)
+		}
+	}
+}
 
 func TestAssetsUploadReaderDownloadBackupAndDelete(t *testing.T) {
 	a := newTestServer(t, "", false)

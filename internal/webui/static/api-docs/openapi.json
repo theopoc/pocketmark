@@ -1939,6 +1939,90 @@
         }
       ]
     },
+    "/api/assets/{assetId}/view": {
+      "get": {
+        "operationId": "viewAsset",
+        "tags": [
+          "Captures & files"
+        ],
+        "summary": "Preview a saved image, PDF or HTML capture",
+        "description": "Authenticated inline preview. HTML retains embedded styles/images/fonts in an opaque sandbox; scripts and network resources are blocked, refresh and external links are disabled. Original downloads remain unchanged. PDF uses the browser native viewer. Preparation shares the archive work slot.",
+        "responses": {
+          "200": {
+            "description": "Inline image/PDF bytes or passive HTML preview (up to the 20 MiB attachment limit).",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/gif": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "422": {
+            "description": "HTML preview preparation failed; download the original file instead."
+          }
+        }
+      },
+      "parameters": [
+        {
+          "name": "assetId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "description": "Attachment ID."
+        }
+      ]
+    },
     "/api/links/{id}/preserve": {
       "post": {
         "operationId": "preserveLink",
