@@ -140,6 +140,7 @@ Accepted inputs are legacy JSON exports (`collections[].links`, object tags, `pa
 | `POST /api/files?name=filename&collection=id` | Raw PDF/image/HTML body → `{link,asset}`; optional collection, max 20 MiB. Creates a standalone file atomically, without a website URL. |
 | `POST /api/links/{id}/assets?name=filename` | Raw PDF/image/HTML body, max 20 MiB and 32 attachments per bookmark. Content is sniffed. HTML is indexed for reading/search. |
 | `GET /api/assets/{assetId}` | Streaming original-byte download, always an attachment with restrictive CSP. |
+| `GET /api/assets/{assetId}/view` | Authenticated inline image/PDF preview or sandboxed HTML with embedded styles/resources; no scripts or network resources. Preparation shares the archive work slot (409 if busy); 422 if HTML cannot be prepared. Original downloads are unchanged. |
 | `DELETE /api/assets/{assetId}` | Removes attachment chunks atomically. |
 | `POST /api/links/{id}/preserve` | Manual resource-embedded passive HTML capture; returns `{asset,embedded,omitted}`. |
 | `GET /api/links/{id}/reader?asset=id` | Sandboxed structural reader; optional HTML attachment ID, otherwise captured HTML. Max 2 MiB input, 1 MiB output. |

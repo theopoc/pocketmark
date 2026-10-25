@@ -62,8 +62,8 @@ function setup({ handler, head } = {}) {
   const records = new Map([[1, link(1)], [2, link(2)]]), annotations = new Map(), assets = new Map(), calls = [], notices = [], edits = [], changes = [], headCalls = [], windows = [];
   const drafts = workspace.createDrafts();
   let expired = 0;
-  const browser = { document, matchMedia: () => ({ matches: true }), confirm: () => true, getSelection: () => null, open: (...args) => windows.push(args), Event: class { constructor(type) { this.type = type; } },
-    fetch: async (path, options) => { headCalls.push({ path, options }); return head ? head(path, options) : { ok: true, status: 200 }; },
+  const browser = { document, addEventListener: (...args) => document.addEventListener(...args), location: { origin: "https://pocketmark.test" }, matchMedia: () => ({ matches: true }), confirm: () => true, getSelection: () => null, open: (...args) => windows.push(args), Event: class { constructor(type) { this.type = type; } },
+    fetch: async (path, options) => { headCalls.push({ path, options }); return head ? head(path, options) : { ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(0) }; },
   };
   async function api(path, options = {}) {
     calls.push({ path, ...options });
@@ -190,6 +190,82 @@ test("formatted-view requests cannot override text mode or a new document", asyn
   assert.equal(env.get("reader-layout").hidden, true);
   assert.equal(env.get("reader-layout").src, "");
   assert.equal(env.headCalls[0].options.credentials, "same-origin");
+});
+
+test("saved files open images, PDF and sandboxed original HTML in the integrated viewer", async () => {
+  const env = setup();
+  env.assets.set(1, [
+    { id: 8, name: "Full page.png", mediaType: "image/png", size: 100 },
+    { id: 9, name: "Printed.pdf", mediaType: "application/pdf", size: 100 },
+    { id: 10, name: "Large page.html", mediaType: "text/html", size: 3 * 1024 * 1024 },
+  ]);
+  await env.reader.open(1);
+  const row = env.get("asset-list").children[0];
+  await fire(row.children.find(node => node.textContent === "View"), "click");
+  await tick();
+  assert.equal(env.get("asset-viewer").open, true);
+  assert.equal(env.get("asset-viewer-select").children.length, 3);
+  let content = env.get("asset-viewer-content").children[0];
+  assert.equal(content.tagName, "IMG");
+  assert.equal(content.src, "/api/assets/8/view");
+  assert.equal(env.get("asset-viewer-download").href, "/api/assets/8");
+  await fire(content, "load");
+  assert.equal(env.get("asset-viewer-status").textContent, "Full page.png");
+  env.get("asset-viewer-select").value = "9";
+  await fire(env.get("asset-viewer-select"), "change");
+  content = env.get("asset-viewer-content").children[0];
+  assert.equal(content.tagName, "IFRAME");
+  assert.equal(content.src, "/api/assets/9/view");
+  assert.equal(content.attributes.sandbox, undefined, "native PDF plugin must remain usable");
+  env.get("asset-viewer-select").value = "10";
+  await fire(env.get("asset-viewer-select"), "change");
+  content = env.get("asset-viewer-content").children[0];
+  assert.equal(content.src, "/asset-preview.html");
+  assert.equal(env.headCalls.at(-1).options.method, "GET", "HTML checks the actual preparation response");
+  await fire(env.get("asset-viewer-close"), "click");
+  assert.equal(env.get("asset-viewer").open, false);
+  assert.equal(env.get("asset-viewer-content").children.length, 0);
+  assert.equal(env.get("reader-dialog").open, true);
+});
+
+test("late preview responses cannot reopen closed captures or replace a newer selection", async () => {
+  const head = deferred();
+  const env = setup({ head: (path) => path.includes("/8/") ? head.promise : { ok: true, status: 200 } });
+  env.assets.set(1, [{ id: 8, name: "Slow.html", mediaType: "text/html", size: 100 }, { id: 9, name: "New.png", mediaType: "image/png", size: 100 }]);
+  await env.reader.open(1);
+  await fire(env.get("asset-list").children[0].children.find(node => node.textContent === "View"), "click");
+  env.get("asset-viewer-select").value = "9";
+  await fire(env.get("asset-viewer-select"), "change");
+  head.resolve({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(0) }); await tick();
+  assert.equal(env.get("asset-viewer-content").children[0].src, "/api/assets/9/view");
+  await env.reader.open(2);
+  assert.equal(env.get("asset-viewer").open, false);
+  assert.equal(env.get("asset-viewer-content").children.length, 0);
+});
+
+test("preview errors offer retry and session expiry closes every viewer", async () => {
+  let status = 404;
+  const env = setup({ head: () => ({ ok: status === 200, status, arrayBuffer: async () => new ArrayBuffer(0) }) });
+  env.assets.set(1, [{ id: 8, name: "Page.html", mediaType: "text/html", size: 100 }]);
+  await env.reader.open(1);
+  await fire(env.get("asset-list").children[0].children.find(node => node.textContent === "View"), "click");
+  await tick();
+  assert.match(env.get("asset-viewer-status").textContent, /no longer available/);
+  assert.equal(env.get("asset-viewer-retry").hidden, false);
+  status = 200;
+  await fire(env.get("asset-viewer-retry"), "click");
+  assert.equal(env.get("asset-viewer-content").children[0].src, "/asset-preview.html");
+  status = 422;
+  await fire(env.get("asset-viewer-retry"), "click");
+  assert.equal(env.get("asset-viewer-content").children.length, 0);
+  assert.match(env.get("asset-viewer-status").textContent, /Could not open/);
+  assert.equal(env.get("asset-viewer-retry").hidden, false);
+  assert.equal(env.headCalls.at(-1).options.method, "GET");
+  status = 401;
+  await fire(env.get("asset-viewer-retry"), "click");
+  assert.equal(env.expired(), 1);
+  assert.equal(env.get("asset-viewer").open, false);
+  assert.equal(env.get("reader-dialog").open, false);
 });
 
 test("capture completion cannot overwrite a different reader's status", async () => {

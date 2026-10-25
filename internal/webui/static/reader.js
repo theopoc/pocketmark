@@ -14,6 +14,13 @@
     let readerAssets = [];
     let readerLayoutURL = "";
     let layoutRequest = 0;
+    let viewerRequest = 0;
+
+    function closeViewer() {
+      viewerRequest++;
+      $("asset-viewer-content").replaceChildren();
+      if ($("asset-viewer").open) $("asset-viewer").close();
+    }
 
     function el(tag, className, text) {
       const node = document.createElement(tag);
@@ -23,6 +30,7 @@
     }
     function isCurrent(token) { return token === state.readerRequest && $("reader-dialog").open; }
     function invalidate() {
+      closeViewer();
       state.readerRequest++; layoutRequest++; annotationSession++;
       state.reading = null; state.annotationDraft = null; state.readerSelection = null;
       state.annotations = []; readerAssets = []; readerLayoutURL = "";
@@ -44,6 +52,7 @@
     });
 
     async function openReader(id, recheck = false) {
+      closeViewer();
       const scroll = recheck ? $("reader-dialog").scrollTop : 0;
       const request = ++state.readerRequest;
       annotationSession++;
@@ -352,6 +361,71 @@
       toast("Use your browser’s Print command, then Save as PDF. Upload the PDF below to keep it here.");
     });
 
+    const previewable = (asset) => ["text/html", "application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp"].includes(asset.mediaType);
+    $("asset-viewer-close").addEventListener("click", closeViewer);
+    $("asset-viewer").addEventListener("close", () => { if (!$("asset-viewer").open) closeViewer(); });
+    $("asset-viewer-select").addEventListener("change", () => showAsset(Number($("asset-viewer-select").value)));
+    $("asset-viewer-retry").addEventListener("click", () => showAsset(Number($("asset-viewer-select").value)));
+
+    async function showAsset(assetID) {
+      const asset = readerAssets.find((item) => item.id === assetID);
+      if (!asset || !previewable(asset)) return;
+      const request = ++viewerRequest, readingRequest = state.readerRequest;
+      const current = () => request === viewerRequest && isCurrent(readingRequest) && $("asset-viewer").open;
+      const url = `/api/assets/${asset.id}/view`;
+      $("asset-viewer-content").replaceChildren();
+      $("asset-viewer-select").value = String(asset.id);
+      $("asset-viewer-download").href = `/api/assets/${asset.id}`;
+      $("asset-viewer-status").textContent = "Opening saved file…";
+      $("asset-viewer-retry").hidden = true;
+      $("asset-viewer-hint").textContent = asset.mediaType === "text/html"
+        ? "Saved appearance with embedded styles, images and fonts. Scripts, external resources and navigation are blocked; missing resources stay missing."
+        : asset.mediaType === "application/pdf" ? "PDF preview uses your browser’s built-in viewer. If unavailable, download the file to open it." : "Scroll to explore the saved image.";
+      const failed = (message) => { if (current()) { $("asset-viewer-status").textContent = message; $("asset-viewer-retry").hidden = false; } };
+      try {
+        const html = asset.mediaType === "text/html";
+        // Read the actual HTML response so preparation/busy/auth errors cannot
+        // be mistaken for a successful iframe load. Rendering stays client-side.
+        const response = await browser.fetch(url, { method: html ? "GET" : "HEAD", credentials: "same-origin" });
+        if (!current()) return;
+        if (response.status === 401) { expireSession(); return; }
+        if (!response.ok) throw new Error(response.status === 404 ? "This saved file is no longer available." : "Could not open this preview. Retry or download the original file.");
+        const bytes = html ? await response.arrayBuffer() : null;
+        if (!current()) return;
+        const image = asset.mediaType.startsWith("image/");
+        const content = el(image ? "img" : "iframe", image ? "asset-viewer-image" : "asset-viewer-frame");
+        if (image) content.alt = asset.name;
+        else {
+          content.title = asset.name;
+          // HTML is placed in the trusted shell's nested opaque sandbox. The
+          // shell's blob-only frame policy also prevents self-navigation to HTTP.
+        }
+        content.addEventListener("load", () => {
+          if (!current()) return;
+          if (html) content.contentWindow.postMessage({ type: "pocketmark-preview", bytes }, browser.location.origin);
+          else $("asset-viewer-status").textContent = asset.name;
+        });
+        content.addEventListener("error", () => failed("Preview could not be displayed. Retry or download the original file."));
+        content.src = html ? "/asset-preview.html" : url;
+        $("asset-viewer-content").replaceChildren(content);
+        // Retry stays available when a browser cannot render a native format.
+        $("asset-viewer-retry").hidden = false;
+      } catch (error) { failed(error.message); }
+    }
+    browser.addEventListener("message", (event) => {
+      const frame = $("asset-viewer-content").children[0];
+      if (event.origin !== browser.location.origin || event.source !== frame?.contentWindow || event.data?.type !== "pocketmark-preview-ready" || !$("asset-viewer").open) return;
+      const asset = readerAssets.find((item) => String(item.id) === $("asset-viewer-select").value);
+      if (asset) $("asset-viewer-status").textContent = asset.name;
+    });
+    function openAsset(asset) {
+      $("asset-viewer-select").replaceChildren(...readerAssets.filter(previewable).map((item) => {
+        const option = el("option", "", item.name); option.value = String(item.id); return option;
+      }));
+      if (!$("asset-viewer").open) $("asset-viewer").showModal();
+      showAsset(asset.id);
+    }
+
     async function loadAssets(id, request = state.readerRequest) {
       if (!isCurrent(request) || state.reading?.id !== id) return;
       const assets = await api(`/api/links/${id}/assets`);
@@ -363,6 +437,12 @@
         const row = el("div", "asset-item");
         const download = el("a", "", asset.name); download.href = `/api/assets/${asset.id}`; download.setAttribute("download", "");
         row.append(download, el("span", "small muted", `${(asset.size / 1024).toFixed(1)} KiB`));
+        if (previewable(asset)) {
+          const view = el("button", "text-button", "View");
+          view.setAttribute("aria-label", `View ${asset.name}`);
+          view.addEventListener("click", () => openAsset(asset));
+          row.append(view);
+        }
         if (asset.mediaType === "text/html" && asset.size <= 2 * 1024 * 1024) {
           const read = el("button", "text-button", "Read");
           read.addEventListener("click", () => { readerLayoutURL = `/api/links/${id}/reader?asset=${asset.id}`; $("reader-layout-mode").disabled = false; $("reader-print").disabled = false; $("reader-layout-mode").click(); });

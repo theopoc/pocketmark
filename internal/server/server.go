@@ -93,6 +93,12 @@ func (a *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+	if r.URL.Path == "/asset-preview.html" {
+		// Only the trusted preview shell needs inline saved styles and blob frames.
+		// The library policy stays unchanged; untrusted HTML gets a nested sandbox.
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'unsafe-inline' data:; img-src data:; font-src data:; frame-src blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'")
+		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+	}
 	extension := extensionOrigin(r.Header.Get("Origin"))
 	isDAV := strings.HasPrefix(r.URL.Path, "/dav/")
 	if extension && (strings.HasPrefix(r.URL.Path, "/api/") || isDAV) {
