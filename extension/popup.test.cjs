@@ -16,7 +16,7 @@ async function setup({ stored, permissionCloses = false, granted = true, hostGra
           if (!authenticated) return { ok: false, error: "Invalid API key" };
           Object.assign(data, message.connection, { pendingConnection: null }); value = { connected: true };
         }
-        if (message.type === "load") value = { collections: [{ id: 7, name: "Reading", parentId: null }], tags: [{ name: "docs" }], link: existing ? { id: 17, title: "Existing title", tags: ["existing"], collectionId: 7 } : null };
+        if (message.type === "load") value = { server: data.server, collections: [{ id: 7, name: "Reading", parentId: null }], tags: [{ name: "docs" }], link: existing ? { id: 17, title: "Existing title", tags: ["existing"], collectionId: 7 } : null };
         if (message.type === "save") value = { fields: message.fields, status: "running", message: "Starting", items: [] };
         return { ok: true, value };
       } },
@@ -100,4 +100,47 @@ test("capture selection updates its summary without starting capture work", asyn
   env.element("capture-pdf").checked = true; env.element("capture-pdf").listeners.change();
   assert.equal(env.element("capture-count").textContent, "1 selected"); assert.equal(env.element("save-hint").textContent, "Bookmark + 1 capture");
   assert.equal(env.calls.some((call) => call.type === "save"), false);
+});
+
+test("completed save shows a success notice and clears it on the next save", async () => {
+  const env = await setup();
+  await env.submit("save-form");
+  const job = { id: "saved", fields: { url: "https://example.org", title: "Article" }, items: [], status: "done", linkId: 17, message: "Saved to Pocketmark." };
+  env.context.renderTask(job);
+  assert.equal(env.element("status").textContent, "Saved to Pocketmark.");
+  assert.equal(env.element("status").className, "notice success");
+  await env.submit("save-form");
+  assert.equal(env.element("status").textContent, "");
+  assert.equal(env.element("status").className, "notice");
+});
+
+test("reopening a completed save confirms only the current article", async () => {
+  const job = { id: "saved", fields: { url: "https://example.org", title: "Article" }, items: [], status: "done", linkId: 17, message: "Saved to Pocketmark." };
+  job.server = "https://library.example";
+  const current = await setup({ job, existing: true });
+  assert.equal(current.element("status").className, "notice success");
+  assert.equal(current.element("status").textContent, "Saved to Pocketmark.");
+  const other = await setup({ job: { ...job, fields: { ...job.fields, url: "https://other.example" } } });
+  assert.equal(other.element("status").className, "notice");
+  assert.equal(other.element("status").textContent, "Ready to save this page.");
+});
+test("partial and unconfirmed saves show attention instead of success, then retry confirms completion", async () => {
+  const env = await setup();
+  const job = { id: "save", fields: { url: "https://example.org", title: "Article" }, items: [{ mode: "pdf", status: "failed" }], status: "paused", linkId: 17, message: "Bookmark saved. Some captures need attention; retry or discard them." };
+  env.context.renderTask(job);
+  assert.equal(env.element("status").className, "notice error");
+  assert.equal(env.element("status").textContent, job.message);
+  env.context.renderTask({ ...job, status: "running" });
+  assert.equal(env.element("status").textContent, "");
+  env.context.renderTask({ ...job, status: "done", items: [{ mode: "pdf", status: "saved" }] });
+  assert.equal(env.element("status").className, "notice success");
+  const failed = { ...job, id: "failed", linkId: undefined, message: "Bookmark not confirmed. Retry manually." };
+  env.context.renderTask(failed);
+  assert.equal(env.element("status").className, "notice error");
+  assert.equal(env.element("status").textContent, failed.message);
+});
+
+test("a completed task from another server cannot confirm the current library save", async () => {
+  const env = await setup({ job: { id: "old", server: "https://old.example", fields: { url: "https://example.org" }, items: [], status: "done", linkId: 17 } });
+  assert.notEqual(env.element("status").className, "notice success");
 });

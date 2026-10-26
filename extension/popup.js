@@ -12,12 +12,12 @@ if (chrome.extension?.getViews({ type: "popup" }).includes(window)) {
   });
 }
 let activeTab, connected = false, connecting = false, loaded = false, ready = false, settingsOpen = false, task = null, tags = [], collections = [], poll, tagTimer, tagQuery = 0, taskSignature;
-function status(message, error = false) {
+function status(message, error = false, success = false) {
   const changed = $("status").textContent !== message;
   $("status").setAttribute("role", error ? "alert" : "status");
   $("status").setAttribute("aria-live", error ? "assertive" : "polite");
-  $("status").textContent = message; $("status").className = error ? "notice error" : "notice";
-  if (error && changed) $("status").scrollIntoView?.({ block: "nearest" });
+  $("status").textContent = message; $("status").className = error ? "notice error" : success ? "notice success" : "notice";
+  if ((error || success) && changed) $("status").scrollIntoView?.({ block: "nearest" });
 }
 async function send(type, values = {}) {
   const response = await chrome.runtime.sendMessage({ type, ...values });
@@ -99,6 +99,7 @@ async function load() {
   tags = data.link?.tags || []; renderTags();
   $("save").textContent = data.link ? "Save changes" : "Save bookmark";
   status(task && (task.status !== "done" || task.fields.url === activeTab?.url) ? "" : data.link ? "Already saved. Edit its title, collection or tags." : "Ready to save this page.");
+  if (data.link && task?.status === "done" && task.server === data.server && task.fields.url === activeTab.url) status("Saved to Pocketmark.", false, true);
   loaded = true; controls();
 }
 function renderTask(job) {
@@ -133,7 +134,11 @@ function renderTask(job) {
     $("retry").hidden = job.status !== "paused";
     $("discard").hidden = job.status !== "paused";
     if (job.linkId && job.fields.url === activeTab?.url) $("save").textContent = "Save changes";
-    if (changedState && job.status === "done" && ready) status("Saved. You can edit this bookmark.");
+    if (changedState && ready) {
+      if (job.status === "done" && job.fields.url === activeTab?.url) status("Saved to Pocketmark.", false, true);
+      else if (job.status === "paused") status(job.message, true);
+      else status("");
+    }
   }
   controls();
 }
