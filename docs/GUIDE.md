@@ -64,7 +64,9 @@ The unmodified third-party Android app (1.4.4) was also tested in an ARM64 emula
 | `POCKETMARK_LISTEN` / `-listen` | `127.0.0.1:8090` | HTTP bind address; Docker uses `0.0.0.0:8090` internally. |
 | `POCKETMARK_TOKEN` | Generated token file | Override the administrative API recovery/setup/session-digest secret; at least 24 characters. |
 | `POCKETMARK_ORIGIN` | Request origin | Public origin such as `https://bookmarks.example.com`, without a path. |
-| `POCKETMARK_TRUSTED_PROXIES` | Empty | Comma-separated trusted proxy CIDRs for client login limits; see [HTTPS deployment](API.md#public-https-deployment). |
+| `POCKETMARK_TRUSTED_PROXIES` | Empty | Comma-separated trusted proxy CIDRs for HTTP and login client limits; see [HTTPS deployment](API.md#public-https-deployment). |
+| `POCKETMARK_RATE_LIMIT` | `10` | HTTP requests per second per client IP (1–1000); [rate limiting](API.md#http-rate-limiting). |
+| `POCKETMARK_RATE_BURST` | `100` | Per-client HTTP burst capacity (1–10000). Zero and invalid values prevent startup. |
 | `POCKETMARK_SECURE_COOKIE` | `false` | Set `true` for HTTPS session cookies; an HTTPS origin enables this automatically. |
 | `POCKETMARK_CAPTURE` / `-no-capture` | Capture enabled | Set the environment variable to `false`, or pass the flag, to disable capture. |
 | `GOMEMLIMIT` | `32MiB` | Soft Go runtime memory budget; native SQLite allocations and total RSS are outside this budget. |

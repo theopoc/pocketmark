@@ -92,6 +92,9 @@ func TestOpenAPICoversNativeRoutes(t *testing.T) {
 			}
 			ids[id] = true
 			responses := op["responses"].(map[string]any)
+			if path != "/healthz" && path != "/livez" && responses["429"] == nil {
+				t.Errorf("rate-limited operation must document 429: %s", pattern)
+			}
 			public := path == "/api/setup" || path == "/api/login" || (path == "/healthz" || path == "/livez")
 			security, override := op["security"]
 			if public {

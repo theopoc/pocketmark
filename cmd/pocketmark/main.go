@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -40,6 +41,14 @@ func run() error {
 	data := flag.String("data", env("POCKETMARK_DATA", "./data"), "data directory")
 	noCapture := flag.Bool("no-capture", os.Getenv("POCKETMARK_CAPTURE") == "false", "disable background page capture")
 	flag.Parse()
+	rate, err := strconv.Atoi(env("POCKETMARK_RATE_LIMIT", "10"))
+	if err != nil {
+		return errors.New("POCKETMARK_RATE_LIMIT must be an integer")
+	}
+	burst, err := strconv.Atoi(env("POCKETMARK_RATE_BURST", "100"))
+	if err != nil {
+		return errors.New("POCKETMARK_RATE_BURST must be an integer")
+	}
 	traceConfig, err := observability.TraceConfigFromEnv()
 	if err != nil {
 		slog.Error("telemetry_configuration_failed", "error", err.Error())
@@ -118,6 +127,9 @@ func run() error {
 		close(done)
 	}
 	handler := server.New(s, token, origin, os.Getenv("POCKETMARK_SECURE_COOKIE") == "true" || strings.HasPrefix(origin, "https://"), observer)
+	if e = handler.SetRateLimit(rate, burst); e != nil {
+		return e
+	}
 	if e = handler.SetTrustedProxies(os.Getenv("POCKETMARK_TRUSTED_PROXIES")); e != nil {
 		return e
 	}

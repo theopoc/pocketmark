@@ -3,7 +3,7 @@
   "info": {
     "title": "Pocketmark HTTP API",
     "version": "1.0.0",
-    "description": "Native API for your personal bookmark library. JSON errors have an error field. Browser requests use the existing owner session automatically; integrations send `Authorization: Bearer <key>`. Named keys cannot manage the account, API keys or full backups. First-run setup, login and health are public. Mutations enforce same-origin browser checks; configure POCKETMARK_ORIGIN to the exact public origin behind a reverse proxy. Limits measured in bytes are UTF-8 byte limits, not character counts. At most eight concurrent library requests; excess work returns 503. “Try it out” performs real operations on this instance. WebDAV /dav/ and removed Linkwarden compatibility routes are outside this reference. Public authentication has two separate slots and a five-second POST body deadline. /healthz has separate readiness slots; /livez checks process liveness independently."
+    "description": "Native API for your personal bookmark library. JSON errors have an error field. Browser requests use the existing owner session automatically; integrations send `Authorization: Bearer <key>`. Named keys cannot manage the account, API keys or full backups. First-run setup, login and health are public. Mutations enforce same-origin browser checks; configure POCKETMARK_ORIGIN to the exact public origin behind a reverse proxy. Limits measured in bytes are UTF-8 byte limits, not character counts. At most eight concurrent library requests; excess work returns 503. “Try it out” performs real operations on this instance. WebDAV /dav/ and removed Linkwarden compatibility routes are outside this reference. Public authentication has two separate slots and a five-second POST body deadline. /healthz has separate readiness slots; /livez checks process liveness independently. All HTTP requests except GET/HEAD health probes share a per-client token bucket: 10 requests/second, burst 100 by default (POCKETMARK_RATE_LIMIT and POCKETMARK_RATE_BURST). IPv6 clients share a /64. Rejection occurs before authentication/body reads and returns 429 with Retry-After. At most 256 sources are tracked; new sources fail closed at capacity. State resets on restart. Trusted forwarding requires POCKETMARK_TRUSTED_PROXIES."
   },
   "servers": [
     {
@@ -119,6 +119,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "security": []
@@ -162,6 +165,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "description": "Only permitted on a new, empty instance with the administrator setup key. Missing or incorrect setupToken returns 403. Existing installations cannot be claimed through setup.",
@@ -265,6 +271,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "description": "Revokes the current session in SQLite and clears its cookie. Revocation survives restart. Other sessions and API keys remain valid."
@@ -293,6 +302,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         }
       }
@@ -323,6 +335,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "x-owner-only": true,
@@ -367,6 +382,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "x-owner-only": true,
@@ -413,6 +431,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "x-owner-only": true,
@@ -452,6 +473,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "x-owner-only": true,
@@ -501,6 +525,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "x-owner-only": true,
@@ -553,6 +580,9 @@
           },
           "415": {
             "$ref": "#/components/responses/415"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "x-owner-only": true,
@@ -617,6 +647,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         }
       }
@@ -648,6 +681,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "description": "At most 200 tags, ordered by count descending then name."
@@ -679,6 +715,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "description": "Alphabetical order grouped by A–Z, followed by # for other initials. Groups contain distinct tag counts across all matching pages.",
@@ -743,6 +782,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         }
       },
@@ -777,6 +819,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "requestBody": {
@@ -827,6 +872,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "description": "Rejects self-parenting and cycles. Omitted description is preserved; an empty string clears it.",
@@ -873,6 +921,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "description": "Moves direct bookmarks to the inbox and makes child collections roots."
@@ -917,6 +968,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "description": "Filters combine with AND, except exact URL lookup. List records omit captured text. Pages contain up to 40 records.",
@@ -1055,6 +1109,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "requestBody": {
@@ -1099,6 +1156,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "description": "Includes captured content when available."
@@ -1137,6 +1197,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "description": "Omitted tags/flags/notes are cleared. A changed URL clears the old capture and queues a new one. Editing other fields preserves the capture. Standalone files must retain their URL.",
@@ -1183,6 +1246,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "description": "Also deletes its capture, attachments and annotations."
@@ -1246,6 +1312,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "description": "One transaction; any failure rolls back every change. tags replaces all tags, move uses collectionId, favorite/read use value, capture queues website bookmarks.",
@@ -1294,6 +1363,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "description": "No request body. A processing bookmark or standalone file returns 404. When the worker is disabled the job remains queued."
@@ -1350,6 +1422,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         }
       },
@@ -1400,6 +1475,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "description": "Stale anchors remain visible rather than being silently moved after a content change."
@@ -1445,6 +1523,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "requestBody": {
@@ -1515,6 +1596,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "requestBody": {
@@ -1560,6 +1644,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         }
       },
@@ -1621,6 +1708,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         }
       },
@@ -1669,6 +1759,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "requestBody": {
@@ -1782,6 +1875,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "requestBody": {
@@ -1887,6 +1983,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         }
       },
@@ -1921,6 +2020,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         }
       },
@@ -2005,6 +2107,9 @@
           },
           "422": {
             "description": "HTML preview preparation failed; download the original file instead."
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         }
       },
@@ -2057,6 +2162,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "description": "No request body. Fetches a passive HTML page with bounded embedded resources and SSRF filtering. Scripts are not executed. Some resources may be omitted; inspect the returned counts."
@@ -2110,6 +2218,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "description": "At most 2 MiB input and 1 MiB output. Upload or capture HTML first. The response has a sandbox CSP and cannot run scripts.",
@@ -2173,6 +2284,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "description": "Transactional metadata import. Duplicate URLs and unsupported uploaded-file types are skipped; invalid records roll back the import. Does not import captured assets or annotations.",
@@ -2237,6 +2351,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "requestBody": {
@@ -2284,6 +2401,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         }
       }
@@ -2319,6 +2439,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         }
       }
@@ -2364,6 +2487,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "x-owner-only": true,
@@ -3360,14 +3486,14 @@
         }
       },
       "429": {
-        "description": "Login rate limit exceeded or password worker busy. Retry-After indicates the retry delay.",
+        "description": "HTTP client rate limit or source-table capacity exceeded, login rate limit exceeded, or password worker busy. Retry-After indicates the retry delay in whole seconds. General rate-limit rejections include Cache-Control: no-store.",
         "content": {
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
             },
             "example": {
-              "error": "too many login attempts; retry in a minute"
+              "error": "too many requests; retry shortly"
             }
           }
         },

@@ -39,7 +39,7 @@ func (a *Server) trustedProxy(addr netip.Addr) bool {
 	return false
 }
 
-func (a *Server) loginSource(r *http.Request) netip.Addr {
+func (a *Server) clientSource(r *http.Request) netip.Addr {
 	peer, err := netip.ParseAddrPort(r.RemoteAddr)
 	if err != nil {
 		return netip.Addr{}
@@ -67,7 +67,7 @@ func (a *Server) loginSource(r *http.Request) netip.Addr {
 }
 
 func (a *Server) allowLogin(r *http.Request) bool {
-	source := a.loginSource(r)
+	source := a.clientSource(r)
 	now := time.Now()
 	a.loginMu.Lock()
 	defer a.loginMu.Unlock()

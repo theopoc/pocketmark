@@ -119,7 +119,7 @@ func TestLoginSourceTrustAndBounds(t *testing.T) {
 		r := httptest.NewRequest("POST", "/api/login", nil)
 		r.RemoteAddr = tc.peer
 		r.Header.Set("X-Forwarded-For", tc.forwarded)
-		if got := a.loginSource(r).String(); got != tc.want {
+		if got := a.clientSource(r).String(); got != tc.want {
 			t.Errorf("source %s / %s: %s != %s", tc.peer, tc.forwarded, got, tc.want)
 		}
 	}
