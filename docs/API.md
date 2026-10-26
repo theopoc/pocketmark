@@ -206,9 +206,44 @@ WebDAV supports `OPTIONS`, `PROPFIND`, `GET`, `HEAD`, `PUT`, `DELETE` and `MOVE`
 | Search query | 512 bytes; page must not exceed 1,000,000 |
 | Import | 8 MiB, 10,000 links, 2,000 collections; one import at a time |
 | Concurrent HTTP requests | Eight; excess requests receive 503 |
-| Login attempts | Ten per minute across the instance; excess requests receive 429 |
+| HTTP request rate | Per client IP: 10 requests/second with a 100-request burst; excess requests receive 429 |
+| Login attempts | Ten per minute per client IP (IPv6 /64); excess requests receive 429 |
 
-Common errors: 400 for invalid JSON/limits/duplicate URLs or references, 401 for missing/invalid authentication, 403 for rejected browser origin, 404 for missing records or an already-processing capture, 409 for concurrent imports, 415 for a missing/wrong JSON content type, and 503 when busy. Oversized import bodies currently return 400. For a reverse proxy, set `POCKETMARK_ORIGIN` to the exact public origin; cross-site browser mutations are rejected.
+Common errors: 400 for invalid JSON/limits/duplicate URLs or references, 401 for missing/invalid authentication, 403 for rejected browser origin, 404 for missing records or an already-processing capture, 409 for concurrent imports, 415 for a missing/wrong JSON content type, 429 for rate limits, and 503 when busy. Oversized import bodies currently return 400. For a reverse proxy, set `POCKETMARK_ORIGIN` to the exact public origin; cross-site browser mutations are rejected.
+
+### HTTP rate limiting
+
+Rate limiting is enabled by default for all HTTP traffic, including static files,
+unknown routes, WebDAV, setup, login, invalid credentials and CORS preflight. It
+runs before authentication, request-body reads and work-slot acquisition. A token
+bucket per client IP allows a burst of 100 requests and replenishes 10 tokens per
+second. Successful authentication does not bypass or reset the quota. IPv4-mapped
+addresses share their IPv4 quota; IPv6 addresses share a /64 quota.
+
+Set `POCKETMARK_RATE_LIMIT` to an integer from 1 to 1000 (requests per second), and
+`POCKETMARK_RATE_BURST` to an integer from 1 to 10000 (bucket capacity). Defaults are
+10 and 100. Invalid values, including zero, prevent startup. The limits cover the
+combined traffic of clients sharing an IP, so allow room for browser assets and
+extension/WebDAV requests when tuning them. Existing protocol and client evidence
+does not qualify these limits under every client workload.
+
+Excess requests receive JSON HTTP 429 with `Cache-Control: no-store` and an integer
+`Retry-After` in seconds, rounded up until another token is available. Extension
+CORS responses expose `Retry-After`. Clients should wait before retrying; failed
+requests are not queued. The stricter login limit and concurrency limits still
+apply independently.
+
+Each process tracks at most 256 source buckets. New sources receive 429 at capacity;
+active buckets are never evicted to admit rotating addresses. Inactive buckets
+can be reclaimed after the greater of one minute and the time needed to refill
+their whole bucket. Unknown peer addresses share one bucket. State stays in bounded
+memory, requires no additional dependency or worker, and resets on process restart.
+
+`GET`/`HEAD /healthz` and `/livez` are exempt so exhausted quotas cannot cause probe
+failures. Other methods on those paths still consume quota. Readiness retains its
+independent concurrency and database timeout limits. The application limit does
+not bound incoming connections or provide distributed/volumetric DDoS protection;
+keep ingress connection/rate limits in front of an Internet-facing instance.
 
 ## Tag directory
 

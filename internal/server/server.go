@@ -39,10 +39,12 @@ type Server struct {
 	authRequests   chan struct{}
 	healthRequests chan struct{}
 	passwordMu     sync.Mutex
+	rateLimit      *requestLimiter
 }
 
 func New(s *store.Store, token, origin string, secure bool, observers ...*observability.Observer) *Server {
 	a := &Server{Store: s, token: token, origin: strings.TrimSuffix(origin, "/"), secure: secure, mux: http.NewServeMux(), requests: make(chan struct{}, 8), imports: make(chan struct{}, 1), authRequests: make(chan struct{}, 2), healthRequests: make(chan struct{}, 2), loginAttempts: make(map[netip.Addr]loginWindow)}
+	a.rateLimit = newRequestLimiter(10, 100)
 	if len(observers) > 0 && observers[0] != nil {
 		a.observer = observers[0]
 	} else {
@@ -120,15 +122,19 @@ func (a *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Vary", "Origin")
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Expose-Headers", "Retry-After")
 		if isDAV {
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Depth, Destination, Overwrite, If-Match, If-None-Match")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, PUT, DELETE, OPTIONS, PROPFIND, MOVE, MKCOL")
-			w.Header().Set("Access-Control-Expose-Headers", "ETag, Last-Modified, Content-Length")
+			w.Header().Set("Access-Control-Expose-Headers", "ETag, Last-Modified, Content-Length, Retry-After")
 		}
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(204)
-			return
-		}
+	}
+	if !a.admitRequest(w, r) {
+		return
+	}
+	if extension && (strings.HasPrefix(r.URL.Path, "/api/") || isDAV) && r.Method == "OPTIONS" {
+		w.WriteHeader(204)
+		return
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/dav/") || r.URL.Path == "/metrics" {
 		w.Header().Set("Cache-Control", "no-store")
