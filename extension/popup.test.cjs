@@ -2,9 +2,10 @@
 const { test } = require("node:test"), assert = require("node:assert/strict"), vm = require("node:vm"), fs = require("node:fs"), path = require("node:path");
 async function setup({ stored, permissionCloses = false, granted = true, hostGranted = true, authenticated = true, existing = false, job = null } = {}) {
   const elements = new Map(), calls = [], writes = [], permissions = [], data = stored || { server: "https://library.example", token: "key" };
+  let closeCount = 0;
   function node(id = "") { return { id, value: "", hidden: true, children: [], listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; }, setAttribute() {}, replaceChildren() { this.children = []; }, append(child) { this.children.push(child); }, focus() {} }; }
   const element = (id) => { if (!elements.has(id)) elements.set(id, node(id)); return elements.get(id); };
-  const context = vm.createContext({ document: { getElementById: element, createElement: () => node(), createElementNS: () => node() }, URL, TextEncoder, setTimeout, clearTimeout, setInterval: () => 1, clearInterval() {}, window: { addEventListener() {} },
+  const context = vm.createContext({ document: { getElementById: element, createElement: () => node(), createElementNS: () => node() }, URL, TextEncoder, setTimeout, clearTimeout, setInterval: () => 1, clearInterval() {}, window: { addEventListener() {}, close() { closeCount++; } },
     chrome: {
       storage: { local: { setAccessLevel: async () => {}, get: async () => data, set: async (value) => { writes.push(value); Object.assign(data, value); } } },
       tabs: { query: async () => [{ id: 3, url: "https://example.org", title: "Page title" }] },
@@ -17,7 +18,8 @@ async function setup({ stored, permissionCloses = false, granted = true, hostGra
           Object.assign(data, message.connection, { pendingConnection: null }); value = { connected: true };
         }
         if (message.type === "load") value = { server: data.server, collections: [{ id: 7, name: "Reading", parentId: null }], tags: [{ name: "docs" }], link: existing ? { id: 17, title: "Existing title", tags: ["existing"], collectionId: 7 } : null };
-        if (message.type === "save") value = { fields: message.fields, status: "running", message: "Starting", items: [] };
+        if (message.type === "save") value = job = { id: "task", fields: message.fields, status: "running", message: "Starting", items: message.modes.map((mode) => ({ mode, status: "pending" })) };
+        if (message.type === "retry") value = job = { ...job, status: "running", message: "Retrying" };
         return { ok: true, value };
       } },
     },
@@ -25,7 +27,7 @@ async function setup({ stored, permissionCloses = false, granted = true, hostGra
   for (const file of ["common.js", "popup.js"]) vm.runInContext(fs.readFileSync(path.join(__dirname, file), "utf8"), context);
   await new Promise(setImmediate);
   const submit = async (id) => element(id).listeners.submit({ preventDefault() {} });
-  return { element, calls, writes, permissions, data, submit, context };
+  return { element, calls, writes, permissions, data, submit, context, get closeCount() { return closeCount; }, setJob(value) { job = value; } };
 }
 test("existing bookmark preloads editable fields, collection and selected tags", async () => {
   const env = await setup({ existing: true });
@@ -40,6 +42,43 @@ test("save sends edited metadata and only user-selected capture formats", async 
   assert.equal(message.fields.title, "Edited"); assert.equal(message.fields.collectionId, 7);
   assert.deepEqual(Array.from(message.fields.tags), ["new", "docs"]); assert.deepEqual(Array.from(message.modes), ["pdf"]);
   assert.equal(env.element("editor").disabled, true); assert.equal(env.element("capture-pdf").checked, false);
+});
+for (const modes of [[], ["pdf", "screenshot"]]) test(`popup closes only after successful save (${modes.length} captures)`, async () => {
+  const env = await setup();
+  for (const mode of modes) env.element("capture-" + mode).checked = true;
+  await env.submit("save-form");
+  assert.equal(env.closeCount, 0);
+  const job = { id: "task", fields: { url: "https://example.org", title: "Page title" }, status: "running", message: "Uploading", linkId: 17, items: modes.map((mode) => ({ mode, status: "uploading" })) };
+  env.setJob(job); await env.context.refresh();
+  assert.equal(env.closeCount, 0);
+  env.setJob({ ...job, status: "done", items: modes.map((mode) => ({ mode, status: "saved" })) });
+  await env.context.refresh();
+  assert.equal(env.closeCount, 1);
+  await env.context.refresh();
+  assert.equal(env.closeCount, 1);
+});
+test("reopening a completed save keeps the popup open for editing", async () => {
+  const env = await setup({ existing: true, job: { id: "previous", fields: { url: "https://example.org", title: "Saved page" }, status: "done", message: "Saved", items: [] } });
+  await env.context.refresh();
+  assert.equal(env.closeCount, 0); assert.equal(env.element("save-form").hidden, false);
+});
+test("partial capture failure keeps recovery visible and successful retry closes the popup", async () => {
+  const env = await setup(); env.element("capture-pdf").checked = true;
+  await env.submit("save-form");
+  const job = { id: "task", fields: { url: "https://example.org", title: "Page title" }, status: "paused", message: "Capture failed", linkId: 17, items: [{ mode: "pdf", status: "failed" }] };
+  env.setJob(job); await env.context.refresh();
+  assert.equal(env.closeCount, 0); assert.equal(env.element("task-actions").hidden, false);
+  await env.element("retry").listeners.click();
+  assert.equal(env.closeCount, 0);
+  env.setJob({ ...job, status: "done", items: [{ mode: "pdf", status: "saved" }] });
+  await env.context.refresh();
+  assert.equal(env.closeCount, 1);
+});
+test("invalid bookmark stays open and shows its error", async () => {
+  const env = await setup(); env.element("title").value = "x".repeat(1025);
+  await env.submit("save-form");
+  assert.equal(env.closeCount, 0); assert.equal(env.calls.some((call) => call.type === "save"), false);
+  assert.ok(env.element("status").textContent); assert.equal(env.element("save").disabled, false);
 });
 test("connection permission prompt persists its draft before popup closure and recovers on reopen", async () => {
   const first = await setup({ permissionCloses: true });
