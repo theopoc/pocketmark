@@ -7,20 +7,27 @@ assert.equal(base.hostname, '127.0.0.1', 'E2E requires a disposable loopback ins
 // Use full Chromium's headless mode: the headless shell omits the native PDF viewer.
 const browser = await chromium.launch({ channel: 'chromium' });
 try {
-  const page = await browser.newPage();
+  const context = await browser.newContext();
+  const page = await context.newPage();
   page.setDefaultTimeout(15_000);
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   const username = 'ci-owner';
   const password = 'Synthetic-E2E-password-42';
+  const unclaimed = await page.request.post(new URL('/api/setup', base).href, { data: { username, password } });
+  assert.equal(unclaimed.status(), 403, 'public visitor cannot claim an empty server');
   await page.goto(base.href);
   await page.locator('#login-username').fill(username);
   await page.locator('#login-password').fill(password);
+  await page.locator('#login-setup-token').fill(process.env.E2E_SETUP_TOKEN || '');
   await page.locator('#login-confirm').fill(password);
   await page.locator('#login-submit').click();
   await page.locator('#app-view').waitFor({ state: 'visible' });
-
+  assert.equal(await page.locator('#login-setup-token').inputValue(), '');
+  const oldSession = (await page.context().cookies()).find(cookie => cookie.name === 'pocketmark');
   await page.locator('#logout-button').click();
+  const replay = await page.request.post(new URL('/api/tokens', base).href, { headers: { Cookie: `pocketmark=${oldSession.value}` }, data: { name: 'replayed-session' } });
+  assert.equal(replay.status(), 401, 'a signed-out cookie cannot mint API keys');
   await page.locator('#login-username').fill(username);
   await page.locator('#login-password').fill('incorrect-password');
   await page.locator('#login-submit').click();
@@ -77,11 +84,13 @@ try {
     <script>parent.previewCompromised = true</script><img src="/preview-leak">
     <iframe src="/preview-frame-leak"></iframe><style>@import url('/preview-style-leak');</style>
     <meta http-equiv="refresh" content="0;url=/preview-navigation-leak"><base href="/preview-base-leak">
-    <a href="/preview-link-leak" target="_top">External link</a><svg><a href="#safe"><set attributeName="href" to="/preview-svg-leak"/><text y="20">SVG link</text></a></svg>` + '<!-- padding -->'.repeat(145000);
+    <a href="/preview-link-leak" target="_top">External link</a><svg xmlns:xlink="http://www.w3.org/1999/xlink"><a href="#safe"><set attributeName="href" to="/preview-svg-leak"/><text y="20">SVG link</text></a><a id="xlink" xlink:href="/preview-xlink-leak"><text y="60">Namespaced link</text></a></svg>` + '<!-- padding -->'.repeat(145000);
   const legacy = Buffer.concat([Buffer.from('<!doctype html><meta charset="windows-1252"><h1>Caf'), Buffer.from([0xe9, 0x20, 0x80]), Buffer.from('</h1>')]);
+  let htmlAsset;
   for (const [name, media, data] of [['legacy.html', 'text/html', legacy], ['capture.html', 'text/html', Buffer.from(html)], ['capture.png', 'image/png', png], ['capture.pdf', 'application/pdf', pdf]]) {
     const response = await page.request.post(new URL(`/api/links/${saved.id}/assets?name=${name}`, base).href, { headers: { 'Content-Type': media }, data });
     assert.equal(response.status(), 201, await response.text());
+    if (name === 'capture.html') htmlAsset = await response.json();
   }
   let downloads = 0;
   const leakedRequests = [];
@@ -105,6 +114,8 @@ try {
   assert.equal(await capture.locator('#embedded').evaluate(node => node.complete && node.naturalWidth > 0), true);
   assert.equal(await capture.locator('a').first().getAttribute('href'), null);
   assert.equal(await capture.locator('set, animate').count(), 0);
+  assert.equal(await capture.locator('#xlink').getAttribute('xlink:href'), null);
+  await capture.locator('#xlink').click();
   assert.equal(await page.evaluate(() => window.previewCompromised), undefined);
   assert.equal(await page.frameLocator('#asset-viewer-content iframe').locator('iframe').getAttribute('sandbox'), '');
   await page.locator('#asset-viewer-select').selectOption({ label: 'legacy.html' });
@@ -118,6 +129,19 @@ try {
   await (await nativeViewer).locator('pdf-viewer').waitFor({ state: 'attached' });
   assert.equal(downloads, 0, 'viewing captures must not trigger downloads');
   assert.deepEqual(leakedRequests, [], 'HTML preview must not execute scripts, navigate or fetch external resources');
+  // Direct navigation must remain safe without the library's outer iframe.
+  const direct = await page.context().newPage();
+  const directLeaks = [];
+  // CSP-blocked resource attempts can emit request events without reaching HTTP.
+  direct.on('response', response => { if (new URL(response.url()).pathname.startsWith('/preview-')) directLeaks.push(response.url()); });
+  direct.on('request', request => { if (new URL(request.url()).pathname === '/preview-xlink-leak') directLeaks.push(request.url()); });
+  const directURL = new URL(`/api/assets/${htmlAsset.id}/view`, base).href;
+  await direct.goto(directURL);
+  assert.equal(await direct.locator('#xlink').getAttribute('xlink:href'), null);
+  await direct.locator('#xlink').click();
+  assert.equal(direct.url(), directURL);
+  assert.deepEqual(directLeaks, [], 'direct previews must not navigate through SVG namespaced links');
+  await direct.close();
   await page.getByRole('button', { name: 'Close preview', exact: true }).click();
   await viewer.waitFor({ state: 'hidden' });
   assert.equal(await page.locator('#asset-viewer-content').innerHTML(), '');

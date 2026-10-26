@@ -9,7 +9,6 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -81,14 +80,10 @@ func (a *Server) setupStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *Server) setup(w http.ResponseWriter, r *http.Request) {
-	if !a.allowLogin() {
-		w.Header().Set("Retry-After", "60")
-		fail(w, 429, "too many login attempts; retry in a minute")
-		return
-	}
 	var b struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
+		SetupToken string `json:"setupToken"`
+		Username   string `json:"username"`
+		Password   string `json:"password"`
 	}
 	if !decode(w, r, &b, 4096) {
 		return
@@ -96,6 +91,19 @@ func (a *Server) setup(w http.ResponseWriter, r *http.Request) {
 	b.Username = strings.TrimSpace(b.Username)
 	if b.Username == "" || len(b.Username) > 120 || len(b.Password) < 12 || len(b.Password) > 1024 {
 		fail(w, 400, "choose a username and a password of 12–1024 bytes")
+		return
+	}
+	state, err := a.Store.SetupStatus(r.Context())
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+	if !state.SetupRequired {
+		fail(w, 409, "account creation is unavailable")
+		return
+	}
+	if !secretEqual(b.SetupToken, a.token) {
+		fail(w, 403, "administrator setup key required")
 		return
 	}
 	a.passwordMu.Lock()
@@ -110,7 +118,9 @@ func (a *Server) setup(w http.ResponseWriter, r *http.Request) {
 		fail(w, 409, "account creation is unavailable; sign in or ask the server administrator to configure your password")
 		return
 	}
-	a.issueSession(w)
+	if !a.issueSession(w, r, salt) {
+		return
+	}
 	respond(w, 201, map[string]bool{"authenticated": true})
 }
 func (a *Server) setAccount(w http.ResponseWriter, r *http.Request) {
@@ -137,21 +147,10 @@ func (a *Server) setAccount(w http.ResponseWriter, r *http.Request) {
 		handleError(w, err)
 		return
 	}
-	a.issueSession(w)
+	if !a.issueSession(w, r, salt) {
+		return
+	}
 	respond(w, 200, map[string]bool{"ok": true})
-}
-func (a *Server) verifyPassword(r *http.Request, username, password string) bool {
-	if len(password) > 1024 || password == "" {
-		return false
-	}
-	a.passwordMu.Lock()
-	defer a.passwordMu.Unlock()
-	account, err := a.Store.Account(r.Context())
-	if err != nil || account.Hash == "" {
-		return false
-	}
-	got := passwordHash(password, account.Salt)
-	return secretEqual(username, account.Username) && secretEqual(got, account.Hash)
 }
 func (a *Server) validAPIKey(r *http.Request, key string) bool {
 	if len(key) != 64 {
@@ -253,8 +252,13 @@ func (a *Server) deleteToken(w http.ResponseWriter, r *http.Request) {
 	}
 	respond(w, 200, map[string]bool{"ok": true})
 }
-func (a *Server) issueSession(w http.ResponseWriter) {
+func (a *Server) issueSession(w http.ResponseWriter, r *http.Request, salt string) bool {
 	expires := time.Now().Add(7 * 24 * time.Hour)
-	value := strconv.FormatInt(expires.Unix(), 10)
-	http.SetCookie(w, &http.Cookie{Name: "pocketmark", Value: value + "." + a.sign(value), Path: "/", HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteStrictMode, Expires: expires, MaxAge: 7 * 24 * 60 * 60})
+	value := "v2." + randomSecret()
+	if err := a.Store.CreateSession(r.Context(), salt, a.sessionHash(value), expires); err != nil {
+		fail(w, 503, "session could not be created; retry signing in")
+		return false
+	}
+	http.SetCookie(w, &http.Cookie{Name: "pocketmark", Value: value, Path: "/", HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteStrictMode, Expires: expires, MaxAge: 7 * 24 * 60 * 60})
+	return true
 }

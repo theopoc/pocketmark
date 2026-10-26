@@ -84,7 +84,7 @@ func TestAuthenticationCookieAndBearer(t *testing.T) {
 	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": cookie.String()}), 200)
 	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": "pocketmark=" + cookie.Value + "tampered"}), 401)
 	expiry := strconv.FormatInt(time.Now().Add(-time.Hour).Unix(), 10)
-	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": "pocketmark=" + expiry + "." + a.sign(expiry)}), 401)
+	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": "pocketmark=" + expiry + "." + a.sessionHash(expiry)}), 401)
 	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Authorization": "Bearer wrong", "Cookie": cookie.String()}), 401)
 	w = request(a, "POST", "/api/logout", "", false, map[string]string{"Cookie": cookie.String()})
 	requireStatus(t, w, 200)
@@ -103,7 +103,10 @@ func TestLoginRateLimitAndReset(t *testing.T) {
 	if w.Header().Get("Retry-After") == "" {
 		t.Fatal("missing retry guidance")
 	}
-	a.loginAt = time.Now().Add(-2 * time.Minute)
+	for key, window := range a.loginAttempts {
+		window.at = time.Now().Add(-2 * time.Minute)
+		a.loginAttempts[key] = window
+	}
 	requireStatus(t, passwordLogin(t, a), 200)
 }
 

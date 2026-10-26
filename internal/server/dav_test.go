@@ -20,7 +20,7 @@ func TestDAVKeysOnlyWithoutLoginThrottleOrTmpfs(t *testing.T) {
 	for i := 0; i < 12; i++ {
 		requireStatus(t, request(a, "OPTIONS", "/dav/", "", false, basic("correct horse battery")), 401)
 	}
-	if a.loginCount != 0 {
+	if len(a.loginAttempts) != 0 {
 		t.Fatal("DAV used browser login throttle")
 	}
 	requireStatus(t, request(a, "POST", "/api/login", `{"username":"me","password":"correct horse battery"}`, false, nil), 200)

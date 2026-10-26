@@ -855,7 +855,7 @@
     $("login-error").textContent = "";
     try {
       if (setupRequired && $("login-password").value !== $("login-confirm").value) throw new Error("The passwords do not match.");
-      await api(setupRequired ? "/api/setup" : "/api/login", { method: "POST", body: JSON.stringify({ username: $("login-username").value.trim(), password: $("login-password").value }) });
+      await api(setupRequired ? "/api/setup" : "/api/login", { method: "POST", body: JSON.stringify({ username: $("login-username").value.trim(), password: $("login-password").value, ...(setupRequired ? { setupToken: $("login-setup-token").value.trim() } : {}) }) });
       setupRequired = false;
       configureLogin();
       $("login-confirm").value = "";
@@ -865,7 +865,7 @@
       $("app-view").hidden = false;
       await restoreRoute(true);
       openSharedLink();
-    } catch (error) { $("login-error").textContent = error.message; } finally { button.disabled = false; }
+    } catch (error) { $("login-error").textContent = error.message; } finally { $("login-setup-token").value = ""; button.disabled = false; }
   });
 
   $("logout-button").addEventListener("click", async () => {
@@ -1019,11 +1019,13 @@
     $("login-title").textContent = setupRequired ? "Create your account" : "Welcome back";
     $("login-description").textContent = setupRequired ? "Set up your personal Pocketmark library." : "Sign in to your Pocketmark library.";
     $("login-submit-label").textContent = setupRequired ? "Create account" : "Sign in";
+    $("login-setup-fields").hidden = !setupRequired;
+    $("login-setup-token").required = setupRequired;
     $("login-confirm-fields").hidden = !setupRequired;
     $("login-confirm").required = setupRequired;
     $("login-password").autocomplete = setupRequired ? "new-password" : "current-password";
     $("login-password").minLength = setupRequired ? 12 : 1;
-    $("login-help").textContent = setupRequired ? "Choose a password of at least 12 characters. This instance has one personal account." : passwordEnabled ? "Use your Pocketmark username and password." : "Your existing library needs a password. Ask the server administrator to configure it using the account recovery instructions.";
+    $("login-help").textContent = setupRequired ? "Enter the setup key from the server’s access-token file and choose a password of at least 12 characters. This instance has one personal account." : passwordEnabled ? "Use your Pocketmark username and password." : "Your existing library needs a password. Ask the server administrator to configure it using the account recovery instructions.";
     $("login-submit").disabled = !setupRequired && !passwordEnabled;
   }
   let settingsSession = 0;

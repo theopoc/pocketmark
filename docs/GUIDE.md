@@ -17,7 +17,7 @@ Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal acc
 
 Existing installations keep their credentials and keys. If no password was configured before upgrading, follow [account recovery](API.md#existing-installations-and-account-recovery); public account creation cannot claim an existing library.
 
-The default data directory is `./data`, containing `pocketmark.db` and the private `access-token` file (mode `0600`). This file remains an administrative API recovery credential and session-signing secret; it is not a browser login method. Stop with Ctrl+C. To run without fetching bookmarked pages:
+The default data directory is `./data`, containing `pocketmark.db` and the private `access-token` file (mode `0600`). This file remains an administrative API recovery credential and session-digest secret. Enter it once as the administrator setup key when creating the first account; later browser logins accept only username/password. Stop with Ctrl+C. To run without fetching bookmarked pages:
 
 ```sh
 ./bin/pocketmark -no-capture
@@ -62,8 +62,9 @@ The unmodified third-party Android app (1.4.4) was also tested in an ARM64 emula
 | --- | --- | --- |
 | `POCKETMARK_DATA` / `-data` | `./data` | Database and generated token directory. |
 | `POCKETMARK_LISTEN` / `-listen` | `127.0.0.1:8090` | HTTP bind address; Docker uses `0.0.0.0:8090` internally. |
-| `POCKETMARK_TOKEN` | Generated token file | Override the administrative API recovery/session-signing secret; at least 24 characters. |
+| `POCKETMARK_TOKEN` | Generated token file | Override the administrative API recovery/setup/session-digest secret; at least 24 characters. |
 | `POCKETMARK_ORIGIN` | Request origin | Public origin such as `https://bookmarks.example.com`, without a path. |
+| `POCKETMARK_TRUSTED_PROXIES` | Empty | Comma-separated trusted proxy CIDRs for client login limits; see [HTTPS deployment](API.md#public-https-deployment). |
 | `POCKETMARK_SECURE_COOKIE` | `false` | Set `true` for HTTPS session cookies; an HTTPS origin enables this automatically. |
 | `POCKETMARK_CAPTURE` / `-no-capture` | Capture enabled | Set the environment variable to `false`, or pass the flag, to disable capture. |
 | `GOMEMLIMIT` | `32MiB` | Soft Go runtime memory budget; native SQLite allocations and total RSS are outside this budget. |

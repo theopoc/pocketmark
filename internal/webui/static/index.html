@@ -31,6 +31,7 @@
       <form id="login-form">
         <label for="login-username">Username</label><input id="login-username" autocomplete="username" maxlength="120" required autofocus>
         <label for="login-password">Password</label><input id="login-password" type="password" autocomplete="current-password" required>
+        <div id="login-setup-fields" hidden><label for="login-setup-token">Administrator setup key</label><input id="login-setup-token" type="password" autocomplete="off" spellcheck="false"></div>
         <div id="login-confirm-fields" hidden><label for="login-confirm">Confirm password</label><input id="login-confirm" type="password" autocomplete="new-password"></div>
         <p id="login-error" class="form-error" role="alert"></p>
         <button id="login-submit" class="button primary" type="submit"><span id="login-submit-label">Sign in</span> <span data-icon="arrow-right" aria-hidden="true"></span></button>
