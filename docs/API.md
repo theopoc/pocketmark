@@ -140,7 +140,7 @@ Accepted inputs are legacy JSON exports (`collections[].links`, object tags, `pa
 | `POST /api/files?name=filename&collection=id` | Raw PDF/image/HTML body → `{link,asset}`; optional collection, max 20 MiB. Creates a standalone file atomically, without a website URL. |
 | `POST /api/links/{id}/assets?name=filename` | Raw PDF/image/HTML body, max 20 MiB and 32 attachments per bookmark. Content is sniffed. HTML is indexed for reading/search. |
 | `GET /api/assets/{assetId}` | Streaming original-byte download, always an attachment with restrictive CSP. |
-| `GET /api/assets/{assetId}/view` | Authenticated inline image/PDF preview or sandboxed HTML with embedded styles/resources; no scripts or network resources. Preparation shares the archive work slot (409 if busy); 422 if HTML cannot be prepared. Original downloads are unchanged. |
+| `GET /api/assets/{assetId}/view` | Authenticated inline image/PDF preview or HTML payload for the UI’s nested sandboxed blob viewer. Direct HTML navigation downloads (attachment disposition); fetch still returns the preview bytes. Preparation shares the archive work slot (409 if busy); 422 if HTML cannot be prepared. Original downloads are unchanged. |
 | `DELETE /api/assets/{assetId}` | Removes attachment chunks atomically. |
 | `POST /api/links/{id}/preserve` | Manual resource-embedded passive HTML capture; returns `{asset,embedded,omitted}`. |
 | `GET /api/links/{id}/reader?asset=id` | Sandboxed structural reader; optional HTML attachment ID, otherwise captured HTML. Max 2 MiB input, 1 MiB output. |
@@ -204,10 +204,10 @@ WebDAV supports `OPTIONS`, `PROPFIND`, `GET`, `HEAD`, `PUT`, `DELETE` and `MOVE`
 | Tags | At most 32 input entries, each at most 80 bytes after trimming |
 | Collection name | 1–120 bytes after trimming |
 | Search query | 512 bytes; page must not exceed 1,000,000 |
-| Import | 8 MiB, 10,000 links, 2,000 collections; one import at a time |
-| Concurrent HTTP requests | Eight; excess requests receive 503 |
+| Import | 8 MiB, 10,000 links, 2,000 collections; one import at a time. JSON also allows 10,000 pinned links, 32 tags per record and 64 nesting levels; counts include repeated fields and are checked before typed allocation. JSON/HTML receive to disk before any write transaction |
+| Concurrent HTTP requests | Eight general request slots; separate authentication and health slots; excess requests receive 503 |
 | HTTP request rate | Per client IP: 10 requests/second with a 100-request burst; excess requests receive 429 |
-| Login attempts | Ten per minute per client IP (IPv6 /64); excess requests receive 429 |
+| Login attempts | Ten per minute per client address (IPv6 /64), up to 256 tracked windows; excess requests receive 429 |
 
 Common errors: 400 for invalid JSON/limits/duplicate URLs or references, 401 for missing/invalid authentication, 403 for rejected browser origin, 404 for missing records or an already-processing capture, 409 for concurrent imports, 415 for a missing/wrong JSON content type, 429 for rate limits, and 503 when busy. Oversized import bodies currently return 400. For a reverse proxy, set `POCKETMARK_ORIGIN` to the exact public origin; cross-site browser mutations are rejected.
 

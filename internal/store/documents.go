@@ -3,7 +3,9 @@ package store
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
+	"net/url"
 	"os"
 	"time"
 )
@@ -18,7 +20,8 @@ func (s *Store) TemporaryFile(pattern string) (*os.File, error) {
 	return os.CreateTemp(s.directory, pattern)
 }
 
-// Snapshot includes committed WAL data. The caller owns closing and removing
+// Snapshot includes committed WAL data but excludes ephemeral login sessions.
+// The caller owns closing and removing
 // the returned file; every failed snapshot is removed here.
 func (s *Store) Snapshot(ctx context.Context) (*os.File, error) {
 	f, err := s.TemporaryFile(".backup-*.db")
@@ -36,6 +39,21 @@ func (s *Store) Snapshot(ctx context.Context) (*os.File, error) {
 	_, err = s.db.ExecContext(ctx, "VACUUM INTO ?", path)
 	if err == nil {
 		err = os.Chmod(path, 0600)
+	}
+	if err == nil {
+		// Scrub only the standalone copy. Restoring a backup must not resurrect
+		// cookies revoked after it was taken, nor sign out the live server.
+		u := url.URL{Scheme: "file", Path: path}
+		var backup *sql.DB
+		backup, err = sql.Open("pocketmark-sqlite3", u.String()+"?_journal_mode=DELETE&_cache_size=-2048")
+		if err == nil {
+			backup.SetMaxOpenConns(1)
+			_, err = backup.ExecContext(ctx, "DELETE FROM sessions")
+			closeErr := backup.Close()
+			if err == nil {
+				err = closeErr
+			}
+		}
 	}
 	if err == nil {
 		f, err = os.Open(path)
