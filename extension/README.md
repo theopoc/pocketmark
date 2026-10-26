@@ -50,11 +50,11 @@ No persistent content script or automatic capture scans your browsing activity.
 
 One background task runs at a time. Closing the popup does not cancel it; reopen
 the popup to see progress and results. Active/failed tasks take priority over
-the editor, with retry/discard actions kept visible. Successful results collapse
-into a summary; expand it to inspect individual formats. A green “Saved to
-Pocketmark” message confirms completion in the popup, including when reopening
-it on the saved page. This confirmation appears only after all selected captures
-are uploaded; partial failures keep the attention message and retry actions.
+the editor, with retry/discard actions kept visible. The popup closes automatically
+after the bookmark and all selected captures are saved, including after a successful
+retry. Reopening it on the saved page shows a green “Saved to Pocketmark” message
+and a collapsed summary; expand it to inspect individual formats or edit the bookmark.
+Partial failures keep the popup open with the attention message and retry actions.
 Keep the source tab open and on the same URL until acquisition finishes. After acquisition, uploads do not need that tab.
 Closing Chrome interrupts work; reopening the popup marks it interrupted and
 requires a manual retry, rather than silently resuming or recapturing.

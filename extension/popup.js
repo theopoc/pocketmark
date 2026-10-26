@@ -138,6 +138,7 @@ function renderTask(job) {
       if (job.status === "done" && job.fields.url === activeTab?.url) status("Saved to Pocketmark.", false, true);
       else if (job.status === "paused") status(job.message, true);
       else status("");
+      if (job.status === "done") window.close();
     }
   }
   controls();
