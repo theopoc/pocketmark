@@ -7,3 +7,5 @@ By default, Pocketmark listens on `127.0.0.1:8090` and creates `./data`. Create 
 Remote access should use an HTTPS reverse proxy and the exact `POCKETMARK_ORIGIN`. Keep the default 32 MiB Go soft budget; it is not a total process-memory limit. For a hard 128 MiB container limit and full configuration/backup instructions, consult the repository's README and Compose file. Preserve the complete data directory when backing up a stopped server.
 
 The single `pocketmark-extension.zip` contains the personal Chrome extension. Extract it, enable Developer mode at `chrome://extensions` and choose **Load unpacked** with the extracted folder. It declares Chrome's debugger permission for on-demand captures; connect it with your server address and a dedicated API key. It is never installed automatically.
+
+First-run account creation requires the administrator setup key from the private `data/access-token` file (or configured `POCKETMARK_TOKEN`). Later logins use username/password. Upgrades invalidate legacy stateless cookies once; sign in again. Account, library and named API keys are preserved.

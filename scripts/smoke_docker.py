@@ -97,7 +97,7 @@ def main():
             checks["health_auth_hardening_limits"] = True
             if args.browser:
                 subprocess.run(["node", str(ROOT / "e2e/browser.mjs")],
-                               env={**os.environ, "E2E_BASE_URL": base}, check=True, timeout=180)
+                               env={**os.environ, "E2E_BASE_URL": base, "E2E_SETUP_TOKEN": token}, check=True, timeout=180)
                 checks["browser_journeys"] = True
             collection = call("/api/collections", {"name": "Smoke collection", "description": "Synthetic CI data"})
             link = call("/api/links", {"url": "http://127.0.0.1/private-ci-fixture", "title": "Smoke bookmark",

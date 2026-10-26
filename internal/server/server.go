@@ -12,6 +12,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -24,22 +25,24 @@ import (
 )
 
 type Server struct {
-	Store      *store.Store
-	observer   *observability.Observer
-	token      string
-	secure     bool
-	origin     string
-	mux        *http.ServeMux
-	requests   chan struct{}
-	imports    chan struct{}
-	loginMu    sync.Mutex
-	loginAt    time.Time
-	loginCount int
-	passwordMu sync.Mutex
+	Store          *store.Store
+	observer       *observability.Observer
+	token          string
+	secure         bool
+	origin         string
+	mux            *http.ServeMux
+	requests       chan struct{}
+	imports        chan struct{}
+	loginMu        sync.Mutex
+	loginAttempts  map[netip.Addr]loginWindow
+	trustedProxies []netip.Prefix
+	authRequests   chan struct{}
+	healthRequests chan struct{}
+	passwordMu     sync.Mutex
 }
 
 func New(s *store.Store, token, origin string, secure bool, observers ...*observability.Observer) *Server {
-	a := &Server{Store: s, token: token, origin: strings.TrimSuffix(origin, "/"), secure: secure, mux: http.NewServeMux(), requests: make(chan struct{}, 8), imports: make(chan struct{}, 1)}
+	a := &Server{Store: s, token: token, origin: strings.TrimSuffix(origin, "/"), secure: secure, mux: http.NewServeMux(), requests: make(chan struct{}, 8), imports: make(chan struct{}, 1), authRequests: make(chan struct{}, 2), healthRequests: make(chan struct{}, 2), loginAttempts: make(map[netip.Addr]loginWindow)}
 	if len(observers) > 0 && observers[0] != nil {
 		a.observer = observers[0]
 	} else {
@@ -53,6 +56,12 @@ func New(s *store.Store, token, origin string, secure bool, observers ...*observ
 	a.registerFiles(a.mux)
 	a.mux.HandleFunc("POST /api/login", a.login)
 	a.mux.HandleFunc("POST /api/logout", func(w http.ResponseWriter, r *http.Request) {
+		if cookie, err := r.Cookie("pocketmark"); err == nil {
+			if err = a.Store.RevokeSession(r.Context(), a.sessionHash(cookie.Value)); err != nil {
+				fail(w, 503, "session could not be revoked; retry signing out")
+				return
+			}
+		}
 		http.SetCookie(w, &http.Cookie{Name: "pocketmark", Value: "", Path: "/", HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteStrictMode, MaxAge: -1})
 		respond(w, 200, map[string]bool{"ok": true})
 	})
@@ -74,10 +83,15 @@ func New(s *store.Store, token, origin string, secure bool, observers ...*observ
 	a.mux.HandleFunc("GET /api/export", a.exportData)
 	a.mux.HandleFunc("GET /api/", func(w http.ResponseWriter, r *http.Request) { fail(w, 404, "endpoint not found") })
 	a.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		if e := s.Ping(r.Context()); e != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+		defer cancel()
+		if e := s.Ping(ctx); e != nil {
 			fail(w, 503, "database unavailable")
 			return
 		}
+		respond(w, 200, map[string]string{"status": "ok"})
+	})
+	a.mux.HandleFunc("GET /livez", func(w http.ResponseWriter, r *http.Request) {
 		respond(w, 200, map[string]string{"status": "ok"})
 	})
 	assets, _ := fs.Sub(webui.Files, "static")
@@ -119,12 +133,26 @@ func (a *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/dav/") || r.URL.Path == "/metrics" {
 		w.Header().Set("Cache-Control", "no-store")
 	}
-	select {
-	case a.requests <- struct{}{}:
-		defer func() { <-a.requests }()
-	default:
-		fail(w, 503, "server busy; try again shortly")
-		return
+	// Public authentication bodies cannot occupy the library's work slots.
+	slots := a.requests
+	if r.URL.Path == "/api/login" || r.URL.Path == "/api/setup" {
+		slots = a.authRequests
+		if r.Method == "POST" {
+			_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(5 * time.Second))
+		}
+	} else if r.URL.Path == "/healthz" {
+		slots = a.healthRequests
+	} else if r.URL.Path == "/livez" {
+		slots = nil
+	}
+	if slots != nil {
+		select {
+		case slots <- struct{}{}:
+			defer func() { <-slots }()
+		default:
+			fail(w, 503, "server busy; try again shortly")
+			return
+		}
 	}
 	if r.Method != "GET" && r.Method != "HEAD" && !(extension && (strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || (isDAV && strings.HasPrefix(r.Header.Get("Authorization"), "Basic ")))) {
 		// An exact Origin check protects both login and cookie-authenticated mutations.
@@ -168,34 +196,23 @@ func (a *Server) authenticated(r *http.Request) bool {
 	if e != nil {
 		return false
 	}
-	parts := strings.Split(c.Value, ".")
-	if len(parts) != 2 {
+	// Legacy stateless cookies deliberately require one fresh login on upgrade.
+	if len(c.Value) != 67 || !strings.HasPrefix(c.Value, "v2.") {
 		return false
 	}
-	expiry, e := strconv.ParseInt(parts[0], 10, 64)
-	if e != nil || time.Now().Unix() > expiry {
-		return false
-	}
-	return hmac.Equal([]byte(parts[1]), []byte(a.sign(parts[0])))
+	return a.Store.SessionValid(r.Context(), a.sessionHash(c.Value))
 }
 func secretEqual(x, y string) bool {
 	a := sha256.Sum256([]byte(x))
 	b := sha256.Sum256([]byte(y))
 	return subtle.ConstantTimeCompare(a[:], b[:]) == 1
 }
-func (a *Server) sign(value string) string {
+func (a *Server) sessionHash(value string) string {
 	h := hmac.New(sha256.New, []byte(a.token))
 	h.Write([]byte(value))
-	account, _ := a.Store.Account(context.Background())
-	h.Write([]byte(account.Salt))
 	return hex.EncodeToString(h.Sum(nil))
 }
 func (a *Server) login(w http.ResponseWriter, r *http.Request) {
-	if !a.allowLogin() {
-		w.Header().Set("Retry-After", "60")
-		fail(w, 429, "too many login attempts; retry in a minute")
-		return
-	}
 	var body struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -203,23 +220,36 @@ func (a *Server) login(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &body, 4096) {
 		return
 	}
-	if !a.verifyPassword(r, body.Username, body.Password) {
+	if body.Username == "" || len(body.Username) > 120 || body.Password == "" || len(body.Password) > 1024 {
+		fail(w, 400, "username and password required")
+		return
+	}
+	if !a.allowLogin(r) {
+		w.Header().Set("Retry-After", "60")
+		fail(w, 429, "too many login attempts; retry in a minute")
+		return
+	}
+	// Do not build a CPU-bound password queue behind unauthenticated requests.
+	if !a.passwordMu.TryLock() {
+		w.Header().Set("Retry-After", "1")
+		fail(w, 429, "authentication busy; retry shortly")
+		return
+	}
+	defer a.passwordMu.Unlock()
+	account, err := a.Store.Account(r.Context())
+	if err != nil || account.Hash == "" {
 		fail(w, 401, "invalid credentials")
 		return
 	}
-	a.issueSession(w)
-	respond(w, 200, map[string]bool{"authenticated": true})
-}
-func (a *Server) allowLogin() bool {
-	a.loginMu.Lock()
-	if time.Since(a.loginAt) > time.Minute {
-		a.loginAt = time.Now()
-		a.loginCount = 0
+	got := passwordHash(body.Password, account.Salt)
+	if !secretEqual(body.Username, account.Username) || !secretEqual(got, account.Hash) {
+		fail(w, 401, "invalid credentials")
+		return
 	}
-	a.loginCount++
-	limited := a.loginCount > 10
-	a.loginMu.Unlock()
-	return !limited
+	if !a.issueSession(w, r, account.Salt) {
+		return
+	}
+	respond(w, 200, map[string]bool{"authenticated": true})
 }
 func decode(w http.ResponseWriter, r *http.Request, target any, max int64) bool {
 	if ct := r.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {

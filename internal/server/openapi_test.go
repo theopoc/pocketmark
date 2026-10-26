@@ -63,7 +63,7 @@ func TestOpenAPICoversNativeRoutes(t *testing.T) {
 				t.Fatal(err)
 			}
 			method, path, ok := strings.Cut(pattern, " ")
-			if !ok || path == "/api/" || !(strings.HasPrefix(path, "/api/") || path == "/healthz") {
+			if !ok || path == "/api/" || !(strings.HasPrefix(path, "/api/") || (path == "/healthz" || path == "/livez")) {
 				return true
 			}
 			routes[strings.ToLower(method)+" "+path] = true
@@ -92,7 +92,7 @@ func TestOpenAPICoversNativeRoutes(t *testing.T) {
 			}
 			ids[id] = true
 			responses := op["responses"].(map[string]any)
-			public := path == "/api/setup" || path == "/api/login" || path == "/healthz"
+			public := path == "/api/setup" || path == "/api/login" || (path == "/healthz" || path == "/livez")
 			security, override := op["security"]
 			if public {
 				if !override || len(security.([]any)) != 0 {

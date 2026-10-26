@@ -81,3 +81,5 @@ database connection. It contains all archive bytes, uploads and account records;
 treat it as sensitive. Preserve the existing `access-token` file or
 `POCKETMARK_TOKEN` separately. Restore with the service stopped into an empty data
 directory, never alongside an old WAL/SHM file. No scheduled backup is enabled.
+
+HTML preview navigation filtering covers both `href` and SVG `xlink:href`; only local fragments remain. This applies to direct preview URLs as well as the nested browser preview.

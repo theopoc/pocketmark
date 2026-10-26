@@ -44,7 +44,7 @@ func Preview(src io.Reader, dst io.Writer) error {
 				attrs := t.Attr[:0]
 				for _, a := range t.Attr {
 					if a.Key == "target" || a.Key == "ping" || a.Key == "download" ||
-						(a.Key == "href" && !strings.HasPrefix(strings.TrimSpace(a.Val), "#")) {
+						((a.Key == "href" || a.Key == "xlink:href") && !strings.HasPrefix(strings.TrimSpace(a.Val), "#")) {
 						continue
 					}
 					attrs = append(attrs, a)

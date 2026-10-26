@@ -53,8 +53,18 @@ func (s *Store) CreateAccount(ctx context.Context, a Account) (bool, error) {
 }
 
 func (s *Store) SaveAccount(ctx context.Context, a Account) error {
-	_, err := s.db.ExecContext(ctx, "INSERT INTO account(id,username,salt,hash) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET username=excluded.username,salt=excluded.salt,hash=excluded.hash", a.Username, a.Salt, a.Hash)
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, "INSERT INTO account(id,username,salt,hash) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET username=excluded.username,salt=excluded.salt,hash=excluded.hash", a.Username, a.Salt, a.Hash); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, "DELETE FROM sessions"); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) HasAPIKeyHash(ctx context.Context, hash string) bool {

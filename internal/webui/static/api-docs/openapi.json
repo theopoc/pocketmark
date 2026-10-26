@@ -3,7 +3,7 @@
   "info": {
     "title": "Pocketmark HTTP API",
     "version": "1.0.0",
-    "description": "Native API for your personal bookmark library. JSON errors have an error field. Browser requests use the existing owner session automatically; integrations send `Authorization: Bearer <key>`. Named keys cannot manage the account, API keys or full backups. First-run setup, login and health are public. Mutations enforce same-origin browser checks; configure POCKETMARK_ORIGIN to the exact public origin behind a reverse proxy. Limits measured in bytes are UTF-8 byte limits, not character counts. At most eight concurrent requests; excess work returns 503. “Try it out” performs real operations on this instance. WebDAV /dav/ and removed Linkwarden compatibility routes are outside this reference."
+    "description": "Native API for your personal bookmark library. JSON errors have an error field. Browser requests use the existing owner session automatically; integrations send `Authorization: Bearer <key>`. Named keys cannot manage the account, API keys or full backups. First-run setup, login and health are public. Mutations enforce same-origin browser checks; configure POCKETMARK_ORIGIN to the exact public origin behind a reverse proxy. Limits measured in bytes are UTF-8 byte limits, not character counts. At most eight concurrent library requests; excess work returns 503. “Try it out” performs real operations on this instance. WebDAV /dav/ and removed Linkwarden compatibility routes are outside this reference. Public authentication has two separate slots and a five-second POST body deadline. /healthz has separate readiness slots; /livez checks process liveness independently."
   },
   "servers": [
     {
@@ -95,7 +95,8 @@
             "$ref": "#/components/responses/503"
           }
         },
-        "security": []
+        "security": [],
+        "description": "Checks SQLite with a one-second context timeout and two separate readiness slots. Independent of login and library slots."
       }
     },
     "/api/setup": {
@@ -159,21 +160,18 @@
           "415": {
             "$ref": "#/components/responses/415"
           },
-          "429": {
-            "$ref": "#/components/responses/429"
-          },
           "503": {
             "$ref": "#/components/responses/503"
           }
         },
-        "description": "Only permitted on a new, empty instance. Existing installations cannot be claimed through setup. Shares the login rate limit.",
+        "description": "Only permitted on a new, empty instance with the administrator setup key. Missing or incorrect setupToken returns 403. Existing installations cannot be claimed through setup.",
         "requestBody": {
           "required": true,
           "description": "4 KiB JSON limit. Username 1–120 bytes; password 12–1024 bytes.",
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Credentials"
+                "$ref": "#/components/schemas/SetupCredentials"
               }
             }
           }
@@ -237,7 +235,8 @@
             }
           }
         },
-        "security": []
+        "security": [],
+        "description": "Password authentication only. Ten validly formed attempts per minute per client address (IPv6 /64), with at most 256 tracked sources. Excess sources fail closed. One password derivation at a time; busy callers receive 429 with Retry-After: 1. Forwarded client addresses require explicitly trusted proxy CIDRs. Sessions expire after seven days; at most 32 sessions, oldest evicted at capacity."
       }
     },
     "/api/logout": {
@@ -268,7 +267,7 @@
             "$ref": "#/components/responses/503"
           }
         },
-        "description": "Expires the browser session cookie. Does not revoke API keys or the recovery token."
+        "description": "Revokes the current session in SQLite and clears its cookie. Revocation survives restart. Other sessions and API keys remain valid."
       }
     },
     "/api/session": {
@@ -2370,6 +2369,40 @@
         "x-owner-only": true,
         "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. Includes captures, attachments, annotations and account settings. Keep the recovery token separately. Restore into an empty data directory while the server is stopped, following RESTORE.txt."
       }
+    },
+    "/livez": {
+      "get": {
+        "operationId": "liveness",
+        "tags": [
+          "Health"
+        ],
+        "summary": "Check process liveness",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "description": "Independent of SQLite and application request slots. Use for Kubernetes liveness; /healthz is bounded SQLite readiness."
+      }
     }
   },
   "components": {
@@ -3205,6 +3238,33 @@
           "collections",
           "links"
         ]
+      },
+      "SetupCredentials": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "Username; 1–120 UTF-8 bytes after trimming when setting credentials.",
+            "example": "reader"
+          },
+          "password": {
+            "type": "string",
+            "description": "Password; 12–1024 UTF-8 bytes when setting credentials.",
+            "format": "password",
+            "writeOnly": true
+          },
+          "setupToken": {
+            "type": "string",
+            "writeOnly": true,
+            "description": "Administrator recovery key from access-token or POCKETMARK_TOKEN; required only for first-run setup."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "username",
+          "password",
+          "setupToken"
+        ]
       }
     },
     "responses": {
@@ -3300,7 +3360,7 @@
         }
       },
       "429": {
-        "description": "Too many login/setup attempts. The instance allows ten attempts per minute.",
+        "description": "Login rate limit exceeded or password worker busy. Retry-After indicates the retry delay.",
         "content": {
           "application/json": {
             "schema": {
@@ -3322,7 +3382,7 @@
         }
       },
       "503": {
-        "description": "Server busy (eight concurrent requests maximum), or database unavailable.",
+        "description": "Server busy (eight library slots, two authentication slots or two readiness slots), database unavailable, or session persistence failed.",
         "content": {
           "application/json": {
             "schema": {

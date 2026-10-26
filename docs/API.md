@@ -51,7 +51,7 @@ For Docker, use `POCKETMARK_ACCESS_TOKEN="$(docker compose exec -T pocketmark ca
 | Method and path | Request / result |
 | --- | --- |
 | `POST /api/login` | `{"username":"…","password":"…"}` → `{"authenticated":true}` and a seven-day HttpOnly, SameSite=Strict cookie. |
-| `POST /api/logout` | Clears the session cookie; returns `{"ok":true}`. Does not revoke the access token. |
+| `POST /api/logout` | Revokes the current session in SQLite (including after restart) and clears its cookie; returns `{"ok":true}`. Does not revoke the access token. |
 | `GET /api/session` | `{"authenticated":true}` or HTTP 401. |
 | `GET /api/stats` | Counts: `links`, `collections`, `pending` (includes processing), `failed`. |
 | `GET /api/tags` | Up to 200 `{"name":"go","count":3}` objects, ordered by count descending then name. |
@@ -150,12 +150,12 @@ Annotation colors: `yellow`, `green`, `blue`, `pink`. Each bookmark supports up 
 
 ## Account and client keys
 
-`POST /api/login` accepts only `{username,password}`. Token-based browser login is not supported. Named API keys cannot log in as the owner. Password verification is serialized and uses PBKDF2-SHA256 with 600,000 iterations; login attempts are globally limited to ten per minute. Changing credential settings invalidates older cookies; named keys remain individually revocable.
+`POST /api/login` accepts only `{username,password}`. Token-based browser login is not supported. Named API keys cannot log in as the owner. Password verification is serialized and uses PBKDF2-SHA256 with 600,000 iterations; validly formed login attempts are limited to ten per minute per client address (IPv6 /64). At most 256 source windows are tracked; additional sources receive 429 until a window expires. Busy password derivations return 429 with `Retry-After: 1` instead of queuing. Changing credential settings invalidates older cookies; named keys remain individually revocable. Sessions are random and only their keyed hashes and expiry are persisted. At most 32 sessions remain active; the oldest is evicted when another is issued. Upgrading from stateless cookies requires one fresh login. Existing accounts, libraries and API keys are preserved.
 
 | Endpoint | Contract |
 | --- | --- |
 | `GET /api/setup` | Public `{setupRequired,passwordEnabled}`; no account name or secret. |
-| `POST /api/setup` | Public first-run `{username,password}` → 201 and an owner cookie. Only a new, empty instance can create its single account; later attempts return 409. Same password limits and shared login rate limit. |
+| `POST /api/setup` | First-run `{username,password,setupToken}` → 201 and an owner cookie. Only a new, empty instance can create its single account; later attempts return 409. Requires the administrator recovery key as `setupToken` (missing/wrong key: 403). Same password limits. |
 | `GET /api/account` | Owner-only `{username,passwordEnabled}`. |
 | `PUT /api/account` | Owner-only `{username,password}`. Password 12–1024 bytes, username 1–120 bytes. Empty passwords are rejected; password sign-in cannot be disabled. Issues a replacement owner cookie. |
 | `GET /api/tokens` | Owner-only array `{id,name,createdAt,active,lastUsedAt}`; never returns secrets. |
@@ -180,7 +180,7 @@ curl --fail-with-body -X PUT \
   --data-binary @/private/path/account.json "$POCKETMARK_URL/api/account"
 ```
 
-Use the local server address or HTTPS, delete the private JSON file afterward, and sign in normally with the new credentials. The server's `access-token` file / `POCKETMARK_TOKEN` remains an administrative API recovery credential and session-signing secret; it is never accepted by `/api/login`. Keep it private and preserve it with server backups. Ordinary integrations should use named keys from the signed-in **Settings → API keys** section.
+Use the local server address or HTTPS, delete the private JSON file afterward, and sign in normally with the new credentials. The server's `access-token` file / `POCKETMARK_TOKEN` remains an administrative API recovery credential and session-digest secret; it is never accepted by `/api/login`. Keep it private and preserve it with server backups. Ordinary integrations should use named keys from the signed-in **Settings → API keys** section.
 
 ## Compatibility and synchronization
 
@@ -215,3 +215,11 @@ Common errors: 400 for invalid JSON/limits/duplicate URLs or references, 401 for
 `GET /api/tags/browse?q=<substring>&page=1` lists all tags currently used by bookmarks, in alphabetical order. Returns `{tags:[{name,count,letter}],groups:[{letter,count}],total,page,pageSize}` with 40 tags per page and global bookmark counts. Groups contain the distinct tag count for each available initial across all matching pages (at most 27 groups). ASCII initials are grouped under A–Z; numbers, symbols and other scripts follow under `#`. Names within a group use SQLite's ASCII case-insensitive order, with exact name as a tie-breaker.
 
 Optional `jump=A` (A–Z, case-insensitive, or URL-encoded `#`) resolves the page containing the first matching tag under that initial; the response's `page` reports the resolved page. If that initial has no matches, the requested page is retained. Search is a literal substring (ASCII case-insensitive); `%` and `_` have no wildcard meaning. `q` is limited to 512 bytes and page to 1–1,000,000; invalid values return 400. Authentication is required. The existing `/api/tags` array remains limited to the 200 most-used tags; the web sidebar shows the first 12 as frequent-tag shortcuts.
+
+### Public HTTPS deployment
+
+Set `POCKETMARK_ORIGIN` to the exact HTTPS origin. For first-run setup, retrieve the private `access-token` file (or configured `POCKETMARK_TOKEN`) on the server and enter it in the setup form. Never publish it or use it as an ordinary integration key.
+
+Behind an Ingress, set `POCKETMARK_TRUSTED_PROXIES` to a comma-separated list of **only the actual proxy CIDRs**. The immediate peer must be trusted before `X-Forwarded-For` is used; the chain is read from right to left to find the first untrusted address. Untrusted peers cannot spoof their limit through forwarding headers. Configure the proxy to overwrite or append the actual source address and restrict direct access to the application. Without this setting, clients behind the same proxy share its limit. Do not trust every address or the whole cluster unless every workload in that range is trusted.
+
+Public `/api/login` and `/api/setup` use two separate request slots; their POST bodies have a five-second read deadline. Library requests retain eight slots. `/healthz` uses two independent slots and a one-second SQLite context timeout: use it for readiness. `/livez` has no database dependency and is independent of these slots: use it for liveness. Ingress connection/rate limits are still needed for distributed traffic floods.
