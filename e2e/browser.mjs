@@ -1,13 +1,14 @@
 // Real Chromium, real HTTP and SQLite. Run only against the disposable smoke instance.
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
+import { securityJourney } from './security.mjs';
 
 const base = new URL(process.env.E2E_BASE_URL);
 assert.equal(base.hostname, '127.0.0.1', 'E2E requires a disposable loopback instance');
 // Use full Chromium's headless mode: the headless shell omits the native PDF viewer.
 const browser = await chromium.launch({ channel: 'chromium' });
 try {
-  const context = await browser.newContext();
+  const context = await browser.newContext({ reducedMotion: "reduce" });
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
   const errors = [];
@@ -35,6 +36,8 @@ try {
   await page.locator('#login-password').fill(password);
   await page.locator('#login-submit').click();
   await page.locator('#app-view').waitFor({ state: 'visible' });
+
+  await securityJourney({ browser, page, base, username, password });
 
   const original = 'Browser integration bookmark';
   const revised = 'Browser revised bookmark';

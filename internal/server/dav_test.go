@@ -24,7 +24,7 @@ func TestDAVKeysOnlyWithoutLoginThrottleOrTmpfs(t *testing.T) {
 		t.Fatal("DAV used browser login throttle")
 	}
 	requireStatus(t, request(a, "POST", "/api/login", `{"username":"me","password":"correct horse battery"}`, false, nil), 200)
-	w := request(a, "POST", "/api/tokens", `{"name":"DAV"}`, true, nil)
+	w := request(a, "POST", "/api/tokens", `{"name":"DAV","profile":"sync"}`, true, nil)
 	requireStatus(t, w, 201)
 	var key apiToken
 	if e := json.Unmarshal(w.Body.Bytes(), &key); e != nil {
@@ -66,7 +66,7 @@ func TestFloccusDAVLockTempMoveExactBytesAndInvalidation(t *testing.T) {
 	if w.Header().Get("Last-Modified") == "" {
 		t.Fatal("missing lock timestamp")
 	}
-	other := request(a, "POST", "/api/tokens", `{"name":"otherDAV"}`, true, nil)
+	other := request(a, "POST", "/api/tokens", `{"name":"otherDAV","profile":"sync"}`, true, nil)
 	requireStatus(t, other, 201)
 	var key apiToken
 	json.Unmarshal(other.Body.Bytes(), &key)

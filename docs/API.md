@@ -28,7 +28,7 @@ update it alongside this document. `make test` checks route coverage, local sche
 references, security declarations and documentation delivery. Upstream asset
 provenance and update instructions are in the adjacent `vendor/README.md`.
 
-Base URL: `http://127.0.0.1:8090`. API endpoints require an owner session, recovery token or named API key unless explicitly public. First-run setup and login are public. `/healthz` is unauthenticated and returns `{"status":"ok"}` when SQLite is reachable. Named keys cannot access account/key management or full backups.
+Base URL: `http://127.0.0.1:8090`. API endpoints require an owner session, recovery token or named API key unless explicitly public. First-run setup and login are public. `/healthz` is unauthenticated and returns `{"status":"ok"}` when SQLite is reachable. Named keys cannot access account/key/session management or full backups. Their profile also restricts library and WebDAV access; see Security controls below.
 
 `GET /metrics` exposes Prometheus text metrics using the same session/bearer
 authentication. Responses include a server-generated `X-Request-ID` for log
@@ -158,8 +158,8 @@ Annotation colors: `yellow`, `green`, `blue`, `pink`. Each bookmark supports up 
 | `POST /api/setup` | First-run `{username,password,setupToken}` → 201 and an owner cookie. Only a new, empty instance can create its single account; later attempts return 409. Requires the administrator recovery key as `setupToken` (missing/wrong key: 403). Same password limits. |
 | `GET /api/account` | Owner-only `{username,passwordEnabled}`. |
 | `PUT /api/account` | Owner-only `{username,password}`. Password 12–1024 bytes, username 1–120 bytes. Empty passwords are rejected; password sign-in cannot be disabled. Issues a replacement owner cookie. |
-| `GET /api/tokens` | Owner-only array `{id,name,createdAt,active,lastUsedAt}`; never returns secrets. |
-| `POST /api/tokens` | Owner-only `{name}` → `{id,name,createdAt,active,lastUsedAt,token}`; raw key appears once. Max 32 keys. |
+| `GET /api/tokens` | Owner-only array `{id,name,createdAt,active,lastUsedAt,profile,expiresAt}`; never returns secrets. |
+| `POST /api/tokens` | Owner-only `{name,profile?,expiresAt?}` → `{id,name,createdAt,active,lastUsedAt,profile,expiresAt,token}`; raw key appears once. Max 32 keys. |
 | `PATCH /api/tokens/{id}` | Owner-only `{name?:string,active?:boolean}` → `{ok:true}`. Supply name, active or both. Rename (1–120 UTF-8 bytes after trimming), disable temporarily or reactivate the same key; 404 for missing/deleted keys. Renaming preserves the secret, status and usage history unless active is explicitly supplied. |
 | `DELETE /api/tokens/{id}` | Owner-only permanent, immediate revocation. |
 
@@ -258,3 +258,82 @@ Set `POCKETMARK_ORIGIN` to the exact HTTPS origin. For first-run setup, retrieve
 Behind an Ingress, set `POCKETMARK_TRUSTED_PROXIES` to a comma-separated list of **only the actual proxy CIDRs**. The immediate peer must be trusted before `X-Forwarded-For` is used; the chain is read from right to left to find the first untrusted address. Untrusted peers cannot spoof their limit through forwarding headers. Configure the proxy to overwrite or append the actual source address and restrict direct access to the application. Without this setting, clients behind the same proxy share its limit. Do not trust every address or the whole cluster unless every workload in that range is trusted.
 
 Public `/api/login` and `/api/setup` use two separate request slots; their POST bodies have a five-second read deadline. Library requests retain eight slots. `/healthz` uses two independent slots and a one-second SQLite context timeout: use it for readiness. `/livez` has no database dependency and is independent of these slots: use it for liveness. Ingress connection/rate limits are still needed for distributed traffic floods.
+
+## Security controls
+
+The local [OpenAPI reference](/api-docs/) and bundled `openapi.json` describe every
+native endpoint, metrics, and WebDAV. The specification records allowed key profiles
+with `x-api-key-profiles`, owner restrictions with `x-owner-only`, and password
+confirmation with `x-reauthentication-required`. WebDAV PROPFIND/MOVE are documented
+with `x-webdav-methods` because OpenAPI 3.0 does not define these operation names.
+
+All library, archive, upload, import, export, metrics, account and session endpoints
+require authentication, including GET and HEAD. Only setup/login, minimal health
+probes and static UI/documentation are public. Setup still requires the private
+administrator setup key and an eligible empty database. Extension CORS OPTIONS
+preflight is public but grants no data access or mutation. Other DAV OPTIONS requests
+are authenticated. Invalid Authorization never falls back to a valid cookie.
+
+### Password confirmation
+
+Browser sessions require password confirmation within the last **five minutes**
+for password changes, creating/updating/deleting/rotating API keys, downloading a
+full backup, changing inactivity timeout, and revoking sessions through the session
+management endpoints. Fresh password login/setup counts as confirmation. Expiry
+returns HTTP 403 with `{"error":"Confirm your password to continue.","code":"reauth_required"}`
+before the handler runs. Call `POST /api/reauth` with `{password}` using the same
+browser session, then retry. Incorrect passwords return 403; expired/revoked sessions
+return 401. Confirmation shares the login attempt limiter and bounded serialized
+password work; busy/throttled requests return 429 with Retry-After. A confirmation
+is tied to one session and cannot revive a revoked session or old account credentials.
+
+The administrative recovery bearer remains an explicit break-glass bypass, including
+for a forgotten password. Keep it private; use named keys for integrations. It cannot
+confirm or configure a browser session. Normal logout remains possible without
+password confirmation. The UI prompts only when needed and clears the entered
+password when the confirmation dialog closes. Backup navigation always confirms
+first and streams the download normally, without buffering the ZIP in the UI.
+
+### API key profiles and lifetime
+
+| Profile | Allowed operations |
+| --- | --- |
+| `read` (new API default) | Native library reads, metadata exports, saved-file downloads/previews, reader and metrics; no library writes or DAV. |
+| `capture` | Session check, stats, tags, collections and bookmark reads; bookmark creation/update, collection creation, capture/preservation and attachment/standalone-file upload. No deletes, bulk edits, imports, exports, saved-file download or DAV. For Pocketmark's browser extension. Bookmark reads can include notes and extracted text. |
+| `sync` | WebDAV including authoritative updates/deletions, plus `GET /api/session`. No native library reads/writes, file downloads or metrics. For Floccus. |
+| `full` | All native library operations, metrics and WebDAV; no owner administration or full backups. |
+
+Every named key is refused on account/key/session administration and full backup.
+New routes require an explicit profile policy; unknown routes do not inherit key
+permissions. The server tests compare the route inventory, authorization policy and
+OpenAPI and exercise anonymous denials and the profile matrix.
+
+`POST /api/tokens` accepts `{name,profile?,expiresAt?}`. `expiresAt` is a future Unix
+timestamp in seconds, or 0 (default) for no expiry. The UI defaults to read-only and
+30 days. Existing keys migrate to `full` without expiry, preserving integrations;
+review and replace them with a narrower profile. Permissions and expiry are immutable:
+create a replacement key when changing them. Expired keys remain listed but cannot
+authenticate or be rotated; reactivation does not extend expiry. Disabled/expired
+keys still count toward the 32-key limit.
+
+`POST /api/tokens/{id}/rotate` atomically replaces an active unexpired key and returns
+`{token}` once. Its ID/name/profile/expiry remain, last-use history resets, and the
+previous secret immediately stops authenticating. Update the connected client.
+In-flight requests may finish after rotation, expiry or revocation. No raw key is
+stored or returned by listing; no session secret is exposed.
+
+### Browser sessions
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /api/sessions` | Owner-only list of at most 32 unexpired sessions: `{id,createdAt,lastUsedAt,expiresAt,idleTimeoutMinutes,device,current}`. Times are Unix seconds; legacy creation/activity may be 0. Device is an untrusted User-Agent truncated to 256 bytes, never a verified identity; no IP is stored. |
+| `PATCH /api/sessions/current` | Cookie session and recent confirmation required; `{idleTimeoutMinutes: 0|15|60|1440}`. Applies only to this browser. |
+| `DELETE /api/sessions/{id}` | Owner and recent confirmation; revoke a session by its numeric ID. 404 if missing. Revocation persists across restart. |
+| `DELETE /api/sessions/others` | Cookie session and recent confirmation; revoke all sessions except the current one. |
+
+New sessions have a 24-hour inactivity timeout and a seven-day absolute expiry.
+Every authenticated request counts as activity, including background refresh from
+an open library. Server-side conditional updates cannot revive an expired session.
+Choosing 0 disables only inactivity expiry. Legacy sessions retain their original
+absolute expiry and require fresh confirmation before sensitive actions. Password
+changes revoke all previous sessions, and backups continue to omit browser sessions.

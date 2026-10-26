@@ -678,3 +678,13 @@ body:has(dialog[open]) { overflow: hidden; }
 .search-scope { display: block; max-width: 32ch; font-size: 12px; line-height: 1.5; }
 .library-options { flex-wrap: wrap; }
 @media (max-width: 600px) { .library-options > .inline-check { align-items: flex-start; padding-block: 8px; } .library-options > .inline-check input { margin-top: 2px; } }
+
+/* Security settings reuse the compact settings rows in both themes. */
+#sessions-list { list-style: none; padding: 0; }
+.session-device { overflow-wrap: anywhere; margin: 4px 0; }
+#session-idle-form, #token-form { display: grid; gap: 8px; }
+#session-idle-form label, #token-form label { margin: 8px 0 0; }
+#session-idle-form button, #token-form button { justify-self: start; }
+#reauth-dialog h2 { margin-top: 0; }
+#sessions-list .token-row > button { flex-shrink: 0; align-self: start; }
+@media (max-width: 600px) { #sessions-list .token-row { flex-direction: column; align-items: stretch; } .token-row-actions { flex-wrap: wrap; } }

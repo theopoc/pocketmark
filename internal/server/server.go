@@ -52,6 +52,7 @@ func New(s *store.Store, token, origin string, secure bool, observers ...*observ
 	}
 	a.mux.HandleFunc("GET /metrics", a.observer.Metrics)
 	a.registerAccount(a.mux)
+	a.registerSessionSecurity(a.mux)
 	a.registerLibrary(a.mux)
 	a.registerDAV(a.mux)
 	a.registerAssets(a.mux)
@@ -141,7 +142,7 @@ func (a *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// Public authentication bodies cannot occupy the library's work slots.
 	slots := a.requests
-	if r.URL.Path == "/api/login" || r.URL.Path == "/api/setup" {
+	if r.URL.Path == "/api/login" || r.URL.Path == "/api/setup" || r.URL.Path == "/api/reauth" {
 		slots = a.authRequests
 		if r.Method == "POST" {
 			_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(5 * time.Second))
@@ -181,33 +182,12 @@ func (a *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	publicAPI := r.URL.Path == "/api/login" || r.URL.Path == "/api/setup"
-	if (strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/metrics") && !publicAPI && !a.authenticated(r) {
-		fail(w, 401, "sign in required")
-		return
-	}
-	if strings.HasPrefix(r.URL.Path, "/dav/") && !a.davAuthenticated(r) {
-		w.Header().Set("WWW-Authenticate", `Basic realm="Pocketmark", charset="UTF-8"`)
-		fail(w, 401, "sign in required")
+	if !a.authorize(w, r) {
 		return
 	}
 	a.mux.ServeHTTP(w, r)
 }
-func (a *Server) authenticated(r *http.Request) bool {
-	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
-		key := strings.TrimPrefix(auth, "Bearer ")
-		return secretEqual(key, a.token) || a.validAPIKey(r, key)
-	}
-	c, e := r.Cookie("pocketmark")
-	if e != nil {
-		return false
-	}
-	// Legacy stateless cookies deliberately require one fresh login on upgrade.
-	if len(c.Value) != 67 || !strings.HasPrefix(c.Value, "v2.") {
-		return false
-	}
-	return a.Store.SessionValid(r.Context(), a.sessionHash(c.Value))
-}
+
 func secretEqual(x, y string) bool {
 	a := sha256.Sum256([]byte(x))
 	b := sha256.Sum256([]byte(y))

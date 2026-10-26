@@ -261,7 +261,7 @@
     $("login-username").focus();
   }
 
-  async function api(path, options = {}) {
+  async function api(path, options = {}, retried = false) {
     const headers = new Headers(options.headers || {});
     if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
     let response;
@@ -277,6 +277,10 @@
       }
     }
     if (!response.ok) {
+      if (body?.code === "reauth_required" && !retried) {
+        await security.confirm();
+        return api(path, options, true);
+      }
       if (response.status === 401 && path !== "/api/login" && path !== "/api/setup") {
         const expired = state.signedIn;
         showLogin();
@@ -289,6 +293,8 @@
     }
     return body;
   }
+
+  const security = globalThis.PocketmarkSecurity.create({ api, toast, onSessionExpired: showLogin });
 
   const reader = globalThis.PocketmarkReader.create({
     api, drafts, toast, onEdit: openEditor, onChange: () => refresh(true), onSessionExpired: showLogin,
@@ -1028,6 +1034,13 @@
     $("login-help").textContent = setupRequired ? "Enter the setup key from the server’s access-token file and choose a password of at least 12 characters. This instance has one personal account." : passwordEnabled ? "Use your Pocketmark username and password." : "Your existing library needs a password. Ask the server administrator to configure it using the account recovery instructions.";
     $("login-submit").disabled = !setupRequired && !passwordEnabled;
   }
+  const profileHelp = {
+    read: "Can read and export library data, including saved files. Cannot change it.",
+    capture: "For the browser extension: read bookmark metadata, add or edit bookmarks, create collections and upload captures. Cannot delete, bulk edit, import, export or download saved files.",
+    sync: "WebDAV only. Floccus can read and replace the bookmark tree, including deletions. Cannot access the native library API or saved files.",
+    full: "Can read, export, change and delete library data, including WebDAV sync. Cannot manage your account, keys, sessions or full backups.",
+  };
+  $("token-profile").addEventListener("change", () => { $("token-permissions-help").textContent = profileHelp[$("token-profile").value]; });
   let settingsSession = 0;
   let tokenCount = 0;
   let tokensBusy = false;
@@ -1079,7 +1092,9 @@
   function renderTokens(tokens, session, focusID, focusAction = "toggle") {
     $("token-list").replaceChildren();
     tokenCount = tokens.length;
-    $("token-count").textContent = `${tokens.filter((token) => token.active).length} active · ${tokens.length} of 32 keys`;
+    const expiredKey = token => token.expiresAt > 0 && token.expiresAt * 1000 <= Date.now();
+    const usableKey = token => token.active && !expiredKey(token);
+    $("token-count").textContent = `${tokens.filter(usableKey).length} active · ${tokens.length} of 32 keys`;
     $("token-form").querySelector("button[type='submit']").disabled = tokensBusy || tokenCount >= 32;
     if (!tokens.length) $("token-list").append(el("li", "token-empty muted", "No API keys yet. Create a key to connect your first app."));
     for (const token of tokens || []) {
@@ -1093,18 +1108,23 @@
       rename.title = `Rename ${token.name}`;
       const nameGroup = el("div", "token-name-group");
       nameGroup.append(el("strong", "token-name", token.name), rename);
-      heading.append(nameGroup, el("span", `token-status${token.active ? " is-active" : ""}`, token.active ? "Active" : "Disabled"));
+      const expired = expiredKey(token);
+      heading.append(nameGroup, el("span", `token-status${usableKey(token) ? " is-active" : ""}`, expired ? "Expired" : token.active ? "Active" : "Disabled"));
       const metadata = el("dl", "token-metadata");
       for (const [label, value] of [["Created", token.createdAt], ["Last used", token.lastUsedAt]]) {
         const group = el("div", "");
         const detail = el("dd", ""); detail.append(tokenDate(value));
         group.append(el("dt", "", label), detail); metadata.append(group);
       }
-      details.append(heading, metadata);
+      const permissions = { read: "Read only", capture: "Add, edit & capture", sync: "Floccus sync", full: "Full library access" };
+      const expiry = token.expiresAt ? `${expired ? "Expired" : "Expires"} ${new Date(token.expiresAt * 1000).toLocaleDateString()}` : "No expiry";
+      details.append(heading, el("p", "small muted", `${permissions[token.profile] || token.profile} · ${expiry}`), metadata);
+      if (expired) details.append(el("p", "small muted", "Create a new key to reconnect this app."));
       const actions = el("div", "token-row-actions");
       const toggle = el("button", "button subtle", token.active ? "Disable" : "Reactivate");
       const revoke = el("button", "button subtle token-revoke", "Delete key");
       toggle.type = revoke.type = "button";
+      toggle.hidden = expired;
       toggle.setAttribute("aria-label", `${token.active ? "Disable" : "Reactivate"} ${token.name}`);
       toggle.title = token.active ? "Pause access without changing the key" : "Restore access with the same key";
       revoke.setAttribute("aria-label", `Delete ${token.name} permanently`);
@@ -1184,7 +1204,22 @@
       }
       toggle.addEventListener("click", () => changeKey(false));
       revoke.addEventListener("click", () => changeKey(true));
-      actions.append(toggle, revoke); row.append(details, actions); $("token-list").append(row);
+      const rotate = el("button", "button subtle", "Rotate key"); rotate.type = "button";
+      rotate.setAttribute("aria-label", `Rotate ${token.name}`);
+      rotate.hidden = !token.active || expired;
+      rotate.addEventListener("click", async () => {
+        if (tokensBusy || !confirm(`Replace the key for “${token.name}”? The old key will stop working immediately. Update the connected app with the new key.`)) return;
+        setTokensBusy(true);
+        try {
+          const result = await api(`/api/tokens/${token.id}/rotate`, { method: "POST" });
+          if (session !== settingsSession) return;
+          setTokenVisibility(false); $("new-token-value").value = result.token; $("new-token").hidden = false; $("new-token-value").focus();
+          $("tokens-feedback").textContent = "Key replaced. Copy the new key into your app; its permissions and expiry are unchanged.";
+          await loadTokens(session);
+        } catch (error) { if (session === settingsSession) $("tokens-error").textContent = error.message; }
+        finally { if (session === settingsSession) setTokensBusy(false); }
+      });
+      actions.append(toggle, rotate, revoke); row.append(details, actions); $("token-list").append(row);
       if (focusID === token.id) (focusAction === "rename" ? rename : toggle).focus();
     }
     setTokensBusy(tokensBusy);
@@ -1202,6 +1237,7 @@
     $("account-password").value = "";
     $("settings-dialog").showModal();
     await Promise.all([
+      security.loadSessions(),
       loadTokens(session).catch((error) => tokenLoadError(error, session)),
       api("/api/account").then((account) => {
         if (session !== settingsSession) return;
@@ -1223,7 +1259,7 @@
     if (tokensBusy || editingTokenID !== null || tokenCount >= 32) return;
     setTokensBusy(true); $("tokens-error").textContent = ""; $("tokens-feedback").textContent = "";
     try {
-      const token = await api("/api/tokens", { method: "POST", body: JSON.stringify({ name: $("token-name").value.trim() }) });
+      const token = await api("/api/tokens", { method: "POST", body: JSON.stringify({ name: $("token-name").value.trim(), profile: $("token-profile").value, expiresAt: Number($("token-expiry").value) ? Math.floor(Date.now() / 1000) + Number($("token-expiry").value) * 86400 : 0 }) });
       if (session !== settingsSession) return;
       setTokenVisibility(false);
       $("new-token-value").value = token.token; $("new-token").hidden = false; $("token-name").value = "";
