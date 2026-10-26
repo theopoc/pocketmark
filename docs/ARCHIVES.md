@@ -54,7 +54,7 @@ rendered markup. Larger files remain downloadable.
 | `DELETE /api/assets/{assetId}` | Delete metadata and all chunks |
 | `POST /api/links/{id}/preserve` | Create offline HTML; returns `{asset, embedded, omitted}` |
 | `GET /api/links/{id}/reader?asset=123` | Sandboxed reader; `asset` is optional |
-| `GET /api/backup` | Owner-only ZIP containing a consistent complete SQLite database and restore instructions |
+| `GET /api/backup` | Owner-only ZIP (recent password confirmation for browser sessions) containing a consistent complete SQLite database and restore instructions |
 
 Native attachment uploads, manual preservation, rich-reader generation and backup
 share one work slot; standalone uploads share the import slot.

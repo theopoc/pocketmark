@@ -22,9 +22,11 @@ check: fmt-check
 	node --check internal/webui/static/bulk.js
 	node --check internal/webui/static/tag-picker.js
 	node --check internal/webui/static/app.js
+	node --check internal/webui/static/security.js
 	node --check internal/webui/static/sw.js
 	node --check internal/webui/static/api-docs/docs.js
 	node --check e2e/browser.mjs
+	node --check e2e/security.mjs
 	@for source in extension/*.js; do node --check "$$source" || exit; done
 	python3 -m py_compile scripts/*.py extension/package.py
 release-check:

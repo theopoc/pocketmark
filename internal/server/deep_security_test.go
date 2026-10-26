@@ -70,7 +70,7 @@ func (r *importBlockingReader) Read(p []byte) (int, error) {
 }
 func TestSlowHTMLImportLeavesDatabaseAvailable(t *testing.T) {
 	a := newTestServer(t, "", false)
-	key := namedAPIKey(t, a)
+	key := createProfileKey(t, a, "full")
 	reader := &importBlockingReader{reached: make(chan struct{}), release: make(chan struct{})}
 	done := make(chan struct{})
 	defer func() { close(reader.release); <-done }()
