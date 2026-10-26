@@ -144,7 +144,7 @@ Accepted inputs are legacy JSON exports (`collections[].links`, object tags, `pa
 | `DELETE /api/assets/{assetId}` | Removes attachment chunks atomically. |
 | `POST /api/links/{id}/preserve` | Manual resource-embedded passive HTML capture; returns `{asset,embedded,omitted}`. |
 | `GET /api/links/{id}/reader?asset=id` | Sandboxed structural reader; optional HTML attachment ID, otherwise captured HTML. Max 2 MiB input, 1 MiB output. |
-| `GET /api/backup` | Owner-only ZIP stream with consistent SQLite snapshot and restore instructions. |
+| `GET /api/backup` | Owner-only ZIP stream with consistent SQLite snapshot and restore instructions. Five-minute overall deadline and renewable 30-second network-write deadline. |
 
 Annotation colors: `yellow`, `green`, `blue`, `pink`. Each bookmark supports up to 200 annotations. After content changes, old anchors are reported stale rather than being silently moved. See [archive limits](ARCHIVES.md) for network and resource budgets.
 

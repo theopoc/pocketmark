@@ -3,12 +3,14 @@ package server
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"mime"
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"pocketmark/internal/capture"
 	"pocketmark/internal/observability"
@@ -257,13 +259,23 @@ func (a *Server) richReader(w http.ResponseWriter, r *http.Request) {
 	w.Write(output.Bytes())
 }
 
-// VACUUM INTO creates a transactionally consistent snapshot including WAL
-// changes. ZIP Store avoids a large compressor and keeps the backup streamable.
+// Snapshot copies a consistent WAL view with bounded caches. ZIP Store avoids
+// a large compressor; backup deadlines allow large exports without permitting
+// an indefinitely stalled download to occupy the archive slot.
 func (a *Server) backup(w http.ResponseWriter, r *http.Request) {
 	if !a.requireOwner(w, r) {
 		return
 	}
-	f, e := a.Store.Snapshot(r.Context())
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer cancel()
+	controller := http.NewResponseController(w)
+	// The normal 60-second deadline includes snapshot preparation. The backup
+	// has its own overall bound and refreshes a bounded deadline on each write.
+	if e := controller.SetWriteDeadline(time.Time{}); e != nil && !errors.Is(e, http.ErrNotSupported) {
+		handleError(w, e)
+		return
+	}
+	f, e := a.Store.Snapshot(ctx)
 	if e != nil {
 		handleError(w, e)
 		return
@@ -272,7 +284,7 @@ func (a *Server) backup(w http.ResponseWriter, r *http.Request) {
 	defer f.Close()
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", `attachment; filename="pocketmark-backup.zip"`)
-	z := zip.NewWriter(w)
+	z := zip.NewWriter(backupWriter{ctx: ctx, ResponseWriter: w, controller: controller})
 	entry, e := z.CreateHeader(&zip.FileHeader{Name: "pocketmark.db", Method: zip.Store})
 	if e != nil {
 		observability.Error(r.Context(), "backup_zip_failed", e)
@@ -293,4 +305,24 @@ func (a *Server) backup(w http.ResponseWriter, r *http.Request) {
 	if e = z.Close(); e != nil {
 		observability.Error(r.Context(), "backup_finish_failed", e)
 	}
+}
+
+type backupWriter struct {
+	http.ResponseWriter
+	controller *http.ResponseController
+	ctx        context.Context
+}
+
+func (w backupWriter) Write(p []byte) (int, error) {
+	if err := w.ctx.Err(); err != nil {
+		return 0, err
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	if end, ok := w.ctx.Deadline(); ok && end.Before(deadline) {
+		deadline = end
+	}
+	if err := w.controller.SetWriteDeadline(deadline); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		return 0, err
+	}
+	return w.ResponseWriter.Write(p)
 }

@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"os"
 	"time"
+
+	"github.com/mattn/go-sqlite3"
 )
 
 var (
@@ -20,10 +22,14 @@ func (s *Store) TemporaryFile(pattern string) (*os.File, error) {
 	return os.CreateTemp(s.directory, pattern)
 }
 
-// Snapshot includes committed WAL data but excludes ephemeral login sessions.
-// The caller owns closing and removing
-// the returned file; every failed snapshot is removed here.
+// Snapshot copies a stable WAL read view in bounded page batches. Its two
+// temporary connections have small caches and leave the application's sole
+// connection available. Ephemeral login sessions are scrubbed from the copy.
+// The caller owns the completed file; failures remove it.
 func (s *Store) Snapshot(ctx context.Context) (*os.File, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	f, err := s.TemporaryFile(".backup-*.db")
 	if err != nil {
 		return nil, err
@@ -33,13 +39,7 @@ func (s *Store) Snapshot(ctx context.Context) (*os.File, error) {
 		os.Remove(path)
 		return nil, err
 	}
-	if err = os.Remove(path); err != nil {
-		return nil, err
-	}
-	_, err = s.db.ExecContext(ctx, "VACUUM INTO ?", path)
-	if err == nil {
-		err = os.Chmod(path, 0600)
-	}
+	err = snapshotDatabase(ctx, s.path, path)
 	if err == nil {
 		// Scrub only the standalone copy. Restoring a backup must not resurrect
 		// cookies revoked after it was taken, nor sign out the live server.
@@ -63,6 +63,103 @@ func (s *Store) Snapshot(ctx context.Context) (*os.File, error) {
 		return nil, err
 	}
 	return f, nil
+}
+
+func snapshotDatabase(ctx context.Context, source, target string) error {
+	open := func(path, mode string) (*sql.DB, error) {
+		u := url.URL{Scheme: "file", Path: path}
+		db, err := sql.Open("pocketmark-sqlite3", u.String()+"?mode="+mode+"&_cache_size=-2048&_busy_timeout=1000")
+		if err == nil {
+			db.SetMaxOpenConns(1)
+		}
+		return db, err
+	}
+	src, err := open(source, "ro")
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	reader, err := src.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+	if _, err = reader.ExecContext(ctx, "PRAGMA mmap_size=0"); err != nil {
+		return err
+	}
+	view, err := reader.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return err
+	}
+	defer view.Rollback()
+	// Pin the read version so concurrent writes cannot restart the backup.
+	var tables int
+	if err = view.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_schema").Scan(&tables); err != nil {
+		return err
+	}
+	var pageSize int
+	if err = view.QueryRowContext(ctx, "PRAGMA page_size").Scan(&pageSize); err != nil {
+		return err
+	}
+	dst, err := open(target, "rw")
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+	writer, err := dst.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer writer.Close()
+	if _, err = writer.ExecContext(ctx, "PRAGMA mmap_size=0; PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL"); err != nil {
+		return err
+	}
+	spill, err := os.OpenFile(target, os.O_RDWR, 0)
+	if err != nil {
+		return err
+	}
+	defer spill.Close()
+	return reader.Raw(func(source any) error {
+		return writer.Raw(func(target any) (err error) {
+			backup, err := target.(*sqlite3.SQLiteConn).Backup("main", source.(*sqlite3.SQLiteConn), "main")
+			if err != nil {
+				return err
+			}
+			defer func() { err = errors.Join(err, backup.Finish()) }()
+			remaining := -1
+			syncedPages := 0
+			for {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				done, err := backup.Step(max(1, (1<<20)/pageSize))
+				if err != nil || done {
+					return err
+				}
+				next := backup.Remaining()
+				copied := backup.PageCount() - next
+				if copied-syncedPages >= max(1, (8<<20)/pageSize) {
+					// A small SQLite cache alone does not bound dirty kernel
+					// pages. Flush spilled pages before they fill a small cgroup
+					// under concurrent reads. This private file is not published
+					// until the backup commits successfully.
+					if err := spill.Sync(); err != nil {
+						return err
+					}
+					syncedPages = copied
+				}
+				if next == remaining {
+					// The driver treats SQLITE_BUSY/LOCKED as unfinished work.
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-time.After(10 * time.Millisecond):
+					}
+				}
+				remaining = next
+			}
+		})
+	})
 }
 
 // IndexDocument preserves personal metadata and ignores a stale upload after a

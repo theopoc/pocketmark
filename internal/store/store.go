@@ -27,6 +27,7 @@ func init() {
 type Store struct {
 	db        *sql.DB
 	directory string
+	path      string
 }
 type Link struct {
 	ID               int64    `json:"id"`
@@ -81,7 +82,7 @@ func Open(path string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
-	s := &Store{db: db, directory: filepath.Dir(path)}
+	s := &Store{db: db, directory: filepath.Dir(path), path: path}
 	if err = s.initializeSchema(context.Background()); err != nil {
 		db.Close()
 		return nil, err
