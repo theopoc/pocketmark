@@ -84,6 +84,7 @@ try {
     <script>parent.previewCompromised = true</script><img src="/preview-leak">
     <iframe src="/preview-frame-leak"></iframe><style>@import url('/preview-style-leak');</style>
     <meta http-equiv="refresh" content="0;url=/preview-navigation-leak"><base href="/preview-base-leak">
+    <noscript><a id="noscript-link" href="${new URL('/preview-noscript-leak', base).href}">No-script navigation</a></noscript>
     <a href="/preview-link-leak" target="_top">External link</a><svg xmlns:xlink="http://www.w3.org/1999/xlink"><a href="#safe"><set attributeName="href" to="/preview-svg-leak"/><text y="20">SVG link</text></a><a id="xlink" xlink:href="/preview-xlink-leak"><text y="60">Namespaced link</text></a></svg>` + '<!-- padding -->'.repeat(145000);
   const legacy = Buffer.concat([Buffer.from('<!doctype html><meta charset="windows-1252"><h1>Caf'), Buffer.from([0xe9, 0x20, 0x80]), Buffer.from('</h1>')]);
   let htmlAsset;
@@ -95,7 +96,7 @@ try {
   let downloads = 0;
   const leakedRequests = [];
   page.on('download', () => downloads++);
-  page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/preview-')) leakedRequests.push(request.url()); });
+  page.on('response', response => { if (new URL(response.url()).pathname.startsWith('/preview-')) leakedRequests.push(response.url()); });
   await card(revised).getByRole('button', { name: revised, exact: true }).click();
   const previews = '**/api/assets/*/view';
   await page.route(previews, route => route.request().method() === 'GET'
@@ -112,12 +113,21 @@ try {
   await capture.getByRole('heading', { name: 'Original saved appearance' }).waitFor();
   assert.equal(await capture.locator('h1').evaluate(node => getComputedStyle(node).color), 'rgb(12, 34, 56)');
   assert.equal(await capture.locator('#embedded').evaluate(node => node.complete && node.naturalWidth > 0), true);
-  assert.equal(await capture.locator('a').first().getAttribute('href'), null);
+  assert.equal(await capture.getByText('External link', { exact: true }).getAttribute('href'), null);
   assert.equal(await capture.locator('set, animate').count(), 0);
   assert.equal(await capture.locator('#xlink').getAttribute('xlink:href'), null);
   await capture.locator('#xlink').click();
   assert.equal(await page.evaluate(() => window.previewCompromised), undefined);
   assert.equal(await page.frameLocator('#asset-viewer-content iframe').locator('iframe').getAttribute('sandbox'), '');
+  // noscript is raw text to the tokenizer, but markup to a scriptless browser.
+  // The absolute URL avoids a false pass caused by relative blob URL resolution.
+  assert.equal(await capture.locator('#noscript-link').getAttribute('href'), new URL('/preview-noscript-leak', base).href);
+  // Chromium can reject the navigation before creating a network request, so
+  // requestfailed is not a reliable signal. Require the explicit CSP violation.
+  await Promise.all([
+    page.waitForEvent('console', { predicate: message => /frame-src/.test(message.text()) && /Content Security Policy/.test(message.text()) }),
+    capture.locator('#noscript-link').click(),
+  ]);
   await page.locator('#asset-viewer-select').selectOption({ label: 'legacy.html' });
   await capture.getByRole('heading', { name: 'Café €' }).waitFor();
   await page.locator('#asset-viewer-select').selectOption({ label: 'capture.png' });
@@ -129,18 +139,19 @@ try {
   await (await nativeViewer).locator('pdf-viewer').waitFor({ state: 'attached' });
   assert.equal(downloads, 0, 'viewing captures must not trigger downloads');
   assert.deepEqual(leakedRequests, [], 'HTML preview must not execute scripts, navigate or fetch external resources');
-  // Direct navigation must remain safe without the library's outer iframe.
+  // HTML payloads may only render inside the UI's parent CSP boundary. Direct
+  // navigation downloads instead of creating a standalone active document.
   const direct = await page.context().newPage();
   const directLeaks = [];
   // CSP-blocked resource attempts can emit request events without reaching HTTP.
   direct.on('response', response => { if (new URL(response.url()).pathname.startsWith('/preview-')) directLeaks.push(response.url()); });
   direct.on('request', request => { if (new URL(request.url()).pathname === '/preview-xlink-leak') directLeaks.push(request.url()); });
   const directURL = new URL(`/api/assets/${htmlAsset.id}/view`, base).href;
-  await direct.goto(directURL);
-  assert.equal(await direct.locator('#xlink').getAttribute('xlink:href'), null);
-  await direct.locator('#xlink').click();
-  assert.equal(direct.url(), directURL);
-  assert.deepEqual(directLeaks, [], 'direct previews must not navigate through SVG namespaced links');
+  const download = direct.waitForEvent('download');
+  await direct.goto(directURL).catch(error => assert.match(error.message, /download|ERR_ABORTED/i));
+  assert.equal((await download).suggestedFilename(), 'capture.html');
+  assert.equal(direct.url(), 'about:blank');
+  assert.deepEqual(directLeaks, [], 'direct HTML payloads must not render or navigate');
   await direct.close();
   await page.getByRole('button', { name: 'Close preview', exact: true }).click();
   await viewer.waitFor({ state: 'hidden' });

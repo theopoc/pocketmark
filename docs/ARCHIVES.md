@@ -50,7 +50,7 @@ rendered markup. Larger files remain downloadable.
 | `POST /api/files?name=document.pdf&collection=123` | Create standalone file and payload atomically; optional collection |
 | `POST /api/links/{id}/assets?name=page.html` | Raw binary body with its MIME Content-Type; returns attachment metadata |
 | `GET /api/assets/{assetId}` | Force-download original bytes |
-| `GET /api/assets/{assetId}/view` | Inline image/PDF or isolated HTML preview |
+| `GET /api/assets/{assetId}/view` | Inline image/PDF; HTML payload fetched by the isolated UI viewer, direct navigation downloads |
 | `DELETE /api/assets/{assetId}` | Delete metadata and all chunks |
 | `POST /api/links/{id}/preserve` | Create offline HTML; returns `{asset, embedded, omitted}` |
 | `GET /api/links/{id}/reader?asset=123` | Sandboxed reader; `asset` is optional |
@@ -67,7 +67,7 @@ viewer and may depend on browser settings.
 HTML previews retain saved styles and embedded images/fonts up to the full
 20 MiB attachment limit, independently of the structural reader's 2 MiB limit.
 They use an opaque CSP sandbox with scripts, forms, frames and network resources
-blocked. Refresh redirects and external links are disabled. Missing resources
+blocked. The parent shell’s `frame-src blob:` policy blocks network navigation from the nested frame, including HTML parsing contexts missed by lexical filtering. Direct HTML `/view` responses use attachment disposition: rendering requires the integrated viewer. Missing resources
 stay missing; this preserves the saved appearance, not live-site interactivity.
 Preparation uses bounded tokenization and temporary disk files in the existing
 single work slot; no browser process or resident cache is added. Closing the
@@ -78,8 +78,8 @@ snapshot. The temporary snapshot is written in the data directory, then streamed
 into an uncompressed ZIP with constant-size copy buffers. It requires free disk
 space approximately equal to the database size and briefly occupies the single
 database connection. It contains all archive bytes, uploads and account records;
-treat it as sensitive. Preserve the existing `access-token` file or
+treat it as sensitive. Browser sessions are removed from the snapshot only; live sessions remain valid, and restoring requires signing in again. Preserve the existing `access-token` file or
 `POCKETMARK_TOKEN` separately. Restore with the service stopped into an empty data
-directory, never alongside an old WAL/SHM file. No scheduled backup is enabled.
+directory, never alongside an old WAL/SHM file. For older backups or raw database copies, rotate the recovery secret to invalidate restored cookies and API keys. Review restored API keys because a rollback can restore keys revoked after the backup. No scheduled backup is enabled.
 
-HTML preview navigation filtering covers both `href` and SVG `xlink:href`; only local fragments remain. This applies to direct preview URLs as well as the nested browser preview.
+HTML token filtering removes ordinary `href`/SVG `xlink:href` destinations as defense in depth; it is not a complete HTML5 sanitizer. The nested viewer and attachment disposition are mandatory security boundaries. Downloaded originals remain untrusted files; opening them outside Pocketmark is outside this boundary.

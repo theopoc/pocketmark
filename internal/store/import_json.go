@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -47,14 +48,22 @@ type ImportResult struct {
 
 func (s *Store) Import(ctx context.Context, r io.Reader) (ImportResult, error) {
 	var result ImportResult
+	f, err := s.stageImport(ctx, r)
+	if err != nil {
+		return result, err
+	}
+	defer os.Remove(f.Name())
+	defer f.Close()
+	if err = preflightImport(f); err != nil {
+		return result, err
+	}
+	if _, err = f.Seek(0, io.SeekStart); err != nil {
+		return result, err
+	}
 	var data importData
-	d := json.NewDecoder(r)
+	d := json.NewDecoder(f)
 	if e := d.Decode(&data); e != nil {
 		return result, e
-	}
-	var extra any
-	if d.Decode(&extra) != io.EOF {
-		return result, errors.New("expected a single JSON document")
 	}
 	if data.Format != "" && (data.Format != "pocketmark" || data.Version != 1) {
 		return result, errors.New("unsupported export format or version")

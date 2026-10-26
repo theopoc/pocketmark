@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -19,12 +20,18 @@ import (
 // the current bookmark and a bounded folder stack. The transaction is atomic.
 func (s *Store) ImportHTML(ctx context.Context, r io.Reader) (ImportResult, error) {
 	result := ImportResult{}
+	f, e := s.stageImport(ctx, r)
+	if e != nil {
+		return result, e
+	}
+	defer os.Remove(f.Name())
+	defer f.Close()
 	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return result, e
 	}
 	defer tx.Rollback()
-	limited := &io.LimitedReader{R: r, N: 8*1024*1024 + 1}
+	limited := &io.LimitedReader{R: f, N: 8*1024*1024 + 1}
 	z := nethtml.NewTokenizer(limited)
 	z.SetMaxBuf(128 * 1024)
 	stack := []*int64{}

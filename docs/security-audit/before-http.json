@@ -1,0 +1,79 @@
+{
+  "http": [
+    {
+      "case": "conflicting-content-length",
+      "responses": [
+        "HTTP/1.1 400 Bad Request"
+      ]
+    },
+    {
+      "case": "space-before-header-colon",
+      "responses": [
+        "HTTP/1.1 400 Bad Request: invalid header name"
+      ]
+    },
+    {
+      "case": "duplicate-host",
+      "responses": [
+        "HTTP/1.1 400 Bad Request"
+      ]
+    },
+    {
+      "case": "unsupported-transfer-encoding",
+      "responses": [
+        "HTTP/1.1 501 Not Implemented"
+      ]
+    },
+    {
+      "case": "negative-content-length",
+      "responses": [
+        "HTTP/1.1 400 Bad Request"
+      ]
+    },
+    {
+      "case": "header-over-25k",
+      "responses": [
+        "HTTP/1.1 431 Request Header Fields Too Large"
+      ]
+    },
+    {
+      "case": "cl-te-pipeline",
+      "responses": [
+        "HTTP/1.1 400 Bad Request",
+        "HTTP/1.1 401 Unauthorized"
+      ]
+    },
+    {
+      "case": "expect-before-auth",
+      "responses": [
+        "HTTP/1.1 401 Unauthorized"
+      ]
+    },
+    {
+      "case": "/.git/config",
+      "status": 404
+    },
+    {
+      "case": "/data/access-token",
+      "status": 404
+    },
+    {
+      "case": "/pocketmark.db",
+      "status": 404
+    },
+    {
+      "case": "/..%2f..%2fetc/passwd",
+      "status": 404
+    },
+    {
+      "case": "/api/%61ccount",
+      "status": 401
+    },
+    {
+      "case": "keepalive-six-seconds-after-login",
+      "status": 200
+    }
+  ],
+  "sourceRevision": "bd2e946bf4794b025ad6e60247612ceba7216f99",
+  "observedDate": "2026-10-26"
+}

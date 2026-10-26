@@ -41,7 +41,11 @@ func TestAssetPreviewsPreserveLayoutAndRequireAuthentication(t *testing.T) {
 			requireStatus(t, request(a, "HEAD", path+"/view", "", false, nil), 401)
 			w = request(a, "GET", path+"/view", "", true, nil)
 			requireStatus(t, w, 200)
-			if w.Header().Get("Content-Type") != file.media || !strings.HasPrefix(w.Header().Get("Content-Disposition"), "inline;") || w.Header().Get("Cache-Control") != "no-store" || w.Header().Get("X-Content-Type-Options") != "nosniff" || w.Header().Get("X-Frame-Options") != "SAMEORIGIN" {
+			disposition := "inline;"
+			if file.media == "text/html" {
+				disposition = "attachment;"
+			}
+			if w.Header().Get("Content-Type") != file.media || !strings.HasPrefix(w.Header().Get("Content-Disposition"), disposition) || w.Header().Get("Cache-Control") != "no-store" || w.Header().Get("X-Content-Type-Options") != "nosniff" || w.Header().Get("X-Frame-Options") != "SAMEORIGIN" {
 				t.Fatalf("incorrect preview headers: %v", w.Header())
 			}
 			policy := w.Header().Get("Content-Security-Policy")
@@ -68,7 +72,7 @@ func TestAssetPreviewsPreserveLayoutAndRequireAuthentication(t *testing.T) {
 			}
 			head := request(a, "HEAD", path+"/view", "", true, nil)
 			requireStatus(t, head, 200)
-			if head.Body.Len() != 0 || head.Header().Get("Content-Security-Policy") != policy {
+			if head.Body.Len() != 0 || head.Header().Get("Content-Security-Policy") != policy || head.Header().Get("Content-Disposition") != w.Header().Get("Content-Disposition") {
 				t.Fatal("HEAD must expose preview policy without rendering a body")
 			}
 			download := request(a, "GET", path, "", true, nil)

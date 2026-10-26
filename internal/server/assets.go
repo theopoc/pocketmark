@@ -168,7 +168,14 @@ func (a *Server) viewAsset(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.Header().Set("Content-Type", asset.MediaType)
-	w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": asset.Name}))
+	disposition := "inline"
+	if asset.MediaType == "text/html" {
+		// Only the UI's nested blob viewer supplies the parent frame-src policy
+		// that blocks self-navigation. A tokenizer cannot sanitize all HTML5
+		// parsing contexts; direct HTML navigation must therefore download.
+		disposition = "attachment"
+	}
+	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": asset.Name}))
 	w.Header().Set("Content-Security-Policy", policy)
 	w.Header().Set("X-Frame-Options", "SAMEORIGIN")
 	if asset.MediaType != "text/html" {
@@ -277,7 +284,7 @@ func (a *Server) backup(w http.ResponseWriter, r *http.Request) {
 	}
 	entry, e = z.CreateHeader(&zip.FileHeader{Name: "RESTORE.txt", Method: zip.Store})
 	if e == nil {
-		_, e = io.WriteString(entry, "Stop Pocketmark. Extract pocketmark.db into an EMPTY data directory (never leave old -wal/-shm files). Set file permissions to 0600 and owner to the service user. Reuse the existing access-token file or POCKETMARK_TOKEN environment value to retain login sessions and token signing. Start Pocketmark. The database includes bookmarks, collections, annotations, all captured HTML and uploaded attachments. Keep this sensitive backup private.\n")
+		_, e = io.WriteString(entry, "Stop Pocketmark. Extract pocketmark.db into an EMPTY data directory (never leave old -wal/-shm files). Set file permissions to 0600 and owner to the service user. Reuse the existing access-token file or POCKETMARK_TOKEN environment value for API key verification. Login sessions are excluded: sign in again after restoring. For older backups or raw database copies, rotate that recovery secret to invalidate old cookies and API keys. Review restored API keys: a database rollback can restore keys revoked since the backup. Start Pocketmark. The database includes bookmarks, collections, annotations, all captured HTML and uploaded attachments. Keep this sensitive backup private.\n")
 	}
 	if e != nil {
 		observability.Error(r.Context(), "backup_instructions_failed", e)
