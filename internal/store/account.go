@@ -21,6 +21,8 @@ type APIKey struct {
 	CreatedAt  string `json:"createdAt"`
 	Active     bool   `json:"active"`
 	LastUsedAt string `json:"lastUsedAt"`
+	Profile    string `json:"profile"`
+	ExpiresAt  int64  `json:"expiresAt"`
 }
 
 var ErrAPIKeyLimit = errors.New("at most 32 API keys")
@@ -69,18 +71,20 @@ func (s *Store) SaveAccount(ctx context.Context, a Account) error {
 
 func (s *Store) HasAPIKeyHash(ctx context.Context, hash string) bool {
 	var one int
-	return s.db.QueryRowContext(ctx, "SELECT 1 FROM api_tokens WHERE hash=? AND active=1", hash).Scan(&one) == nil
+	return s.db.QueryRowContext(ctx, "SELECT 1 FROM api_tokens WHERE hash=? AND active=1 AND (expires_at=0 OR expires_at>unixepoch())", hash).Scan(&one) == nil
 }
 
 // AuthenticateAPIKey checks the current persisted state and records successful
 // credential use in one write. Disabled and unknown keys never change history.
 func (s *Store) AuthenticateAPIKey(ctx context.Context, hash string) bool {
-	r, err := s.db.ExecContext(ctx, "UPDATE api_tokens SET last_used_at=? WHERE hash=? AND active=1", time.Now().UTC().Format(time.RFC3339Nano), hash)
-	if err != nil {
-		return false
-	}
-	n, err := r.RowsAffected()
-	return err == nil && n == 1
+	_, err := s.AuthenticateAPIKeyProfile(ctx, hash)
+	return err == nil
+}
+
+func (s *Store) AuthenticateAPIKeyProfile(ctx context.Context, hash string) (string, error) {
+	var profile string
+	err := s.db.QueryRowContext(ctx, "UPDATE api_tokens SET last_used_at=? WHERE hash=? AND active=1 AND (expires_at=0 OR expires_at>unixepoch()) RETURNING profile", time.Now().UTC().Format(time.RFC3339Nano), hash).Scan(&profile)
+	return profile, err
 }
 
 func (s *Store) SetAPIKeyActive(ctx context.Context, id int64, active bool) error {
@@ -95,7 +99,7 @@ func (s *Store) UpdateAPIKey(ctx context.Context, id int64, name *string, active
 }
 
 func (s *Store) APIKeys(ctx context.Context) ([]APIKey, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT id,name,created_at,active,last_used_at FROM api_tokens ORDER BY id")
+	rows, err := s.db.QueryContext(ctx, "SELECT id,name,created_at,active,last_used_at,profile,expires_at FROM api_tokens ORDER BY id")
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +107,7 @@ func (s *Store) APIKeys(ctx context.Context) ([]APIKey, error) {
 	keys := []APIKey{}
 	for rows.Next() {
 		var key APIKey
-		if err := rows.Scan(&key.ID, &key.Name, &key.CreatedAt, &key.Active, &key.LastUsedAt); err != nil {
+		if err := rows.Scan(&key.ID, &key.Name, &key.CreatedAt, &key.Active, &key.LastUsedAt, &key.Profile, &key.ExpiresAt); err != nil {
 			return nil, err
 		}
 		keys = append(keys, key)
@@ -112,8 +116,12 @@ func (s *Store) APIKeys(ctx context.Context) ([]APIKey, error) {
 }
 
 func (s *Store) CreateAPIKey(ctx context.Context, name, hash string) (APIKey, error) {
-	key := APIKey{Name: name, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Active: true}
-	r, err := s.db.ExecContext(ctx, "INSERT INTO api_tokens(name,hash,created_at) SELECT ?,?,? WHERE (SELECT COUNT(*) FROM api_tokens)<32", name, hash, key.CreatedAt)
+	return s.CreateScopedAPIKey(ctx, name, hash, "full", 0)
+}
+
+func (s *Store) CreateScopedAPIKey(ctx context.Context, name, hash, profile string, expires int64) (APIKey, error) {
+	key := APIKey{Name: name, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Active: true, Profile: profile, ExpiresAt: expires}
+	r, err := s.db.ExecContext(ctx, "INSERT INTO api_tokens(name,hash,created_at,profile,expires_at) SELECT ?,?,?,?,? WHERE (SELECT COUNT(*) FROM api_tokens)<32", name, hash, key.CreatedAt, profile, expires)
 	if err != nil {
 		return key, err
 	}
@@ -130,5 +138,11 @@ func (s *Store) CreateAPIKey(ctx context.Context, name, hash string) (APIKey, er
 
 func (s *Store) DeleteAPIKey(ctx context.Context, id int64) error {
 	r, err := s.db.ExecContext(ctx, "DELETE FROM api_tokens WHERE id=?", id)
+	return affected(r, err)
+}
+
+// RotateAPIKey atomically replaces the verifier, preserving permissions and expiry.
+func (s *Store) RotateAPIKey(ctx context.Context, id int64, hash string) error {
+	r, err := s.db.ExecContext(ctx, "UPDATE api_tokens SET hash=?,last_used_at='' WHERE id=? AND active=1 AND (expires_at=0 OR expires_at>unixepoch())", hash, id)
 	return affected(r, err)
 }

@@ -97,3 +97,5 @@ python3 extension/package.py /tmp/pocketmark-extension.zip
 
 Run `make test-extension` for deterministic regressions. Actual browser observations
 are recorded separately in [docs/REAL_CLIENTS.md](../docs/REAL_CLIENTS.md).
+
+For a new API key, choose **Add, edit & capture — browser extension** in Settings. Read-only keys cannot save pages; Floccus keys only support WebDAV. After rotating a key, reconnect the extension with its new value.

@@ -44,13 +44,9 @@ func (a *Server) registerAccount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/tokens", a.createToken)
 	mux.HandleFunc("PATCH /api/tokens/{id}", a.updateToken)
 	mux.HandleFunc("DELETE /api/tokens/{id}", a.deleteToken)
+	mux.HandleFunc("POST /api/tokens/{id}/rotate", a.rotateToken)
 }
-func (a *Server) owner(r *http.Request) bool {
-	if auth := r.Header.Get("Authorization"); auth != "" {
-		return secretEqual(strings.TrimPrefix(auth, "Bearer "), a.token)
-	}
-	return a.authenticated(r)
-}
+func (a *Server) owner(r *http.Request) bool { return requestPrincipal(r).owner }
 func (a *Server) requireOwner(w http.ResponseWriter, r *http.Request) bool {
 	if !a.owner(r) {
 		fail(w, 403, "account settings require the owner session or recovery token")
@@ -152,13 +148,6 @@ func (a *Server) setAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	respond(w, 200, map[string]bool{"ok": true})
 }
-func (a *Server) validAPIKey(r *http.Request, key string) bool {
-	if len(key) != 64 {
-		return false
-	}
-	sum := sha256.Sum256([]byte(key))
-	return a.Store.AuthenticateAPIKey(r.Context(), hex.EncodeToString(sum[:]))
-}
 
 type apiToken struct {
 	store.APIKey
@@ -181,7 +170,9 @@ func (a *Server) createToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var b struct {
-		Name string `json:"name"`
+		Name      string `json:"name"`
+		Profile   string `json:"profile"`
+		ExpiresAt int64  `json:"expiresAt"`
 	}
 	if !decode(w, r, &b, 4096) {
 		return
@@ -191,9 +182,20 @@ func (a *Server) createToken(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "name must contain 1–120 bytes")
 		return
 	}
+	if b.Profile == "" {
+		b.Profile = "read"
+	}
+	if b.Profile != "read" && b.Profile != "capture" && b.Profile != "sync" && b.Profile != "full" {
+		fail(w, 400, "choose read, capture, sync or full permissions")
+		return
+	}
+	if b.ExpiresAt < 0 || (b.ExpiresAt != 0 && b.ExpiresAt <= time.Now().Unix()) {
+		fail(w, 400, "expiry must be a future Unix timestamp or zero")
+		return
+	}
 	token := randomSecret()
 	sum := sha256.Sum256([]byte(token))
-	key, err := a.Store.CreateAPIKey(r.Context(), b.Name, hex.EncodeToString(sum[:]))
+	key, err := a.Store.CreateScopedAPIKey(r.Context(), b.Name, hex.EncodeToString(sum[:]), b.Profile, b.ExpiresAt)
 	if errors.Is(err, store.ErrAPIKeyLimit) {
 		fail(w, 409, err.Error())
 		return
@@ -255,10 +257,25 @@ func (a *Server) deleteToken(w http.ResponseWriter, r *http.Request) {
 func (a *Server) issueSession(w http.ResponseWriter, r *http.Request, salt string) bool {
 	expires := time.Now().Add(7 * 24 * time.Hour)
 	value := "v2." + randomSecret()
-	if err := a.Store.CreateSession(r.Context(), salt, a.sessionHash(value), expires); err != nil {
+	if err := a.Store.CreateSession(r.Context(), salt, a.sessionHash(value), expires, r.UserAgent()); err != nil {
 		fail(w, 503, "session could not be created; retry signing in")
 		return false
 	}
 	http.SetCookie(w, &http.Cookie{Name: "pocketmark", Value: value, Path: "/", HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteStrictMode, Expires: expires, MaxAge: 7 * 24 * 60 * 60})
 	return true
+}
+
+func (a *Server) rotateToken(w http.ResponseWriter, r *http.Request) {
+	token := randomSecret()
+	sum := sha256.Sum256([]byte(token))
+	err := a.Store.RotateAPIKey(r.Context(), id(r), hex.EncodeToString(sum[:]))
+	if errors.Is(err, sql.ErrNoRows) {
+		fail(w, 404, "active, unexpired key not found")
+		return
+	}
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+	respond(w, 200, map[string]string{"token": token})
 }

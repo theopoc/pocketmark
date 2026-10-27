@@ -22,7 +22,7 @@ func TestPasswordKeysAndRevocation(t *testing.T) {
 	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": oldCookie}), 401)
 	requireStatus(t, request(a, "POST", "/api/login", `{"username":"me","password":"wrong"}`, false, nil), 401)
 	requireStatus(t, request(a, "POST", "/api/login", `{"username":"me","password":"correct horse battery"}`, false, nil), 200)
-	w = request(a, "POST", "/api/tokens", `{"name":"test extension"}`, true, nil)
+	w = request(a, "POST", "/api/tokens", `{"name":"test extension","profile":"full"}`, true, nil)
 	requireStatus(t, w, 201)
 	var key apiToken
 	json.Unmarshal(w.Body.Bytes(), &key)
@@ -32,7 +32,7 @@ func TestPasswordKeysAndRevocation(t *testing.T) {
 	h := map[string]string{"Authorization": "Bearer " + key.Token}
 	requireStatus(t, request(a, "GET", "/api/links", "", false, h), 200)
 	requireStatus(t, request(a, "GET", "/api/account", "", false, h), 403)
-	requireStatus(t, request(a, "POST", "/api/tokens", `{"name":"escalate"}`, false, h), 403)
+	requireStatus(t, request(a, "POST", "/api/tokens", `{"name":"escalate","profile":"full"}`, false, h), 403)
 	requireStatus(t, request(a, "POST", "/api/login", `{"token":"`+key.Token+`"}`, false, nil), 400)
 	w = request(a, "GET", "/api/tokens", "", true, nil)
 	if strings.Contains(w.Body.String(), key.Token) {
@@ -47,7 +47,7 @@ func TestPasswordKeysAndRevocation(t *testing.T) {
 
 func TestAPIKeyDisableReactivateAndActivity(t *testing.T) {
 	a := newTestServer(t, "", false)
-	w := request(a, "POST", "/api/tokens", `{"name":"sync"}`, true, nil)
+	w := request(a, "POST", "/api/tokens", `{"name":"sync","profile":"full"}`, true, nil)
 	requireStatus(t, w, 201)
 	var key apiToken
 	if err := json.Unmarshal(w.Body.Bytes(), &key); err != nil {
@@ -108,7 +108,7 @@ func TestAPIKeyDisableReactivateAndActivity(t *testing.T) {
 
 func TestAPIKeyRenameValidationAndAuthorization(t *testing.T) {
 	a := newTestServer(t, "", false)
-	w := request(a, "POST", "/api/tokens", `{"name":"Original"}`, true, nil)
+	w := request(a, "POST", "/api/tokens", `{"name":"Original","profile":"full"}`, true, nil)
 	requireStatus(t, w, 201)
 	var key apiToken
 	if err := json.Unmarshal(w.Body.Bytes(), &key); err != nil {
