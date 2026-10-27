@@ -104,11 +104,15 @@ func TestOpenAPICoversNativeRoutes(t *testing.T) {
 			if path != "/healthz" && path != "/livez" && responses["429"] == nil {
 				t.Errorf("rate-limited operation must document 429: %s", pattern)
 			}
-			public := path == "/api/setup" || path == "/api/login" || (path == "/healthz" || path == "/livez")
+			public := publicAuthPath(path) || (path == "/healthz" || path == "/livez")
 			security, override := op["security"]
 			if public {
 				if !override || len(security.([]any)) != 0 {
 					t.Errorf("public operation must explicitly allow anonymous access: %s", pattern)
+				}
+			} else if path == "/api/mfa/reset" {
+				if !override || len(security.([]any)) != 1 || security.([]any)[0].(map[string]any)["bearerAuth"] == nil || responses["401"] == nil {
+					t.Errorf("MFA reset must require bearer authentication: %s", pattern)
 				}
 			} else if override || responses["401"] == nil {
 				t.Errorf("protected operation must inherit authentication and document 401: %s", pattern)

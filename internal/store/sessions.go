@@ -15,31 +15,40 @@ func (s *Store) CreateSession(ctx context.Context, salt, hash string, expires ti
 	if len(device) > 0 {
 		label = device[0]
 	}
-	if len(label) > 256 {
-		label = label[:256]
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if err = insertSessionTx(ctx, tx, salt, hash, expires, label, false); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func insertSessionTx(ctx context.Context, tx *sql.Tx, salt, hash string, expires time.Time, label string, recovery bool) error {
+	if len(label) > 256 {
+		label = label[:256]
+	}
 	var current string
-	if err = tx.QueryRowContext(ctx, "SELECT salt FROM account WHERE id=1").Scan(&current); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT salt FROM account WHERE id=1").Scan(&current); err != nil {
 		return err
 	}
 	if current != salt {
 		return errors.New("account changed during login")
 	}
-	if _, err = tx.ExecContext(ctx, "DELETE FROM sessions WHERE expires_at<=?", time.Now().Unix()); err != nil {
+	if _, err := tx.ExecContext(ctx, "DELETE FROM sessions WHERE expires_at<=?", time.Now().Unix()); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, "DELETE FROM sessions WHERE id NOT IN (SELECT id FROM sessions ORDER BY id DESC LIMIT 31)"); err != nil {
+	if _, err := tx.ExecContext(ctx, "DELETE FROM sessions WHERE id NOT IN (SELECT id FROM sessions ORDER BY id DESC LIMIT 31)"); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, "INSERT INTO sessions(hash,expires_at,created_at,last_used_at,confirmed_at,idle_minutes,device) VALUES(?,?,unixepoch(),unixepoch(),unixepoch(),1440,?)", hash, expires.Unix(), label); err != nil {
-		return err
+	recoveryUntil := int64(0)
+	if recovery {
+		recoveryUntil = time.Now().Add(5 * time.Minute).Unix()
 	}
-	return tx.Commit()
+	_, err := tx.ExecContext(ctx, "INSERT INTO sessions(hash,expires_at,created_at,last_used_at,confirmed_at,idle_minutes,device,recovery_until) VALUES(?,?,unixepoch(),unixepoch(),unixepoch(),1440,?,?)", hash, expires.Unix(), label, recoveryUntil)
+	return err
 }
 
 const liveSession = "expires_at>unixepoch() AND (idle_minutes=0 OR last_used_at>unixepoch()-idle_minutes*60)"

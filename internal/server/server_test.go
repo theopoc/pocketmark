@@ -35,7 +35,27 @@ func newTestServer(t *testing.T, origin string, secure bool) *Server {
 func passwordLogin(t *testing.T, a *Server) *httptest.ResponseRecorder {
 	t.Helper()
 	requireStatus(t, request(a, "PUT", "/api/account", `{"username":"me","password":"test-only-password"}`, true, nil), 200)
-	return request(a, "POST", "/api/login", `{"username":"me","password":"test-only-password"}`, false, nil)
+	w := request(a, "POST", "/api/login", `{"username":"me","password":"test-only-password"}`, false, nil)
+	if w.Code != 200 {
+		return w
+	}
+	_, _, _, result := enrollForTest(t, a, pendingCookie(t, w), testToken)
+	return result
+}
+
+// Tests of session management create an additional persisted session directly;
+// the MFA integration tests exercise the real two-step login separately.
+func additionalTestSession(t *testing.T, a *Server) *http.Cookie {
+	t.Helper()
+	account, err := a.Store.Account(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	value := "v3." + randomSecret()
+	if err = a.Store.CreateSession(context.Background(), account.Salt, a.sessionHash(value), time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	return &http.Cookie{Name: "pocketmark", Value: value}
 }
 
 func request(a *Server, method, path, body string, bearer bool, headers map[string]string) *httptest.ResponseRecorder {
@@ -70,11 +90,15 @@ func TestAuthenticationCookieAndBearer(t *testing.T) {
 	requireStatus(t, request(a, "POST", "/api/login", `{"username":"me","password":"wrong"}`, false, nil), 401)
 	w := passwordLogin(t, a)
 	requireStatus(t, w, 200)
-	cookies := w.Result().Cookies()
-	if len(cookies) != 1 {
-		t.Fatalf("cookies: %v", cookies)
+	var cookie *http.Cookie
+	for _, c := range w.Result().Cookies() {
+		if c.Name == "pocketmark" {
+			cookie = c
+		}
 	}
-	cookie := cookies[0]
+	if cookie == nil {
+		t.Fatal("session cookie missing")
+	}
 	if cookie.Name != "pocketmark" || !cookie.HttpOnly || !cookie.Secure || cookie.SameSite != http.SameSiteStrictMode || cookie.Path != "/" || cookie.MaxAge <= 0 {
 		t.Fatalf("unsafe session cookie: %+v", cookie)
 	}

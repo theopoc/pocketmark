@@ -48,7 +48,9 @@ func (s *Store) Snapshot(ctx context.Context) (*os.File, error) {
 		backup, err = sql.Open("pocketmark-sqlite3", u.String()+"?_journal_mode=DELETE&_cache_size=-2048")
 		if err == nil {
 			backup.SetMaxOpenConns(1)
-			_, err = backup.ExecContext(ctx, "DELETE FROM sessions")
+			// The marker is consumed only when this copy is opened by the app.
+			// It prevents a restore from reviving already-used recovery codes.
+			_, err = backup.ExecContext(ctx, "BEGIN; DELETE FROM sessions; UPDATE mfa SET restored=1 WHERE id=1; COMMIT")
 			closeErr := backup.Close()
 			if err == nil {
 				err = closeErr

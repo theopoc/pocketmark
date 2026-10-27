@@ -34,9 +34,33 @@
         <label for="login-password">Password</label><input id="login-password" type="password" autocomplete="current-password" required>
         <div id="login-setup-fields" hidden><label for="login-setup-token">Administrator setup key</label><input id="login-setup-token" type="password" autocomplete="off" spellcheck="false"></div>
         <div id="login-confirm-fields" hidden><label for="login-confirm">Confirm password</label><input id="login-confirm" type="password" autocomplete="new-password"></div>
-        <p id="login-error" class="form-error" role="alert"></p>
         <button id="login-submit" class="button primary" type="submit"><span id="login-submit-label">Sign in</span> <span data-icon="arrow-right" aria-hidden="true"></span></button>
       </form>
+      <form id="mfa-key-form" hidden>
+        <label for="mfa-setup-key">Administrator setup key</label>
+        <input id="mfa-setup-key" type="password" autocomplete="off" spellcheck="false" required>
+        <p class="small muted">Enter the key from the server’s access-token file once to protect this account.</p>
+        <button class="button primary" type="submit">Set up authenticator</button>
+      </form>
+      <div id="mfa-enrollment" hidden>
+        <p class="small muted">Scan this QR code with your authenticator app, or enter the key manually.</p>
+        <img id="mfa-qr" class="mfa-qr" alt="Authenticator setup QR code" width="220" height="220">
+        <label for="mfa-secret">Manual setup key</label><input id="mfa-secret" class="mfa-secret" readonly spellcheck="false">
+      </div>
+      <form id="mfa-code-form" hidden>
+        <label id="mfa-code-label" for="mfa-code">Authentication or recovery code</label>
+        <input id="mfa-code" autocomplete="one-time-code" inputmode="text" spellcheck="false" required>
+        <button class="button primary" type="submit">Verify and continue</button>
+      </form>
+      <section id="mfa-login-codes" hidden aria-labelledby="mfa-login-codes-title">
+        <h3 id="mfa-login-codes-title">Save your recovery codes</h3>
+        <p class="small muted">Each code works once if you lose your authenticator. Store them somewhere safe; they will not be shown again.</p>
+        <pre id="mfa-login-codes-value" class="mfa-codes" tabindex="0"></pre>
+        <button id="mfa-login-copy" type="button" class="button subtle">Copy recovery codes</button>
+        <button id="mfa-login-continue" type="button" class="button primary">I saved my codes</button>
+      </section>
+      <button id="mfa-back" type="button" class="text-button login-help" hidden>Back to sign in</button>
+      <p id="login-error" class="form-error" role="alert"></p>
       <p id="login-help" class="login-help muted small">Use your Pocketmark username and password.</p>
     </div></div>
   </section>
@@ -164,6 +188,19 @@
     <ul id="token-list" aria-label="API keys" aria-describedby="token-activity-help"></ul>
     <p id="tokens-feedback" class="small muted" role="status"></p>
     <p id="tokens-error" class="form-error" role="alert"></p>
+  </section><section class="settings-section" aria-labelledby="mfa-settings-title">
+    <h3 id="mfa-settings-title">Two-step verification</h3>
+    <p class="small muted">Use an authenticator app when signing in. Replacing it signs out your other browsers.</p>
+    <form id="mfa-manage-form">
+      <label for="mfa-manage-password">Current password</label><input id="mfa-manage-password" type="password" autocomplete="current-password" required maxlength="1024">
+      <label for="mfa-manage-code">Authentication or recovery code</label><input id="mfa-manage-code" autocomplete="one-time-code" spellcheck="false">
+      <p class="small muted">If you just signed in with a recovery code, you can leave the code field empty for five minutes.</p>
+      <p id="mfa-codes-warning" class="small muted">Generating recovery codes invalidates all previous recovery codes.</p>
+      <div class="token-actions"><button class="button subtle" type="submit" value="replace">Replace authenticator</button><button class="button subtle" type="submit" value="codes" aria-describedby="mfa-codes-warning">Generate recovery codes</button></div>
+    </form>
+    <div id="mfa-manage-enrollment" hidden><p class="small muted">Scan the new QR code or enter the setup key in your authenticator.</p><img id="mfa-manage-qr" class="mfa-qr" alt="New authenticator setup QR code" width="220" height="220"><label for="mfa-manage-secret">Manual setup key</label><input id="mfa-manage-secret" class="mfa-secret" readonly spellcheck="false"><form id="mfa-manage-verify"><label for="mfa-manage-new-code">Code from the new authenticator</label><input id="mfa-manage-new-code" autocomplete="one-time-code" inputmode="numeric" required><button class="button primary" type="submit">Confirm new authenticator</button></form></div>
+    <div id="mfa-manage-codes" hidden><p class="small muted">Save these single-use codes now. Previous codes no longer work.</p><pre id="mfa-manage-codes-value" class="mfa-codes" tabindex="0"></pre><button id="mfa-manage-copy" class="button subtle" type="button">Copy recovery codes</button></div>
+    <p id="mfa-manage-feedback" class="small muted" role="status"></p><p id="mfa-manage-error" class="form-error" role="alert"></p>
   </section><section class="settings-section" aria-labelledby="sessions-title">
     <h3 id="sessions-title">Browser sessions</h3>
     <p class="small muted">Review signed-in browsers and revoke access. All sessions expire after seven days. Browser details are reported by the device and may be unavailable or inaccurate.</p>
@@ -230,7 +267,7 @@
         <details>
           <summary>Extensions &amp; browser sync<span data-icon="chevron-right" aria-hidden="true"></span></summary>
           <div class="help-answer">
-            <p>Create a dedicated key under <strong>Settings → API keys</strong> for each extension or sync app. Browser sign-in uses your username and password.</p>
+            <p>Create a dedicated key under <strong>Settings → API keys</strong> for each extension or sync app. Browser sign-in uses your password and an authentication or recovery code.</p>
             <p><strong>Settings</strong> contains Floccus WebDAV instructions and mobile installation guidance.</p>
             <p>Floccus uploads replace the synchronized bookmark tree. Review sync settings before uploading.</p>
           </div>

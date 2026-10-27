@@ -27,12 +27,19 @@ func TestSessionRevocationAcrossRestart(t *testing.T) {
 	}
 	defer func() { s.Close() }()
 	a := New(s, testToken, "", false)
-	requireStatus(t, request(a, "POST", "/api/setup", setupRequest, false, nil), 201)
+	setup := request(a, "POST", "/api/setup", setupRequest, false, nil)
+	requireStatus(t, setup, 201)
+	_, _, codes, _ := enrollForTest(t, a, pendingCookie(t, setup), "")
+	codeIndex := 0
 	login := func() string {
 		t.Helper()
 		w := request(a, "POST", "/api/login", setupCredentials, false, nil)
 		requireStatus(t, w, 200)
-		return w.Result().Cookies()[0].String()
+		pending := pendingCookie(t, w)
+		w = request(a, "POST", "/api/mfa/verify", `{"code":"`+codes[codeIndex]+`"}`, false, map[string]string{"Cookie": pending})
+		codeIndex++
+		requireStatus(t, w, 200)
+		return responseCookie(t, w, "pocketmark")
 	}
 	first, second := login(), login()
 	if first == second {
@@ -60,7 +67,7 @@ func TestSessionRevocationAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expired := "v2." + strings.Repeat("a", 64)
+	expired := "v3." + strings.Repeat("a", 64)
 	if err = s.CreateSession(context.Background(), account.Salt, a.sessionHash(expired), time.Now().Add(-time.Second)); err != nil {
 		t.Fatal(err)
 	}
@@ -165,6 +172,8 @@ func TestSlowLoginCannotBlockLibraryOrHealth(t *testing.T) {
 		t.Fatal("slow connections did not reach handler")
 	}
 	requireStatus(t, request(a, "POST", "/api/login", setupCredentials, false, nil), 503)
+	// Slow unauthenticated sign-ins cannot occupy the administrator's reset slot.
+	requireStatus(t, request(a, "POST", "/api/mfa/reset", "", true, nil), 200)
 	for _, path := range []string{"/healthz", "/livez", "/api/stats"} {
 		requireStatus(t, request(a, "GET", path, "", true, nil), 200)
 	}

@@ -136,7 +136,7 @@ Dark controls, dialogs, cards, metadata, highlights and selection share the them
 
 ## Typography
 
-**Body and interface font:** the system sans stack in the frontmatter. There is no separately loaded display face. Monospace is limited to generated token fields.
+**Body and interface font:** the system sans stack in the frontmatter. There is no separately loaded display face. Monospace is used for generated credentials, including API keys, authenticator setup keys and recovery codes.
 
 The hierarchy is compact: headline for library headings, title for bookmark names, body for the base interface, and label for buttons and field labels. Secondary metadata commonly uses (11px–13px). Dialog headings use (20px); the reader title uses (28px). The sign-in introduction uses (42px) on desktop and (30px) on phones; this is an entrance-specific treatment, not a general display scale.
 
@@ -183,6 +183,8 @@ Grid bookmark cards use the panel radius, white background and a line border; se
 
 ### Inputs / Fields
 Field boundaries use control-line (#818896) in light mode and #747b92 in dark mode, providing at least 3:1 against their adjacent field surfaces. Quiet separators keep the line token. Fields retain the control radius and (10px 12px) padding. Focus has a (2px) outline and (2px) offset. Search applies its outline around the complete search container. Read-only fields use the surface fill; form errors appear inline in danger text. Bookmark fields validate the server’s UTF-8 size limits before submission and identify the field to correct. Network/session failures give recovery instructions while retaining unsaved work.
+
+Authenticator setup pairs a QR code on white with a labeled, read-only manual key. Recovery codes use selectable, scrollable text in a bordered surface, with a copy action and a manual-selection fallback.
 
 ### Navigation
 The slate-tinted rail combines outline icons, sentence-case labels and compact counts. Active navigation uses pale indigo and stronger text. On smaller screens, the same navigation element moves into the native dialog drawer; its controls gain height rather than losing functions.

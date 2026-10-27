@@ -1,12 +1,54 @@
 // Real Chromium, real HTTP and SQLite. Run only against the disposable smoke instance.
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { securityJourney } from './security.mjs';
 
 const base = new URL(process.env.E2E_BASE_URL);
 assert.equal(base.hostname, '127.0.0.1', 'E2E requires a disposable loopback instance');
 // Use full Chromium's headless mode: the headless shell omits the native PDF viewer.
-const browser = await chromium.launch({ channel: 'chromium' });
+const browser = await chromium.launch(process.env.E2E_CHROMIUM_EXECUTABLE
+  ? { executablePath: process.env.E2E_CHROMIUM_EXECUTABLE }
+  : { channel: 'chromium' });
+function authenticatorCode(secret) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = 0, value = 0;
+  const bytes = [];
+  for (const character of secret) {
+    value = (value << 5) | alphabet.indexOf(character);
+    bits += 5;
+    if (bits >= 8) { bits -= 8; bytes.push((value >>> bits) & 255); }
+  }
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
+  const digest = createHmac('sha1', Buffer.from(bytes)).update(counter).digest();
+  const offset = digest[digest.length - 1] & 15;
+  return String((digest.readUInt32BE(offset) & 0x7fffffff) % 1000000).padStart(6, '0');
+}
+async function captureMFA(page, name) {
+  if (!process.env.E2E_SCREENSHOTS) return;
+  await mkdir(process.env.E2E_SCREENSHOTS, { recursive: true });
+  for (const [suffix, width, height, theme] of [['desktop', 1280, 1000, 'dark'], ['mobile', 390, 844, 'dark'], ['mobile-light', 390, 844, 'light']]) {
+    await page.setViewportSize({ width, height });
+    await page.evaluate(theme => { if (document.documentElement.dataset.theme !== theme) document.querySelector('[data-theme-toggle]').click(); }, theme);
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+      await Promise.all(document.getAnimations().filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => {})));
+      window.scrollTo(0, 0);
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${name}-${suffix} overflows`);
+    await page.screenshot({ path: join(process.env.E2E_SCREENSHOTS, `${name}-${suffix}.png`), fullPage: false });
+    if (await page.evaluate(() => document.documentElement.scrollHeight > innerHeight + 1)) {
+      await page.evaluate(async () => { window.scrollTo(0, document.documentElement.scrollHeight); await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
+      await page.screenshot({ path: join(process.env.E2E_SCREENSHOTS, `${name}-${suffix}-bottom.png`), fullPage: false });
+    }
+  }
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.evaluate(() => { if (document.documentElement.dataset.theme !== 'dark') document.querySelector('[data-theme-toggle]').click(); });
+}
 try {
   const context = await browser.newContext({ reducedMotion: "reduce" });
   const page = await context.newPage();
@@ -23,6 +65,18 @@ try {
   await page.locator('#login-setup-token').fill(process.env.E2E_SETUP_TOKEN || '');
   await page.locator('#login-confirm').fill(password);
   await page.locator('#login-submit').click();
+  await page.locator('#mfa-enrollment').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#mfa-code').getAttribute('inputmode'), 'numeric');
+  await captureMFA(page, 'mfa-enrollment');
+  const secret = await page.locator('#mfa-secret').inputValue();
+  assert.ok(secret.length >= 32);
+  await page.locator('#mfa-code').fill(authenticatorCode(secret));
+  await page.locator('#mfa-code-form button').click();
+  await page.locator('#mfa-login-codes').waitFor({ state: 'visible' });
+  await captureMFA(page, 'mfa-recovery');
+  const recoveryCodes = (await page.locator('#mfa-login-codes-value').textContent()).trim().split('\n');
+  assert.equal(recoveryCodes.length, 10);
+  await page.locator('#mfa-login-continue').click();
   await page.locator('#app-view').waitFor({ state: 'visible' });
   assert.equal(await page.locator('#login-setup-token').inputValue(), '');
   const oldSession = (await page.context().cookies()).find(cookie => cookie.name === 'pocketmark');
@@ -35,9 +89,47 @@ try {
   await page.waitForFunction(() => document.getElementById('login-error').textContent.length > 0);
   await page.locator('#login-password').fill(password);
   await page.locator('#login-submit').click();
+  await page.locator('#mfa-code-form').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#mfa-code').getAttribute('inputmode'), 'text');
+  await captureMFA(page, 'mfa-sign-in');
+  await page.locator('#mfa-code').fill(recoveryCodes[0]);
+  await page.locator('#mfa-code-form button').click();
   await page.locator('#app-view').waitFor({ state: 'visible' });
 
-  await securityJourney({ browser, page, base, username, password });
+  await securityJourney({ browser, page, base, username, password, recoveryCode: recoveryCodes[1] });
+
+  // A recovery-code session can replace a lost authenticator without another
+  // recovery code, and replacement signs out other browsers.
+  const peer = await browser.newContext();
+  try {
+    assert.equal((await peer.request.post(new URL('/api/login', base).href, { data: { username, password } })).status(), 200);
+    assert.equal((await peer.request.post(new URL('/api/mfa/verify', base).href, { data: { code: recoveryCodes[2] } })).status(), 200);
+    await page.locator('#settings-button').click();
+    assert.equal(await page.getByText('Generating recovery codes invalidates all previous recovery codes.').isVisible(), true);
+    assert.equal(await page.locator('#mfa-manage-form button[value="codes"]').getAttribute('aria-describedby'), 'mfa-codes-warning');
+    await page.locator('#mfa-manage-password').fill('incorrect-password');
+    await page.locator('#mfa-manage-form button[value="replace"]').click();
+    await page.locator('#mfa-manage-error').filter({ hasText: 'incorrect password' }).waitFor();
+    await page.locator('#mfa-manage-password').fill(password);
+    await page.locator('#mfa-manage-form button[value="replace"]').click();
+    await page.locator('#mfa-manage-enrollment').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#mfa-manage-new-code').getAttribute('inputmode'), 'numeric');
+    const replacementSecret = await page.locator('#mfa-manage-secret').inputValue();
+    await page.locator('#mfa-manage-new-code').fill(authenticatorCode(replacementSecret));
+    await page.locator('#mfa-manage-verify button').click();
+    await page.locator('#mfa-manage-codes').waitFor({ state: 'visible' });
+    const replacementCodes = (await page.locator('#mfa-manage-codes-value').textContent()).trim().split('\n');
+    assert.equal(replacementCodes.length, 10);
+    assert.equal((await peer.request.get(new URL('/api/session', base).href)).status(), 401);
+    await page.locator('#mfa-manage-password').fill(password);
+    await page.locator('#mfa-manage-code').fill(replacementCodes[0]);
+    await page.locator('#mfa-manage-form button[value="codes"]').click();
+    await page.waitForFunction(previous => document.getElementById('mfa-manage-codes-value').textContent !== previous, replacementCodes.join('\n'));
+    await page.locator('#settings-dialog').getByRole('button', { name: 'Close', exact: true }).click();
+    await page.waitForFunction(() => document.getElementById('mfa-manage-codes-value').textContent === '');
+    assert.equal(await page.locator('#mfa-manage-codes-value').textContent(), '');
+    assert.equal(await page.locator('#mfa-manage-secret').inputValue(), '');
+  } finally { await peer.close(); }
 
   const original = 'Browser integration bookmark';
   const revised = 'Browser revised bookmark';

@@ -70,6 +70,9 @@ PRAGMA user_version=1;
 	if err = initSessionSecurity(ctx, tx); err != nil {
 		return fmt.Errorf("initialize session security: %w", err)
 	}
+	if err = initMFA(ctx, tx); err != nil {
+		return fmt.Errorf("initialize multifactor authentication: %w", err)
+	}
 	if err = initAssets(ctx, tx); err != nil {
 		return fmt.Errorf("initialize attachments: %w", err)
 	}
@@ -106,6 +109,7 @@ func initSessionSecurity(ctx context.Context, tx *sql.Tx) error {
 		{"confirmed_at", "INTEGER NOT NULL DEFAULT 0"},
 		{"idle_minutes", "INTEGER NOT NULL DEFAULT 0"},
 		{"device", "TEXT NOT NULL DEFAULT ''"},
+		{"recovery_until", "INTEGER NOT NULL DEFAULT 0"},
 	} {
 		var exists int
 		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM pragma_table_info('sessions') WHERE name=?", column.name).Scan(&exists); err != nil {

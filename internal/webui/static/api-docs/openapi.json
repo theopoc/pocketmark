@@ -138,13 +138,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Session"
+                  "$ref": "#/components/schemas/MFAChallenge"
                 }
               }
             },
             "headers": {
               "Set-Cookie": {
-                "description": "Seven-day HttpOnly, SameSite=Strict pocketmark session cookie. Secure when HTTPS is configured.",
+                "description": "Five-minute HttpOnly, SameSite=Strict pocketmark_mfa challenge cookie; no library session.",
                 "schema": {
                   "type": "string"
                 }
@@ -170,7 +170,7 @@
             "$ref": "#/components/responses/429"
           }
         },
-        "description": "Only permitted on a new, empty instance with the administrator setup key. Missing or incorrect setupToken returns 403. Existing installations cannot be claimed through setup.",
+        "description": "Creates the owner only on an eligible empty instance using the administrator setup key. TOTP enrollment and verification are required before a browser session is issued.",
         "requestBody": {
           "required": true,
           "description": "4 KiB JSON limit. Username 1–120 bytes; password 12–1024 bytes.",
@@ -191,20 +191,20 @@
         "tags": [
           "Authentication"
         ],
-        "summary": "Sign in with a password",
+        "summary": "Start password and TOTP sign-in",
         "responses": {
           "200": {
             "description": "Successful response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Session"
+                  "$ref": "#/components/schemas/MFAChallenge"
                 }
               }
             },
             "headers": {
               "Set-Cookie": {
-                "description": "Seven-day HttpOnly, SameSite=Strict pocketmark session cookie. Secure when HTTPS is configured.",
+                "description": "Five-minute HttpOnly, SameSite=Strict pocketmark_mfa challenge cookie; no library session.",
                 "schema": {
                   "type": "string"
                 }
@@ -242,7 +242,7 @@
           }
         },
         "security": [],
-        "description": "Password authentication only. Ten validly formed attempts per minute per client address (IPv6 /64), with at most 256 tracked sources. Excess sources fail closed. One password derivation at a time; busy callers receive 429 with Retry-After: 1. Forwarded client addresses require explicitly trusted proxy CIDRs. Sessions expire after seven days; at most 32 sessions, oldest evicted at capacity."
+        "description": "Verifies the password and issues only a five-minute MFA challenge. Follow with enrollment or verification. Ten password attempts per minute per source; the second factor has an account-wide limit."
       }
     },
     "/api/logout": {
@@ -399,7 +399,7 @@
           }
         },
         "x-owner-only": true,
-        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. Invalidates older owner cookies and issues a replacement. Named keys remain valid. Owner session or recovery credential required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry. The administrative recovery credential is the explicit recovery bypass.",
+        "description": "Changes owner credentials and revokes old sessions. A fully authenticated browser receives a replacement session; an administrative bearer receives no browser cookie.",
         "requestBody": {
           "required": true,
           "description": "4 KiB JSON limit. Username 1–120 bytes; password 12–1024 bytes. Password sign-in cannot be disabled.",
@@ -4155,6 +4155,359 @@
         ]
       },
       "x-webdav-methods": {}
+    },
+    "/api/mfa/enroll": {
+      "post": {
+        "operationId": "mfaEnroll",
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Prepare mandatory TOTP enrollment",
+        "description": "Requires a valid password-stage challenge cookie. Existing installations also require the administrator setup key. The secret and QR code are returned only for this challenge.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "setupToken": {
+                    "type": "string",
+                    "format": "password"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "secret": {
+                      "type": "string"
+                    },
+                    "qr": {
+                      "type": "string",
+                      "description": "Locally generated PNG data URL; contains the enrollment secret."
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/mfa/verify": {
+      "post": {
+        "operationId": "mfaVerify",
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Verify a TOTP or recovery code",
+        "description": "Requires a live challenge cookie. Enrollment must be confirmed with the new TOTP. Successful enrollment returns recovery codes once; sign-in atomically consumes a code and creates a session.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "description": "A six-digit TOTP or single-use recovery code."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "authenticated": {
+                      "type": "boolean"
+                    },
+                    "usedRecoveryCode": {
+                      "type": "boolean"
+                    },
+                    "recoveryCodes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Single-use recovery codes, returned once."
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/mfa/replace": {
+      "post": {
+        "operationId": "mfaReplace",
+        "tags": [
+          "Account & keys"
+        ],
+        "summary": "Replace the authenticator",
+        "description": "A browser session, current password and fresh TOTP or recovery code are required. A session recently opened with a recovery code may use its one-time replacement grant.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "password": {
+                    "type": "string",
+                    "format": "password"
+                  },
+                  "code": {
+                    "type": "string",
+                    "description": "Fresh code, or empty for a recent recovery-code sign-in."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "secret": {
+                      "type": "string"
+                    },
+                    "qr": {
+                      "type": "string",
+                      "description": "Locally generated PNG data URL; contains the enrollment secret."
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "x-owner-only": true
+      }
+    },
+    "/api/mfa/recovery-codes": {
+      "post": {
+        "operationId": "mfaRecoveryCodes",
+        "tags": [
+          "Account & keys"
+        ],
+        "summary": "Generate new recovery codes",
+        "description": "A browser session, current password and fresh TOTP or recovery code are required. A session recently opened with a recovery code may use its one-time replacement grant.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "password": {
+                    "type": "string",
+                    "format": "password"
+                  },
+                  "code": {
+                    "type": "string",
+                    "description": "Fresh code, or empty for a recent recovery-code sign-in."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "recoveryCodes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Single-use recovery codes, returned once."
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "x-owner-only": true
+      }
+    },
+    "/api/mfa/reset": {
+      "post": {
+        "operationId": "mfaReset",
+        "tags": [
+          "Account & keys"
+        ],
+        "summary": "Reset the authenticator with the administrator key",
+        "description": "Requires the administrative bearer, revokes all browser sessions and recovery codes, and requires a new TOTP enrollment. Named API keys and browser sessions cannot reset MFA.",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-owner-only": true
+      }
     }
   },
   "components": {
@@ -5113,6 +5466,21 @@
           "device",
           "current"
         ],
+        "additionalProperties": false
+      },
+      "MFAChallenge": {
+        "type": "object",
+        "properties": {
+          "mfaRequired": {
+            "type": "boolean"
+          },
+          "enrollmentRequired": {
+            "type": "boolean"
+          },
+          "setupKeyConfirmed": {
+            "type": "boolean"
+          }
+        },
         "additionalProperties": false
       }
     },

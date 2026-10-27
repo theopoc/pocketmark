@@ -25,25 +25,29 @@ import (
 )
 
 type Server struct {
-	Store          *store.Store
-	observer       *observability.Observer
-	token          string
-	secure         bool
-	origin         string
-	mux            *http.ServeMux
-	requests       chan struct{}
-	imports        chan struct{}
-	loginMu        sync.Mutex
-	loginAttempts  map[netip.Addr]loginWindow
-	trustedProxies []netip.Prefix
-	authRequests   chan struct{}
-	healthRequests chan struct{}
-	passwordMu     sync.Mutex
-	rateLimit      *requestLimiter
+	Store            *store.Store
+	observer         *observability.Observer
+	token            string
+	secure           bool
+	origin           string
+	mux              *http.ServeMux
+	requests         chan struct{}
+	imports          chan struct{}
+	loginMu          sync.Mutex
+	loginAttempts    map[netip.Addr]loginWindow
+	trustedProxies   []netip.Prefix
+	authRequests     chan struct{}
+	recoveryRequests chan struct{}
+	healthRequests   chan struct{}
+	passwordMu       sync.Mutex
+	mfaMu            sync.Mutex
+	mfaPending       map[string]*mfaChallenge
+	mfaAttempts      loginWindow
+	rateLimit        *requestLimiter
 }
 
 func New(s *store.Store, token, origin string, secure bool, observers ...*observability.Observer) *Server {
-	a := &Server{Store: s, token: token, origin: strings.TrimSuffix(origin, "/"), secure: secure, mux: http.NewServeMux(), requests: make(chan struct{}, 8), imports: make(chan struct{}, 1), authRequests: make(chan struct{}, 2), healthRequests: make(chan struct{}, 2), loginAttempts: make(map[netip.Addr]loginWindow)}
+	a := &Server{Store: s, token: token, origin: strings.TrimSuffix(origin, "/"), secure: secure, mux: http.NewServeMux(), requests: make(chan struct{}, 8), imports: make(chan struct{}, 1), authRequests: make(chan struct{}, 2), recoveryRequests: make(chan struct{}, 1), healthRequests: make(chan struct{}, 2), loginAttempts: make(map[netip.Addr]loginWindow)}
 	a.rateLimit = newRequestLimiter(10, 100)
 	if len(observers) > 0 && observers[0] != nil {
 		a.observer = observers[0]
@@ -52,6 +56,7 @@ func New(s *store.Store, token, origin string, secure bool, observers ...*observ
 	}
 	a.mux.HandleFunc("GET /metrics", a.observer.Metrics)
 	a.registerAccount(a.mux)
+	a.registerMFA(a.mux)
 	a.registerSessionSecurity(a.mux)
 	a.registerLibrary(a.mux)
 	a.registerDAV(a.mux)
@@ -142,8 +147,12 @@ func (a *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// Public authentication bodies cannot occupy the library's work slots.
 	slots := a.requests
-	if r.URL.Path == "/api/login" || r.URL.Path == "/api/setup" || r.URL.Path == "/api/reauth" {
+	if publicAuthPath(r.URL.Path) || r.URL.Path == "/api/reauth" || strings.HasPrefix(r.URL.Path, "/api/mfa/") {
 		slots = a.authRequests
+		// Only a valid administrative bearer can use the dedicated recovery slot.
+		if r.Method == "POST" && r.URL.Path == "/api/mfa/reset" && strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") && secretEqual(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), a.token) {
+			slots = a.recoveryRequests
+		}
 		if r.Method == "POST" {
 			_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(5 * time.Second))
 		}
@@ -232,10 +241,19 @@ func (a *Server) login(w http.ResponseWriter, r *http.Request) {
 		fail(w, 401, "invalid credentials")
 		return
 	}
-	if !a.issueSession(w, r, account.Salt) {
+	state, err := a.Store.MFA(r.Context())
+	if err != nil {
+		fail(w, 503, "authentication unavailable; try again")
 		return
 	}
-	respond(w, 200, map[string]bool{"authenticated": true})
+	kind := "verify"
+	if len(state.Secret) == 0 {
+		kind = "enroll"
+	}
+	if !a.newMFAChallenge(w, mfaChallenge{kind: kind, salt: account.Salt, username: account.Username, generation: state.Generation}) {
+		return
+	}
+	respond(w, 200, map[string]bool{"mfaRequired": true, "enrollmentRequired": kind == "enroll"})
 }
 func decode(w http.ResponseWriter, r *http.Request, target any, max int64) bool {
 	if ct := r.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
