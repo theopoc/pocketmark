@@ -1,7 +1,9 @@
 package store
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"io"
@@ -9,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestReaderDocumentSelectionOwnershipAndLimits(t *testing.T) {
@@ -128,5 +131,66 @@ func TestSnapshotIncludesWALAndCleansFailedWork(t *testing.T) {
 	paths, err := filepath.Glob(filepath.Join(s.directory, ".backup-*.db"))
 	if err != nil || len(paths) != 1 || paths[0] != f.Name() {
 		t.Fatalf("failed snapshot left temporary files: %v (%v)", paths, err)
+	}
+}
+
+func TestSnapshotDoesNotWaitForApplicationConnection(t *testing.T) {
+	s := testStore(t)
+	id := createLink(t, s, Link{URL: "https://example.com/backup", Notes: "Committed in WAL"})
+	// A busy application connection must not prevent an independent snapshot
+	// reader from copying committed pages. Real captures and requests share it.
+	conn, err := s.db.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	f, err := s.Snapshot(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+	defer f.Close()
+	copy, err := sql.Open("pocketmark-sqlite3", f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer copy.Close()
+	var notes string
+	if err := copy.QueryRow("SELECT notes FROM links WHERE id=?", id).Scan(&notes); err != nil || notes != "Committed in WAL" {
+		t.Fatalf("snapshot lost WAL data: %q (%v)", notes, err)
+	}
+}
+
+func TestSnapshotLargeAssetRestoresOriginalBytes(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	id := createLink(t, s, Link{URL: "https://example.com/large"})
+	const size = 19 << 20
+	asset, err := s.SaveAsset(ctx, Asset{LinkID: id, Name: "large.pdf", MediaType: "application/pdf", Kind: "pdf"}, io.LimitReader(repeatedByteReader{}, size))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := s.Snapshot(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+	defer f.Close()
+	restored, err := Open(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restored.Close()
+	want, got := sha256.New(), sha256.New()
+	if _, err := io.Copy(want, io.LimitReader(repeatedByteReader{}, size)); err != nil {
+		t.Fatal(err)
+	}
+	if err := restored.WriteAsset(ctx, asset.ID, got); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(want.Sum(nil), got.Sum(nil)) {
+		t.Fatal("large backup changed the attachment bytes")
 	}
 }

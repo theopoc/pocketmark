@@ -29,6 +29,10 @@ CREATE TABLE IF NOT EXISTS annotations(id INTEGER PRIMARY KEY, link_id INTEGER N
 CREATE INDEX IF NOT EXISTS annotations_link ON annotations(link_id,id);
 CREATE INDEX IF NOT EXISTS links_collection ON links(collection_id,id DESC);
 CREATE INDEX IF NOT EXISTS links_status ON links(status,id);
+CREATE INDEX IF NOT EXISTS links_created_order ON links(julianday(created_at),id);
+CREATE INDEX IF NOT EXISTS links_updated_order ON links(julianday(updated_at),id);
+CREATE INDEX IF NOT EXISTS links_collection_created_order ON links(collection_id,julianday(created_at),id);
+CREATE INDEX IF NOT EXISTS links_collection_updated_order ON links(collection_id,julianday(updated_at),id);
 CREATE VIRTUAL TABLE IF NOT EXISTS links_fts USING fts5(title,url,description,notes,tags,content,content='links',content_rowid='id',tokenize='unicode61 remove_diacritics 2');
 CREATE TRIGGER IF NOT EXISTS links_ai AFTER INSERT ON links BEGIN
  INSERT INTO links_fts(rowid,title,url,description,notes,tags,content) VALUES(new.id,new.title,new.url,new.description,new.notes,new.tags,new.content);

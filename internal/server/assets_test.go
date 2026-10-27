@@ -7,11 +7,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"pocketmark/internal/store"
 )
@@ -82,6 +85,40 @@ func TestAssetPreviewsPreserveLayoutAndRequireAuthentication(t *testing.T) {
 			requireStatus(t, request(a, "DELETE", path, "", true, nil), 200)
 			requireStatus(t, request(a, "GET", path+"/view", "", true, nil), 404)
 		})
+	}
+}
+
+func TestBackupOutlivesServerWriteDeadline(t *testing.T) {
+	a := newTestServer(t, "", false)
+	if _, err := a.Store.Create(context.Background(), store.Link{URL: "https://example.com/backup"}); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// A large snapshot may finish after the server's ordinary request
+		// deadline. Expire that deadline before invoking the real backup route.
+		time.Sleep(20 * time.Millisecond)
+		a.ServeHTTP(w, r)
+	}))
+	srv.Config.WriteTimeout = time.Millisecond
+	srv.Start()
+	defer srv.Close()
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/api/backup", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+testToken)
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("backup interrupted by write deadline: %d (%v)", resp.StatusCode, err)
+	}
+	z, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if err != nil || len(z.File) != 2 {
+		t.Fatalf("incomplete backup: %v (%v)", z, err)
 	}
 }
 

@@ -1,5 +1,58 @@
 # Memory measurements
 
+## Backup and chronological sorting, 26 October 2026
+
+Measured on Apple M4/macOS with Linux ARM64 Docker containers limited to **one
+CPU and 128 MiB**, with the normal 32 MiB Go soft budget. The before and after
+images use the same Go 1.27.3/Alpine 3.24 bases. Each comparison reopens the same
+synthetic database. [Measurements and source identities](benchmark-backup-sort.json).
+These controlled images predate the later security, HTTP rate-limit and extension
+merges; the same
+backup/date patch is rebased for delivery and the integrated branch is checked
+separately.
+
+Each archived bookmark has a 256 KiB HTML attachment (about 32 KiB indexed
+text plus inert padding) and a 1 MiB synthetic PDF. Remote capture and browser
+PDF generation are excluded. Latencies are 30 local HTTP requests per query;
+p95 describes these samples, not a service guarantee.
+
+| Workload | Before | After |
+| --- | ---: | ---: |
+| Newest listing, 10,000 HTML/PDF bookmarks, p95 | 6.97 s | 1.96 ms |
+| Newest listing, 100,000 metadata-only bookmarks, p95 | 64.24 ms | 6.79 ms |
+| Updated listing, 100,000 metadata-only bookmarks, p95 | 63.46 ms | 2.65 ms |
+| Full backup, 10,000 HTML/PDF bookmarks | Truncated ZIP at the 60-second HTTP limit | Complete 12.69 GiB ZIP in 117.22 s |
+| Full backup repeated without swap | — | Complete in 77.39 s; zero OOM kills |
+
+The refreshed baseline at revision 779609e backed up 1,000 archived bookmarks
+successfully. At 10,000, snapshot preparation took 59 seconds and the download
+was truncated; the process stayed alive. This differs from the earlier
+1eef406/Go 1.27.2/Alpine 3.23 measurements that observed OOM kills, so those
+failures must not be presented as a universal 1,000-bookmark threshold.
+
+The final backup completed while 789 list requests succeeded
+(p95 10.55 ms), with no OOM kill. Its observed process lifetime
+RSS peak was 28.20 MiB; the container reached its 128 MiB budget
+including filesystem cache. Kernel reclaim events are expected here and are not
+OOM kills. The repeated backup without swap also completed with concurrent
+reads. These are bounded observations, not worst-case memory limits.
+
+The complete ZIP passed CRC verification. Opening its extracted SQLite file
+confirmed 10,000 links, 20,000 assets, 200,000 chunks and 10,000 FTS matches.
+Three HTML and three PDF attachments matched their original SHA-256 hashes;
+the same samples survived an application restart. Synthetic data was removed.
+
+Date indexes preserve the existing Julian-day ordering, time-zone handling and
+ID tie-breakers, including collection/Inbox views. Snapshot copying uses
+temporary bounded-cache connections and syncs spilled destination pages every
+8 MiB. An intermediate copy without these periodic syncs still OOMed under
+concurrent reads. [Backup resource and deadline boundaries](ARCHIVES.md) remain
+explicit: free disk is needed for a full snapshot, preparation/download have a
+five-minute overall deadline, and network writes have a renewable 30-second
+deadline. Background reads were enabled for the successful backups, whereas the
+before backup had no concurrent client workload; elapsed times are not a
+like-for-like throughput comparison.
+
 ## Final mobile compatibility build
 
 Measured 20 October 2026 at 08:19 UTC, Linux ARM64/OrbStack. Image `pocketmark:mobile`, SHA-256 `ad750f95840315d7ed7bbe059abb90f8b4d4d8ea7a1f93e134bdc6ae3600af76`, 17.59 MiB storage. [Raw measurements](benchmark-mobile.json).

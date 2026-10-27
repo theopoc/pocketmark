@@ -73,12 +73,23 @@ Preparation uses bounded tokenization and temporary disk files in the existing
 single work slot; no browser process or resident cache is added. Closing the
 viewer unloads its content. Untrusted HTML never gains the application's origin. The API does not upload to a third-party service.
 
-Backup uses SQLite `VACUUM INTO` to include committed WAL data in a consistent
-snapshot. The temporary snapshot is written in the data directory, then streamed
-into an uncompressed ZIP with constant-size copy buffers. It requires free disk
-space approximately equal to the database size and briefly occupies the single
-database connection. It contains all archive bytes, uploads and account records;
-treat it as sensitive. Browser sessions are removed from the snapshot only; live sessions remain valid, and restoring requires signing in again. Preserve the existing `access-token` file or
+Backup uses SQLite's online backup API to include committed WAL data in a
+consistent snapshot. A temporary read-only connection pins the source version;
+a temporary destination connection copies at most 1 MiB per step. Both have 2 MiB
+page-cache targets and disabled mmap, and close when copying finishes. The normal
+application connection remains available to reads and writes. Spilled destination
+pages are synced every 8 MiB to limit dirty filesystem-cache pressure in small
+containers. The snapshot is
+written in the data directory, then streamed into an uncompressed ZIP with
+constant-size copy buffers. Unlike a vacuum, this preserves free database pages
+instead of compacting the file. It requires free disk space approximately equal
+to the database size, plus any WAL growth while the read view is pinned.
+Preparation and download have a five-minute overall deadline; network writes
+have a renewable 30-second deadline so a progressing large download can exceed
+the normal 60-second HTTP write limit. It contains all archive bytes, uploads and
+account records; treat it as sensitive. Browser sessions are removed from the
+snapshot only; live sessions remain valid, and restoring requires signing in
+again. Preserve the existing `access-token` file or
 `POCKETMARK_TOKEN` separately. Restore with the service stopped into an empty data
 directory, never alongside an old WAL/SHM file. For older backups or raw database copies, rotate the recovery secret to invalidate restored cookies and API keys. Review restored API keys because a rollback can restore keys revoked after the backup. No scheduled backup is enabled.
 
