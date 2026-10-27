@@ -39,7 +39,7 @@ func passwordLogin(t *testing.T, a *Server) *httptest.ResponseRecorder {
 	if w.Code != 200 {
 		return w
 	}
-	_, _, _, result := enrollForTest(t, a, pendingCookie(t, w), testToken)
+	_, _, _, result, _ := enrollForTest(t, a, pendingCookie(t, w), testToken)
 	return result
 }
 

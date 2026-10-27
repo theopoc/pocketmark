@@ -4386,7 +4386,7 @@
           "Account & keys"
         ],
         "summary": "Generate new recovery codes",
-        "description": "A browser session, current password and fresh TOTP or recovery code are required. A session recently opened with a recovery code may use its one-time replacement grant.",
+        "description": "A browser session, current password and fresh TOTP or recovery code are required.",
         "requestBody": {
           "required": true,
           "content": {
@@ -4400,10 +4400,12 @@
                   },
                   "code": {
                     "type": "string",
-                    "description": "Fresh code, or empty for a recent recovery-code sign-in."
+                    "description": "Fresh TOTP or unused recovery code.",
+                    "minLength": 1
                   }
                 },
-                "additionalProperties": false
+                "additionalProperties": false,
+                "required": ["password", "code"]
               }
             }
           }

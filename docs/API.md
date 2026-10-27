@@ -196,6 +196,10 @@ curl --fail-with-body -X POST \
 
 This revokes all browser sessions and existing recovery codes. The TOTP secret is encrypted using a key derived from the administrator key. If that key changes, use a still-valid recovery code to sign in and replace the authenticator, or reset MFA and enroll again. New native ZIP restores invalidate their recovery codes, so a restore with a different administrator key requires a reset. Keep a high-entropy administrator key and protect it separately from database backups. TOTP codes are accepted only once within the allowed clock window. Recovery codes are generated randomly, stored as hashes and usable once. QR codes are generated locally. These protections apply to browser sessions: named API keys and the administrator bearer remain direct API credentials.
 
+Restoring a new native ZIP also blocks the current TOTP window to prevent replay of a code used after the snapshot. Wait for up to two new authenticator codes before signing in; clock differences can add delay. Older ZIPs and raw copies cannot be identified automatically and may restore earlier TOTP counters.
+
+The `pquerna/otp` package and its QR encoder run within the existing Go process. QR generation is limited to a 220 × 220 image during enrollment, and authentication work slots bound concurrency; no resident process, cache or index is added. Their memory impact has not been separately benchmarked.
+
 ## Compatibility and synchronization
 
 Pocketmark exposes only its native `/api` endpoints and WebDAV. The Linkwarden

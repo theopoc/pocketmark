@@ -71,6 +71,9 @@ func TestMFANativeBackupInvalidatesCodesOnlyOnRestore(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
+	if err = s.SaveAccount(ctx, Account{Username: "owner", Salt: "salt", Hash: "hash"}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = s.db.Exec("UPDATE mfa SET secret=X'0102' WHERE id=1; INSERT INTO mfa_recovery(hash) VALUES('saved-code')"); err != nil {
 		t.Fatal(err)
 	}
@@ -85,6 +88,7 @@ func TestMFANativeBackupInvalidatesCodesOnlyOnRestore(t *testing.T) {
 	if err = s.db.QueryRow("SELECT count(*) FROM mfa_recovery").Scan(&count); err != nil || count != 1 {
 		t.Fatal("backup changed live recovery codes", err)
 	}
+	minimumCounter := time.Now().Unix()/30 + 1
 	restored, err := Open(path)
 	if err != nil {
 		t.Fatal(err)
@@ -95,6 +99,16 @@ func TestMFANativeBackupInvalidatesCodesOnlyOnRestore(t *testing.T) {
 	state, err := restored.MFA(ctx)
 	if err != nil || len(state.Secret) != 2 {
 		t.Fatal("restore removed the encrypted factor", err)
+	}
+	var restoredCounter int64
+	if err = restored.db.QueryRow("SELECT last_counter FROM mfa WHERE id=1").Scan(&restoredCounter); err != nil || restoredCounter < minimumCounter {
+		t.Fatal("restore did not invalidate the current TOTP window", err)
+	}
+	if err = restored.SignInMFA(ctx, "salt", state.Generation, restoredCounter, "", "replayed-session", time.Now().Add(time.Hour), ""); err == nil {
+		t.Fatal("restore accepted a TOTP counter from the invalidated window")
+	}
+	if err = restored.SignInMFA(ctx, "salt", state.Generation, restoredCounter+1, "", "fresh-session", time.Now().Add(time.Hour), ""); err != nil {
+		t.Fatal("later TOTP counter rejected after restore", err)
 	}
 	if _, err = restored.db.Exec("INSERT INTO mfa_recovery(hash) VALUES('new-code')"); err != nil {
 		t.Fatal(err)

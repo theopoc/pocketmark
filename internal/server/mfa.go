@@ -25,7 +25,7 @@ import (
 type mfaChallenge struct {
 	kind, salt, username, secret, session string
 	generation                            int64
-	adminApproved, busy                   bool
+	adminApproved, busy, recoveryGrant    bool
 	expires                               time.Time
 	attempts                              loginWindow
 }
@@ -319,7 +319,7 @@ func (a *Server) mfaVerify(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		counter := matchTOTPCounter(challenge.secret, body.Code, time.Now())
+		counter := matchTOTPCounter(challenge.secret, body.Code, a.totpNow())
 		if counter < 0 {
 			fail(w, 401, "invalid authentication code")
 			return
@@ -330,7 +330,7 @@ func (a *Server) mfaVerify(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		codes, hashes := newRecoveryCodes()
-		if err = a.Store.ActivateMFA(r.Context(), challenge.salt, challenge.generation, counter, encrypted, hashes, challenge.session, a.sessionHash(value), expires, r.UserAgent()); err != nil {
+		if err = a.Store.ActivateMFA(r.Context(), challenge.salt, challenge.generation, counter, encrypted, hashes, challenge.session, a.sessionHash(value), expires, r.UserAgent(), challenge.recoveryGrant); err != nil {
 			fail(w, 409, "account changed; start again")
 			return
 		}
@@ -359,7 +359,7 @@ func (a *Server) mfaVerify(w http.ResponseWriter, r *http.Request) {
 			fail(w, 401, "authentication unavailable; use a recovery code or administrator reset")
 			return
 		}
-		counter = matchTOTPCounter(secret, body.Code, time.Now())
+		counter = matchTOTPCounter(secret, body.Code, a.totpNow())
 		if counter < 0 {
 			fail(w, 401, "invalid authentication code")
 			return
@@ -377,52 +377,56 @@ func (a *Server) mfaVerify(w http.ResponseWriter, r *http.Request) {
 
 // authorizeMFAChange requires a browser session, current password and either a
 // fresh factor or the one-time grant from a recent recovery-code sign-in.
-func (a *Server) authorizeMFAChange(w http.ResponseWriter, r *http.Request) (string, int64, bool) {
+func (a *Server) authorizeMFAChange(w http.ResponseWriter, r *http.Request, allowRecoveryGrant bool) (string, int64, bool, bool) {
 	if requestPrincipal(r).session == "" {
 		fail(w, 403, "a browser session is required")
-		return "", 0, false
+		return "", 0, false, false
 	}
 	var body struct{ Password, Code string }
 	if !decode(w, r, &body, 4096) || !a.mfaThrottle(w, nil) {
-		return "", 0, false
+		return "", 0, false, false
 	}
 	if body.Password == "" || len(body.Password) > 1024 {
 		fail(w, 400, "password required")
-		return "", 0, false
+		return "", 0, false, false
+	}
+	if body.Code == "" && !allowRecoveryGrant {
+		fail(w, 403, "authentication or recovery code required")
+		return "", 0, false, false
 	}
 	if !a.passwordMu.TryLock() {
 		w.Header().Set("Retry-After", "1")
 		fail(w, 429, "authentication busy; retry shortly")
-		return "", 0, false
+		return "", 0, false, false
 	}
 	defer a.passwordMu.Unlock()
 	account, err := a.Store.Account(r.Context())
 	state, stateErr := a.Store.MFA(r.Context())
 	if err != nil || stateErr != nil || !secretEqual(passwordHash(body.Password, account.Salt), account.Hash) || len(state.Secret) == 0 {
 		fail(w, 403, "incorrect password or authentication unavailable")
-		return "", 0, false
+		return "", 0, false, false
 	}
 	recoveryHash := recoveryDigest(body.Code)
 	counter := int64(-1)
 	if body.Code != "" && recoveryHash == "" {
 		secret, err := a.decryptMFA(state.Secret)
 		if err == nil {
-			counter = matchTOTPCounter(secret, body.Code, time.Now())
+			counter = matchTOTPCounter(secret, body.Code, a.totpNow())
 		}
 		if counter < 0 {
 			fail(w, 403, "invalid authentication code")
-			return "", 0, false
+			return "", 0, false, false
 		}
 	}
 	if err = a.Store.AuthorizeMFAChange(r.Context(), account.Salt, state.Generation, counter, recoveryHash, requestPrincipal(r).session); err != nil {
 		fail(w, 403, "invalid or already used authentication code")
-		return "", 0, false
+		return "", 0, false, false
 	}
-	return account.Salt, state.Generation, true
+	return account.Salt, state.Generation, body.Code == "", true
 }
 
 func (a *Server) mfaReplace(w http.ResponseWriter, r *http.Request) {
-	salt, generation, ok := a.authorizeMFAChange(w, r)
+	salt, generation, recoveryGrant, ok := a.authorizeMFAChange(w, r, true)
 	if !ok {
 		return
 	}
@@ -436,14 +440,14 @@ func (a *Server) mfaReplace(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "could not prepare authentication; try again")
 		return
 	}
-	if !a.newMFAChallenge(w, mfaChallenge{kind: "replace", salt: salt, username: account.Username, secret: secret, session: requestPrincipal(r).session, generation: generation, adminApproved: true}) {
+	if !a.newMFAChallenge(w, mfaChallenge{kind: "replace", salt: salt, username: account.Username, secret: secret, session: requestPrincipal(r).session, generation: generation, adminApproved: true, recoveryGrant: recoveryGrant}) {
 		return
 	}
 	respond(w, 200, map[string]string{"secret": secret, "qr": qr})
 }
 
 func (a *Server) mfaRecoveryCodes(w http.ResponseWriter, r *http.Request) {
-	salt, generation, ok := a.authorizeMFAChange(w, r)
+	salt, generation, _, ok := a.authorizeMFAChange(w, r, false)
 	if !ok {
 		return
 	}

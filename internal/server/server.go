@@ -43,11 +43,12 @@ type Server struct {
 	mfaMu            sync.Mutex
 	mfaPending       map[string]*mfaChallenge
 	mfaAttempts      loginWindow
+	totpNow          func() time.Time
 	rateLimit        *requestLimiter
 }
 
 func New(s *store.Store, token, origin string, secure bool, observers ...*observability.Observer) *Server {
-	a := &Server{Store: s, token: token, origin: strings.TrimSuffix(origin, "/"), secure: secure, mux: http.NewServeMux(), requests: make(chan struct{}, 8), imports: make(chan struct{}, 1), authRequests: make(chan struct{}, 2), recoveryRequests: make(chan struct{}, 1), healthRequests: make(chan struct{}, 2), loginAttempts: make(map[netip.Addr]loginWindow)}
+	a := &Server{Store: s, token: token, origin: strings.TrimSuffix(origin, "/"), secure: secure, mux: http.NewServeMux(), requests: make(chan struct{}, 8), imports: make(chan struct{}, 1), authRequests: make(chan struct{}, 2), recoveryRequests: make(chan struct{}, 1), healthRequests: make(chan struct{}, 2), loginAttempts: make(map[netip.Addr]loginWindow), totpNow: time.Now}
 	a.rateLimit = newRequestLimiter(10, 100)
 	if len(observers) > 0 && observers[0] != nil {
 		a.observer = observers[0]

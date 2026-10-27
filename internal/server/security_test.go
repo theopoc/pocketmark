@@ -29,7 +29,7 @@ func TestSessionRevocationAcrossRestart(t *testing.T) {
 	a := New(s, testToken, "", false)
 	setup := request(a, "POST", "/api/setup", setupRequest, false, nil)
 	requireStatus(t, setup, 201)
-	_, _, codes, _ := enrollForTest(t, a, pendingCookie(t, setup), "")
+	_, _, codes, _, _ := enrollForTest(t, a, pendingCookie(t, setup), "")
 	codeIndex := 0
 	login := func() string {
 		t.Helper()

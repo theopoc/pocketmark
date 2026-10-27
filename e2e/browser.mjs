@@ -113,6 +113,13 @@ try {
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-form button[value="replace"]').click();
     await page.locator('#mfa-manage-enrollment').waitFor({ state: 'visible' });
+    // Closing settings must not spend the recovery grant before confirmation.
+    await page.locator('#settings-dialog').getByRole('button', { name: 'Close', exact: true }).click();
+    await page.locator('#settings-dialog').waitFor({ state: 'hidden' });
+    await page.locator('#settings-button').click();
+    await page.locator('#mfa-manage-password').fill(password);
+    await page.locator('#mfa-manage-form button[value="replace"]').click();
+    await page.locator('#mfa-manage-enrollment').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#mfa-manage-new-code').getAttribute('inputmode'), 'numeric');
     const replacementSecret = await page.locator('#mfa-manage-secret').inputValue();
     await page.locator('#mfa-manage-new-code').fill(authenticatorCode(replacementSecret));

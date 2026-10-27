@@ -194,7 +194,7 @@
     <form id="mfa-manage-form">
       <label for="mfa-manage-password">Current password</label><input id="mfa-manage-password" type="password" autocomplete="current-password" required maxlength="1024">
       <label for="mfa-manage-code">Authentication or recovery code</label><input id="mfa-manage-code" autocomplete="one-time-code" spellcheck="false">
-      <p class="small muted">If you just signed in with a recovery code, you can leave the code field empty for five minutes.</p>
+      <p class="small muted">For five minutes after signing in with a recovery code, you can leave the code field empty when replacing your authenticator.</p>
       <p id="mfa-codes-warning" class="small muted">Generating recovery codes invalidates all previous recovery codes.</p>
       <div class="token-actions"><button class="button subtle" type="submit" value="replace">Replace authenticator</button><button class="button subtle" type="submit" value="codes" aria-describedby="mfa-codes-warning">Generate recovery codes</button></div>
     </form>

@@ -78,8 +78,9 @@ func (s *Store) SaveAccountFromSession(ctx context.Context, a Account, oldHash, 
 	}
 	defer tx.Rollback()
 	var expiry int64
+	var recoveryUntil int64
 	var idleMinutes int
-	if err = tx.QueryRowContext(ctx, "SELECT expires_at,idle_minutes FROM sessions WHERE hash=? AND "+liveSession+" AND EXISTS(SELECT 1 FROM mfa WHERE id=1 AND length(secret)>0)", oldHash).Scan(&expiry, &idleMinutes); err != nil {
+	if err = tx.QueryRowContext(ctx, "SELECT expires_at,idle_minutes,recovery_until FROM sessions WHERE hash=? AND "+liveSession+" AND EXISTS(SELECT 1 FROM mfa WHERE id=1 AND length(secret)>0)", oldHash).Scan(&expiry, &idleMinutes, &recoveryUntil); err != nil {
 		return time.Time{}, ErrMFAChanged
 	}
 	if _, err = tx.ExecContext(ctx, "UPDATE account SET username=?,salt=?,hash=? WHERE id=1", a.Username, a.Salt, a.Hash); err != nil {
@@ -92,7 +93,7 @@ func (s *Store) SaveAccountFromSession(ctx context.Context, a Account, oldHash, 
 	if err = insertSessionTx(ctx, tx, a.Salt, newHash, expires, device, false); err != nil {
 		return time.Time{}, err
 	}
-	if _, err = tx.ExecContext(ctx, "UPDATE sessions SET idle_minutes=? WHERE hash=?", idleMinutes, newHash); err != nil {
+	if _, err = tx.ExecContext(ctx, "UPDATE sessions SET idle_minutes=?,recovery_until=? WHERE hash=?", idleMinutes, recoveryUntil, newHash); err != nil {
 		return time.Time{}, err
 	}
 	if err = tx.Commit(); err != nil {

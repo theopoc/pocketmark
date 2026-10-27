@@ -46,7 +46,7 @@ func TestSetupOnceAcrossRestart(t *testing.T) {
 	requireSetup(t, a, true, false)
 	w := request(a, "POST", "/api/setup", setupRequest, false, nil)
 	requireStatus(t, w, 201)
-	cookie, _, _, _ := enrollForTest(t, a, pendingCookie(t, w), "")
+	cookie, _, _, _, _ := enrollForTest(t, a, pendingCookie(t, w), "")
 	requireStatus(t, request(a, "GET", "/api/account", "", false, map[string]string{"Cookie": cookie}), 200)
 	requireSetup(t, a, false, true)
 	a = New(s, testToken, "", false)

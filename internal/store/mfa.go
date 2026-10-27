@@ -36,7 +36,7 @@ func initMFA(ctx context.Context, tx *sql.Tx) error {
 	}
 	// Only new native backup copies have this marker; the live database does not.
 	_, err := tx.ExecContext(ctx, `DELETE FROM mfa_recovery WHERE EXISTS(SELECT 1 FROM mfa WHERE id=1 AND restored=1);
- UPDATE mfa SET restored=0 WHERE id=1 AND restored=1`)
+ UPDATE mfa SET last_counter=MAX(last_counter,unixepoch()/30+1),restored=0 WHERE id=1 AND restored=1`)
 	return err
 }
 
@@ -95,7 +95,7 @@ func (s *Store) SignInMFA(ctx context.Context, salt string, generation, counter 
 }
 
 // AuthorizeMFAChange consumes a fresh factor. A recent recovery-code sign-in
-// grants one replacement authorization without consuming a second code.
+// grants replacement authorization until the change is successfully committed.
 func (s *Store) AuthorizeMFAChange(ctx context.Context, salt string, generation, counter int64, recoveryHash, sessionHash string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -107,14 +107,10 @@ func (s *Store) AuthorizeMFAChange(ctx context.Context, salt string, generation,
 		return ErrMFAChanged
 	}
 	if counter < 0 && recoveryHash == "" {
-		r, e := tx.ExecContext(ctx, `UPDATE sessions SET recovery_until=0 WHERE hash=? AND recovery_until>unixepoch()
+		err = tx.QueryRowContext(ctx, `SELECT 1 FROM sessions WHERE hash=? AND recovery_until>unixepoch()
  AND EXISTS(SELECT 1 FROM account WHERE id=1 AND salt=?)
- AND EXISTS(SELECT 1 FROM mfa WHERE id=1 AND generation=? AND length(secret)>0)`, sessionHash, salt, generation)
-		if e != nil {
-			return e
-		}
-		n, e := r.RowsAffected()
-		if e != nil || n != 1 {
+		 AND EXISTS(SELECT 1 FROM mfa WHERE id=1 AND generation=? AND length(secret)>0)`, sessionHash, salt, generation).Scan(&one)
+		if err != nil {
 			return ErrMFAChanged
 		}
 	} else if err = consumeFactorTx(ctx, tx, salt, generation, counter, recoveryHash); err != nil {
@@ -137,7 +133,7 @@ func insertRecoveryCodes(ctx context.Context, tx *sql.Tx, hashes []string) error
 
 // ActivateMFA replaces the factor and recovery codes in one transaction. An
 // initial enrollment creates a session; a replacement keeps only its session.
-func (s *Store) ActivateMFA(ctx context.Context, salt string, generation, counter int64, encrypted []byte, hashes []string, keepSession, newSession string, expires time.Time, device string) error {
+func (s *Store) ActivateMFA(ctx context.Context, salt string, generation, counter int64, encrypted []byte, hashes []string, keepSession, newSession string, expires time.Time, device string, recoveryGrant bool) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -156,6 +152,16 @@ func (s *Store) ActivateMFA(ctx context.Context, salt string, generation, counte
 	if keepSession != "" {
 		var one int
 		if err = tx.QueryRowContext(ctx, "SELECT 1 FROM sessions WHERE hash=? AND "+liveSession, keepSession).Scan(&one); err != nil {
+			return ErrMFAChanged
+		}
+	}
+	if recoveryGrant {
+		r, e := tx.ExecContext(ctx, "UPDATE sessions SET recovery_until=0 WHERE hash=? AND recovery_until>unixepoch() AND "+liveSession, keepSession)
+		if e != nil {
+			return e
+		}
+		n, e := r.RowsAffected()
+		if e != nil || n != 1 {
 			return ErrMFAChanged
 		}
 	}
