@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/theopoc/pocketmark/compare/v0.3.0...v0.3.1) (2026-10-27)
+
+
+### Bug Fixes
+
+* **ci:** prevent browser smoke rate limit exhaustion ([#53](https://github.com/theopoc/pocketmark/issues/53)) ([7466ead](https://github.com/theopoc/pocketmark/commit/7466ead3719e3e1a51243986b158fe870fa29c98))
+
 ## [0.3.0](https://github.com/theopoc/pocketmark/compare/v0.2.0...v0.3.0) (2026-10-27)
 
 
