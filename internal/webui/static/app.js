@@ -24,6 +24,9 @@
   let editorBaseline = null;
   let editorSession = 0;
   let routeRequest = 0;
+  let mfaManagementBusy = false;
+  let deferredLogin = false;
+  let deferredLoginNotice = "";
   let scrollTimer;
   let searchSession = false;
   let tagsSearchSession = false;
@@ -57,7 +60,9 @@
     if (!initial && previous !== workspace.routeSearch(route())) bulk.clear();
     reader.close();
     bulk.close();
-    document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
+    document.querySelectorAll("dialog[open]").forEach((dialog) => {
+      if (dialog.id !== "settings-dialog" || (!mfaManagementBusy && $("mfa-manage-codes").hidden)) dialog.close();
+    });
     await refresh();
     if (request !== routeRequest) return;
     if (showingTags) await loadTagDirectory();
@@ -71,7 +76,7 @@
   }, { passive: true });
   window.addEventListener("popstate", () => { if (state.signedIn) restoreRoute(); });
   window.addEventListener("beforeunload", (event) => {
-    if (drafts.size) { event.preventDefault(); event.returnValue = ""; }
+    if (drafts.size || mfaManagementBusy || ($("settings-dialog").open && !$("mfa-manage-codes").hidden)) { event.preventDefault(); event.returnValue = ""; }
   });
 
   const compactLibrary = window.matchMedia("(max-width: 600px)");
@@ -255,6 +260,19 @@
     $("login-help").hidden = false;
   }
   function showLogin() {
+    if (mfaManagementBusy || ($("settings-dialog").open && !$("mfa-manage-codes").hidden)) {
+      deferredLogin = true;
+      if (!mfaManagementBusy) {
+        document.querySelectorAll("#settings-dialog > section").forEach(section => { if (section.getAttribute("aria-labelledby") !== "mfa-settings-title") section.inert = true; });
+        document.querySelectorAll("#mfa-manage-form button[type='submit'], #mfa-manage-verify button[type='submit']").forEach(button => { button.disabled = true; });
+      }
+      $("mfa-manage-feedback").textContent = mfaManagementBusy
+        ? "Your session expired. Waiting for the authentication change to finish."
+        : "Your session expired. These recovery codes may have changed. Save them, then sign in and generate new codes.";
+      return;
+    }
+    deferredLogin = false;
+    setMFAManagementBusy(false);
     clearTimeout(tagsTimer);
     tagsRequest++;
     state.signedIn = false;
@@ -267,6 +285,7 @@
     $("app-view").hidden = true;
     $("login-view").hidden = false;
     resetMFALogin();
+    if (deferredLoginNotice) { $("login-error").textContent = deferredLoginNotice; deferredLoginNotice = ""; }
     $("login-username").focus();
   }
 
@@ -293,8 +312,9 @@
       const loginPath = ["/api/login", "/api/setup", "/api/mfa/enroll", "/api/mfa/verify"].includes(path);
       if (response.status === 401 && !loginPath) {
         const expired = state.signedIn;
+        const recoveryNotice = deferredLoginNotice;
         showLogin();
-        if (expired) $("login-error").textContent = workspace.requestFailure(401);
+        if (expired && !recoveryNotice) $("login-error").textContent = workspace.requestFailure(401);
       }
       const message = response.status === 401 && loginPath ? (body?.error || "Check your credentials, then try again.") : workspace.requestFailure(response.status, body?.error);
       const error = new Error(message);
@@ -1339,40 +1359,111 @@
     $("mfa-manage-codes-value").textContent = "";
     $("mfa-manage-feedback").textContent = $("mfa-manage-error").textContent = "";
   }
+  function setMFAManagementBusy(busy) {
+    mfaManagementBusy = busy;
+    $("settings-dialog").querySelector(".close-dialog").disabled = busy;
+    $("mfa-manage-cancel").disabled = busy;
+    document.querySelectorAll("#settings-dialog > section").forEach(section => { if (section.getAttribute("aria-labelledby") !== "mfa-settings-title") section.inert = busy || deferredLogin; });
+    document.querySelectorAll("#mfa-manage-form button[type='submit'], #mfa-manage-verify button[type='submit']").forEach(button => { button.disabled = busy || deferredLogin; });
+    if (busy) $("mfa-manage-feedback").textContent = "Updating authentication. Keep settings open until this finishes.";
+    else if ($("mfa-manage-feedback").textContent === "Updating authentication. Keep settings open until this finishes.") $("mfa-manage-feedback").textContent = "";
+    if (!busy && deferredLogin) showLogin();
+  }
   function showManagedCodes(codes) {
     $("mfa-manage-codes-value").textContent = codes.join("\n");
     $("mfa-manage-codes").hidden = false;
     $("mfa-manage-codes-value").focus();
   }
+  function normalizeRecoveryCode(code) { return code.trim().replaceAll("-", "").toUpperCase(); }
+  function removeManagedRecoveryCode(proof) {
+    if ($("mfa-manage-codes").hidden) return false;
+    const codes = $("mfa-manage-codes-value").textContent.split("\n");
+    const remaining = codes.filter(code => normalizeRecoveryCode(code) !== normalizeRecoveryCode(proof));
+    if (remaining.length === codes.length) return false;
+    $("mfa-manage-codes-value").textContent = remaining.join("\n");
+    $("mfa-manage-codes").hidden = remaining.length === 0;
+    return true;
+  }
+  function mfaOutcomeUncertain(error) {
+    if (error.status === 401 && error.message === "invalid authentication code") return false;
+    return !error.status || error.status === 401 || error.status === 408 || error.status === 409 || error.status >= 500;
+  }
+  function mfaManagementFailure(error) {
+    if (!mfaOutcomeUncertain(error)) return error.message;
+    return "Could not confirm the result. The change may have completed. Use your authenticator to generate recovery codes, or use the administrator recovery key if needed.";
+  }
   $("mfa-manage-form").addEventListener("submit", async event => {
     event.preventDefault(); const session = settingsSession; const button = event.submitter;
-    button.disabled = true; $("mfa-manage-error").textContent = $("mfa-manage-feedback").textContent = "";
+    if (mfaManagementBusy) return;
+    const previousCodes = $("mfa-manage-codes-value").textContent;
+    const previousCodesVisible = !$("mfa-manage-codes").hidden;
+    const proof = $("mfa-manage-code").value.trim();
+    $("mfa-manage-error").textContent = $("mfa-manage-feedback").textContent = "";
+    if (button.value === "codes") { $("mfa-manage-codes").hidden = true; $("mfa-manage-codes-value").textContent = ""; }
+    setMFAManagementBusy(true);
     try {
       const replace = button.value === "replace";
-      const result = await api(replace ? "/api/mfa/replace" : "/api/mfa/recovery-codes", { method: "POST", body: JSON.stringify({ password: $("mfa-manage-password").value, code: $("mfa-manage-code").value.trim() }) });
+      const result = await api(replace ? "/api/mfa/replace" : "/api/mfa/recovery-codes", { method: "POST", body: JSON.stringify({ password: $("mfa-manage-password").value, code: proof }) });
       if (session !== settingsSession) return;
       $("mfa-manage-password").value = $("mfa-manage-code").value = "";
-      $("mfa-manage-codes").hidden = true; $("mfa-manage-codes-value").textContent = "";
       if (replace) {
+        if (removeManagedRecoveryCode(proof)) $("mfa-manage-feedback").textContent = "The recovery code used for this change was removed from the list.";
         $("mfa-manage-form").hidden = true; $("mfa-manage-enrollment").hidden = false;
         $("mfa-manage-secret").value = result.secret; $("mfa-manage-qr").src = result.qr;
         $("mfa-manage-new-code").focus();
-      } else showManagedCodes(result.recoveryCodes);
-    } catch (error) { if (session === settingsSession) $("mfa-manage-error").textContent = error.message; }
-    finally { button.disabled = false; }
+      } else { deferredLoginNotice = ""; showManagedCodes(result.recoveryCodes); }
+    } catch (error) {
+      if (session === settingsSession) {
+        if (button.value === "codes" && previousCodesVisible && !mfaOutcomeUncertain(error)) showManagedCodes(previousCodes.split("\n"));
+        let proofNotice = "";
+        if (/^[0-9A-F]{32}$/.test(normalizeRecoveryCode(proof))) {
+          const rejected = error.status === 403 && error.message === "invalid or already used authentication code";
+          if (rejected || (button.value === "replace" && error.status !== 400 && error.status !== 403)) {
+            const removed = removeManagedRecoveryCode(proof);
+            proofNotice = rejected
+              ? `The recovery code entered is invalid or has already been used.${removed ? " It was removed from the list." : ""}`
+              : `The recovery code entered may have been used.${removed ? " It was removed from the list." : " Try a different code or your authenticator."}`;
+            $("mfa-manage-feedback").textContent = proofNotice;
+          }
+        }
+        $("mfa-manage-error").textContent = mfaManagementFailure(error);
+        if (mfaOutcomeUncertain(error) || proofNotice) {
+          deferredLoginNotice = [mfaOutcomeUncertain(error) ? mfaManagementFailure(error) : "", proofNotice].filter(Boolean).join(" ");
+        }
+      }
+    }
+    finally { setMFAManagementBusy(false); }
   });
   $("mfa-manage-verify").addEventListener("submit", async event => {
-    event.preventDefault(); const session = settingsSession; event.submitter.disabled = true;
+    event.preventDefault(); const session = settingsSession;
+    if (mfaManagementBusy) return;
+    const previousCodes = $("mfa-manage-codes-value").textContent;
+    const previousCodesVisible = !$("mfa-manage-codes").hidden;
+    $("mfa-manage-codes").hidden = true; $("mfa-manage-codes-value").textContent = "";
     $("mfa-manage-error").textContent = "";
+    setMFAManagementBusy(true);
     try {
       const result = await api("/api/mfa/verify", { method: "POST", body: JSON.stringify({ code: $("mfa-manage-new-code").value.trim() }) });
       if (session !== settingsSession) return;
       $("mfa-manage-new-code").value = $("mfa-manage-secret").value = ""; $("mfa-manage-qr").removeAttribute("src");
       $("mfa-manage-enrollment").hidden = true; $("mfa-manage-form").hidden = false;
       $("mfa-manage-feedback").textContent = "Authenticator replaced. Other browsers have been signed out.";
-      showManagedCodes(result.recoveryCodes); await security.loadSessions();
-    } catch (error) { if (session === settingsSession) $("mfa-manage-error").textContent = error.message; }
-    finally { event.submitter.disabled = false; }
+      deferredLoginNotice = "";
+      showManagedCodes(result.recoveryCodes); void security.loadSessions();
+    } catch (error) {
+      if (session === settingsSession) {
+        if (previousCodesVisible && !mfaOutcomeUncertain(error)) showManagedCodes(previousCodes.split("\n"));
+        $("mfa-manage-error").textContent = mfaManagementFailure(error);
+        if (mfaOutcomeUncertain(error)) deferredLoginNotice = mfaManagementFailure(error);
+      }
+    }
+    finally { setMFAManagementBusy(false); }
+  });
+  $("mfa-manage-cancel").addEventListener("click", () => {
+    if (mfaManagementBusy) return;
+    $("mfa-manage-verify").reset(); $("mfa-manage-secret").value = ""; $("mfa-manage-qr").removeAttribute("src");
+    $("mfa-manage-enrollment").hidden = true; $("mfa-manage-form").hidden = false;
+    $("mfa-manage-error").textContent = ""; $("mfa-manage-password").focus();
   });
   $("mfa-manage-copy").addEventListener("click", async () => {
     try { await navigator.clipboard.writeText($("mfa-manage-codes-value").textContent); $("mfa-manage-feedback").textContent = "Recovery codes copied."; }
@@ -1394,7 +1485,11 @@
   });
   $("toggle-token").addEventListener("click", () => setTokenVisibility($("new-token-value").type === "password"));
   $("copy-token").addEventListener("click", async () => { try { await navigator.clipboard.writeText($("new-token-value").value); toast("Key copied."); } catch { setTokenVisibility(true); $("new-token-value").select(); toast("Select and copy the key."); } });
-  $("settings-dialog").addEventListener("close", () => { settingsSession++; editingTokenID = null; $("account-password").value = ""; clearNewToken(); clearMFAManagement(); });
+  $("settings-dialog").addEventListener("cancel", event => { if (mfaManagementBusy) event.preventDefault(); });
+  $("settings-dialog").addEventListener("close", () => {
+    settingsSession++; editingTokenID = null; $("account-password").value = ""; clearNewToken(); clearMFAManagement();
+    if (deferredLogin) showLogin();
+  });
   $("export-button").addEventListener("click", () => $("export-dialog").showModal());
 
   function openSharedLink() {

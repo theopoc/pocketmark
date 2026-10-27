@@ -45,7 +45,7 @@
       <div id="mfa-enrollment" hidden>
         <p class="small muted">Scan this QR code with your authenticator app, or enter the key manually.</p>
         <img id="mfa-qr" class="mfa-qr" alt="Authenticator setup QR code" width="220" height="220">
-        <label for="mfa-secret">Manual setup key</label><input id="mfa-secret" class="mfa-secret" readonly spellcheck="false">
+        <label for="mfa-secret">Manual setup key</label><textarea id="mfa-secret" class="mfa-secret" rows="2" readonly spellcheck="false"></textarea>
       </div>
       <form id="mfa-code-form" hidden>
         <label id="mfa-code-label" for="mfa-code">Authentication or recovery code</label>
@@ -198,7 +198,7 @@
       <p id="mfa-codes-warning" class="small muted">Generating recovery codes invalidates all previous recovery codes.</p>
       <div class="token-actions"><button class="button subtle" type="submit" value="replace">Replace authenticator</button><button class="button subtle" type="submit" value="codes" aria-describedby="mfa-codes-warning">Generate recovery codes</button></div>
     </form>
-    <div id="mfa-manage-enrollment" hidden><p class="small muted">Scan the new QR code or enter the setup key in your authenticator.</p><img id="mfa-manage-qr" class="mfa-qr" alt="New authenticator setup QR code" width="220" height="220"><label for="mfa-manage-secret">Manual setup key</label><input id="mfa-manage-secret" class="mfa-secret" readonly spellcheck="false"><form id="mfa-manage-verify"><label for="mfa-manage-new-code">Code from the new authenticator</label><input id="mfa-manage-new-code" autocomplete="one-time-code" inputmode="numeric" required><button class="button primary" type="submit">Confirm new authenticator</button></form></div>
+    <div id="mfa-manage-enrollment" hidden><p class="small muted">Scan the new QR code or enter the setup key in your authenticator.</p><img id="mfa-manage-qr" class="mfa-qr" alt="New authenticator setup QR code" width="220" height="220"><label for="mfa-manage-secret">Manual setup key</label><textarea id="mfa-manage-secret" class="mfa-secret" rows="2" readonly spellcheck="false"></textarea><form id="mfa-manage-verify"><label for="mfa-manage-new-code">Code from the new authenticator</label><input id="mfa-manage-new-code" autocomplete="one-time-code" inputmode="numeric" required><button class="button primary" type="submit">Confirm new authenticator</button><button id="mfa-manage-cancel" class="button subtle" type="button">Cancel replacement</button></form></div>
     <div id="mfa-manage-codes" hidden><p class="small muted">Save these single-use codes now. Previous codes no longer work.</p><pre id="mfa-manage-codes-value" class="mfa-codes" tabindex="0"></pre><button id="mfa-manage-copy" class="button subtle" type="button">Copy recovery codes</button></div>
     <p id="mfa-manage-feedback" class="small muted" role="status"></p><p id="mfa-manage-error" class="form-error" role="alert"></p>
   </section><section class="settings-section" aria-labelledby="sessions-title">
