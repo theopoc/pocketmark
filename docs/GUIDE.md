@@ -13,11 +13,11 @@ make build
 ./bin/pocketmark
 ```
 
-Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account. On later visits, sign in with your username and password. Once signed in, open **Settings → API keys** to create or revoke a key for each extension or client.
+Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account. Register an authenticator app with the local QR code or setup key, verify a code and save the single-use recovery codes. On later visits, sign in with your username, password and an authentication or recovery code. Once signed in, open **Settings → API keys** to create or revoke a key for each extension or client.
 
-Existing installations keep their credentials and keys. If no password was configured before upgrading, follow [account recovery](API.md#existing-installations-and-account-recovery); public account creation cannot claim an existing library.
+Existing installations keep their credentials and keys. The first login after upgrading requires the administrator key to enroll an authenticator; existing browser sessions are signed out. If no password was configured before upgrading, follow [account recovery](API.md#existing-installations-and-account-recovery); public account creation cannot claim an existing library.
 
-The default data directory is `./data`, containing `pocketmark.db` and the private `access-token` file (mode `0600`). This file remains an administrative API recovery credential and session-digest secret. Enter it once as the administrator setup key when creating the first account; later browser logins accept only username/password. Stop with Ctrl+C. To run without fetching bookmarked pages:
+The default data directory is `./data`, containing `pocketmark.db` and the private `access-token` file (mode `0600`). This file is the administrative recovery key, session-digest secret and key material protecting TOTP. Enter it once for initial setup or first MFA enrollment; later logins use password and TOTP or a recovery code. Preserve it separately with backups. Stop with Ctrl+C. To run without fetching bookmarked pages:
 
 ```sh
 ./bin/pocketmark -no-capture
@@ -47,7 +47,7 @@ The supplied Compose configuration sets a **128 MiB container memory limit** and
 - Anchored highlights and annotations, with stale highlights identified after a page changes; a separate structural reader preserves headings, lists, code and tables.
 - Browser bookmarks HTML import/export and WebDAV/XBEL synchronization for Floccus.
 - PDF, image and SingleFile/HTML files (standalone or attached) streamed in 64 KiB SQLite chunks; manual offline snapshots with embedded resources.
-- Personal username/password login, named revocable API keys and an owner-only full ZIP backup while the app runs.
+- Personal password and TOTP login, named revocable API keys and an owner-only full ZIP backup while the app runs.
 - Installable mobile web interface, share target, and a small [browser extension](../extension/README.md). The Linkwarden compatibility API and third-party extension/mobile integration have been removed.
 
 Default capture fetches one HTML response, with a 20-second timeout, at most five redirects, a 2 MiB response/decompressed-body limit and up to 256 KiB of extracted text. Choose **Save with resources** for bounded resource embedding, or use the extension for an already-rendered page and a visible-tab PNG screenshot. The same Chrome extension generates PDF and full-page screenshots on demand, using an explicit debugger permission; [installation and limits](../extension/README.md). Other browsers can use **Print / PDF**, then upload the file. No Chromium instance runs on the server. Private, loopback and reserved network destinations can be bookmarked, but server capture refuses them. See [archive limits](ARCHIVES.md).
@@ -87,7 +87,7 @@ JSON import/export does not include captured HTML, extracted text or other archi
 
 ## Back up everything
 
-Choose **Settings → Full backup** to download a consistent ZIP while Pocketmark runs. It contains a SQLite snapshot including captures, uploaded files, highlights, account settings and hashed API keys. Keep your existing `access-token` file or `POCKETMARK_TOKEN` separately. The ZIP includes restore instructions; restore only while stopped into an empty data directory so stale WAL files cannot overwrite restored data. The operation uses temporary disk space approximately equal to the database size, not an in-memory copy.
+Choose **Settings → Full backup** to download a consistent ZIP while Pocketmark runs. It contains a SQLite snapshot including captures, uploaded files, highlights, account settings and hashed API keys. Keep your existing `access-token` file or `POCKETMARK_TOKEN` separately: the saved TOTP factor requires it. New ZIPs invalidate their recovery codes and the current TOTP window when restored; wait for up to two new authenticator codes, sign in and generate new recovery codes. Clock differences can add delay. Older ZIPs and raw copies cannot be detected automatically: reset MFA or regenerate codes manually after restore, and revoke restored sessions. The ZIP includes restore instructions; restore only while stopped into an empty data directory so stale WAL files cannot overwrite restored data. The operation uses temporary disk space approximately equal to the database size, not an in-memory copy.
 
 Alternatively, stop Pocketmark before copying its data directory. Preserve the complete directory, including any SQLite WAL files and the access token; a live copy of only `pocketmark.db` can miss committed data.
 

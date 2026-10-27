@@ -10,6 +10,8 @@ import (
 	"pocketmark/internal/store"
 	"testing"
 	"time"
+
+	"github.com/pquerna/otp/totp"
 )
 
 func TestSecurityAuthorizationAndInjection(t *testing.T) {
@@ -101,7 +103,8 @@ func TestBackupRestoreExcludesSessions(t *testing.T) {
 	a := newTestServer(t, "", false)
 	w := request(a, "POST", "/api/setup", setupRequest, false, nil)
 	requireStatus(t, w, 201)
-	headers := map[string]string{"Cookie": w.Result().Cookies()[0].String()}
+	cookie, secret, _, _, _ := enrollForTest(t, a, pendingCookie(t, w), "")
+	headers := map[string]string{"Cookie": cookie}
 	key := namedAPIKey(t, a)
 	requireStatus(t, request(a, "POST", "/api/links", `{"url":"https://example.test/restore","notes":"Keep across restore"}`, true, nil), 201)
 	snapshot, err := a.Store.Snapshot(context.Background())
@@ -122,7 +125,16 @@ func TestBackupRestoreExcludesSessions(t *testing.T) {
 	requireStatus(t, restoredResponse, 401)
 	login := request(old, "POST", "/api/login", setupCredentials, false, nil)
 	requireStatus(t, login, 200)
-	fresh := map[string]string{"Cookie": login.Result().Cookies()[0].String()}
+	// The restored snapshot blocks its current TOTP window; simulate time
+	// advancing so this checks the real HTTP sign-in without sleeping.
+	old.totpNow = func() time.Time { return time.Now().Add(60 * time.Second) }
+	code, err := totp.GenerateCode(secret, old.totpNow())
+	if err != nil {
+		t.Fatal(err)
+	}
+	verified := request(old, "POST", "/api/mfa/verify", `{"code":"`+code+`"}`, false, map[string]string{"Cookie": pendingCookie(t, login)})
+	requireStatus(t, verified, 200)
+	fresh := map[string]string{"Cookie": responseCookie(t, verified, "pocketmark")}
 	if err := restored.Close(); err != nil {
 		t.Fatal(err)
 	}

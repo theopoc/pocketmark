@@ -69,6 +69,39 @@ func (s *Store) SaveAccount(ctx context.Context, a Account) error {
 	return tx.Commit()
 }
 
+// SaveAccountFromSession retains a fully authenticated browser only if that
+// session and the enrolled factor still exist at the moment of the change.
+func (s *Store) SaveAccountFromSession(ctx context.Context, a Account, oldHash, newHash, device string) (time.Time, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return time.Time{}, err
+	}
+	defer tx.Rollback()
+	var expiry int64
+	var recoveryUntil int64
+	var idleMinutes int
+	if err = tx.QueryRowContext(ctx, "SELECT expires_at,idle_minutes,recovery_until FROM sessions WHERE hash=? AND "+liveSession+" AND EXISTS(SELECT 1 FROM mfa WHERE id=1 AND length(secret)>0)", oldHash).Scan(&expiry, &idleMinutes, &recoveryUntil); err != nil {
+		return time.Time{}, ErrMFAChanged
+	}
+	if _, err = tx.ExecContext(ctx, "UPDATE account SET username=?,salt=?,hash=? WHERE id=1", a.Username, a.Salt, a.Hash); err != nil {
+		return time.Time{}, err
+	}
+	if _, err = tx.ExecContext(ctx, "DELETE FROM sessions"); err != nil {
+		return time.Time{}, err
+	}
+	expires := time.Unix(expiry, 0)
+	if err = insertSessionTx(ctx, tx, a.Salt, newHash, expires, device, false); err != nil {
+		return time.Time{}, err
+	}
+	if _, err = tx.ExecContext(ctx, "UPDATE sessions SET idle_minutes=?,recovery_until=? WHERE hash=?", idleMinutes, recoveryUntil, newHash); err != nil {
+		return time.Time{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return time.Time{}, err
+	}
+	return expires, nil
+}
+
 func (s *Store) HasAPIKeyHash(ctx context.Context, hash string) bool {
 	var one int
 	return s.db.QueryRowContext(ctx, "SELECT 1 FROM api_tokens WHERE hash=? AND active=1 AND (expires_at=0 OR expires_at>unixepoch())", hash).Scan(&one) == nil

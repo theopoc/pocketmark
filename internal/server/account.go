@@ -89,6 +89,11 @@ func (a *Server) setup(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "choose a username and a password of 12–1024 bytes")
 		return
 	}
+	if !a.allowLogin(r) {
+		w.Header().Set("Retry-After", "60")
+		fail(w, 429, "too many setup attempts; retry in a minute")
+		return
+	}
 	state, err := a.Store.SetupStatus(r.Context())
 	if err != nil {
 		handleError(w, err)
@@ -114,10 +119,15 @@ func (a *Server) setup(w http.ResponseWriter, r *http.Request) {
 		fail(w, 409, "account creation is unavailable; sign in or ask the server administrator to configure your password")
 		return
 	}
-	if !a.issueSession(w, r, salt) {
+	mfaState, err := a.Store.MFA(r.Context())
+	if err != nil {
+		fail(w, 503, "authentication unavailable; sign in again")
 		return
 	}
-	respond(w, 201, map[string]bool{"authenticated": true})
+	if !a.newMFAChallenge(w, mfaChallenge{kind: "enroll", salt: salt, username: b.Username, generation: mfaState.Generation, adminApproved: true}) {
+		return
+	}
+	respond(w, 201, map[string]bool{"mfaRequired": true, "enrollmentRequired": true, "setupKeyConfirmed": true})
 }
 func (a *Server) setAccount(w http.ResponseWriter, r *http.Request) {
 	if !a.requireOwner(w, r) {
@@ -139,13 +149,26 @@ func (a *Server) setAccount(w http.ResponseWriter, r *http.Request) {
 	defer a.passwordMu.Unlock()
 	salt := randomSecret()
 	hash := passwordHash(b.Password, salt)
-	if err := a.Store.SaveAccount(r.Context(), store.Account{Username: b.Username, Salt: salt, Hash: hash}); err != nil {
-		handleError(w, err)
+	account := store.Account{Username: b.Username, Salt: salt, Hash: hash}
+	// A bearer recovery key can reset credentials but cannot create a web
+	// session without proof of the configured second factor.
+	if requestPrincipal(r).session == "" {
+		if err := a.Store.SaveAccount(r.Context(), account); err != nil {
+			handleError(w, err)
+			return
+		}
+		a.clearPendingMFA(false)
+		respond(w, 200, map[string]bool{"ok": true})
 		return
 	}
-	if !a.issueSession(w, r, salt) {
+	value := "v3." + randomSecret()
+	expires, err := a.Store.SaveAccountFromSession(r.Context(), account, requestPrincipal(r).session, a.sessionHash(value), r.UserAgent())
+	if err != nil {
+		fail(w, 401, "session changed; sign in again")
 		return
 	}
+	a.clearPendingMFA(false)
+	a.setSessionCookie(w, value, expires)
 	respond(w, 200, map[string]bool{"ok": true})
 }
 
@@ -254,15 +277,12 @@ func (a *Server) deleteToken(w http.ResponseWriter, r *http.Request) {
 	}
 	respond(w, 200, map[string]bool{"ok": true})
 }
-func (a *Server) issueSession(w http.ResponseWriter, r *http.Request, salt string) bool {
-	expires := time.Now().Add(7 * 24 * time.Hour)
-	value := "v2." + randomSecret()
-	if err := a.Store.CreateSession(r.Context(), salt, a.sessionHash(value), expires, r.UserAgent()); err != nil {
-		fail(w, 503, "session could not be created; retry signing in")
-		return false
+func (a *Server) setSessionCookie(w http.ResponseWriter, value string, expires time.Time) {
+	maxAge := int(time.Until(expires).Seconds())
+	if maxAge < 1 {
+		maxAge = -1
 	}
-	http.SetCookie(w, &http.Cookie{Name: "pocketmark", Value: value, Path: "/", HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteStrictMode, Expires: expires, MaxAge: 7 * 24 * 60 * 60})
-	return true
+	http.SetCookie(w, &http.Cookie{Name: "pocketmark", Value: value, Path: "/", HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteStrictMode, Expires: expires, MaxAge: maxAge})
 }
 
 func (a *Server) rotateToken(w http.ResponseWriter, r *http.Request) {

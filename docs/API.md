@@ -50,7 +50,7 @@ For Docker, use `POCKETMARK_ACCESS_TOKEN="$(docker compose exec -T pocketmark ca
 
 | Method and path | Request / result |
 | --- | --- |
-| `POST /api/login` | `{"username":"…","password":"…"}` → `{"authenticated":true}` and a seven-day HttpOnly, SameSite=Strict cookie. |
+| `POST /api/login` | `{"username":"…","password":"…"}` → a five-minute MFA challenge; verify the second factor before a browser session is issued. |
 | `POST /api/logout` | Revokes the current session in SQLite (including after restart) and clears its cookie; returns `{"ok":true}`. Does not revoke the access token. |
 | `GET /api/session` | `{"authenticated":true}` or HTTP 401. |
 | `GET /api/stats` | Counts: `links`, `collections`, `pending` (includes processing), `failed`. |
@@ -150,14 +150,19 @@ Annotation colors: `yellow`, `green`, `blue`, `pink`. Each bookmark supports up 
 
 ## Account and client keys
 
-`POST /api/login` accepts only `{username,password}`. Token-based browser login is not supported. Named API keys cannot log in as the owner. Password verification is serialized and uses PBKDF2-SHA256 with 600,000 iterations; validly formed login attempts are limited to ten per minute per client address (IPv6 /64). At most 256 source windows are tracked; additional sources receive 429 until a window expires. Busy password derivations return 429 with `Retry-After: 1` instead of queuing. Changing credential settings invalidates older cookies; named keys remain individually revocable. Sessions are random and only their keyed hashes and expiry are persisted. At most 32 sessions remain active; the oldest is evicted when another is issued. Upgrading from stateless cookies requires one fresh login. Existing accounts, libraries and API keys are preserved.
+`POST /api/login` accepts only `{username,password}` and creates a short-lived challenge, not a browser session. TOTP or a single-use recovery code is required to finish signing in. The first MFA enrollment on an existing installation also requires the administrator key. Named API keys cannot log in as the owner. Password verification is serialized and uses PBKDF2-SHA256 with 600,000 iterations; validly formed login attempts are limited to ten per minute per client address (IPv6 /64). At most 256 source windows are tracked; additional sources receive 429 until a window expires. MFA verification permits five attempts per challenge per minute and ten attempts account-wide per minute, with at most 32 pending challenges. The administrator recovery reset is independent of that verification budget. Busy password derivations return 429 with `Retry-After: 1` instead of queuing. Challenges expire after five minutes and do not survive restart. Existing browser sessions are revoked during the MFA migration; password-only cookies issued by an older version are also rejected after an upgrade. Accounts, libraries and API keys are preserved. Sessions are random and only their keyed hashes and expiry are persisted. At most 32 sessions remain active; the oldest is evicted when another is issued.
 
 | Endpoint | Contract |
 | --- | --- |
 | `GET /api/setup` | Public `{setupRequired,passwordEnabled}`; no account name or secret. |
-| `POST /api/setup` | First-run `{username,password,setupToken}` → 201 and an owner cookie. Only a new, empty instance can create its single account; later attempts return 409. Requires the administrator recovery key as `setupToken` (missing/wrong key: 403). Same password limits. |
+| `POST /api/setup` | First-run `{username,password,setupToken}` → 201 and a temporary MFA challenge. Only a new, empty instance can create its single account; later attempts return 409. Requires the administrator recovery key as `setupToken` (missing/wrong key: 403). |
+| `POST /api/mfa/enroll` | With a pending enrollment challenge, submit `{setupToken}` and receive a locally generated `{secret,qr}`. First-run setup has already checked the key; existing accounts must supply it. |
+| `POST /api/mfa/verify` | With a pending challenge, submit `{code}`. A valid TOTP or recovery code creates the browser session; initial enrollment confirms TOTP and returns ten recovery codes once. |
+| `POST /api/mfa/replace` | Browser session plus `{password,code}` starts replacement. A recent recovery-code login can use its one-time grant with an empty code; confirming the new TOTP revokes other sessions and replaces recovery codes. |
+| `POST /api/mfa/recovery-codes` | Browser session plus `{password,code}` replaces all recovery codes; the new codes are returned once. |
+| `POST /api/mfa/reset` | Administrator bearer only: remove the factor and recovery codes and revoke browser sessions. The next login requires enrollment. |
 | `GET /api/account` | Owner-only `{username,passwordEnabled}`. |
-| `PUT /api/account` | Owner-only `{username,password}`. Password 12–1024 bytes, username 1–120 bytes. Empty passwords are rejected; password sign-in cannot be disabled. Issues a replacement owner cookie. |
+| `PUT /api/account` | Owner-only `{username,password}`. Password 12–1024 bytes, username 1–120 bytes. Empty passwords are rejected; password sign-in cannot be disabled. A browser session receives a replacement cookie; an administrator bearer does not. |
 | `GET /api/tokens` | Owner-only array `{id,name,createdAt,active,lastUsedAt,profile,expiresAt}`; never returns secrets. |
 | `POST /api/tokens` | Owner-only `{name,profile?,expiresAt?}` → `{id,name,createdAt,active,lastUsedAt,profile,expiresAt,token}`; raw key appears once. Max 32 keys. |
 | `PATCH /api/tokens/{id}` | Owner-only `{name?:string,active?:boolean}` → `{ok:true}`. Supply name, active or both. Rename (1–120 UTF-8 bytes after trimming), disable temporarily or reactivate the same key; 404 for missing/deleted keys. Renaming preserves the secret, status and usage history unless active is explicitly supplied. |
@@ -181,6 +186,19 @@ curl --fail-with-body -X PUT \
 ```
 
 Use the local server address or HTTPS, delete the private JSON file afterward, and sign in normally with the new credentials. The server's `access-token` file / `POCKETMARK_TOKEN` remains an administrative API recovery credential and session-digest secret; it is never accepted by `/api/login`. Keep it private and preserve it with server backups. Ordinary integrations should use named keys from the signed-in **Settings → API keys** section.
+
+If the authenticator and recovery codes are lost, reset MFA with the administrator key, then sign in with the password and enroll again:
+
+```sh
+curl --fail-with-body -X POST \
+  -H "Authorization: Bearer $POCKETMARK_ACCESS_TOKEN" "$POCKETMARK_URL/api/mfa/reset"
+```
+
+This revokes all browser sessions and existing recovery codes. The TOTP secret is encrypted using a key derived from the administrator key. If that key changes, use a still-valid recovery code to sign in and replace the authenticator, or reset MFA and enroll again. New native ZIP restores invalidate their recovery codes, so a restore with a different administrator key requires a reset. Keep a high-entropy administrator key and protect it separately from database backups. TOTP codes are accepted only once within the allowed clock window. Recovery codes are generated randomly, stored as hashes and usable once. QR codes are generated locally. These protections apply to browser sessions: named API keys and the administrator bearer remain direct API credentials.
+
+Restoring a new native ZIP also blocks the current TOTP window to prevent replay of a code used after the snapshot. Wait for up to two new authenticator codes before signing in; clock differences can add delay. Older ZIPs and raw copies cannot be identified automatically and may restore earlier TOTP counters.
+
+The `pquerna/otp` package and its QR encoder run within the existing Go process. QR generation is limited to a 220 × 220 image during enrollment, and authentication work slots bound concurrency; no resident process, cache or index is added. Their memory impact has not been separately benchmarked.
 
 ## Compatibility and synchronization
 
@@ -257,7 +275,7 @@ Set `POCKETMARK_ORIGIN` to the exact HTTPS origin. For first-run setup, retrieve
 
 Behind an Ingress, set `POCKETMARK_TRUSTED_PROXIES` to a comma-separated list of **only the actual proxy CIDRs**. The immediate peer must be trusted before `X-Forwarded-For` is used; the chain is read from right to left to find the first untrusted address. Untrusted peers cannot spoof their limit through forwarding headers. Configure the proxy to overwrite or append the actual source address and restrict direct access to the application. Without this setting, clients behind the same proxy share its limit. Do not trust every address or the whole cluster unless every workload in that range is trusted.
 
-Public `/api/login` and `/api/setup` use two separate request slots; their POST bodies have a five-second read deadline. Library requests retain eight slots. `/healthz` uses two independent slots and a one-second SQLite context timeout: use it for readiness. `/livez` has no database dependency and is independent of these slots: use it for liveness. Ingress connection/rate limits are still needed for distributed traffic floods.
+Public `/api/login`, `/api/setup` and MFA challenge endpoints use two separate request slots; their POST bodies have a five-second read deadline. Library requests retain eight slots. `/healthz` uses two independent slots and a one-second SQLite context timeout: use it for readiness. `/livez` has no database dependency and is independent of these slots: use it for liveness. Ingress connection/rate limits are still needed for distributed traffic floods.
 
 ## Security controls
 
@@ -269,7 +287,7 @@ with `x-webdav-methods` because OpenAPI 3.0 does not define these operation name
 
 All library, archive, upload, import, export, metrics, account and session endpoints
 require authentication, including GET and HEAD. Only setup/login, minimal health
-probes and static UI/documentation are public. Setup still requires the private
+probes and static UI/documentation are public. MFA enrollment and verification require a short-lived password-stage challenge. Setup still requires the private
 administrator setup key and an eligible empty database. Extension CORS OPTIONS
 preflight is public but grants no data access or mutation. Other DAV OPTIONS requests
 are authenticated. Invalid Authorization never falls back to a valid cookie.

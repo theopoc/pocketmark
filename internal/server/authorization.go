@@ -26,6 +26,9 @@ var apiAccess = map[string]routeAccess{
 	"DELETE /api/tokens/{id}":                           {owner: true, confirm: true},
 	"POST /api/tokens/{id}/rotate":                      {owner: true, confirm: true},
 	"POST /api/reauth":                                  {owner: true},
+	"POST /api/mfa/replace":                             {owner: true},
+	"POST /api/mfa/recovery-codes":                      {owner: true},
+	"POST /api/mfa/reset":                               {owner: true},
 	"GET /api/sessions":                                 {owner: true},
 	"PATCH /api/sessions/current":                       {owner: true, confirm: true},
 	"DELETE /api/sessions/others":                       {owner: true, confirm: true},
@@ -102,7 +105,9 @@ func (a *Server) authenticate(r *http.Request, dav bool) (principal, bool) {
 		return principal{profile: profile}, err == nil
 	}
 	cookie, err := r.Cookie("pocketmark")
-	if err != nil || len(cookie.Value) != 67 || !strings.HasPrefix(cookie.Value, "v2.") {
+	// Versions before mandatory MFA issued v2 cookies after password-only login.
+	// The keyed digest covers the prefix, so changing it cannot upgrade a cookie.
+	if err != nil || len(cookie.Value) != 67 || !strings.HasPrefix(cookie.Value, "v3.") {
 		return principal{}, false
 	}
 	hash := a.sessionHash(cookie.Value)
@@ -114,7 +119,7 @@ func (a *Server) authorize(w http.ResponseWriter, r *http.Request) bool {
 	if !dav && !strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Path != "/metrics" {
 		return true
 	}
-	if r.URL.Path == "/api/login" || r.URL.Path == "/api/setup" {
+	if publicAuthPath(r.URL.Path) {
 		return true
 	}
 	p, ok := a.authenticate(r, dav)

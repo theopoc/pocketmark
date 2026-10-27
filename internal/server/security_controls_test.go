@@ -73,7 +73,7 @@ func TestSensitiveRoutesRequireRecentPassword(t *testing.T) {
 	requireStatus(t, request(a, "POST", "/api/tokens", `{"name":"confirmed"}`, false, headers), 201)
 	requireStatus(t, request(a, "GET", "/api/backup", "", false, headers), 200)
 	// Confirmation is bound to one session, not to the owner globally.
-	other := request(a, "POST", "/api/login", `{"username":"me","password":"test-only-password"}`, false, nil).Result().Cookies()[0]
+	other := additionalTestSession(t, a)
 	if _, err := db.Exec("UPDATE sessions SET confirmed_at=0 WHERE hash=?", a.sessionHash(other.Value)); err != nil {
 		t.Fatal(err)
 	}
@@ -81,6 +81,28 @@ func TestSensitiveRoutesRequireRecentPassword(t *testing.T) {
 	// Recovery still works without a password or browser session.
 	requireStatus(t, request(a, "PUT", "/api/account", `{"username":"recovered","password":"new-recovery-password"}`, true, nil), 200)
 	requireStatus(t, request(a, "POST", "/api/reauth", `{"password":"test-only-password"}`, false, headers), 401)
+}
+
+func TestAccountChangePreservesAbsoluteSessionExpiryAndIdlePolicy(t *testing.T) {
+	a, db := securityServer(t)
+	old := passwordLogin(t, a).Result().Cookies()[0]
+	var expiry int64
+	if err := db.QueryRow("UPDATE sessions SET expires_at=unixepoch()+3600,idle_minutes=15 WHERE hash=? RETURNING expires_at", a.sessionHash(old.Value)).Scan(&expiry); err != nil {
+		t.Fatal(err)
+	}
+	w := request(a, "PUT", "/api/account", `{"username":"me","password":"test-only-password"}`, false, map[string]string{"Cookie": old.String()})
+	requireStatus(t, w, 200)
+	next := w.Result().Cookies()[0]
+	var storedExpiry int64
+	var idleMinutes int
+	if err := db.QueryRow("SELECT expires_at,idle_minutes FROM sessions WHERE hash=?", a.sessionHash(next.Value)).Scan(&storedExpiry, &idleMinutes); err != nil {
+		t.Fatal(err)
+	}
+	if storedExpiry != expiry || idleMinutes != 15 || next.Expires.Unix() != expiry || next.MaxAge > 3600 {
+		t.Fatalf("session policy changed: expiry=%d want=%d idle=%d cookie=%+v", storedExpiry, expiry, idleMinutes, next)
+	}
+	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": old.String()}), 401)
+	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": next.String()}), 200)
 }
 
 func TestReauthenticationLimits(t *testing.T) {
@@ -106,7 +128,7 @@ func TestAllRegisteredEndpointsRejectAnonymousAccess(t *testing.T) {
 	for route := range nativeAPIRoutes(t) {
 		method, path, _ := strings.Cut(route, " ")
 		method = strings.ToUpper(method)
-		if path == "/api/setup" || path == "/api/login" || path == "/healthz" || path == "/livez" {
+		if publicAuthPath(path) || path == "/healthz" || path == "/livez" {
 			continue
 		}
 		if _, ok := apiAccess[method+" "+path]; !ok {
@@ -123,8 +145,8 @@ func TestAllRegisteredEndpointsRejectAnonymousAccess(t *testing.T) {
 			requireStatus(t, request(a, method, path, "", false, nil), 401)
 		}
 	}
+	cookie := passwordLogin(t, a).Result().Cookies()[0].String()
 	for _, path := range []string{"/api/links/1", "/api/backup", "/api/tokens"} {
-		cookie := passwordLogin(t, a).Result().Cookies()[0].String()
 		requireStatus(t, request(a, "GET", path, "", false, map[string]string{"Cookie": cookie, "Authorization": "Basic invalid"}), 401)
 	}
 }
@@ -202,7 +224,7 @@ func TestKeyProfilesRealOperationsAndRotation(t *testing.T) {
 func TestSessionManagementHTTP(t *testing.T) {
 	a, db := securityServer(t)
 	first := passwordLogin(t, a).Result().Cookies()[0]
-	second := request(a, "POST", "/api/login", `{"username":"me","password":"test-only-password"}`, false, nil).Result().Cookies()[0]
+	second := additionalTestSession(t, a)
 	headers := map[string]string{"Cookie": first.String()}
 	w := request(a, "GET", "/api/sessions", "", false, headers)
 	requireStatus(t, w, 200)
@@ -213,8 +235,8 @@ func TestSessionManagementHTTP(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &sessions); err != nil {
 		t.Fatal(err)
 	}
-	if len(sessions) != 3 {
-		t.Fatalf("expected recovery-issued and two login sessions, got %d", len(sessions))
+	if len(sessions) != 2 {
+		t.Fatalf("expected two browser sessions, got %d", len(sessions))
 	}
 	requireStatus(t, request(a, "PATCH", "/api/sessions/current", `{"idleTimeoutMinutes":15}`, false, headers), 200)
 	requireStatus(t, request(a, "PATCH", "/api/sessions/current", `{"idleTimeoutMinutes":1}`, false, headers), 400)
@@ -258,7 +280,7 @@ func TestKeyCreationDefaultsAndValidation(t *testing.T) {
 func TestIndividualSessionRevocation(t *testing.T) {
 	a, _ := securityServer(t)
 	cookie := passwordLogin(t, a).Result().Cookies()[0]
-	other := request(a, "POST", "/api/login", `{"username":"me","password":"test-only-password"}`, false, nil).Result().Cookies()[0]
+	other := additionalTestSession(t, a)
 	h := map[string]string{"Cookie": cookie.String()}
 	w := request(a, "GET", "/api/sessions", "", false, h)
 	var sessions []store.Session

@@ -4,7 +4,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-export async function securityJourney({ browser, page, base, username, password }) {
+export async function securityJourney({ browser, page, base, username, password, recoveryCode }) {
   const url = path => new URL(path, base).href;
   const request = page.request;
   const settle = async () => { await page.evaluate(async () => { await Promise.all(document.getAnimations().filter(a => a.effect?.getTiming().iterations !== Infinity).map(a => a.finished.catch(() => {}))); }); };
@@ -17,8 +17,22 @@ export async function securityJourney({ browser, page, base, username, password 
   const peer = await browser.newContext({ userAgent: 'Synthetic second browser / security regression' });
   try {
     assert.equal((await peer.request.post(url('/api/login'), { data: { username, password } })).status(), 200);
+    assert.equal((await peer.request.post(url('/api/mfa/verify'), { data: { code: recoveryCode } })).status(), 200);
     await page.locator('#settings-button').click();
     await page.locator('#sessions-list .token-row').nth(1).waitFor();
+    if (process.env.E2E_SCREENSHOTS) {
+      await mkdir(process.env.E2E_SCREENSHOTS, { recursive: true });
+      for (const [name, width, height, theme] of [['desktop', 1280, 1000, 'dark'], ['mobile', 390, 844, 'dark'], ['mobile-light', 390, 844, 'light']]) {
+        await page.setViewportSize({ width, height });
+        await page.evaluate(theme => { if (document.documentElement.dataset.theme !== theme) document.querySelector('[data-theme-toggle]').click(); }, theme);
+        await page.locator('#mfa-settings-title').evaluate(node => node.scrollIntoView({ block: 'start' }));
+        assert.ok(await page.locator('#settings-dialog').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), `${name} MFA settings overflow`);
+        await settle();
+        await page.screenshot({ path: join(process.env.E2E_SCREENSHOTS, `mfa-settings-${name}.png`), fullPage: false });
+      }
+      await page.setViewportSize({ width: 1280, height: 1000 });
+      await page.evaluate(() => { if (document.documentElement.dataset.theme !== 'dark') document.querySelector('[data-theme-toggle]').click(); });
+    }
     assert.equal(await page.locator('#token-profile').inputValue(), 'read');
     assert.equal(await page.locator('#token-expiry').inputValue(), '30');
     await page.locator('#token-name').fill('Synthetic extension');
@@ -91,7 +105,7 @@ export async function securityJourney({ browser, page, base, username, password 
       await page.screenshot({ path: join(process.env.E2E_SCREENSHOTS, 'expired-key.png'), fullPage: false });
       for (const [name, width, height, theme] of [['desktop', 1280, 1000, 'dark'], ['mobile', 390, 844, 'dark'], ['mobile-light', 390, 844, 'light']]) {
         await page.setViewportSize({ width, height });
-        await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+        await page.evaluate(theme => { if (document.documentElement.dataset.theme !== theme) document.querySelector('[data-theme-toggle]').click(); }, theme);
         await page.locator('#settings-dialog').evaluate(dialog => { dialog.scrollTop = 0; });
         assert.ok(await page.locator('#settings-dialog').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), `${name} settings overflow`);
         await settle();
