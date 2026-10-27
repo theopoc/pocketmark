@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.0](https://github.com/theopoc/pocketmark/compare/v0.2.0...v0.3.0) (2026-10-27)
+
+
+### Features
+
+* add integrated capture viewer ([#42](https://github.com/theopoc/pocketmark/issues/42)) ([45f6517](https://github.com/theopoc/pocketmark/commit/45f6517f07ed84d1e2e1d24fce1cc562d8f7ea9a))
+* **auth:** require TOTP for web sessions ([#52](https://github.com/theopoc/pocketmark/issues/52)) ([24f7b6b](https://github.com/theopoc/pocketmark/commit/24f7b6beb1f22ded26366842d1250fa60fd4c265))
+* **extension:** confirm successful saves ([#46](https://github.com/theopoc/pocketmark/issues/46)) ([19ce3db](https://github.com/theopoc/pocketmark/commit/19ce3dbc46be39c8c97ed20586ef57db2cf386ff))
+* **security:** scope API keys and manage browser sessions ([#51](https://github.com/theopoc/pocketmark/issues/51)) ([7e0851e](https://github.com/theopoc/pocketmark/commit/7e0851e66d27fc78d5b8328a52cb9d408eaf4d54))
+* **server:** add per-client HTTP rate limits ([#48](https://github.com/theopoc/pocketmark/issues/48)) ([593bcf5](https://github.com/theopoc/pocketmark/commit/593bcf5b775a7c11d95ec9113e8db32e606318a7))
+
+
+### Bug Fixes
+
+* bound backups and index date sorting ([#50](https://github.com/theopoc/pocketmark/issues/50)) ([f568d7d](https://github.com/theopoc/pocketmark/commit/f568d7d68c5b53b62bf13df2e96936a7d7651b0f))
+* **compose:** use published GHCR image ([#38](https://github.com/theopoc/pocketmark/issues/38)) ([1eef406](https://github.com/theopoc/pocketmark/commit/1eef406c6f30e6f291eaa50fa355709f749ba82c))
+* **extension:** close popup after saving ([#47](https://github.com/theopoc/pocketmark/issues/47)) ([766a427](https://github.com/theopoc/pocketmark/commit/766a4273ee2545a9dfcbf292535e73e428617b91))
+* **security:** close pre-deployment audit findings ([#45](https://github.com/theopoc/pocketmark/issues/45)) ([bd2e946](https://github.com/theopoc/pocketmark/commit/bd2e946bf4794b025ad6e60247612ceba7216f99))
+* **security:** harden imports previews and backups ([#49](https://github.com/theopoc/pocketmark/issues/49)) ([d276803](https://github.com/theopoc/pocketmark/commit/d2768039bf772417bb0cbf718934744fe848ea32))
+
 ## [0.2.0](https://github.com/theopoc/pocketmark/compare/v0.1.0...v0.2.0) (2026-10-24)
 
 
