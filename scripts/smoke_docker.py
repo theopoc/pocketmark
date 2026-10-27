@@ -41,6 +41,12 @@ def main():
     service = config["services"]["pocketmark"]
     service.pop("build", None)
     service["image"] = args.image
+    if args.browser:
+        # The synthetic browser journey generates bursts far above normal use.
+        # Rate limiting itself is covered by the server's dedicated tests.
+        service.setdefault("environment", {}).update({
+            "POCKETMARK_RATE_LIMIT": "1000", "POCKETMARK_RATE_BURST": "10000",
+        })
     if args.platform:
         service["platform"] = args.platform
     service["ports"] = [{"target": 8090, "published": "0", "host_ip": "127.0.0.1", "protocol": "tcp"}]
