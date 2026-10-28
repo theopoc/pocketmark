@@ -758,8 +758,9 @@
     $("empty-state").hidden = state.links.length > 0;
     const filtered = !!state.query || state.filter !== "all" || !!state.tag;
     $("empty-title").textContent = filtered ? "No bookmarks found" : "Your library starts here";
-    $("empty-message").textContent = filtered ? "Try a different search or clear your filters to see all bookmarks." : "Save your first bookmark, or import an existing library from the navigation.";
+    $("empty-message").textContent = filtered ? "Try a different search or clear your filters to see all bookmarks." : "Save your first bookmark, or bring your existing bookmarks with you.";
     $("empty-reset").hidden = !filtered;
+    $("empty-import").hidden = filtered;
     $("empty-add").textContent = filtered ? "Add a bookmark" : "Add your first bookmark";
     $("empty-add").classList.toggle("primary", !filtered);
     $("empty-add").classList.toggle("subtle", filtered);
@@ -981,6 +982,7 @@
   document.querySelectorAll(".close-dialog").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
   $("add-bookmark").addEventListener("click", () => openEditor());
   $("empty-add").addEventListener("click", () => openEditor());
+  $("empty-import").addEventListener("click", () => $("import-file").click());
   $("empty-reset").addEventListener("click", () => {
     clearTimeout(searchTimer); state.query = ""; $("search").value = "";
     selectFilter("all"); $("search").focus();
@@ -1044,6 +1046,7 @@
     const file = $("import-file").files[0];
     if (!file) return;
     $("import-button").disabled = true;
+    $("empty-import").disabled = true;
     try {
       if (file.size > 8 * 1024 * 1024) throw new Error("Choose an export smaller than 8 MiB.");
       const body = await file.text();
@@ -1052,7 +1055,7 @@
       const result = await api(html ? "/api/import/html" : "/api/import", { method: "POST", headers: { "Content-Type": html ? "text/html" : "application/json" }, body });
       toast(`Imported ${result.imported} bookmarks. ${result.skipped || 0} skipped.`);
       await refresh();
-    } catch (error) { toast(error.message, true); } finally { $("import-button").disabled = false; $("import-file").value = ""; }
+    } catch (error) { toast(error.message, true); } finally { $("import-button").disabled = false; $("empty-import").disabled = false; $("import-file").value = ""; }
   });
 
   document.addEventListener("keydown", (event) => {
