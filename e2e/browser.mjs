@@ -411,12 +411,26 @@ try {
   await page.unroute('**/api/links?*', failLibrary);
   await page.locator('#library-error').getByRole('button', { name: 'Try again' }).click();
   await page.locator('#library-error').waitFor({ state: 'hidden' });
-  await page.route('**/api/links?*', failLibrary);
+  let releaseDelayedFailure;
+  let notifyRequest;
+  const requested = new Promise(resolve => { notifyRequest = resolve; });
+  const delayedFailure = async route => {
+    notifyRequest();
+    await new Promise(resolve => { releaseDelayedFailure = resolve; });
+    await failLibrary(route);
+  };
+  await page.route('**/api/links?*', delayedFailure);
   await page.locator('[data-filter="favorite"]').click();
+  await requested;
+  assert.equal(await card(original).isVisible(), false, 'old results are hidden while a different view loads');
+  assert.equal(await page.locator('#empty-state').isVisible(), false);
+  assert.equal(await page.locator('#page-title').evaluate(node => document.activeElement === node), true, 'focus stays on the new view heading');
+  assert.match(await page.locator('#results-label').textContent(), /Loading/);
+  releaseDelayedFailure();
   await page.locator('#library-error').getByRole('button', { name: 'Try again' }).waitFor();
   assert.equal(await card(original).isVisible(), false, 'old results do not appear under a failed new filter');
   assert.equal(await page.locator('#empty-state').isVisible(), false, 'a failed request is not presented as an empty view');
-  await page.unroute('**/api/links?*', failLibrary);
+  await page.unroute('**/api/links?*', delayedFailure);
   await page.locator('#library-error').getByRole('button', { name: 'Try again' }).click();
   await page.locator('#empty-title').filter({ hasText: 'No favorites yet' }).waitFor();
   assert.equal(await page.locator('#empty-add').isVisible(), false);

@@ -21,6 +21,7 @@
   let themeTransition = null;
   let renderedLibraryRoute = null;
   let libraryUnavailable = false;
+  let libraryLoading = false;
   const sharedParams = new URLSearchParams(location.search);
   let editorBaseline = null;
   let editorSession = 0;
@@ -761,9 +762,9 @@
       card.append(top, body, footer);
       grid.append(card);
     }
-    bulk.render(libraryUnavailable ? [] : state.links);
-    grid.hidden = libraryUnavailable;
-    $("empty-state").hidden = libraryUnavailable || state.links.length > 0;
+    bulk.render(libraryUnavailable || libraryLoading ? [] : state.links);
+    grid.hidden = libraryUnavailable || libraryLoading;
+    $("empty-state").hidden = libraryUnavailable || libraryLoading || state.links.length > 0;
     const filtered = !!state.query || state.filter !== "all" || !!state.tag;
     $("empty-title").textContent = filtered ? "No bookmarks found" : "Your library starts here";
     const offerNearMatches = !!state.query && !state.fuzzy;
@@ -789,11 +790,11 @@
     $("empty-reset").classList.toggle("primary", !primaryAdd);
     $("empty-reset").classList.toggle("subtle", primaryAdd);
     const pages = Math.max(1, Math.ceil(state.total / state.pageSize));
-    $("pagination").hidden = libraryUnavailable || pages <= 1;
+    $("pagination").hidden = libraryUnavailable || libraryLoading || pages <= 1;
     $("page-label").textContent = `Page ${state.page} of ${pages}`;
     $("previous-page").disabled = state.page <= 1;
     $("next-page").disabled = state.page >= pages;
-    $("results-label").textContent = libraryUnavailable ? "Could not load this view" : `${state.total} bookmark${state.total === 1 ? "" : "s"}${state.query ? ` matching “${state.query}”` : " in this view"}`;
+    $("results-label").textContent = libraryLoading ? "Loading your library…" : libraryUnavailable ? "Could not load this view" : `${state.total} bookmark${state.total === 1 ? "" : "s"}${state.query ? ` matching “${state.query}”` : " in this view"}`;
     restoreFocus(grid, key);
   }
 
@@ -809,13 +810,22 @@
     if (state.filter === "unread") params.set("unread", "1");
     if (state.filter === "inbox") params.set("collection", "0");
     if (state.filter === "collection") params.set("collection", state.collection);
+    libraryLoading = renderedLibraryRoute !== params.toString();
+    if (libraryLoading) {
+      if ($("bookmark-grid").contains(document.activeElement) || $("pagination").contains(document.activeElement)) $("page-title").focus();
+      $("bookmark-grid").hidden = true;
+      $("empty-state").hidden = true;
+      $("pagination").hidden = true;
+      bulk.render([]);
+    }
     $("bookmark-grid").setAttribute("aria-busy", "true");
-    if (!quiet) $("results-label").textContent = "Loading your library…";
+    if (!quiet || libraryLoading) $("results-label").textContent = "Loading your library…";
     $("library-error").hidden = true;
     try {
       const [result, collections, tags, stats] = await Promise.all([api(`/api/links?${params}`), api("/api/collections"), api("/api/tags"), api("/api/stats")]);
       if (request !== state.request) return;
       libraryUnavailable = false;
+      libraryLoading = false;
       state.links = result.links || [];
       state.total = result.total || 0;
       state.pageSize = result.pageSize || 40;
@@ -835,6 +845,7 @@
       if (stats.pending && !document.hidden) state.timer = setTimeout(() => refresh(true), 5000);
     } catch (error) {
       if (request !== state.request) return;
+      libraryLoading = false;
       libraryUnavailable = renderedLibraryRoute !== params.toString();
       renderLinks();
       const message = el("span", "", `${error.message}${libraryUnavailable ? "" : " Showing the last loaded results."} `);
