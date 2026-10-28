@@ -87,6 +87,8 @@
       $("reader-notes").value = "";
       $("asset-file").value = "";
       $("asset-file").disabled = false;
+      $("asset-upload-button").removeAttribute("aria-disabled");
+      $("asset-upload-button").textContent = "Attach a saved file";
       $("preserve-page").disabled = false;
       $("reader-notes-form").querySelector("button[type=submit]").disabled = false;
       $("reader-error").textContent = "";
@@ -469,16 +471,19 @@
       if (!assets?.length) $("asset-list").append(el("p", "small muted", "No additional files saved."));
     }
 
+    $("asset-upload-button").addEventListener("click", () => { if (!$("asset-file").disabled) $("asset-file").click(); });
     $("asset-file").addEventListener("change", async () => {
       const file = $("asset-file").files[0];
       if (!file || !state.reading) return;
       const id = state.reading.id, request = state.readerRequest;
       $("asset-file").disabled = true;
+      $("asset-upload-button").setAttribute("aria-disabled", "true");
+      $("asset-upload-button").textContent = "Uploading file…";
       try {
         if (file.size > 20 * 1024 * 1024) throw new Error("Choose a file smaller than 20 MiB.");
         await api(`/api/links/${id}/assets?name=${encodeURIComponent(file.name)}`, { method: "POST", headers: { "Content-Type": file.type || (/\.html?$/i.test(file.name) ? "text/html" : "application/octet-stream") }, body: file });
         await loadAssets(id, request); toast("File saved.");
-      } catch (error) { toast(error.message, true); } finally { if (isCurrent(request)) { $("asset-file").value = ""; $("asset-file").disabled = false; } }
+      } catch (error) { toast(error.message, true); } finally { if (isCurrent(request)) { $("asset-file").value = ""; $("asset-file").disabled = false; $("asset-upload-button").removeAttribute("aria-disabled"); $("asset-upload-button").textContent = "Attach a saved file"; } }
     });
     $("preserve-page").addEventListener("click", async () => {
       if (!state.reading) return;

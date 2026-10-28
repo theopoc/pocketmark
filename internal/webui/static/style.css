@@ -32,7 +32,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 button { cursor: pointer; }
 button:disabled { opacity: .48; cursor: not-allowed; }
-#reader-retry-capture[aria-disabled="true"] { opacity: .48; cursor: not-allowed; }
+#reader-retry-capture[aria-disabled="true"], #asset-upload-button[aria-disabled="true"] { opacity: .48; cursor: not-allowed; }
 a { color: inherit; text-underline-offset: 3px; }
 button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 input, select, textarea { caret-color: var(--accent); }

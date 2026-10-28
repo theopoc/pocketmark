@@ -404,9 +404,19 @@ test("an old file upload cannot release another document's active upload control
   const newer = fire(env.get("asset-file"), "change");
   first.resolve({ id: 18 }); await uploading;
   assert.equal(env.get("asset-file").disabled, true);
+  assert.equal(env.get("asset-upload-button").attributes["aria-disabled"], "true");
+  assert.equal(env.get("asset-upload-button").textContent, "Uploading file…");
+  let chooserRequests = 0;
+  env.get("asset-file").addEventListener("click", () => { chooserRequests++; });
+  await fire(env.get("asset-upload-button"), "click");
+  assert.equal(chooserRequests, 0);
   assert.equal(env.get("reader-title").textContent, "Page 2");
   second.resolve({ id: 19 }); await newer;
   assert.equal(env.get("asset-file").disabled, false);
+  assert.equal(env.get("asset-upload-button").attributes["aria-disabled"], undefined);
+  assert.equal(env.get("asset-upload-button").textContent, "Attach a saved file");
+  await fire(env.get("asset-upload-button"), "click");
+  assert.equal(chooserRequests, 1);
   assert.equal(env.calls.filter(call => call.path === "/api/links/1/assets").length, 1);
 });
 
