@@ -81,6 +81,16 @@ test("select-page and individual selection enforce 500 while clear updates the t
   await fire(env.get("clear-selection"), "click");
   assert.equal(env.bulk.has(1), false); assert.equal(env.get("bulk-open").hidden, true);
 });
+test("select page is unavailable when the current page has no bookmarks", () => {
+  const env = setup();
+  assert.equal(env.get("select-page").disabled, true);
+  env.bulk.render([env.link(1)]);
+  assert.equal(env.get("select-page").disabled, false);
+  env.bulk.select(env.link(1), true);
+  env.bulk.render([]);
+  assert.equal(env.get("select-page").disabled, true);
+  assert.equal(env.get("bulk-open").hidden, false);
+});
 test("duplicate submits and action changes cannot release a pending operation", async () => {
   const pending = deferred(), env = setup(() => pending.promise);
   env.bulk.select(env.link(1), true); await env.open("tags"); env.get("bulk-tags").value = "go, café, go";

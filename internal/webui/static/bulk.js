@@ -17,6 +17,7 @@
       $("selected-count").hidden = !selected.size;
       $("bulk-open").hidden = !selected.size; $("bulk-open").disabled = !selected.size;
       $("clear-selection").hidden = !selected.size;
+      $("select-page").disabled = visible.length === 0;
       $("select-page").checked = visible.length > 0 && count === visible.length;
       $("select-page").indeterminate = count > 0 && count < visible.length;
     }

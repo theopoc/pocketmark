@@ -132,6 +132,7 @@ input[type=checkbox] { width: 15px; height: 15px; padding: 0; flex-shrink: 0; ac
 .bulk-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
 .bulk-toolbar .button { min-height: 26px; padding: 3px 8px; font-size: 11px; }
 .bulk-toolbar .inline-check { padding: 4px 0; }
+.bulk-toolbar .inline-check:has(input:disabled) { opacity: .6; }
 #selected-count { color: var(--accent); font-weight: 600; }
 .capture-summary { font-size: 12px; color: #8c5818; }
 /* The same bookmark structure supports both dense rows and a reading grid. */
@@ -610,7 +611,7 @@ body:has(dialog[open]) { overflow: hidden; }
   .view-list .card-footer { flex-wrap: wrap; }
   input.bookmark-select[type=checkbox], #select-page { width: 20px; height: 20px; margin: 0; }
   .bookmark-select-target { width: 44px; min-height: 44px; margin: -10px; }
-  .bulk-toolbar .inline-check { min-width: 44px; min-height: 44px; justify-content: center; margin-left: -10px; margin-right: -6px; }
+  .bulk-toolbar .inline-check { min-width: 44px; min-height: 44px; justify-content: center; margin-left: -10px; margin-right: 0; }
   .view-list .bookmark-card { grid-template-columns: 24px minmax(0,1fr); }
   .topbar .icon-button, .topbar .theme-toggle, .navigation-dialog .icon-button { min-width: 44px; min-height: 44px; }
   .help-details summary, .reader-options summary { min-height: 44px; padding-block: 12px; }
