@@ -83,6 +83,8 @@
     <main id="main-content" class="main-content" tabindex="-1">
       <header class="topbar"><div class="topbar-location"><button id="open-navigation" class="icon-button mobile-only" aria-label="Open navigation" aria-controls="navigation-dialog" aria-expanded="false"><span data-icon="menu" aria-hidden="true"></span></button><span class="breadcrumb"><span class="breadcrumb-root">Workspace</span><span data-icon="chevron-right" aria-hidden="true"></span><span id="breadcrumb-current">All bookmarks</span></span></div><div class="topbar-actions"><button class="button subtle theme-toggle" data-theme-toggle aria-label="Dark mode" aria-pressed="true" title="Switch to light mode"><span data-theme-icon aria-hidden="true"></span><span data-theme-label>Dark</span></button><span class="workspace-badge"><span data-icon="lock" aria-hidden="true"></span>Personal library</span></div></header>
       <div class="library-content">
+      <p id="import-progress" class="operation-progress" role="status" hidden>Importing bookmarks…</p>
+      <p id="upload-progress" class="operation-progress" role="status" hidden>Uploading file…</p>
       <section id="tags-view" hidden aria-labelledby="tags-title">
         <div class="library-header"><div><h1 id="tags-title" tabindex="-1">All tags</h1><p class="muted">Browse your tags. Select one to see its bookmarks.</p></div><button id="tags-back" class="button subtle"><span data-icon="arrow-left" aria-hidden="true"></span>Back to library</button></div>
         <label class="search-box"><span data-icon="search" aria-hidden="true"></span><span class="sr-only">Search tags</span><input id="tags-search" type="search" placeholder="Search tags…" autocomplete="off" maxlength="512"></label>

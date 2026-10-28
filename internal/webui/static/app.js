@@ -1077,6 +1077,7 @@
     const file = $("import-file").files[0];
     if (!file) return;
     $("import-button").disabled = true;
+    $("import-progress").hidden = false;
     try {
       if (file.size > 8 * 1024 * 1024) throw new Error("Choose an export smaller than 8 MiB.");
       const body = await file.text();
@@ -1085,7 +1086,7 @@
       const result = await api(html ? "/api/import/html" : "/api/import", { method: "POST", headers: { "Content-Type": html ? "text/html" : "application/json" }, body });
       toast(`Imported ${result.imported} bookmarks. ${result.skipped || 0} skipped.`);
       await refresh();
-    } catch (error) { toast(error.message, true); } finally { $("import-button").disabled = false; $("import-file").value = ""; }
+    } catch (error) { toast(error.message, true); } finally { $("import-progress").hidden = true; $("import-button").disabled = false; $("import-file").value = ""; }
   });
 
   document.addEventListener("keydown", (event) => {
@@ -1123,6 +1124,7 @@
     const file = $("library-file").files[0];
     if (!file) return;
     $("upload-file-button").disabled = true;
+    $("upload-progress").hidden = false;
     try {
       if (file.size > 20 * 1024 * 1024) throw new Error("Choose a file smaller than 20 MiB.");
       const params = new URLSearchParams({ name: file.name });
@@ -1130,7 +1132,7 @@
       const result = await api(`/api/files?${params}`, { method: "POST", headers: { "Content-Type": file.type || (/\.html?$/i.test(file.name) ? "text/html" : "application/octet-stream") }, body: file });
       await refresh(); toast("File saved to your library.");
       await reader.open(result.link.id);
-    } catch (error) { toast(error.message, true); } finally { $("library-file").value = ""; $("upload-file-button").disabled = false; }
+    } catch (error) { toast(error.message, true); } finally { $("upload-progress").hidden = true; $("library-file").value = ""; $("upload-file-button").disabled = false; }
   });
   function updateHelp() {
     const query = $("help-search").value.trim().toLocaleLowerCase();

@@ -381,6 +381,21 @@ try {
   }), 'the bulk action fits the mobile dialog');
   await page.locator('#bulk-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.locator('#clear-selection').click();
+  for (const [endpoint, input, status, file] of [
+    ['**/api/import', '#import-file', '#import-progress', { name: 'bookmarks.json', mimeType: 'application/json', buffer: Buffer.from('{}') }],
+    ['**/api/files?*', '#library-file', '#upload-progress', { name: 'fixture.png', mimeType: 'image/png', buffer: Buffer.from('fixture') }],
+  ]) {
+    let release, notify;
+    const requested = new Promise(resolve => { notify = resolve; });
+    const delayed = async route => { notify(); await new Promise(resolve => { release = resolve; }); await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }); };
+    await page.route(endpoint, delayed);
+    await page.locator(input).setInputFiles(file);
+    await requested;
+    assert.equal(await page.locator(status).isVisible(), true, `${status} is visible during the operation`);
+    release();
+    await page.locator(status).waitFor({ state: 'hidden' });
+    await page.unroute(endpoint, delayed);
+  }
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.locator('#all-tags').click();
   await page.locator('#tags-list').getByRole('button', { name: '#reading 1 bookmark' }).waitFor();
