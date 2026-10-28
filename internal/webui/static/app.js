@@ -5,6 +5,7 @@
   const state = { filter: "all", collection: null, tag: "", query: "", page: 1, pageSize: 40, total: 0, links: [], collections: [], editing: null, request: 0, timer: null, signedIn: false, sort: "newest", fuzzy: false, editingCollection: null };
   let toastTimer;
   let expandedBookmarkActions = null;
+  const expandedBookmarkTags = new Set();
   let searchTimer;
   let tagsTimer;
   let tagsPage = 1;
@@ -282,6 +283,7 @@
     state.signedIn = false;
     renderedLibraryRoute = null;
     libraryUnavailable = true;
+    expandedBookmarkTags.clear();
     state.links = [];
     bulk.clear();
     state.request++;
@@ -686,21 +688,28 @@
         body.append(excerpt);
       }
       const tags = el("div", "card-tags");
-      for (const name of (link.tags || []).slice(0, 5)) {
+      for (const name of (link.tags || []).slice(0, expandedBookmarkTags.has(link.id) ? undefined : 5)) {
         const tag = el("button", "card-tag", `#${name}`);
+        tag.dataset.focusKey = `link:${link.id}:tag:${name}`;
         tag.addEventListener("click", () => selectFilter("all", null, name));
         tags.append(tag);
       }
-      if ((link.tags || []).length > 5) {
+      if ((link.tags || []).length > 5 && !expandedBookmarkTags.has(link.id)) {
         const more = el("button", "card-tag", `+${link.tags.length - 5}`);
+        more.dataset.focusKey = `link:${link.id}:more-tags`;
         more.setAttribute("aria-label", `Show all ${link.tags.length} tags for ${link.title || link.url}`);
         more.addEventListener("click", () => {
+          expandedBookmarkTags.add(link.id);
           more.remove();
+          let firstAdded;
           for (const name of link.tags.slice(5)) {
             const tag = el("button", "card-tag", `#${name}`);
+            tag.dataset.focusKey = `link:${link.id}:tag:${name}`;
             tag.addEventListener("click", () => selectFilter("all", null, name));
             tags.append(tag);
+            if (!firstAdded) firstAdded = tag;
           }
+          firstAdded?.focus();
         });
         tags.append(more);
       }
@@ -827,6 +836,8 @@
       libraryUnavailable = false;
       libraryLoading = false;
       state.links = result.links || [];
+      const visibleIds = new Set(state.links.map(link => link.id));
+      for (const id of expandedBookmarkTags) if (!visibleIds.has(id)) expandedBookmarkTags.delete(id);
       state.total = result.total || 0;
       state.pageSize = result.pageSize || 40;
       const lastPage = Math.max(1, Math.ceil(state.total / state.pageSize));

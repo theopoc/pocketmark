@@ -361,6 +361,10 @@ try {
   await page.locator('#bookmark-notes').fill('Persisted browser notes');
   await page.locator('#bookmark-tags-query').fill('reading');
   await page.locator('#bookmark-tags-query').press('Enter');
+  for (const tag of ['design', 'research', 'archive', 'reference', 'web']) {
+    await page.locator('#bookmark-tags-query').fill(tag);
+    await page.locator('#bookmark-tags-query').press('Enter');
+  }
   await page.locator('#save-bookmark').click();
   const card = title => page.locator('.bookmark-card').filter({ has: page.getByRole('button', { name: title, exact: true }) });
   const openActions = async title => {
@@ -368,6 +372,13 @@ try {
     if (await toggle.isVisible()) await toggle.click();
   };
   await card(original).waitFor();
+  const moreTags = card(original).getByRole('button', { name: `Show all 6 tags for ${original}` });
+  await moreTags.focus();
+  await moreTags.press('Enter');
+  assert.equal(await card(original).locator('.card-tags button').nth(5).evaluate(node => document.activeElement === node), true, 'expanding tags moves focus to the first revealed tag');
+  await page.locator('#refresh-button').evaluate(button => button.click());
+  await page.waitForFunction(() => document.querySelector('#bookmark-grid').getAttribute('aria-busy') === 'false');
+  assert.equal(await card(original).locator('.card-tags button').nth(5).evaluate(node => document.activeElement === node), true, 'refresh preserves the revealed tag and its focus');
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.locator('#view-grid').click();
   await card(original).hover();
