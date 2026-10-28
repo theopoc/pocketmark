@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,6 +15,66 @@ import (
 	"pocketmark/internal/observability"
 	"pocketmark/internal/store"
 )
+
+func TestServerSecretPersistenceAndLegacyMigration(t *testing.T) {
+	dir := t.TempDir()
+	secret, err := loadServerSecret(dir, "", false)
+	if err != nil || len(secret) != 64 {
+		t.Fatalf("new secret: %v", err)
+	}
+	info, err := os.Stat(filepath.Join(dir, "server-secret"))
+	if err != nil || info.Mode().Perm() != 0600 {
+		t.Fatalf("secret permissions: %v %v", info, err)
+	}
+	again, err := loadServerSecret(dir, "", false)
+	if err != nil || again != secret {
+		t.Fatal("secret changed across restart", err)
+	}
+	legacy := t.TempDir()
+	old := strings.Repeat("b", 64)
+	if err := os.WriteFile(filepath.Join(legacy, "access-token"), []byte(old), 0600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := loadServerSecret(legacy, "", false)
+	if err != nil || got != old {
+		t.Fatal("legacy secret changed", err)
+	}
+	missing := t.TempDir()
+	if err := os.WriteFile(filepath.Join(missing, "pocketmark.db"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadServerSecret(missing, "", false); err == nil {
+		t.Fatal("missing secret silently replaced")
+	}
+	if _, err := loadServerSecret(missing, "", true); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestResetAccountInputValidation(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "account.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, input := range []string{
+		`{"username":"reader","password":"a good password","extra":true}`,
+		`{"username":"reader","password":"a good password"} {}`,
+		`{"username":"reader","password":"short"}`,
+		strings.Repeat(" ", 4097),
+	} {
+		if err := resetAccountFromInput(s, strings.NewReader(input)); err == nil {
+			t.Errorf("invalid input was accepted")
+		}
+	}
+	if err := resetAccountFromInput(s, strings.NewReader(`{"username":"reader","password":"a good password"}`)); err != nil {
+		t.Fatal(err)
+	}
+	account, err := s.Account(context.Background())
+	if err != nil || account.Username != "reader" || account.Hash == "" {
+		t.Fatalf("account not saved: %v", err)
+	}
+}
 
 // The production worker must report an ordinary fetch failure even when saving
 // that failure to SQLite succeeds. The loopback URL is rejected without network.

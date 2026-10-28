@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/pbkdf2"
 	"crypto/rand"
 	"crypto/sha256"
@@ -35,6 +36,17 @@ func randomSecret() string {
 	}
 	return hex.EncodeToString(b)
 }
+
+// ResetLocalAccount is intended for an operator with access to the stopped
+// server's data directory. Existing MFA remains enabled and sessions are revoked.
+func ResetLocalAccount(ctx context.Context, s *store.Store, username, password string) error {
+	username = strings.TrimSpace(username)
+	if username == "" || len(username) > 120 || len(password) < 12 || len(password) > 1024 {
+		return errors.New("choose a username and a password of 12–1024 bytes")
+	}
+	salt := randomSecret()
+	return s.SaveAccount(ctx, store.Account{Username: username, Salt: salt, Hash: passwordHash(password, salt)})
+}
 func (a *Server) registerAccount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/setup", a.setupStatus)
 	mux.HandleFunc("POST /api/setup", a.setup)
@@ -49,7 +61,7 @@ func (a *Server) registerAccount(mux *http.ServeMux) {
 func (a *Server) owner(r *http.Request) bool { return requestPrincipal(r).owner }
 func (a *Server) requireOwner(w http.ResponseWriter, r *http.Request) bool {
 	if !a.owner(r) {
-		fail(w, 403, "account settings require the owner session or recovery token")
+		fail(w, 403, "account settings require the owner session")
 		return false
 	}
 	return true
@@ -77,9 +89,8 @@ func (a *Server) setupStatus(w http.ResponseWriter, r *http.Request) {
 
 func (a *Server) setup(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		SetupToken string `json:"setupToken"`
-		Username   string `json:"username"`
-		Password   string `json:"password"`
+		Username string `json:"username"`
+		Password string `json:"password"`
 	}
 	if !decode(w, r, &b, 4096) {
 		return
@@ -103,10 +114,6 @@ func (a *Server) setup(w http.ResponseWriter, r *http.Request) {
 		fail(w, 409, "account creation is unavailable")
 		return
 	}
-	if !secretEqual(b.SetupToken, a.token) {
-		fail(w, 403, "administrator setup key required")
-		return
-	}
 	a.passwordMu.Lock()
 	defer a.passwordMu.Unlock()
 	salt := randomSecret()
@@ -124,10 +131,10 @@ func (a *Server) setup(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "authentication unavailable; sign in again")
 		return
 	}
-	if !a.newMFAChallenge(w, mfaChallenge{kind: "enroll", salt: salt, username: b.Username, generation: mfaState.Generation, adminApproved: true}) {
+	if !a.newMFAChallenge(w, mfaChallenge{kind: "enroll", salt: salt, username: b.Username, generation: mfaState.Generation}) {
 		return
 	}
-	respond(w, 201, map[string]bool{"mfaRequired": true, "enrollmentRequired": true, "setupKeyConfirmed": true})
+	respond(w, 201, map[string]bool{"mfaRequired": true, "enrollmentRequired": true})
 }
 func (a *Server) setAccount(w http.ResponseWriter, r *http.Request) {
 	if !a.requireOwner(w, r) {
@@ -150,17 +157,6 @@ func (a *Server) setAccount(w http.ResponseWriter, r *http.Request) {
 	salt := randomSecret()
 	hash := passwordHash(b.Password, salt)
 	account := store.Account{Username: b.Username, Salt: salt, Hash: hash}
-	// A bearer recovery key can reset credentials but cannot create a web
-	// session without proof of the configured second factor.
-	if requestPrincipal(r).session == "" {
-		if err := a.Store.SaveAccount(r.Context(), account); err != nil {
-			handleError(w, err)
-			return
-		}
-		a.clearPendingMFA(false)
-		respond(w, 200, map[string]bool{"ok": true})
-		return
-	}
 	value := "v3." + randomSecret()
 	expires, err := a.Store.SaveAccountFromSession(r.Context(), account, requestPrincipal(r).session, a.sessionHash(value), r.UserAgent())
 	if err != nil {

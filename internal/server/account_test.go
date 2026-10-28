@@ -149,9 +149,11 @@ func TestExtensionBearerRequiredAndDAV(t *testing.T) {
 	h := map[string]string{"Origin": "chrome-extension://abcdefghijklmnop", "Sec-Fetch-Site": "cross-site"}
 	requireStatus(t, request(a, "OPTIONS", "/api/links", "", false, h), 204)
 	requireStatus(t, request(a, "POST", "/api/links", `{"url":"https://example.org"}`, false, h), 403)
-	requireStatus(t, request(a, "POST", "/api/links", `{"url":"https://example.org"}`, true, h), 201)
+	key := createProfileKey(t, a, "full")
+	h["Authorization"] = "Bearer " + key
+	requireStatus(t, request(a, "POST", "/api/links", `{"url":"https://example.org"}`, false, h), 201)
 	requireStatus(t, request(a, "GET", "/dav/bookmarks.xbel", "", false, nil), 401)
-	basic := map[string]string{"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte("key:"+testToken))}
+	basic := map[string]string{"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte("key:"+key))}
 	w := request(a, "GET", "/dav/bookmarks.xbel", "", false, basic)
 	requireStatus(t, w, 200)
 	etag := w.Header().Get("ETag")

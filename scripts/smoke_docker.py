@@ -13,6 +13,7 @@ import time
 import urllib.error
 import urllib.request
 import zipfile
+from disposable_auth import bootstrap
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -76,15 +77,17 @@ def main():
             require(any(x.startswith("no-new-privileges") for x in host["SecurityOpt"]), "privilege protection missing")
             require(host["Memory"] == 128 * 2**20 and host["NanoCpus"] == 10**9 and host["PidsLimit"] == 64,
                     "Compose resource limits changed")
-            require(docker("exec", cid, "stat", "-c", "%a:%u", "/data/access-token") == "600:10001", "token permissions changed")
-            # Keep the generated token in memory, never in reports or logs.
-            token = docker("exec", cid, "cat", "/data/access-token")
+            require(docker("exec", cid, "stat", "-c", "%a:%u", "/data/server-secret") == "600:10001", "secret permissions changed")
+            secret = docker("exec", cid, "cat", "/data/server-secret")
+            token = session = ""
             port = details["NetworkSettings"]["Ports"]["8090/tcp"][0]["HostPort"]
             base = "http://127.0.0.1:" + port
 
-            def call(path, payload=None, authenticated=True, raw=False):
+            def call(path, payload=None, authenticated=True, raw=False, owner=False):
                 headers = {"Content-Type": "application/json"}
-                if authenticated:
+                if authenticated and owner:
+                    headers["Cookie"] = session
+                elif authenticated and token:
                     headers["Authorization"] = "Bearer " + token
                 body = None if payload is None else json.dumps(payload).encode()
                 req = urllib.request.Request(base + path, data=body, headers=headers)
@@ -100,10 +103,19 @@ def main():
                 require(error.code == 401, "expected unauthenticated 401")
             else:
                 raise RuntimeError("unauthenticated API access succeeded")
+            token, session, password = bootstrap(base)
             checks["health_auth_hardening_limits"] = True
             if args.browser:
-                subprocess.run(["node", str(ROOT / "e2e/browser.mjs")],
-                               env={**os.environ, "E2E_BASE_URL": base, "E2E_SETUP_TOKEN": token}, check=True, timeout=180)
+                browser_compose = ["compose", "-p", project + "-browser", "-f", str(configuration)]
+                try:
+                    docker(*browser_compose, "up", "-d", "--wait", "--wait-timeout", "90")
+                    browser_cid = docker(*browser_compose, "ps", "-q", "pocketmark")
+                    browser_details = json.loads(docker("inspect", browser_cid))[0]
+                    browser_port = browser_details["NetworkSettings"]["Ports"]["8090/tcp"][0]["HostPort"]
+                    subprocess.run(["node", str(ROOT / "e2e/browser.mjs")],
+                                   env={**os.environ, "E2E_BASE_URL": "http://127.0.0.1:" + browser_port}, check=True, timeout=180)
+                finally:
+                    docker(*browser_compose, "down", "--volumes", "--remove-orphans")
                 checks["browser_journeys"] = True
             collection = call("/api/collections", {"name": "Smoke collection", "description": "Synthetic CI data"})
             link = call("/api/links", {"url": "http://127.0.0.1/private-ci-fixture", "title": "Smoke bookmark",
@@ -117,11 +129,12 @@ def main():
             require(saved["status"] == "failed", "capture worker did not reject the private destination")
             require(call("/api/links?q=Smoke")["total"] == 1, "FTS5 search failed")
             checks["sqlite_fts5_and_capture_ssrf_rejection"] = True
-            # A full backup must be a valid ZIP and must not contain the recovery token.
-            backup = call("/api/backup", raw=True)
+            # A full backup must be a valid ZIP and exclude the server secret.
+            call("/api/reauth", {"password": password}, owner=True)
+            backup = call("/api/backup", raw=True, owner=True)
             with zipfile.ZipFile(io.BytesIO(backup)) as archive:
                 require(archive.testzip() is None, "backup ZIP is corrupt")
-                require(not any("access-token" in x for x in archive.namelist()), "backup contains the recovery token")
+                require(not any("server-secret" in x or "access-token" in x for x in archive.namelist()), "backup contains the server secret")
             checks["full_backup"] = True
             before = hashlib.sha256(call("/api/export", raw=True)).hexdigest()
             events = dict(line.split() for line in docker("exec", cid, "cat", "/sys/fs/cgroup/memory.events").splitlines())
@@ -142,8 +155,33 @@ def main():
             else:
                 raise RuntimeError("server did not become healthy after restart")
             require(before == hashlib.sha256(call("/api/export", raw=True)).hexdigest(), "library changed across restart")
-            require(token == docker("exec", cid, "cat", "/data/access-token"), "token changed across restart")
+            require(secret == docker("exec", cid, "cat", "/data/server-secret"), "secret changed across restart")
             checks["restart_persistence_and_no_oom"] = True
+            docker(*compose, "stop", "pocketmark")
+            docker(*compose, "run", "--rm", "--no-deps", "pocketmark", "-reset-mfa")
+            docker(*compose, "start", "pocketmark")
+            restarted = json.loads(docker("inspect", cid))[0]
+            port = restarted["NetworkSettings"]["Ports"]["8090/tcp"][0]["HostPort"]
+            base = "http://127.0.0.1:" + port
+            for _ in range(100):
+                try:
+                    if call("/healthz")["status"] == "ok":
+                        break
+                except (OSError, urllib.error.URLError):
+                    pass
+                time.sleep(0.1)
+            else:
+                raise RuntimeError("server did not become healthy after MFA reset")
+            try:
+                call("/api/session", owner=True)
+            except urllib.error.HTTPError as error:
+                require(error.code == 401, "reset did not revoke the owner session")
+            else:
+                raise RuntimeError("owner session survived the local MFA reset")
+            login = call("/api/login", {"username": "disposable-test", "password": password}, authenticated=False)
+            require(login["enrollmentRequired"], "local MFA reset did not require enrollment")
+            require(before == hashlib.sha256(call("/api/export", raw=True)).hexdigest(), "library changed during local MFA reset")
+            checks["local_mfa_reset"] = True
             report = {"image": args.image, "image_id": details["Image"], "platform": platform,
                       "revision": labels.get("org.opencontainers.image.revision"),
                       "version": labels.get("org.opencontainers.image.version"),

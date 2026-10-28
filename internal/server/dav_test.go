@@ -46,7 +46,8 @@ func TestFloccusDAVLockTempMoveExactBytesAndInvalidation(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	h := map[string]string{"Origin": "chrome-extension://floccus", "Sec-Fetch-Site": "cross-site", "Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte("arbitrary:"+testToken))}
+	fixtureKey := createProfileKey(t, a, "sync")
+	h := map[string]string{"Origin": "chrome-extension://floccus", "Sec-Fetch-Site": "cross-site", "Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte("arbitrary:"+fixtureKey))}
 	requireStatus(t, request(a, "OPTIONS", "/dav/", "", false, map[string]string{"Origin": h["Origin"], "Access-Control-Request-Method": "PROPFIND"}), 204)
 	requireStatus(t, request(a, "PROPFIND", "/dav/", "", false, h), 207)
 	requireStatus(t, request(a, "PROPFIND", "/dav/", "", false, map[string]string{"Origin": h["Origin"]}), 403)

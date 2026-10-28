@@ -111,12 +111,9 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   const username = 'ci-owner';
   const password = 'Synthetic-E2E-password-42';
-  const unclaimed = await page.request.post(new URL('/api/setup', base).href, { data: { username, password } });
-  assert.equal(unclaimed.status(), 403, 'public visitor cannot claim an empty server');
   await page.goto(base.href);
   await page.locator('#login-username').fill(username);
   await page.locator('#login-password').fill(password);
-  await page.locator('#login-setup-token').fill(process.env.E2E_SETUP_TOKEN || '');
   await page.locator('#login-confirm').fill(password);
   await page.locator('#login-submit').click();
   await page.locator('#mfa-enrollment').waitFor({ state: 'visible' });
@@ -132,7 +129,6 @@ try {
   assert.equal(recoveryCodes.length, 10);
   await page.locator('#mfa-login-continue').click();
   await page.locator('#app-view').waitFor({ state: 'visible' });
-  assert.equal(await page.locator('#login-setup-token').inputValue(), '');
   const oldSession = (await page.context().cookies()).find(cookie => cookie.name === 'pocketmark');
   await page.locator('#logout-button').click();
   const replay = await page.request.post(new URL('/api/tokens', base).href, { headers: { Cookie: `pocketmark=${oldSession.value}` }, data: { name: 'replayed-session' } });
@@ -154,6 +150,7 @@ try {
 
   // A recovery-code session can replace a lost authenticator without another
   // recovery code, and replacement signs out other browsers.
+  let currentSecret, freshRecoveryCodes;
   const peer = await browser.newContext();
   try {
     assert.equal((await peer.request.post(new URL('/api/login', base).href, { data: { username, password } })).status(), 200);
@@ -173,6 +170,7 @@ try {
     await page.locator('#mfa-manage-enrollment').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#mfa-manage-new-code').getAttribute('inputmode'), 'numeric');
     const replacementSecret = await page.locator('#mfa-manage-secret').inputValue();
+    currentSecret = replacementSecret;
     const replacementQR = await page.locator('#mfa-manage-qr').getAttribute('src');
     await page.locator('#mfa-manage-new-code').fill(authenticatorCode(replacementSecret));
     const heldReplacement = await holdResponse(page, '/api/mfa/verify');
@@ -289,10 +287,11 @@ try {
     await page.locator('#mfa-manage-feedback').filter({ hasText: 'Your session expired' }).waitFor();
     assert.equal(await page.locator('#settings-dialog').isVisible(), true);
     heldCodes.release();
-    await page.waitForFunction(previous => { const value = document.getElementById('mfa-manage-codes-value').textContent; return value && value !== previous; }, replacementCodes.join('\n'));
+    await page.waitForFunction(() => document.getElementById('mfa-manage-codes-value').textContent.trim().split('\n').length === 10);
     await heldCodes.remove();
     await heldSession.remove();
-    assert.equal((await page.locator('#mfa-manage-codes-value').textContent()).trim().split('\n').length, 10);
+    freshRecoveryCodes = (await page.locator('#mfa-manage-codes-value').textContent()).trim().split('\n');
+    assert.equal(freshRecoveryCodes.length, 10);
     await page.locator('#mfa-manage-feedback').filter({ hasText: 'These recovery codes may have changed' }).waitFor();
     await page.locator('#settings-dialog').getByRole('button', { name: 'Close', exact: true }).click();
     await page.waitForFunction(() => document.getElementById('mfa-manage-codes-value').textContent === '');
@@ -479,23 +478,25 @@ try {
 
   // A gateway timeout can conceal a committed change. The recovery warning
   // must survive an unrelated expired-session response and remain visible.
-  let resetSecret, resetCodes;
   for (const sessionFirst of [true, false]) {
     if (sessionFirst) {
-      const reset = await page.request.post(new URL('/api/mfa/reset', base).href, { headers: { Authorization: `Bearer ${process.env.E2E_SETUP_TOKEN}` } });
-      assert.equal(reset.status(), 200);
       await page.locator('#login-username').fill(username);
       await page.locator('#login-password').fill(password);
       await page.locator('#login-submit').click();
-      await page.locator('#mfa-setup-key').fill(process.env.E2E_SETUP_TOKEN || '');
-      await page.locator('#mfa-key-form button').click();
-      await page.locator('#mfa-enrollment').waitFor({ state: 'visible' });
-      resetSecret = await page.locator('#mfa-secret').inputValue();
-      await page.locator('#mfa-code').fill(authenticatorCode(resetSecret));
+      await page.locator('#mfa-code-form').waitFor({ state: 'visible' });
+      await page.locator('#mfa-code').fill(freshRecoveryCodes[0]);
+      const verification = page.waitForResponse(response => response.url().endsWith('/api/mfa/verify') && response.request().method() === 'POST');
       await page.locator('#mfa-code-form button').click();
-      await page.locator('#mfa-login-codes').waitFor({ state: 'visible' });
-      resetCodes = (await page.locator('#mfa-login-codes-value').textContent()).trim().split('\n');
-      await page.locator('#mfa-login-continue').click();
+      if ((await verification).status() === 429) {
+        // Earlier security journeys deliberately consume the account-wide MFA
+        // budget. Wait for its real window instead of bypassing the limiter.
+        await new Promise(resolve => setTimeout(resolve, 60000));
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        await page.locator('#mfa-code-form button').click();
+      }
+      await page.waitForFunction(() => !document.getElementById('app-view').hidden || document.getElementById('login-error').textContent);
+      assert.equal(await page.locator('#login-error').textContent(), '', 'recovery-code login failed');
+      await page.locator('#app-view').waitFor({ state: 'visible' });
     } else {
       // The preceding 401 was synthetic; the actual session is still valid.
       await page.reload();
@@ -506,7 +507,7 @@ try {
     await page.locator('#sessions-refresh').click();
     await expiredRequest.ready;
     await page.locator('#mfa-manage-password').fill(password);
-    await page.locator('#mfa-manage-code').fill(sessionFirst ? resetCodes[0] : authenticatorCode(resetSecret, 30));
+    await page.locator('#mfa-manage-code').fill(sessionFirst ? freshRecoveryCodes[1] : authenticatorCode(currentSecret, 30));
     const gatewayFailure = await holdGatewayFailureAfterCommit(page, '/api/mfa/recovery-codes');
     await page.locator('#mfa-manage-form button[value="codes"]').click();
     await gatewayFailure.ready;

@@ -172,8 +172,6 @@ func TestSlowLoginCannotBlockLibraryOrHealth(t *testing.T) {
 		t.Fatal("slow connections did not reach handler")
 	}
 	requireStatus(t, request(a, "POST", "/api/login", setupCredentials, false, nil), 503)
-	// Slow unauthenticated sign-ins cannot occupy the administrator's reset slot.
-	requireStatus(t, request(a, "POST", "/api/mfa/reset", "", true, nil), 200)
 	for _, path := range []string{"/healthz", "/livez", "/api/stats"} {
 		requireStatus(t, request(a, "GET", path, "", true, nil), 200)
 	}

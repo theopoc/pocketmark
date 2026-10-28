@@ -9,6 +9,7 @@ import secrets
 import subprocess
 import time
 from pathlib import Path
+from disposable_auth import bootstrap
 
 
 def main():
@@ -58,6 +59,7 @@ def main():
             time.sleep(0.05)
         else:
             raise RuntimeError("Disposable instance failed readiness")
+        key, _, _ = bootstrap(f"http://127.0.0.1:{port}")
         results["imageID"] = docker("inspect", "--format", "{{.Image}}", name)
         results["identity"] = docker("exec", name, "id")
         objects = b"{}," * 999999 + b"{}"

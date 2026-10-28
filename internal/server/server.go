@@ -25,30 +25,29 @@ import (
 )
 
 type Server struct {
-	Store            *store.Store
-	observer         *observability.Observer
-	token            string
-	secure           bool
-	origin           string
-	mux              *http.ServeMux
-	requests         chan struct{}
-	imports          chan struct{}
-	loginMu          sync.Mutex
-	loginAttempts    map[netip.Addr]loginWindow
-	trustedProxies   []netip.Prefix
-	authRequests     chan struct{}
-	recoveryRequests chan struct{}
-	healthRequests   chan struct{}
-	passwordMu       sync.Mutex
-	mfaMu            sync.Mutex
-	mfaPending       map[string]*mfaChallenge
-	mfaAttempts      loginWindow
-	totpNow          func() time.Time
-	rateLimit        *requestLimiter
+	Store          *store.Store
+	observer       *observability.Observer
+	token          string
+	secure         bool
+	origin         string
+	mux            *http.ServeMux
+	requests       chan struct{}
+	imports        chan struct{}
+	loginMu        sync.Mutex
+	loginAttempts  map[netip.Addr]loginWindow
+	trustedProxies []netip.Prefix
+	authRequests   chan struct{}
+	healthRequests chan struct{}
+	passwordMu     sync.Mutex
+	mfaMu          sync.Mutex
+	mfaPending     map[string]*mfaChallenge
+	mfaAttempts    loginWindow
+	totpNow        func() time.Time
+	rateLimit      *requestLimiter
 }
 
 func New(s *store.Store, token, origin string, secure bool, observers ...*observability.Observer) *Server {
-	a := &Server{Store: s, token: token, origin: strings.TrimSuffix(origin, "/"), secure: secure, mux: http.NewServeMux(), requests: make(chan struct{}, 8), imports: make(chan struct{}, 1), authRequests: make(chan struct{}, 2), recoveryRequests: make(chan struct{}, 1), healthRequests: make(chan struct{}, 2), loginAttempts: make(map[netip.Addr]loginWindow), totpNow: time.Now}
+	a := &Server{Store: s, token: token, origin: strings.TrimSuffix(origin, "/"), secure: secure, mux: http.NewServeMux(), requests: make(chan struct{}, 8), imports: make(chan struct{}, 1), authRequests: make(chan struct{}, 2), healthRequests: make(chan struct{}, 2), loginAttempts: make(map[netip.Addr]loginWindow), totpNow: time.Now}
 	a.rateLimit = newRequestLimiter(10, 100)
 	if len(observers) > 0 && observers[0] != nil {
 		a.observer = observers[0]
@@ -150,10 +149,6 @@ func (a *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	slots := a.requests
 	if publicAuthPath(r.URL.Path) || r.URL.Path == "/api/reauth" || strings.HasPrefix(r.URL.Path, "/api/mfa/") {
 		slots = a.authRequests
-		// Only a valid administrative bearer can use the dedicated recovery slot.
-		if r.Method == "POST" && r.URL.Path == "/api/mfa/reset" && strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") && secretEqual(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), a.token) {
-			slots = a.recoveryRequests
-		}
 		if r.Method == "POST" {
 			_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(5 * time.Second))
 		}
@@ -171,7 +166,7 @@ func (a *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if r.Method != "GET" && r.Method != "HEAD" && !(extension && (strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || (isDAV && strings.HasPrefix(r.Header.Get("Authorization"), "Basic ")))) {
+	if r.Method != "GET" && r.Method != "HEAD" && !(!publicAuthPath(r.URL.Path) && extension && (strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || (isDAV && strings.HasPrefix(r.Header.Get("Authorization"), "Basic ")))) {
 		// An exact Origin check protects both login and cookie-authenticated mutations.
 		if o := r.Header.Get("Origin"); o != "" {
 			expected := a.origin
