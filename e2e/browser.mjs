@@ -354,6 +354,8 @@ try {
   await page.locator('#bookmark-url').fill('http://127.0.0.1/e2e-fixture');
   await page.locator('#bookmark-title').fill(original);
   await page.locator('#bookmark-notes').fill('Persisted browser notes');
+  await page.locator('#bookmark-tags-query').fill('reading');
+  await page.locator('#bookmark-tags-query').press('Enter');
   await page.locator('#save-bookmark').click();
   const card = title => page.locator('.bookmark-card').filter({ has: page.getByRole('button', { name: title, exact: true }) });
   const openActions = async title => {
@@ -361,6 +363,16 @@ try {
     if (await toggle.isVisible()) await toggle.click();
   };
   await card(original).waitFor();
+  await page.locator('#all-tags').click();
+  await page.locator('#tags-list').getByRole('button', { name: '#reading 1 bookmark' }).waitFor();
+  await page.setViewportSize({ width: 320, height: 700 });
+  assert.equal(await page.locator('#tags-alphabet').isVisible(), false);
+  await page.locator('#tags-letter-picker').selectOption('R');
+  await page.waitForFunction(() => document.activeElement.id === 'tags-letter-R');
+  await page.locator('#tags-list').getByRole('button', { name: '#reading 1 bookmark' }).click();
+  await card(original).waitFor();
+  await page.getByRole('button', { name: 'Remove #reading filter' }).click();
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.locator('#search').fill('browzer');
   await page.locator('#empty-near-matches').waitFor({ state: 'visible' });
   await page.locator('#empty-near-matches').click();

@@ -625,7 +625,8 @@ body:has(dialog[open]) { overflow: hidden; }
   .reader-section-nav .text-button { min-height: 40px; min-width: 44px; }
   .reader-modal { padding-bottom: max(20px,env(safe-area-inset-bottom)); }
   .filter-chip { min-height: 40px; }
-  .tags-index-layout { gap: 12px; }
+  .tags-index-layout { grid-template-columns: minmax(0,1fr); }
+  .tags-alphabet { display: none; }
   .tags-directory, .tag-index-group:only-child .tag-group-rows { grid-template-columns: minmax(0,1fr); }
   .tags-directory { gap: 24px; }
   .tag-directory-row { min-height: 44px; padding-inline: 8px; }
