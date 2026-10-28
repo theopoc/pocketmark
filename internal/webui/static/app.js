@@ -216,7 +216,8 @@
   navigation.addEventListener("close", () => $("open-navigation").setAttribute("aria-expanded", "false"));
   navigation.addEventListener("click", (event) => { if (event.target === navigation) closeNavigation(); });
   $("sidebar").addEventListener("click", (event) => {
-    if (event.target.closest("button") && event.target.closest("button").id !== "close-navigation") closeNavigation();
+    const button = event.target.closest("button");
+    if (button && button.id !== "close-navigation" && !button.hasAttribute("data-keep-navigation")) closeNavigation();
   }, true);
 
   function toast(message, error = false, action = null) {
@@ -448,10 +449,11 @@
       button.addEventListener("click", () => selectFilter("collection", collection.id));
       const remove = el("button", "icon-button delete-collection"); remove.append(icon("trash"));
       remove.dataset.focusKey = `delete-collection:${collection.id}`;
+      remove.setAttribute("data-keep-navigation", "");
       remove.title = `Delete ${collection.name}`;
       remove.setAttribute("aria-label", remove.title);
       remove.addEventListener("click", async () => {
-        if (!confirm(`Delete “${collection.name}”? Its bookmarks will move to Inbox.`)) return;
+        if (!confirm(`Delete “${collection.name}”? Bookmarks directly in it move to Inbox. Direct subcollections move to the library root.`)) return;
         remove.disabled = true;
         try {
           await api(`/api/collections/${collection.id}`, { method: "DELETE" });

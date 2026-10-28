@@ -619,6 +619,7 @@ body:has(dialog[open]) { overflow: hidden; }
   .reader-modal > h2 { margin-bottom: 12px; }
   .reader-content { margin-top: 20px; }
   .navigation-dialog .tag-button { min-height: 44px; }
+  .navigation-dialog .collection-name { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
   .reader-sticky-heading { top: -20px; margin: -20px -8px 16px; padding: 12px 8px 8px; padding-top: max(12px,env(safe-area-inset-top)); }
   .reader-heading-row .icon-button { min-width: 44px; min-height: 44px; }
   .reader-section-nav { justify-content: space-between; gap: 4px; padding-top: 0; }
