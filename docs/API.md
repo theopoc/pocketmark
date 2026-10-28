@@ -12,7 +12,7 @@ Your existing owner session is sent automatically. Integrations can use
 **Authorize** with a dedicated API key, without the `Bearer` prefix. Authorization
 is held in tab memory and cleared on reload. Named keys retain their existing
 restrictions: account settings, key management and full backups require an owner
-session or recovery token. The documentation and specification are public static
+session. The documentation and specification are public static
 files; API data still requires authentication.
 
 Download the OpenAPI 3.0.3 specification from the page or
@@ -28,7 +28,7 @@ update it alongside this document. `make test` checks route coverage, local sche
 references, security declarations and documentation delivery. Upstream asset
 provenance and update instructions are in the adjacent `vendor/README.md`.
 
-Base URL: `http://127.0.0.1:8090`. API endpoints require an owner session, recovery token or named API key unless explicitly public. First-run setup and login are public. `/healthz` is unauthenticated and returns `{"status":"ok"}` when SQLite is reachable. Named keys cannot access account/key/session management or full backups. Their profile also restricts library and WebDAV access; see Security controls below.
+Base URL: `http://127.0.0.1:8090`. API endpoints require an owner session or named API key unless explicitly public. First-run setup and login are public. `/healthz` is unauthenticated and returns `{"status":"ok"}` when SQLite is reachable. Named keys cannot access account/key/session management or full backups. Their profile also restricts library and WebDAV access; see Security controls below.
 
 `GET /metrics` exposes Prometheus text metrics using the same session/bearer
 authentication. Responses include a server-generated `X-Request-ID` for log
@@ -36,15 +36,14 @@ correlation. See [observability](OBSERVABILITY.md) for metrics, JSON log fields 
 optional OpenTelemetry tracing; `/metrics` is operational and outside the native
 JSON API specification.
 
-For these examples, load your local token without putting its value directly in the command:
+Create a dedicated API key in **Settings → API keys** and keep it private. Set `POCKETMARK_ACCESS_TOKEN` from a secure source before running the examples:
 
 ```sh
-POCKETMARK_ACCESS_TOKEN="$(cat ./data/access-token)"
 POCKETMARK_URL=http://127.0.0.1:8090
 curl --fail-with-body -H "Authorization: Bearer $POCKETMARK_ACCESS_TOKEN" "$POCKETMARK_URL/api/stats"
 ```
 
-For Docker, use `POCKETMARK_ACCESS_TOKEN="$(docker compose exec -T pocketmark cat /data/access-token)"` instead. JSON mutation requests use `Content-Type: application/json`. Responses use JSON except archive downloads; errors have the shape `{"error":"message"}`. Unknown JSON fields are rejected for normal create/update/login requests; migration accepts extra source fields.
+JSON mutation requests use `Content-Type: application/json`. Responses use JSON except archive downloads; errors have the shape `{"error":"message"}`. Unknown JSON fields are rejected for normal create/update/login requests; migration accepts extra source fields.
 
 ## Endpoints
 
@@ -150,19 +149,18 @@ Annotation colors: `yellow`, `green`, `blue`, `pink`. Each bookmark supports up 
 
 ## Account and client keys
 
-`POST /api/login` accepts only `{username,password}` and creates a short-lived challenge, not a browser session. TOTP or a single-use recovery code is required to finish signing in. The first MFA enrollment on an existing installation also requires the administrator key. Named API keys cannot log in as the owner. Password verification is serialized and uses PBKDF2-SHA256 with 600,000 iterations; validly formed login attempts are limited to ten per minute per client address (IPv6 /64). At most 256 source windows are tracked; additional sources receive 429 until a window expires. MFA verification permits five attempts per challenge per minute and ten attempts account-wide per minute, with at most 32 pending challenges. The administrator recovery reset is independent of that verification budget. Busy password derivations return 429 with `Retry-After: 1` instead of queuing. Challenges expire after five minutes and do not survive restart. Existing browser sessions are revoked during the MFA migration; password-only cookies issued by an older version are also rejected after an upgrade. Accounts, libraries and API keys are preserved. Sessions are random and only their keyed hashes and expiry are persisted. At most 32 sessions remain active; the oldest is evicted when another is issued.
+`POST /api/login` accepts only `{username,password}` and creates a short-lived challenge, not a browser session. TOTP or a single-use recovery code is required to finish signing in. Named API keys cannot log in as the owner. Password verification is serialized and uses PBKDF2-SHA256 with 600,000 iterations; validly formed login attempts are limited to ten per minute per client address (IPv6 /64). At most 256 source windows are tracked; additional sources receive 429 until a window expires. MFA verification permits five attempts per challenge per minute and ten attempts account-wide per minute, with at most 32 pending challenges. Busy password derivations return 429 with `Retry-After: 1` instead of queuing. Challenges expire after five minutes and do not survive restart. Existing browser sessions are revoked during the MFA migration; password-only cookies issued by an older version are also rejected after an upgrade. Accounts, libraries and API keys are preserved. Sessions are random and only their keyed hashes and expiry are persisted. At most 32 sessions remain active; the oldest is evicted when another is issued.
 
 | Endpoint | Contract |
 | --- | --- |
 | `GET /api/setup` | Public `{setupRequired,passwordEnabled}`; no account name or secret. |
-| `POST /api/setup` | First-run `{username,password,setupToken}` → 201 and a temporary MFA challenge. Only a new, empty instance can create its single account; later attempts return 409. Requires the administrator recovery key as `setupToken` (missing/wrong key: 403). |
-| `POST /api/mfa/enroll` | With a pending enrollment challenge, submit `{setupToken}` and receive a locally generated `{secret,qr}`. First-run setup has already checked the key; existing accounts must supply it. |
+| `POST /api/setup` | First-run `{username,password}` → 201 and a temporary MFA challenge. Only a new, empty instance can create its single account; later attempts return 409. Restrict access until setup is complete. |
+| `POST /api/mfa/enroll` | With a pending enrollment challenge, submit `{}` and receive a locally generated `{secret,qr}`. |
 | `POST /api/mfa/verify` | With a pending challenge, submit `{code}`. A valid TOTP or recovery code creates the browser session; initial enrollment confirms TOTP and returns ten recovery codes once. |
 | `POST /api/mfa/replace` | Browser session plus `{password,code}` starts replacement. A recent recovery-code login can use its one-time grant with an empty code; confirming the new TOTP revokes other sessions and replaces recovery codes. |
 | `POST /api/mfa/recovery-codes` | Browser session plus `{password,code}` replaces all recovery codes; the new codes are returned once. |
-| `POST /api/mfa/reset` | Administrator bearer only: remove the factor and recovery codes and revoke browser sessions. The next login requires enrollment. |
 | `GET /api/account` | Owner-only `{username,passwordEnabled}`. |
-| `PUT /api/account` | Owner-only `{username,password}`. Password 12–1024 bytes, username 1–120 bytes. Empty passwords are rejected; password sign-in cannot be disabled. A browser session receives a replacement cookie; an administrator bearer does not. |
+| `PUT /api/account` | Owner-only `{username,password}`. Password 12–1024 bytes, username 1–120 bytes. Empty passwords are rejected; password sign-in cannot be disabled. The browser session receives a replacement cookie. |
 | `GET /api/tokens` | Owner-only array `{id,name,createdAt,active,lastUsedAt,profile,expiresAt}`; never returns secrets. |
 | `POST /api/tokens` | Owner-only `{name,profile?,expiresAt?}` → `{id,name,createdAt,active,lastUsedAt,profile,expiresAt,token}`; raw key appears once. Max 32 keys. |
 | `PATCH /api/tokens/{id}` | Owner-only `{name?:string,active?:boolean}` → `{ok:true}`. Supply name, active or both. Rename (1–120 UTF-8 bytes after trimming), disable temporarily or reactivate the same key; 404 for missing/deleted keys. Renaming preserves the secret, status and usage history unless active is explicitly supplied. |
@@ -174,27 +172,29 @@ The included extension uses bearer authentication with narrowly recognized `chro
 
 ### Existing installations and account recovery
 
-Existing credentials and named API keys are preserved. An older installation without a password cannot be claimed through public setup, even if its library is empty. Configure a password before upgrading in Settings, or use the owner-only `PUT /api/account` endpoint with the existing administrative recovery token. The same endpoint allows recovery after a forgotten password. Named API keys cannot perform this operation.
+Existing credentials, TOTP factors, MFA-verified sessions and named API keys are preserved. The old administrative bearer is no longer accepted; replace it with a named API key in every integration before upgrading to avoid interruption. The old `access-token` file or `POCKETMARK_TOKEN` remains the server secret for existing installations. New installations automatically generate `server-secret` with mode `0600`.
 
-On the server, prepare a private JSON file containing `{"username":"your-name","password":"your-new-password"}` with permissions `0600`, then use:
-
-```sh
-curl --fail-with-body -X PUT \
-  -H "Authorization: Bearer $POCKETMARK_ACCESS_TOKEN" \
-  -H 'Content-Type: application/json' \
-  --data-binary @/private/path/account.json "$POCKETMARK_URL/api/account"
-```
-
-Use the local server address or HTTPS, delete the private JSON file afterward, and sign in normally with the new credentials. The server's `access-token` file / `POCKETMARK_TOKEN` remains an administrative API recovery credential and session-digest secret; it is never accepted by `/api/login`. Keep it private and preserve it with server backups. Ordinary integrations should use named keys from the signed-in **Settings → API keys** section.
-
-If the authenticator and recovery codes are lost, reset MFA with the administrator key, then sign in with the password and enroll again:
+An older library without a password cannot be claimed through public setup. Stop the server and provide a private JSON file with `{"username":"your-name","password":"your-new-password"}` via standard input:
 
 ```sh
-curl --fail-with-body -X POST \
-  -H "Authorization: Bearer $POCKETMARK_ACCESS_TOKEN" "$POCKETMARK_URL/api/mfa/reset"
+./pocketmark -data /path/to/data -reset-account < /private/path/account.json
 ```
 
-This revokes all browser sessions and existing recovery codes. The TOTP secret is encrypted using a key derived from the administrator key. If that key changes, use a still-valid recovery code to sign in and replace the authenticator, or reset MFA and enroll again. New native ZIP restores invalidate their recovery codes, so a restore with a different administrator key requires a reset. Keep a high-entropy administrator key and protect it separately from database backups. TOTP codes are accepted only once within the allowed clock window. Recovery codes are generated randomly, stored as hashes and usable once. QR codes are generated locally. These protections apply to browser sessions: named API keys and the administrator bearer remain direct API credentials.
+Delete the private file afterward. This preserves an existing authenticator and revokes sessions. To recover after losing both the authenticator and recovery codes, stop the server and run:
+
+```sh
+./pocketmark -data /path/to/data -reset-mfa
+```
+
+This clears the factor and recovery codes and revokes sessions. Sign in using the password and enroll again. For the supplied Docker Compose configuration, use the same data volume:
+
+```sh
+docker compose stop pocketmark
+docker compose run --rm --no-deps pocketmark -reset-mfa
+docker compose start pocketmark
+```
+
+Back up the server secret separately from the database. If it is missing for an existing database, startup fails rather than silently invalidating MFA. Restore the original secret, or explicitly use `-reset-mfa` to generate a replacement and enroll again. Native ZIP restores invalidate recovery codes and may require the local reset when the authenticator is unavailable. TOTP codes are accepted once within the clock window; recovery codes are random, hashed and single-use. QR codes are generated locally.
 
 Restoring a new native ZIP also blocks the current TOTP window to prevent replay of a code used after the snapshot. Wait for up to two new authenticator codes before signing in; clock differences can add delay. Older ZIPs and raw copies cannot be identified automatically and may restore earlier TOTP counters.
 
@@ -210,7 +210,7 @@ Existing bookmarks, collections, tags, notes, annotations and archives are kept.
 Legacy compatibility metadata tables remain on disk so no destructive database
 migration is needed; they no longer expose an HTTP interface.
 
-WebDAV supports `OPTIONS`, `PROPFIND`, `GET`, `HEAD`, `PUT`, `DELETE` and `MOVE` for the fixed `/dav/` collection and its `bookmarks.xbel`, `bookmarks.xbel.temp` and `bookmarks.xbel.lock` resources. Resource-specific methods are restricted; primary XML deletion is not supported. Authenticate using Basic with any username and a dedicated API key/recovery token as password, or use bearer authentication. Extension-origin Basic authentication is accepted only after normal credential verification. ETag conditional `If-Match` writes and stale locked snapshots return 412; competing lock owners receive 423. Acquire a lock, GET the primary XML, upload the temporary resource, then MOVE it to the same server's primary XML. XML is limited to 8 MiB and persisted as bounded SQLite chunks. Uploads apply an authoritative bookmark tree including deletions and preserve personal fields for retained IDs/URLs. There is no scheduled server synchronizer. See [Floccus instructions](FEATURES.md#floccus-setup-and-data-semantics) and [protocol details](CLIENT_FLOCCUS_NOTES.md).
+WebDAV supports `OPTIONS`, `PROPFIND`, `GET`, `HEAD`, `PUT`, `DELETE` and `MOVE` for the fixed `/dav/` collection and its `bookmarks.xbel`, `bookmarks.xbel.temp` and `bookmarks.xbel.lock` resources. Resource-specific methods are restricted; primary XML deletion is not supported. Authenticate using Basic with any username and a dedicated API key as password, or use bearer authentication. Extension-origin Basic authentication is accepted only after normal credential verification. ETag conditional `If-Match` writes and stale locked snapshots return 412; competing lock owners receive 423. Acquire a lock, GET the primary XML, upload the temporary resource, then MOVE it to the same server's primary XML. XML is limited to 8 MiB and persisted as bounded SQLite chunks. Uploads apply an authoritative bookmark tree including deletions and preserve personal fields for retained IDs/URLs. There is no scheduled server synchronizer. See [Floccus instructions](FEATURES.md#floccus-setup-and-data-semantics) and [protocol details](CLIENT_FLOCCUS_NOTES.md).
 
 ## Limits and failures
 
@@ -271,7 +271,7 @@ Optional `jump=A` (A–Z, case-insensitive, or URL-encoded `#`) resolves the pag
 
 ### Public HTTPS deployment
 
-Set `POCKETMARK_ORIGIN` to the exact HTTPS origin. For first-run setup, retrieve the private `access-token` file (or configured `POCKETMARK_TOKEN`) on the server and enter it in the setup form. Never publish it or use it as an ordinary integration key.
+Set `POCKETMARK_ORIGIN` to the exact HTTPS origin. Complete first-run setup before exposing the instance to untrusted networks: anyone who can reach an eligible empty instance can create its owner account.
 
 Behind an Ingress, set `POCKETMARK_TRUSTED_PROXIES` to a comma-separated list of **only the actual proxy CIDRs**. The immediate peer must be trusted before `X-Forwarded-For` is used; the chain is read from right to left to find the first untrusted address. Untrusted peers cannot spoof their limit through forwarding headers. Configure the proxy to overwrite or append the actual source address and restrict direct access to the application. Without this setting, clients behind the same proxy share its limit. Do not trust every address or the whole cluster unless every workload in that range is trusted.
 
@@ -287,8 +287,7 @@ with `x-webdav-methods` because OpenAPI 3.0 does not define these operation name
 
 All library, archive, upload, import, export, metrics, account and session endpoints
 require authentication, including GET and HEAD. Only setup/login, minimal health
-probes and static UI/documentation are public. MFA enrollment and verification require a short-lived password-stage challenge. Setup still requires the private
-administrator setup key and an eligible empty database. Extension CORS OPTIONS
+probes and static UI/documentation are public. MFA enrollment and verification require a short-lived password-stage challenge. Setup requires an eligible empty database and is available to anyone able to reach it. Extension CORS OPTIONS
 preflight is public but grants no data access or mutation. Other DAV OPTIONS requests
 are authenticated. Invalid Authorization never falls back to a valid cookie.
 
@@ -305,9 +304,7 @@ return 401. Confirmation shares the login attempt limiter and bounded serialized
 password work; busy/throttled requests return 429 with Retry-After. A confirmation
 is tied to one session and cannot revive a revoked session or old account credentials.
 
-The administrative recovery bearer remains an explicit break-glass bypass, including
-for a forgotten password. Keep it private; use named keys for integrations. It cannot
-confirm or configure a browser session. Normal logout remains possible without
+Normal logout remains possible without
 password confirmation. The UI prompts only when needed and clears the entered
 password when the confirmation dialog closes. Backup navigation always confirms
 first and streams the download normally, without buffering the ZIP in the UI.

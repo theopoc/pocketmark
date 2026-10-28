@@ -25,7 +25,7 @@ import (
 type mfaChallenge struct {
 	kind, salt, username, secret, session string
 	generation                            int64
-	adminApproved, busy, recoveryGrant    bool
+	busy, recoveryGrant                   bool
 	expires                               time.Time
 	attempts                              loginWindow
 }
@@ -39,7 +39,6 @@ func (a *Server) registerMFA(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/mfa/verify", a.mfaVerify)
 	mux.HandleFunc("POST /api/mfa/replace", a.mfaReplace)
 	mux.HandleFunc("POST /api/mfa/recovery-codes", a.mfaRecoveryCodes)
-	mux.HandleFunc("POST /api/mfa/reset", a.mfaReset)
 }
 
 func (a *Server) newMFAChallenge(w http.ResponseWriter, challenge mfaChallenge) bool {
@@ -252,9 +251,7 @@ func enrollmentImage(username, secret string) (string, string, error) {
 }
 
 func (a *Server) mfaEnroll(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		SetupToken string `json:"setupToken"`
-	}
+	var body struct{}
 	if !decode(w, r, &body, 4096) {
 		return
 	}
@@ -276,16 +273,12 @@ func (a *Server) mfaEnroll(w http.ResponseWriter, r *http.Request) {
 		fail(w, 401, "account changed; sign in again")
 		return
 	}
-	if !challenge.adminApproved && !secretEqual(body.SetupToken, a.token) {
-		fail(w, 403, "administrator setup key required")
-		return
-	}
 	secret, qr, err := enrollmentImage(challenge.username, challenge.secret)
 	if err != nil {
 		fail(w, 503, "could not prepare authentication; try again")
 		return
 	}
-	challenge.secret, challenge.adminApproved = secret, true
+	challenge.secret = secret
 	respond(w, 200, map[string]string{"secret": secret, "qr": qr})
 }
 
@@ -308,7 +301,7 @@ func (a *Server) mfaVerify(w http.ResponseWriter, r *http.Request) {
 	expires := time.Now().Add(7 * 24 * time.Hour)
 	value := "v3." + randomSecret()
 	if challenge.kind == "enroll" || challenge.kind == "replace" {
-		if challenge.secret == "" || !challenge.adminApproved {
+		if challenge.secret == "" {
 			fail(w, 403, "start enrollment first")
 			return
 		}
@@ -356,7 +349,7 @@ func (a *Server) mfaVerify(w http.ResponseWriter, r *http.Request) {
 	if recoveryHash == "" {
 		secret, err := a.decryptMFA(state.Secret)
 		if err != nil {
-			fail(w, 401, "authentication unavailable; use a recovery code or administrator reset")
+			fail(w, 401, "authentication unavailable; use a recovery code or local MFA reset")
 			return
 		}
 		counter = matchTOTPCounter(secret, body.Code, a.totpNow())
@@ -440,7 +433,7 @@ func (a *Server) mfaReplace(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "could not prepare authentication; try again")
 		return
 	}
-	if !a.newMFAChallenge(w, mfaChallenge{kind: "replace", salt: salt, username: account.Username, secret: secret, session: requestPrincipal(r).session, generation: generation, adminApproved: true, recoveryGrant: recoveryGrant}) {
+	if !a.newMFAChallenge(w, mfaChallenge{kind: "replace", salt: salt, username: account.Username, secret: secret, session: requestPrincipal(r).session, generation: generation, recoveryGrant: recoveryGrant}) {
 		return
 	}
 	respond(w, 200, map[string]string{"secret": secret, "qr": qr})
@@ -457,17 +450,4 @@ func (a *Server) mfaRecoveryCodes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, 200, map[string]any{"recoveryCodes": codes})
-}
-
-func (a *Server) mfaReset(w http.ResponseWriter, r *http.Request) {
-	if requestPrincipal(r).session != "" || !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || !secretEqual(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), a.token) {
-		fail(w, 403, "administrator recovery key required")
-		return
-	}
-	if err := a.Store.ResetMFA(r.Context()); err != nil {
-		fail(w, 503, "could not reset authentication")
-		return
-	}
-	a.clearPendingMFA(true)
-	respond(w, 200, map[string]bool{"ok": true})
 }

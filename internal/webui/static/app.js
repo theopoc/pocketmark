@@ -252,9 +252,9 @@
 
   let setupRequired = false;
   function resetMFALogin() {
-    ["mfa-key-form", "mfa-enrollment", "mfa-code-form", "mfa-login-codes", "mfa-back"].forEach(id => { $(id).hidden = true; });
+    ["mfa-enrollment", "mfa-code-form", "mfa-login-codes", "mfa-back"].forEach(id => { $(id).hidden = true; });
     $("login-form").hidden = false;
-    $("mfa-setup-key").value = $("mfa-code").value = $("mfa-secret").value = "";
+    $("mfa-code").value = $("mfa-secret").value = "";
     $("mfa-login-codes-value").textContent = "";
     $("mfa-qr").removeAttribute("src");
     $("login-help").hidden = false;
@@ -894,7 +894,6 @@
     openSharedLink();
   }
   function showMFACode(enrollment) {
-    $("mfa-key-form").hidden = true;
     $("mfa-code-form").hidden = false;
     $("mfa-enrollment").hidden = !enrollment;
     $("mfa-back").hidden = false;
@@ -906,8 +905,8 @@
     $("mfa-code").value = "";
     $("mfa-code").focus();
   }
-  async function beginMFAEnrollment(setupToken = "") {
-    const enrollment = await api("/api/mfa/enroll", { method: "POST", body: JSON.stringify({ setupToken }) });
+  async function beginMFAEnrollment() {
+    const enrollment = await api("/api/mfa/enroll", { method: "POST", body: "{}" });
     $("mfa-secret").value = enrollment.secret;
     $("mfa-qr").src = enrollment.qr;
     showMFACode(true);
@@ -920,28 +919,14 @@
     $("login-error").textContent = "";
     try {
       if (setupRequired && $("login-password").value !== $("login-confirm").value) throw new Error("The passwords do not match.");
-      const result = await api(setupRequired ? "/api/setup" : "/api/login", { method: "POST", body: JSON.stringify({ username: $("login-username").value.trim(), password: $("login-password").value, ...(setupRequired ? { setupToken: $("login-setup-token").value.trim() } : {}) }) });
+      const result = await api(setupRequired ? "/api/setup" : "/api/login", { method: "POST", body: JSON.stringify({ username: $("login-username").value.trim(), password: $("login-password").value }) });
       setupRequired = false;
       $("login-confirm").value = "";
       $("login-password").value = "";
       $("login-form").hidden = true;
-      if (result.enrollmentRequired && result.setupKeyConfirmed) {
-        $("mfa-key-form").hidden = false; $("mfa-back").hidden = false;
-        await beginMFAEnrollment();
-      }
-      else if (result.enrollmentRequired) {
-        $("mfa-key-form").hidden = false; $("mfa-back").hidden = false; $("login-help").hidden = true;
-        $("login-title").textContent = "Protect your account";
-        $("login-description").textContent = "Set up two-step verification before opening your library.";
-        $("mfa-setup-key").focus();
-      } else showMFACode(false);
-    } catch (error) { $("login-error").textContent = error.message; } finally { $("login-setup-token").value = ""; button.disabled = false; }
-  });
-  $("mfa-key-form").addEventListener("submit", async event => {
-    event.preventDefault(); event.submitter.disabled = true; $("login-error").textContent = "";
-    try { await beginMFAEnrollment($("mfa-setup-key").value.trim()); }
-    catch (error) { $("login-error").textContent = error.message; }
-    finally { $("mfa-setup-key").value = ""; event.submitter.disabled = false; }
+      if (result.enrollmentRequired) { $("mfa-back").hidden = false; await beginMFAEnrollment(); }
+      else showMFACode(false);
+    } catch (error) { $("login-error").textContent = error.message; } finally { button.disabled = false; }
   });
   $("mfa-code-form").addEventListener("submit", async event => {
     event.preventDefault(); event.submitter.disabled = true; $("login-error").textContent = "";
@@ -1123,13 +1108,11 @@
     $("login-title").textContent = setupRequired ? "Create your account" : "Welcome back";
     $("login-description").textContent = setupRequired ? "Set up your personal Pocketmark library." : "Sign in to your Pocketmark library.";
     $("login-submit-label").textContent = setupRequired ? "Create account" : "Sign in";
-    $("login-setup-fields").hidden = !setupRequired;
-    $("login-setup-token").required = setupRequired;
     $("login-confirm-fields").hidden = !setupRequired;
     $("login-confirm").required = setupRequired;
     $("login-password").autocomplete = setupRequired ? "new-password" : "current-password";
     $("login-password").minLength = setupRequired ? 12 : 1;
-    $("login-help").textContent = setupRequired ? "Enter the setup key from the server’s access-token file and choose a password of at least 12 characters. This instance has one personal account." : passwordEnabled ? "Use your Pocketmark username and password." : "Your existing library needs a password. Ask the server administrator to configure it using the account recovery instructions.";
+    $("login-help").textContent = setupRequired ? "Choose a password of at least 12 characters. This instance has one personal account." : passwordEnabled ? "Use your Pocketmark username and password." : "Your existing library needs a password. Ask the server administrator to configure it using the account recovery instructions.";
     $("login-submit").disabled = !setupRequired && !passwordEnabled;
   }
   const profileHelp = {
@@ -1390,7 +1373,7 @@
   }
   function mfaManagementFailure(error) {
     if (!mfaOutcomeUncertain(error)) return error.message;
-    return "Could not confirm the result. The change may have completed. Use your authenticator to generate recovery codes, or use the administrator recovery key if needed.";
+    return "Could not confirm the result. The change may have completed. Use your authenticator to generate recovery codes, or reset MFA locally if needed.";
   }
   $("mfa-manage-form").addEventListener("submit", async event => {
     event.preventDefault(); const session = settingsSession; const button = event.submitter;

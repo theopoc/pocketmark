@@ -78,9 +78,9 @@ func TestSensitiveRoutesRequireRecentPassword(t *testing.T) {
 		t.Fatal(err)
 	}
 	requireStatus(t, request(a, "POST", "/api/tokens", `{"name":"other"}`, false, map[string]string{"Cookie": other.String()}), 403)
-	// Recovery still works without a password or browser session.
-	requireStatus(t, request(a, "PUT", "/api/account", `{"username":"recovered","password":"new-recovery-password"}`, true, nil), 200)
-	requireStatus(t, request(a, "POST", "/api/reauth", `{"password":"test-only-password"}`, false, headers), 401)
+	// The former server secret is no longer an administrative credential.
+	requireStatus(t, request(a, "PUT", "/api/account", `{"username":"recovered","password":"new-recovery-password"}`, false, map[string]string{"Authorization": "Bearer " + testToken}), 401)
+	requireStatus(t, request(a, "GET", "/api/session", "", false, headers), 200)
 }
 
 func TestAccountChangePreservesAbsoluteSessionExpiryAndIdlePolicy(t *testing.T) {

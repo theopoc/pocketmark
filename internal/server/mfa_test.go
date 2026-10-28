@@ -63,7 +63,47 @@ func TestMFARejectsPasswordOnlySessionAfterRollbackAndRestart(t *testing.T) {
 	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": verified}), 200)
 }
 
-func TestMFAChallengeLimitsDoNotBlockAdministratorReset(t *testing.T) {
+func TestLegacyFactorAndLocalAccountRecoveryAcrossRestart(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "legacy-factor.db")
+	s, err := store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := New(s, testToken, "", false)
+	w := request(a, "POST", "/api/setup", setupCredentials, false, nil)
+	_, secret, codes, _, _ := enrollForTest(t, a, pendingCookie(t, w), "")
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	a = New(s, testToken, "", false)
+	now := time.Now().Add(30 * time.Second)
+	a.totpNow = func() time.Time { return now }
+	requireStatus(t, request(a, "GET", "/api/stats", "", false, map[string]string{"Authorization": "Bearer " + testToken}), 401)
+	if err = ResetLocalAccount(ctx, s, "reader", "new personal password"); err != nil {
+		t.Fatal(err)
+	}
+	w = request(a, "POST", "/api/login", `{"username":"reader","password":"new personal password"}`, false, nil)
+	requireStatus(t, w, 200)
+	pending := pendingCookie(t, w)
+	code, err := totp.GenerateCode(secret, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w = request(a, "POST", "/api/mfa/verify", `{"code":"`+code+`"}`, false, map[string]string{"Cookie": pending})
+	requireStatus(t, w, 200)
+	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": responseCookie(t, w, "pocketmark")}), 200)
+	w = request(a, "POST", "/api/login", `{"username":"reader","password":"new personal password"}`, false, nil)
+	w = request(a, "POST", "/api/mfa/verify", `{"code":"`+codes[0]+`"}`, false, map[string]string{"Cookie": pendingCookie(t, w)})
+	requireStatus(t, w, 200)
+}
+
+func TestMFAChallengeLimitsDoNotBlockLocalReset(t *testing.T) {
 	a := newTestServer(t, "", false)
 	setup := request(a, "POST", "/api/setup", setupRequest, false, nil)
 	_, _, codes, _, _ := enrollForTest(t, a, pendingCookie(t, setup), "")
@@ -79,7 +119,9 @@ func TestMFAChallengeLimitsDoNotBlockAdministratorReset(t *testing.T) {
 	}
 	third := pendingCookie(t, request(a, "POST", "/api/login", setupCredentials, false, nil))
 	requireStatus(t, request(a, "POST", "/api/mfa/verify", `{"code":"`+codes[1]+`"}`, false, map[string]string{"Cookie": third}), 429)
-	requireStatus(t, request(a, "POST", "/api/mfa/reset", "", true, nil), 200)
+	if err := a.Store.ResetMFA(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestMFAResetClearsPendingChallengesAndVerificationBudget(t *testing.T) {
@@ -96,7 +138,10 @@ func TestMFAResetClearsPendingChallengesAndVerificationBudget(t *testing.T) {
 	}
 	for a.allowMFA(nil) {
 	}
-	requireStatus(t, request(a, "POST", "/api/mfa/reset", "", true, nil), 200)
+	if err := a.Store.ResetMFA(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	a = New(a.Store, testToken, "", false)
 	login := request(a, "POST", "/api/login", setupCredentials, false, nil)
 	requireStatus(t, login, 200)
 	session, _, _, _, _ := enrollForTest(t, a, pendingCookie(t, login), testToken)
@@ -115,8 +160,7 @@ func pendingCookie(t *testing.T, w *httptest.ResponseRecorder) string {
 
 func enrollForTest(t *testing.T, a *Server, pending string, setupKey string) (string, string, []string, *httptest.ResponseRecorder, string) {
 	t.Helper()
-	body, _ := json.Marshal(map[string]string{"setupToken": setupKey})
-	w := request(a, "POST", "/api/mfa/enroll", string(body), false, map[string]string{"Cookie": pending})
+	w := request(a, "POST", "/api/mfa/enroll", "{}", false, map[string]string{"Cookie": pending})
 	requireStatus(t, w, 200)
 	var enrollment struct{ Secret, QR string }
 	if err := json.Unmarshal(w.Body.Bytes(), &enrollment); err != nil || enrollment.Secret == "" || !strings.HasPrefix(enrollment.QR, "data:image/png;base64,") {
@@ -180,31 +224,23 @@ func TestMFAEnrollmentReplayRecoveryAndReset(t *testing.T) {
 	a.mfaMu.Lock()
 	a.mfaAttempts.at = time.Now().Add(-time.Minute)
 	a.mfaMu.Unlock()
-	reset := request(a, "POST", "/api/mfa/reset", "", true, nil)
-	requireStatus(t, reset, 200)
-	for _, cookie := range reset.Result().Cookies() {
-		if cookie.Name == "pocketmark" {
-			t.Fatal("administrator reset issued a browser session")
-		}
+	if err := a.Store.ResetMFA(t.Context()); err != nil {
+		t.Fatal(err)
 	}
 	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": recoverySession}), 401)
 	login = request(a, "POST", "/api/login", setupCredentials, false, nil)
 	pending = pendingCookie(t, login)
-	requireStatus(t, request(a, "POST", "/api/mfa/enroll", `{"setupToken":"wrong"}`, false, map[string]string{"Cookie": pending}), 403)
+	requireStatus(t, request(a, "POST", "/api/mfa/enroll", `{}`, false, map[string]string{"Cookie": pending}), 200)
 }
 
-func TestMFALegacyEnrollmentRequiresAdministrator(t *testing.T) {
+func TestMFALegacyEnrollmentRequiresPassword(t *testing.T) {
 	a := newTestServer(t, "", false)
-	changed := request(a, "PUT", "/api/account", setupCredentials, true, nil)
-	requireStatus(t, changed, 200)
-	for _, cookie := range changed.Result().Cookies() {
-		if cookie.Name == "pocketmark" {
-			t.Fatal("administrator credential change issued a full session")
-		}
+	salt := randomSecret()
+	if err := a.Store.SaveAccount(t.Context(), store.Account{Username: "reader", Salt: salt, Hash: passwordHash("a good personal password", salt)}); err != nil {
+		t.Fatal(err)
 	}
 	login := request(a, "POST", "/api/login", setupCredentials, false, nil)
 	pending := pendingCookie(t, login)
-	requireStatus(t, request(a, "POST", "/api/mfa/enroll", `{"setupToken":"wrong"}`, false, map[string]string{"Cookie": pending}), 403)
 	session, _, _, _, _ := enrollForTest(t, a, pending, testToken)
 	requireStatus(t, request(a, "GET", "/api/account", "", false, map[string]string{"Cookie": session}), 200)
 	// A password-only browser cannot turn its pending cookie into API access.
@@ -346,12 +382,14 @@ func TestMFAPendingChallengeRejectsCrossOriginAndCredentialChanges(t *testing.T)
 		t.Fatal(err)
 	}
 	code, _ := totp.GenerateCode(enrollment.Secret, time.Now())
-	requireStatus(t, request(a, "PUT", "/api/account", `{"username":"reader","password":"changed personal password"}`, true, nil), 200)
-	requireStatus(t, request(a, "POST", "/api/mfa/verify", `{"code":"`+code+`"}`, false, map[string]string{"Cookie": pending}), 401)
+	if err := ResetLocalAccount(t.Context(), a.Store, "reader", "changed personal password"); err != nil {
+		t.Fatal(err)
+	}
+	requireStatus(t, request(a, "POST", "/api/mfa/verify", `{"code":"`+code+`"}`, false, map[string]string{"Cookie": pending}), 409)
 	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": pending}), 401)
 }
 
-func TestMFARotatedAdministratorKeyCanRecoverWithBackupCode(t *testing.T) {
+func TestMFARotatedServerSecretCanRecoverWithBackupCode(t *testing.T) {
 	a := newTestServer(t, "", false)
 	setup := request(a, "POST", "/api/setup", setupRequest, false, nil)
 	_, secret, codes, _, _ := enrollForTest(t, a, pendingCookie(t, setup), "")
@@ -363,7 +401,7 @@ func TestMFARotatedAdministratorKeyCanRecoverWithBackupCode(t *testing.T) {
 	w := request(rotated, "POST", "/api/mfa/verify", `{"code":"`+codes[0]+`"}`, false, map[string]string{"Cookie": pending})
 	requireStatus(t, w, 200)
 	session := responseCookie(t, w, "pocketmark")
-	requireStatus(t, request(rotated, "POST", "/api/mfa/reset", "", false, map[string]string{"Cookie": session}), 403)
+	requireStatus(t, request(rotated, "POST", "/api/mfa/reset", "", false, map[string]string{"Cookie": session}), 405)
 	// The old administrator key no longer grants reset access after rotation.
-	requireStatus(t, request(rotated, "POST", "/api/mfa/reset", "", true, nil), 401)
+	requireStatus(t, request(rotated, "POST", "/api/mfa/reset", "", false, map[string]string{"Authorization": "Bearer " + testToken}), 401)
 }

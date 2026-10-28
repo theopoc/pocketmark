@@ -30,7 +30,7 @@ func documentUploadPath(t *testing.T, a *Server, standalone bool) string {
 
 func postDocument(a *Server, path, media string, body io.Reader) *httptest.ResponseRecorder {
 	r := httptest.NewRequest("POST", "http://pocketmark.test"+path, body)
-	r.Header.Set("Authorization", "Bearer "+testToken)
+	r.AddCookie(fixtureOwnerCookie(a))
 	r.Header.Set("Content-Type", media)
 	w := httptest.NewRecorder()
 	a.ServeHTTP(w, r)

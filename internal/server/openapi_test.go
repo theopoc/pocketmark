@@ -110,9 +110,9 @@ func TestOpenAPICoversNativeRoutes(t *testing.T) {
 				if !override || len(security.([]any)) != 0 {
 					t.Errorf("public operation must explicitly allow anonymous access: %s", pattern)
 				}
-			} else if path == "/api/mfa/reset" {
-				if !override || len(security.([]any)) != 1 || security.([]any)[0].(map[string]any)["bearerAuth"] == nil || responses["401"] == nil {
-					t.Errorf("MFA reset must require bearer authentication: %s", pattern)
+			} else if op["x-owner-only"] == true {
+				if !override || len(security.([]any)) != 1 || security.([]any)[0].(map[string]any)["ownerSession"] == nil || responses["401"] == nil {
+					t.Errorf("owner route must require a session: %s", pattern)
 				}
 			} else if override || responses["401"] == nil {
 				t.Errorf("protected operation must inherit authentication and document 401: %s", pattern)
