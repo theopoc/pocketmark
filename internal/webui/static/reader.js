@@ -81,6 +81,8 @@
       $("reader-status").textContent = "";
       $("reader-mode-hint").textContent = "Checking saved HTML…";
       $("reader-recheck").hidden = true;
+      $("reader-retry-capture").hidden = true;
+      $("reader-retry-capture").disabled = false;
       for (const section of ["annotations", "assets"]) { $(section + "-error").hidden = true; $(section + "-retry").hidden = true; $(section + "-retry").disabled = false; }
       $("reader-notes").value = "";
       $("asset-file").value = "";
@@ -109,7 +111,8 @@
         $("reader-archive").href = `/api/links/${id}/archive`;
         $("reader-archive").setAttribute("download", "");
         $("reader-content").textContent = link.content || link.description || "No readable content captured yet. Visit the original page, or try refreshing the capture.";
-        $("reader-status").textContent = { ready: "Captured text", failed: `Capture failed. ${workspace.captureFailure(link.error)} Open Reading options to retry, or attach a snapshot under Files.`, pending: "Capture queued. You can check its status here.", processing: "Capture in progress. You can check its status here." }[link.status] || "";
+        $("reader-status").textContent = { ready: "Captured text", failed: `Capture failed. ${workspace.captureFailure(link.error)} Retry the capture, or attach a snapshot under Files.`, pending: "Capture queued. You can check its status here.", processing: "Capture in progress. You can check its status here." }[link.status] || "";
+        $("reader-retry-capture").hidden = link.status !== "failed" || link.type === "file";
         $("reader-recheck").hidden = !["pending", "processing"].includes(link.status);
         const draft = drafts.get(draftKey(link));
         $("reader-notes").value = draft?.notes ?? link.notes ?? "";
@@ -171,21 +174,27 @@
       close();
       onEdit(link);
     });
-    $("reader-capture").addEventListener("click", async () => {
-      if (!state.reading) return;
+    async function capture() {
+      if (!state.reading || $("reader-capture").disabled) return;
       const id = state.reading.id, request = state.readerRequest;
       $("reader-capture").disabled = true;
+      $("reader-retry-capture").disabled = true;
       $("reader-error").textContent = "";
       try {
         await api(`/api/links/${id}/capture`, { method: "POST" });
         if (isCurrent(request)) {
+          const retryFocused = document.activeElement === $("reader-retry-capture");
           $("reader-status").textContent = "Capture queued. Check its status here without closing the reader.";
+          $("reader-retry-capture").hidden = true;
           $("reader-recheck").hidden = false;
+          if (retryFocused) $("reader-recheck").focus({ preventScroll: true });
           toast("Capture queued.");
         }
         await onChange();
-      } catch (error) { if (isCurrent(request)) $("reader-error").textContent = error.message; } finally { if (isCurrent(request)) $("reader-capture").disabled = false; }
-    });
+      } catch (error) { if (isCurrent(request)) { $("reader-error").textContent = error.message; if (!$("reader-retry-capture").hidden) $("reader-status").textContent = `Could not retry capture. ${error.message}`; } } finally { if (isCurrent(request)) { $("reader-capture").disabled = false; $("reader-retry-capture").disabled = false; } }
+    }
+    $("reader-capture").addEventListener("click", capture);
+    $("reader-retry-capture").addEventListener("click", capture);
     $("reader-notes-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       if (!state.reading) return;

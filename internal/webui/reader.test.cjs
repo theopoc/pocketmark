@@ -131,6 +131,36 @@ test("partial section errors leave text usable and retry only the failed section
   assert.equal(env.calls.filter(call => call.path.endsWith("/annotations")).length, 1);
 });
 
+test("failed capture offers a direct retry and prevents duplicate requests", async () => {
+  const pending = deferred();
+  const env = setup({ handler: (path, options, fallback) => path.endsWith("/capture") ? pending.promise : fallback() });
+  env.records.set(1, link(1, { status: "failed", error: "page not found" }));
+  await env.reader.open(1);
+  assert.equal(env.get("reader-retry-capture").hidden, false);
+  env.document.activeElement = env.get("reader-retry-capture");
+  const retry = fire(env.get("reader-retry-capture"), "click");
+  assert.equal(env.get("reader-capture").disabled, true);
+  await fire(env.get("reader-capture"), "click");
+  assert.equal(env.calls.filter(call => call.path.endsWith("/capture")).length, 1);
+  pending.resolve({ ok: true }); await retry;
+  assert.equal(env.get("reader-retry-capture").hidden, true);
+  assert.equal(env.get("reader-recheck").hidden, false);
+  assert.equal(env.get("reader-recheck").focused, true);
+  assert.match(env.get("reader-status").textContent, /queued/i);
+  await env.reader.open(2);
+  assert.equal(env.get("reader-retry-capture").hidden, true);
+});
+
+test("a rejected direct capture retry remains available with a visible error", async () => {
+  const env = setup({ handler: (path, options, fallback) => { if (path.endsWith("/capture")) throw Error("Try again later"); return fallback(); } });
+  env.records.set(1, link(1, { status: "failed" }));
+  await env.reader.open(1);
+  await fire(env.get("reader-retry-capture"), "click");
+  assert.equal(env.get("reader-retry-capture").hidden, false);
+  assert.equal(env.get("reader-retry-capture").disabled, false);
+  assert.match(env.get("reader-status").textContent, /Try again later/);
+});
+
 test("notes saved while typing preserve newer notes and unrelated editor drafts", async () => {
   const save = deferred();
   const env = setup({ handler: (path, options, fallback) => options.method === "PUT" ? save.promise : fallback() });
