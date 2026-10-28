@@ -186,6 +186,7 @@ input[type=checkbox] { width: 15px; height: 15px; padding: 0; flex-shrink: 0; ac
 .view-list .card-action { width: 28px; height: 28px; }
 /* Feedback and page controls */
 .empty-state { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 72px 24px 88px; }
+.empty-state .reader-actions { justify-content: center; }
 .empty-art { margin-bottom: 18px; color: #7f78c9; }
 .empty-art .icon { width: 36px; height: 42px; stroke-width: 1.2; }
 .empty-state h2 { font-size: 18px; font-weight: 600; letter-spacing: -.3px; margin-bottom: 8px; }
@@ -474,7 +475,7 @@ body:has(dialog[open]) { overflow: hidden; }
   .view-list .card-state { font-size: 11px; }
   .card-tag { font-size: 11px; padding: 4px 7px; }
   .bookmark-grid:not(.view-list) { grid-template-columns: 1fr; }
-  .empty-state { padding: 56px 16px; }
+  .empty-state { padding: 32px 16px 40px; }
   .main-footer > span:last-child { display: none; }
   .modal, .compact-modal { width: calc(100vw - 24px); max-height: calc(100dvh - 24px); padding: 22px; }
   .settings-sticky-heading { top: -22px; margin: -22px -22px 20px; padding: 16px 22px 8px; }
