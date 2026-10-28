@@ -439,7 +439,7 @@ body:has(dialog[open]) { overflow: hidden; }
   .library-content { padding: 22px 16px 0; }
   .library-header { flex-wrap: wrap; margin-bottom: 16px; }
   h1 { font-size: 24px; }
-  .library-header .reader-actions { width: auto; }
+  .library-header .reader-actions { width: 100%; }
   .library-header .reader-actions > .button { min-height: 44px; }
   .primary kbd, .search-box kbd { display: none; }
   .library-toolbar { flex-wrap: wrap; padding-bottom: 14px; }
