@@ -483,6 +483,9 @@ body:has(dialog[open]) { overflow: hidden; }
   .settings-sticky-heading { top: -22px; margin: -22px -22px 20px; padding: 16px 22px 8px; }
   .settings-section-nav { justify-content: space-between; gap: 2px 8px; }
   .settings-section-nav .text-button { min-height: 44px; }
+  #settings-dialog .button, #settings-dialog .text-button, #settings-dialog .icon-button { min-height: 44px; }
+  #settings-dialog .icon-button { min-width: 44px; }
+  #settings-dialog input:not([type=checkbox]), #settings-dialog select { min-height: 44px; }
   .modal input:not([type=checkbox]), .modal select, .modal textarea { font-size: 16px; }
   .modal .button { min-height: 40px; }
   .form-columns { grid-template-columns: 1fr; gap: 0; }
