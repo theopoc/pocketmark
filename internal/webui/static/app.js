@@ -262,6 +262,7 @@
   function showLogin() {
     if (mfaManagementBusy || ($("settings-dialog").open && !$("mfa-manage-codes").hidden)) {
       deferredLogin = true;
+      syncSettingsNavigation();
       if (!mfaManagementBusy) {
         document.querySelectorAll("#settings-dialog > section").forEach(section => { if (section.getAttribute("aria-labelledby") !== "mfa-settings-title") section.inert = true; });
         document.querySelectorAll("#mfa-manage-form button[type='submit'], #mfa-manage-verify button[type='submit']").forEach(button => { button.disabled = true; });
@@ -1305,6 +1306,18 @@
     }
     setTokensBusy(tokensBusy);
   }
+  function syncSettingsNavigation() {
+    document.querySelectorAll("[data-settings-section]").forEach(button => {
+      button.disabled = (mfaManagementBusy || deferredLogin) && button.dataset.settingsSection !== "mfa-settings-title";
+    });
+  }
+  document.querySelectorAll("[data-settings-section]").forEach(button => button.addEventListener("click", () => {
+    const target = $(button.dataset.settingsSection);
+    if (target.closest("section").inert) return;
+    target.tabIndex = -1;
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }));
   $("settings-button").addEventListener("click", async () => {
     const session = ++settingsSession;
     $("settings-error").textContent = "";
@@ -1344,6 +1357,7 @@
   }
   function setMFAManagementBusy(busy) {
     mfaManagementBusy = busy;
+    syncSettingsNavigation();
     $("settings-dialog").querySelector(".close-dialog").disabled = busy;
     $("mfa-manage-cancel").disabled = busy;
     document.querySelectorAll("#settings-dialog > section").forEach(section => { if (section.getAttribute("aria-labelledby") !== "mfa-settings-title") section.inert = busy || deferredLogin; });

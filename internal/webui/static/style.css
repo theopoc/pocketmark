@@ -219,6 +219,11 @@ body:has(dialog[open]) { overflow: hidden; }
 .form-error { color: var(--danger); font-size: 12px; margin: 12px 0 0; }
 .form-error:empty { display: none; }
 .compact-modal { width: min(430px,calc(100vw - 32px)); }
+.settings-sticky-heading { position: sticky; top: -28px; z-index: 2; margin: -28px -28px 20px; padding: 20px 28px 10px; border-bottom: 1px solid var(--line); background: var(--paper); }
+.settings-sticky-heading .dialog-heading { margin-bottom: 8px; }
+.settings-section-nav { display: flex; flex-wrap: wrap; gap: 4px 20px; }
+.settings-section-nav .text-button { color: var(--muted); min-height: 36px; }
+#api-keys-title, #mfa-settings-title, #sessions-title, #backup-title { scroll-margin-top: 130px; }
 #settings-dialog hr { border: 0; border-top: 1px solid var(--line); margin: 28px 0; }
 #settings-dialog h3 { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
 #settings-dialog form > .button { margin-top: 14px; }
@@ -472,6 +477,9 @@ body:has(dialog[open]) { overflow: hidden; }
   .empty-state { padding: 56px 16px; }
   .main-footer > span:last-child { display: none; }
   .modal, .compact-modal { width: calc(100vw - 24px); max-height: calc(100dvh - 24px); padding: 22px; }
+  .settings-sticky-heading { top: -22px; margin: -22px -22px 20px; padding: 16px 22px 8px; }
+  .settings-section-nav { justify-content: space-between; gap: 2px 8px; }
+  .settings-section-nav .text-button { min-height: 44px; }
   .modal input:not([type=checkbox]), .modal select, .modal textarea { font-size: 16px; }
   .modal .button { min-height: 40px; }
   .form-columns { grid-template-columns: 1fr; gap: 0; }

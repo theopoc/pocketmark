@@ -273,6 +273,8 @@ try {
     await page.locator('#mfa-manage-form button[value="codes"]').click();
     await heldCodes.ready;
     assert.equal(await page.locator('#settings-dialog').getByRole('button', { name: 'Close', exact: true }).isDisabled(), true);
+    assert.equal(await page.locator('[data-settings-section="backup-title"]').isDisabled(), true);
+    assert.equal(await page.locator('[data-settings-section="mfa-settings-title"]').isEnabled(), true);
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('#settings-dialog').isVisible(), true);
     await page.evaluate(() => history.pushState({}, '', '?test=mfa-pending'));
