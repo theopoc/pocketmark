@@ -612,6 +612,9 @@ body:has(dialog[open]) { overflow: hidden; }
   input.bookmark-select[type=checkbox], #select-page { width: 20px; height: 20px; margin: 0; }
   .bookmark-select-target { width: 44px; min-height: 44px; margin: -10px; }
   .bulk-toolbar .inline-check { min-width: 44px; min-height: 44px; justify-content: center; margin-left: -10px; margin-right: 0; }
+  .bulk-toolbar .button, #clear-selection { min-height: 44px; padding-inline: 8px; font-size: 14px; }
+  #bulk-dialog .dialog-actions { flex-direction: column-reverse; }
+  #bulk-dialog .dialog-actions .button { width: 100%; min-height: 44px; white-space: normal; }
   .view-list .bookmark-card { grid-template-columns: 24px minmax(0,1fr); }
   .topbar .icon-button, .topbar .theme-toggle, .navigation-dialog .icon-button { min-width: 44px; min-height: 44px; }
   .help-details summary, .reader-options summary { min-height: 44px; padding-block: 12px; }

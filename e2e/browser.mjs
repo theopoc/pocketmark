@@ -368,6 +368,20 @@ try {
     if (await toggle.isVisible()) await toggle.click();
   };
   await card(original).waitFor();
+  await page.setViewportSize({ width: 320, height: 700 });
+  await card(original).getByRole('checkbox', { name: `Select ${original}` }).check();
+  for (const id of ['bulk-open', 'clear-selection']) {
+    assert.ok(await page.locator(`#${id}`).evaluate(node => node.getBoundingClientRect().height >= 44), `${id} has a mobile touch target`);
+  }
+  await page.locator('#bulk-open').click();
+  await page.locator('#bulk-action').selectOption('capture');
+  assert.ok(await page.locator('#bulk-apply').evaluate(node => {
+    const button = node.getBoundingClientRect(), dialog = node.closest('dialog').getBoundingClientRect();
+    return button.height >= 44 && button.left >= dialog.left && button.right <= dialog.right;
+  }), 'the bulk action fits the mobile dialog');
+  await page.locator('#bulk-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.locator('#clear-selection').click();
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.locator('#all-tags').click();
   await page.locator('#tags-list').getByRole('button', { name: '#reading 1 bookmark' }).waitFor();
   await page.setViewportSize({ width: 320, height: 700 });
