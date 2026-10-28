@@ -1118,13 +1118,15 @@
 
   function configureLogin(passwordEnabled = true) {
     $("login-title").textContent = setupRequired ? "Create your account" : "Welcome back";
-    $("login-description").textContent = setupRequired ? "Set up your personal Pocketmark library." : "Sign in to your Pocketmark library.";
+    $("login-description").textContent = setupRequired ? "After creating your account, you’ll set up an authenticator app and save recovery codes." : "Sign in with your password and an authentication or recovery code.";
     $("login-submit-label").textContent = setupRequired ? "Create account" : "Sign in";
     $("login-confirm-fields").hidden = !setupRequired;
+    $("login-password-hint").hidden = !setupRequired;
+    $("login-password").setAttribute("aria-describedby", setupRequired ? "login-password-hint" : "login-help");
     $("login-confirm").required = setupRequired;
     $("login-password").autocomplete = setupRequired ? "new-password" : "current-password";
     $("login-password").minLength = setupRequired ? 12 : 1;
-    $("login-help").textContent = setupRequired ? "Choose a password of at least 12 characters. This instance has one personal account." : passwordEnabled ? "Use your Pocketmark username and password." : "Your existing library needs a password. Ask the server administrator to configure it using the account recovery instructions.";
+    $("login-help").textContent = setupRequired ? "This instance has one personal account." : passwordEnabled ? "Use your Pocketmark username and password." : "Your existing library needs a password. Ask the server administrator to configure it using the account recovery instructions.";
     $("login-submit").disabled = !setupRequired && !passwordEnabled;
   }
   const profileHelp = {

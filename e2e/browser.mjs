@@ -112,6 +112,10 @@ try {
   const username = 'ci-owner';
   const password = 'Synthetic-E2E-password-42';
   await page.goto(base.href);
+  await page.locator('#login-title').filter({ hasText: 'Create your account' }).waitFor();
+  assert.match(await page.locator('#login-description').textContent(), /authenticator app.*recovery codes/i);
+  assert.equal(await page.locator('#login-password').getAttribute('aria-describedby'), 'login-password-hint');
+  assert.equal(await page.locator('#login-password-hint').isVisible(), true);
   await page.locator('#login-username').fill(username);
   await page.locator('#login-password').fill(password);
   await page.locator('#login-confirm').fill(password);
@@ -131,6 +135,7 @@ try {
   await page.locator('#app-view').waitFor({ state: 'visible' });
   const oldSession = (await page.context().cookies()).find(cookie => cookie.name === 'pocketmark');
   await page.locator('#logout-button').click();
+  assert.equal(await page.locator('#login-password').getAttribute('aria-describedby'), 'login-help');
   const replay = await page.request.post(new URL('/api/tokens', base).href, { headers: { Cookie: `pocketmark=${oldSession.value}` }, data: { name: 'replayed-session' } });
   assert.equal(replay.status(), 401, 'a signed-out cookie cannot mint API keys');
   await page.locator('#login-username').fill(username);
