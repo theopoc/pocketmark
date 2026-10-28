@@ -763,13 +763,26 @@
     $("empty-title").textContent = filtered ? "No bookmarks found" : "Your library starts here";
     const offerNearMatches = !!state.query && !state.fuzzy;
     $("empty-message").textContent = offerNearMatches ? "Try a different search, or look for near matches in titles, URLs, descriptions and tags." : filtered ? "Try a different search or clear your filters to see all bookmarks." : "Save your first bookmark, or import an existing library from the navigation.";
+    const emptyView = !state.query && !state.tag && {
+      collection: ["This collection is empty", "Add a bookmark to start this collection.", true],
+      inbox: ["Your inbox is empty", "Bookmarks without a collection appear here.", true],
+      favorite: ["No favorites yet", "Select the star on a bookmark to keep it here.", false],
+      unread: ["Nothing left to read", "Mark a bookmark as unread to see it here.", false],
+    }[state.filter];
+    if (emptyView) {
+      $("empty-title").textContent = emptyView[0];
+      $("empty-message").textContent = emptyView[1];
+    }
     $("empty-near-matches").hidden = !offerNearMatches;
     $("empty-reset").hidden = !filtered;
+    $("empty-reset").textContent = emptyView ? "View all bookmarks" : "Clear filters";
+    $("empty-add").hidden = !!emptyView && !emptyView[2];
     $("empty-add").textContent = filtered ? "Add a bookmark" : "Add your first bookmark";
-    $("empty-add").classList.toggle("primary", !filtered);
-    $("empty-add").classList.toggle("subtle", filtered);
-    $("empty-reset").classList.toggle("primary", filtered);
-    $("empty-reset").classList.toggle("subtle", !filtered);
+    const primaryAdd = !filtered || !!emptyView?.[2];
+    $("empty-add").classList.toggle("primary", primaryAdd);
+    $("empty-add").classList.toggle("subtle", !primaryAdd);
+    $("empty-reset").classList.toggle("primary", !primaryAdd);
+    $("empty-reset").classList.toggle("subtle", primaryAdd);
     const pages = Math.max(1, Math.ceil(state.total / state.pageSize));
     $("pagination").hidden = pages <= 1;
     $("page-label").textContent = `Page ${state.page} of ${pages}`;

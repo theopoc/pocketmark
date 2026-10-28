@@ -395,6 +395,18 @@ try {
   assert.equal(await collection.isVisible(), true);
   await page.locator('#close-navigation').click();
   await page.setViewportSize({ width: 1280, height: 720 });
+  await collection.click();
+  await page.locator('#empty-title').filter({ hasText: 'This collection is empty' }).waitFor();
+  await page.locator('#empty-add').click();
+  assert.equal(await page.locator('#bookmark-collection option:checked').textContent(), collectionName);
+  await page.locator('#bookmark-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.locator('#empty-reset').click();
+  await card(original).waitFor();
+  await page.locator('[data-filter="favorite"]').click();
+  await page.locator('#empty-title').filter({ hasText: 'No favorites yet' }).waitFor();
+  assert.equal(await page.locator('#empty-add').isVisible(), false);
+  await page.locator('#empty-reset').click();
+  await card(original).waitFor();
   await page.locator('#search').fill('browzer');
   await page.locator('#empty-near-matches').waitFor({ state: 'visible' });
   await page.locator('#empty-near-matches').click();
