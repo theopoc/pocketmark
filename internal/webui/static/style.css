@@ -397,6 +397,11 @@ body:has(dialog[open]) { overflow: hidden; }
 [data-theme="dark"] .highlight-pink { background: #583246; }
 [data-theme="dark"] .skip-link { background: #e8e9ef; color: #15161b; }
 [data-theme="dark"] .empty-art { color: #b4a9f6; }
+
+/* Keep the active bookmark easy to follow when navigating with a keyboard. */
+.bookmark-card { transition: background-color var(--motion-fast) ease-out, border-color var(--motion-fast) ease-out, box-shadow var(--motion-fast) ease-out; }
+.bookmark-card:focus-within { border-color: var(--focus); box-shadow: 0 0 0 2px var(--focus); position: relative; z-index: 1; }
+.view-list .bookmark-card:focus-within { box-shadow: inset 3px 0 0 var(--focus); }
 @media (max-width: 600px) {
   .topbar-actions { gap: 6px; }
   .topbar-actions .workspace-badge { display: none; }
