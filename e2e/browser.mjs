@@ -361,8 +361,16 @@ try {
     if (await toggle.isVisible()) await toggle.click();
   };
   await card(original).waitFor();
+  await page.locator('#search').fill('browzer');
+  await page.locator('#empty-near-matches').waitFor({ state: 'visible' });
+  await page.locator('#empty-near-matches').click();
+  await card(original).waitFor();
+  assert.equal(await page.locator('#fuzzy-search').isChecked(), true);
   await page.locator('#search').fill('absent-e2e-bookmark-42');
   await page.locator('#empty-title').filter({ hasText: 'No bookmarks found' }).waitFor();
+  await page.locator('#empty-reset').click();
+  assert.equal(await page.locator('#fuzzy-search').isChecked(), false);
+  assert.equal(await page.locator('#search').inputValue(), '');
   await page.locator('#search').fill('Browser integration');
   await card(original).waitFor();
   await page.waitForFunction(() => document.querySelectorAll('.bookmark-card').length === 1);

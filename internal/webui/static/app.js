@@ -759,7 +759,9 @@
     $("empty-state").hidden = state.links.length > 0;
     const filtered = !!state.query || state.filter !== "all" || !!state.tag;
     $("empty-title").textContent = filtered ? "No bookmarks found" : "Your library starts here";
-    $("empty-message").textContent = filtered ? "Try a different search or clear your filters to see all bookmarks." : "Save your first bookmark, or import an existing library from the navigation.";
+    const offerNearMatches = !!state.query && !state.fuzzy;
+    $("empty-message").textContent = offerNearMatches ? "Try a different search, or look for near matches in titles, URLs, descriptions and tags." : filtered ? "Try a different search or clear your filters to see all bookmarks." : "Save your first bookmark, or import an existing library from the navigation.";
+    $("empty-near-matches").hidden = !offerNearMatches;
     $("empty-reset").hidden = !filtered;
     $("empty-add").textContent = filtered ? "Add a bookmark" : "Add your first bookmark";
     $("empty-add").classList.toggle("primary", !filtered);
@@ -967,8 +969,15 @@
   document.querySelectorAll(".close-dialog").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
   $("add-bookmark").addEventListener("click", () => openEditor());
   $("empty-add").addEventListener("click", () => openEditor());
+  $("empty-near-matches").addEventListener("click", () => {
+    clearTimeout(searchTimer); state.query = $("search").value.trim();
+    if (!state.query) { $("search").focus(); return; }
+    $("search").focus(); $("empty-near-matches").hidden = true;
+    $("fuzzy-search").checked = true; $("fuzzy-search").dispatchEvent(new Event("change"));
+  });
   $("empty-reset").addEventListener("click", () => {
     clearTimeout(searchTimer); state.query = ""; $("search").value = "";
+    state.fuzzy = false; $("fuzzy-search").checked = false;
     selectFilter("all"); $("search").focus();
   });
   $("refresh-button").addEventListener("click", () => refresh());
