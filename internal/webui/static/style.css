@@ -487,7 +487,9 @@ body:has(dialog[open]) { overflow: hidden; }
   #settings-dialog .icon-button { min-width: 44px; }
   #settings-dialog input:not([type=checkbox]), #settings-dialog select { min-height: 44px; }
   .modal input:not([type=checkbox]), .modal select, .modal textarea { font-size: 16px; }
-  .modal .button { min-height: 40px; }
+  .modal .button { min-height: 44px; }
+  .modal .dialog-heading .icon-button { min-width: 44px; min-height: 44px; }
+  .checkbox-row label { min-height: 44px; }
   .form-columns { grid-template-columns: 1fr; gap: 0; }
   .reader-modal { width: 100%; max-width: none; height: 100dvh; max-height: 100dvh; margin: 0; inset: 0; border-radius: 0; padding: 20px; }
   .reader-modal > h2 { font-size: 24px; }

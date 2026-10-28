@@ -396,6 +396,12 @@ try {
   assert.ok(await page.locator('#bookmark-dialog').evaluate(node => getComputedStyle(node).transitionDuration.split(',').every(value => parseFloat(value) === 0)), 'reduced motion removes dialog transitions');
   await page.locator('#bookmark-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.setViewportSize({ width: 320, height: 700 });
+  await page.locator('#add-bookmark').click();
+  for (const selector of ['#bookmark-dialog .dialog-heading .icon-button', '#save-bookmark', '#bookmark-favorite', '#bookmark-read']) {
+    assert.ok(await page.locator(selector).evaluate(node => (node.matches('input') ? node.closest('label') : node).getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
+  }
+  assert.ok(await page.locator('#bookmark-dialog').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), 'mobile bookmark form does not overflow');
+  await page.locator('#bookmark-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   await card(original).getByRole('checkbox', { name: `Select ${original}` }).check();
   for (const id of ['bulk-open', 'clear-selection']) {
     assert.ok(await page.locator(`#${id}`).evaluate(node => node.getBoundingClientRect().height >= 44), `${id} has a mobile touch target`);
