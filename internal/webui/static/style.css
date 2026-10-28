@@ -179,7 +179,7 @@ input[type=checkbox] { width: 15px; height: 15px; padding: 0; flex-shrink: 0; ac
 .view-list .card-body { padding: 0; }
 .view-list .card-title button { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .view-list .card-domain { display: inline; }
-.view-list .card-description { display: none; }
+.view-list .card-description { margin-top: 5px; -webkit-line-clamp: 1; }
 .view-list .card-tags { display: inline-flex; margin: 5px 0 0 8px; gap: 4px; }
 .view-list .card-footer { border: 0; padding: 0 0 0 8px; flex-direction: column; align-items: flex-end; gap: 11px; }
 .view-list .card-action { width: 28px; height: 28px; }
@@ -399,9 +399,12 @@ body:has(dialog[open]) { overflow: hidden; }
 [data-theme="dark"] .empty-art { color: #b4a9f6; }
 
 /* Keep the active bookmark easy to follow when navigating with a keyboard. */
-.bookmark-card { transition: background-color var(--motion-fast) ease-out, border-color var(--motion-fast) ease-out, box-shadow var(--motion-fast) ease-out; }
+.bookmark-card { transition: background-color var(--motion-fast) ease-out, border-color var(--motion-fast) ease-out, box-shadow var(--motion-fast) ease-out, transform var(--motion-enter) var(--ease-ui); }
 .bookmark-card:focus-within { border-color: var(--focus); box-shadow: 0 0 0 2px var(--focus); position: relative; z-index: 1; }
 .view-list .bookmark-card:focus-within { box-shadow: inset 3px 0 0 var(--focus); }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .bookmark-grid:not(.view-list) .bookmark-card:hover:not(:focus-within) { transform: translateY(-2px); box-shadow: 0 6px 18px rgb(0 0 0 / .12); }
+}
 @media (max-width: 600px) {
   .topbar-actions { gap: 6px; }
   .topbar-actions .workspace-badge { display: none; }
