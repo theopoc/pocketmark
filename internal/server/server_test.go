@@ -34,7 +34,13 @@ func newTestServer(t *testing.T, origin string, secure bool) *Server {
 
 func passwordLogin(t *testing.T, a *Server) *httptest.ResponseRecorder {
 	t.Helper()
-	requireStatus(t, request(a, "PUT", "/api/account", `{"username":"me","password":"test-only-password"}`, true, nil), 200)
+	salt := randomSecret()
+	if err := a.Store.SaveAccount(context.Background(), store.Account{Username: "me", Salt: salt, Hash: passwordHash("test-only-password", salt)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Store.ResetMFA(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	w := request(a, "POST", "/api/login", `{"username":"me","password":"test-only-password"}`, false, nil)
 	if w.Code != 200 {
 		return w
@@ -58,13 +64,49 @@ func additionalTestSession(t *testing.T, a *Server) *http.Cookie {
 	return &http.Cookie{Name: "pocketmark", Value: value}
 }
 
+func fixtureOwnerCookie(a *Server) *http.Cookie {
+	// Most route tests need an owner, not a recovery bearer. Construct a
+	// confirmed session in the disposable database; authentication flows
+	// themselves are exercised separately using real MFA challenges.
+	ctx := context.Background()
+	account, err := a.Store.Account(ctx)
+	if err != nil {
+		salt := randomSecret()
+		account = store.Account{Username: "fixture", Salt: salt, Hash: passwordHash("fixture-password", salt)}
+		if err = a.Store.SaveAccount(ctx, account); err != nil {
+			panic(err)
+		}
+	}
+	value := "v3." + strings.Repeat("a", 64)
+	hash := a.sessionHash(value)
+	state, err := a.Store.MFA(ctx)
+	if err != nil {
+		panic(err)
+	}
+	if len(state.Secret) == 0 {
+		secret, e := a.encryptMFA("JBSWY3DPEHPK3PXP")
+		if e != nil {
+			panic(e)
+		}
+		if e = a.Store.ActivateMFA(ctx, account.Salt, state.Generation, 0, secret, nil, "", hash, time.Now().Add(time.Hour), "fixture", false); e != nil {
+			panic(e)
+		}
+	}
+	if !a.Store.SessionValid(ctx, hash) {
+		if err = a.Store.CreateSession(ctx, account.Salt, hash, time.Now().Add(time.Hour)); err != nil {
+			panic(err)
+		}
+	}
+	return &http.Cookie{Name: "pocketmark", Value: value}
+}
+
 func request(a *Server, method, path, body string, bearer bool, headers map[string]string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(method, "http://pocketmark.test"+path, strings.NewReader(body))
 	if body != "" {
 		r.Header.Set("Content-Type", "application/json")
 	}
 	if bearer {
-		r.Header.Set("Authorization", "Bearer "+testToken)
+		r.AddCookie(fixtureOwnerCookie(a))
 	}
 	for key, value := range headers {
 		r.Header.Set(key, value)

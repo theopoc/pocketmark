@@ -14,7 +14,7 @@ import (
 	"pocketmark/internal/store"
 )
 
-const setupRequest = `{"username":"reader","password":"a good personal password","setupToken":"` + testToken + `"}`
+const setupRequest = `{"username":"reader","password":"a good personal password"}`
 
 const setupCredentials = `{"username":"reader","password":"a good personal password"}`
 
@@ -39,10 +39,8 @@ func TestSetupOnceAcrossRestart(t *testing.T) {
 	requireSetup(t, a, true, false)
 	requireStatus(t, request(a, "POST", "/api/setup", setupRequest, false, map[string]string{"Origin": "https://attacker.test"}), 403)
 	requireStatus(t, request(a, "POST", "/api/setup", setupRequest, false, map[string]string{"Origin": "chrome-extension://attacker", "Sec-Fetch-Site": "cross-site"}), 403)
+	requireStatus(t, request(a, "POST", "/api/setup", setupRequest, false, map[string]string{"Origin": "chrome-extension://attacker", "Sec-Fetch-Site": "cross-site", "Authorization": "Bearer irrelevant"}), 403)
 	requireStatus(t, request(a, "POST", "/api/setup", `{"username":"reader","password":"short"}`, false, nil), 400)
-	// Missing or guessed setup keys cannot claim a fresh instance.
-	requireStatus(t, request(a, "POST", "/api/setup", setupCredentials, false, nil), 403)
-	requireStatus(t, request(a, "POST", "/api/setup", strings.Replace(setupRequest, testToken, "wrong-key", 1), false, nil), 403)
 	requireSetup(t, a, true, false)
 	w := request(a, "POST", "/api/setup", setupRequest, false, nil)
 	requireStatus(t, w, 201)
@@ -54,7 +52,35 @@ func TestSetupOnceAcrossRestart(t *testing.T) {
 	requireStatus(t, request(a, "POST", "/api/setup", setupRequest, false, nil), 409)
 	requireStatus(t, request(a, "POST", "/api/login", `{"token":"`+testToken+`"}`, false, nil), 400)
 	requireStatus(t, request(a, "POST", "/api/login", setupCredentials, false, nil), 200)
-	requireStatus(t, request(a, "PUT", "/api/account", `{"username":"reader","password":""}`, true, nil), 400)
+	requireStatus(t, request(a, "PUT", "/api/account", `{"username":"reader","password":""}`, false, map[string]string{"Cookie": cookie}), 400)
+}
+
+func TestInterruptedSetupCanResumeWithoutAdministratorKey(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "restart.db")
+	s, err := store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := New(s, testToken, "", false)
+	w := request(a, "POST", "/api/setup", setupCredentials, false, nil)
+	requireStatus(t, w, 201)
+	pending := pendingCookie(t, w)
+	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": pending}), 401)
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	a = New(s, testToken, "", false)
+	requireStatus(t, request(a, "POST", "/api/setup", setupCredentials, false, nil), 409)
+	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Authorization": "Bearer " + testToken}), 401)
+	w = request(a, "POST", "/api/login", setupCredentials, false, nil)
+	requireStatus(t, w, 200)
+	cookie, _, _, _, _ := enrollForTest(t, a, pendingCookie(t, w), "")
+	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": cookie}), 200)
 }
 
 func requireSetup(t *testing.T, a *Server, required, enabled bool) {

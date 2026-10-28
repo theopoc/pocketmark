@@ -19,6 +19,7 @@ import threading
 import time
 import urllib.request
 from pathlib import Path
+from disposable_auth import bootstrap
 
 
 def main():
@@ -76,6 +77,7 @@ def main():
                         time.sleep(0.05)
                 else:
                     raise RuntimeError("server did not become ready")
+                token, _, _ = bootstrap(base)
                 phase[0] = "idle_empty"
                 time.sleep(2)
                 payload = {"format": "pocketmark", "version": 1, "collections": [], "links": [

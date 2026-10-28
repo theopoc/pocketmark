@@ -170,7 +170,7 @@
             "$ref": "#/components/responses/429"
           }
         },
-        "description": "Creates the owner only on an eligible empty instance using the administrator setup key. TOTP enrollment and verification are required before a browser session is issued.",
+        "description": "Creates the owner only on an eligible empty instance. TOTP enrollment and verification are required before a browser session is issued.",
         "requestBody": {
           "required": true,
           "description": "4 KiB JSON limit. Username 1–120 bytes; password 12–1024 bytes.",
@@ -276,8 +276,13 @@
             "$ref": "#/components/responses/429"
           }
         },
-        "description": "Revokes the current session in SQLite and clears its cookie. Revocation survives restart. Other sessions and API keys remain valid. Owner session or recovery credential required; named keys are forbidden.",
-        "x-owner-only": true
+        "description": "Revokes the current session in SQLite and clears its cookie. Revocation survives restart. Other sessions and API keys remain valid. Owner session required; named keys are forbidden.",
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       }
     },
     "/api/session": {
@@ -352,7 +357,12 @@
           }
         },
         "x-owner-only": true,
-        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403.  Owner session or recovery credential required; named keys are forbidden."
+        "description": "Owner only: a signed-in owner session is required. Named API keys receive 403.  Owner session required; named keys are forbidden.",
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       },
       "put": {
         "operationId": "setAccount",
@@ -399,7 +409,7 @@
           }
         },
         "x-owner-only": true,
-        "description": "Changes owner credentials and revokes old sessions. A fully authenticated browser receives a replacement session; an administrative bearer receives no browser cookie.",
+        "description": "Changes owner credentials and revokes old sessions. A fully authenticated browser receives a replacement session.",
         "requestBody": {
           "required": true,
           "description": "4 KiB JSON limit. Username 1–120 bytes; password 12–1024 bytes. Password sign-in cannot be disabled.",
@@ -411,7 +421,12 @@
             }
           }
         },
-        "x-reauthentication-required": true
+        "x-reauthentication-required": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       }
     },
     "/api/tokens": {
@@ -449,7 +464,12 @@
           }
         },
         "x-owner-only": true,
-        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. Never returns the secret token. Owner session or recovery credential required; named keys are forbidden."
+        "description": "Owner only: a signed-in owner session is required. Named API keys receive 403. Never returns the secret token. Owner session required; named keys are forbidden.",
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       },
       "post": {
         "operationId": "createKey",
@@ -491,7 +511,7 @@
           }
         },
         "x-owner-only": true,
-        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403.  Owner session or recovery credential required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry. The administrative recovery credential is the explicit recovery bypass. Defaults to read only and no expiry. Permissions and expiry are immutable; create a replacement key to change them. Migrated keys retain full library permissions and no expiry.",
+        "description": "Owner only: a signed-in owner session is required. Named API keys receive 403.  Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry. Defaults to read only and no expiry. Permissions and expiry are immutable; create a replacement key to change them. Migrated keys retain full library permissions and no expiry.",
         "requestBody": {
           "required": true,
           "description": "4 KiB JSON limit. At most 32 keys per instance.",
@@ -503,7 +523,12 @@
             }
           }
         },
-        "x-reauthentication-required": true
+        "x-reauthentication-required": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       }
     },
     "/api/tokens/{id}": {
@@ -544,8 +569,13 @@
           }
         },
         "x-owner-only": true,
-        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. Revocation takes effect immediately. Owner session or recovery credential required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry. The administrative recovery credential is the explicit recovery bypass.",
-        "x-reauthentication-required": true
+        "description": "Owner only: a signed-in owner session is required. Named API keys receive 403. Revocation takes effect immediately. Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry.",
+        "x-reauthentication-required": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       },
       "parameters": [
         {
@@ -600,7 +630,7 @@
           }
         },
         "x-owner-only": true,
-        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. Disabling blocks subsequent API and WebDAV authentication; reactivation restores access with the same key. Revoked keys cannot be reactivated. Supply name, active, or both. Renaming preserves the credential, creation date and usage history and does not reactivate a disabled key. Owner session or recovery credential required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry. The administrative recovery credential is the explicit recovery bypass.",
+        "description": "Owner only: a signed-in owner session is required. Named API keys receive 403. Disabling blocks subsequent API and WebDAV authentication; reactivation restores access with the same key. Revoked keys cannot be reactivated. Supply name, active, or both. Renaming preserves the credential, creation date and usage history and does not reactivate a disabled key. Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry.",
         "requestBody": {
           "required": true,
           "description": "4 KiB JSON limit.",
@@ -636,7 +666,12 @@
             }
           }
         },
-        "x-reauthentication-required": true
+        "x-reauthentication-required": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       }
     },
     "/api/stats": {
@@ -2687,8 +2722,13 @@
           }
         },
         "x-owner-only": true,
-        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. Includes captures, attachments, annotations and account settings. Keep the recovery token separately. Restore into an empty data directory while the server is stopped, following RESTORE.txt. Owner session or recovery credential required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry. The administrative recovery credential is the explicit recovery bypass.",
-        "x-reauthentication-required": true
+        "description": "Owner only: a signed-in owner session is required. Named API keys receive 403. Includes captures, attachments, annotations and account settings. Keep the server secret separately. Restore into an empty data directory while the server is stopped, following RESTORE.txt. Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry.",
+        "x-reauthentication-required": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       }
     },
     "/livez": {
@@ -2732,7 +2772,7 @@
           "Account & keys"
         ],
         "summary": "Confirm the current password",
-        "description": "Browser cookie required; recovery bearer cannot confirm a browser. Confirmation is session-bound, persists across restart and lasts five minutes. A successful login also counts as confirmation. Shares the bounded login rate limiter and serialized password work. Wrong password is 403; revoked/expired session is 401. Body limit: 4 KiB. Owner session or recovery credential required; named keys are forbidden.",
+        "description": "Browser cookie required. Confirmation is session-bound, persists across restart and lasts five minutes. A successful login also counts as confirmation. Shares the bounded login rate limiter and serialized password work. Wrong password is 403; revoked/expired session is 401. Body limit: 4 KiB. Owner session required; named keys are forbidden.",
         "responses": {
           "200": {
             "description": "Successful response",
@@ -2798,7 +2838,12 @@
             }
           }
         },
-        "x-owner-only": true
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       }
     },
     "/api/sessions": {
@@ -2808,7 +2853,7 @@
           "Account & keys"
         ],
         "summary": "List active browser sessions",
-        "description": "At most 32 sessions, newest first. Omits expired and idle sessions. Contains no credentials or IP addresses. Legacy timestamps may be zero. Owner session or recovery credential required; named keys are forbidden.",
+        "description": "At most 32 sessions, newest first. Omits expired and idle sessions. Contains no credentials or IP addresses. Legacy timestamps may be zero. Owner session required; named keys are forbidden.",
         "responses": {
           "200": {
             "description": "Successful response",
@@ -2843,7 +2888,12 @@
             "$ref": "#/components/responses/503"
           }
         },
-        "x-owner-only": true
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       }
     },
     "/api/sessions/current": {
@@ -2853,7 +2903,7 @@
           "Account & keys"
         ],
         "summary": "Set this browser’s inactivity timeout",
-        "description": "Browser cookie required. Allowed minutes: 15, 60, 1440, or 0 to disable inactivity expiry. Seven-day absolute expiry remains. New sessions default to 1440; legacy sessions retain absolute expiry only. Each authenticated HTTP request counts as activity, including background refresh. Body limit: 1 KiB. Owner session or recovery credential required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry. The administrative recovery credential is the explicit recovery bypass.",
+        "description": "Browser cookie required. Allowed minutes: 15, 60, 1440, or 0 to disable inactivity expiry. Seven-day absolute expiry remains. New sessions default to 1440; legacy sessions retain absolute expiry only. Each authenticated HTTP request counts as activity, including background refresh. Body limit: 1 KiB. Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry.",
         "responses": {
           "200": {
             "description": "Successful response",
@@ -2913,7 +2963,12 @@
           }
         },
         "x-owner-only": true,
-        "x-reauthentication-required": true
+        "x-reauthentication-required": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       }
     },
     "/api/sessions/others": {
@@ -2923,7 +2978,7 @@
           "Account & keys"
         ],
         "summary": "Sign out all other browsers",
-        "description": "Requires a browser cookie; preserves its session. In-flight requests may finish. Owner session or recovery credential required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry. The administrative recovery credential is the explicit recovery bypass.",
+        "description": "Requires a browser cookie; preserves its session. In-flight requests may finish. Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry.",
         "responses": {
           "200": {
             "description": "Successful response",
@@ -2955,7 +3010,12 @@
           }
         },
         "x-owner-only": true,
-        "x-reauthentication-required": true
+        "x-reauthentication-required": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       }
     },
     "/api/sessions/{id}": {
@@ -2977,7 +3037,7 @@
           "Account & keys"
         ],
         "summary": "Revoke one browser session",
-        "description": "Revocation persists across restart. Revoking the current session makes its next request return 401. In-flight requests may finish. Owner session or recovery credential required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry. The administrative recovery credential is the explicit recovery bypass.",
+        "description": "Revocation persists across restart. Revoking the current session makes its next request return 401. In-flight requests may finish. Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry.",
         "responses": {
           "200": {
             "description": "Successful response",
@@ -3009,7 +3069,12 @@
           }
         },
         "x-owner-only": true,
-        "x-reauthentication-required": true
+        "x-reauthentication-required": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       }
     },
     "/api/tokens/{id}/rotate": {
@@ -3031,7 +3096,7 @@
           "Account & keys"
         ],
         "summary": "Rotate an active API key",
-        "description": "Atomically invalidates the previous secret and returns a new one once. Preserves ID, name, permissions and expiry; resets last use. Disabled, expired or missing keys return 404. Update the connected app immediately. In-flight requests may finish. Owner session or recovery credential required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry. The administrative recovery credential is the explicit recovery bypass.",
+        "description": "Atomically invalidates the previous secret and returns a new one once. Preserves ID, name, permissions and expiry; resets last use. Disabled, expired or missing keys return 404. Update the connected app immediately. In-flight requests may finish. Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry.",
         "responses": {
           "200": {
             "description": "Successful response",
@@ -3074,7 +3139,12 @@
           }
         },
         "x-owner-only": true,
-        "x-reauthentication-required": true
+        "x-reauthentication-required": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       }
     },
     "/metrics": {
@@ -3128,7 +3198,7 @@
           "WebDAV"
         ],
         "summary": "OPTIONS /dav/",
-        "description": "WebDAV/XBEL. Sync/full keys, owner cookie or recovery token required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
@@ -3200,7 +3270,7 @@
           "WebDAV"
         ],
         "summary": "GET /dav/bookmarks.xbel",
-        "description": "WebDAV/XBEL. Sync/full keys, owner cookie or recovery token required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
@@ -3265,7 +3335,7 @@
           "WebDAV"
         ],
         "summary": "HEAD /dav/bookmarks.xbel",
-        "description": "WebDAV/XBEL. Sync/full keys, owner cookie or recovery token required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
@@ -3330,7 +3400,7 @@
           "WebDAV"
         ],
         "summary": "PUT /dav/bookmarks.xbel",
-        "description": "WebDAV/XBEL. Sync/full keys, owner cookie or recovery token required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
@@ -3405,7 +3475,7 @@
           "WebDAV"
         ],
         "summary": "OPTIONS /dav/bookmarks.xbel",
-        "description": "WebDAV/XBEL. Sync/full keys, owner cookie or recovery token required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
@@ -3477,7 +3547,7 @@
           "WebDAV"
         ],
         "summary": "GET /dav/bookmarks.xbel.temp",
-        "description": "WebDAV/XBEL. Sync/full keys, owner cookie or recovery token required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
@@ -3542,7 +3612,7 @@
           "WebDAV"
         ],
         "summary": "HEAD /dav/bookmarks.xbel.temp",
-        "description": "WebDAV/XBEL. Sync/full keys, owner cookie or recovery token required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
@@ -3607,7 +3677,7 @@
           "WebDAV"
         ],
         "summary": "PUT /dav/bookmarks.xbel.temp",
-        "description": "WebDAV/XBEL. Sync/full keys, owner cookie or recovery token required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
@@ -3682,7 +3752,7 @@
           "WebDAV"
         ],
         "summary": "DELETE /dav/bookmarks.xbel.temp",
-        "description": "WebDAV/XBEL. Sync/full keys, owner cookie or recovery token required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
@@ -3747,7 +3817,7 @@
           "WebDAV"
         ],
         "summary": "OPTIONS /dav/bookmarks.xbel.temp",
-        "description": "WebDAV/XBEL. Sync/full keys, owner cookie or recovery token required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
@@ -3822,7 +3892,7 @@
           "WebDAV"
         ],
         "summary": "GET /dav/bookmarks.xbel.lock",
-        "description": "WebDAV/XBEL. Sync/full keys, owner cookie or recovery token required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
@@ -3887,7 +3957,7 @@
           "WebDAV"
         ],
         "summary": "HEAD /dav/bookmarks.xbel.lock",
-        "description": "WebDAV/XBEL. Sync/full keys, owner cookie or recovery token required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
@@ -3952,7 +4022,7 @@
           "WebDAV"
         ],
         "summary": "PUT /dav/bookmarks.xbel.lock",
-        "description": "WebDAV/XBEL. Sync/full keys, owner cookie or recovery token required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
@@ -4030,7 +4100,7 @@
           "WebDAV"
         ],
         "summary": "DELETE /dav/bookmarks.xbel.lock",
-        "description": "WebDAV/XBEL. Sync/full keys, owner cookie or recovery token required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
@@ -4095,7 +4165,7 @@
           "WebDAV"
         ],
         "summary": "OPTIONS /dav/bookmarks.xbel.lock",
-        "description": "WebDAV/XBEL. Sync/full keys, owner cookie or recovery token required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
@@ -4163,19 +4233,14 @@
           "Authentication"
         ],
         "summary": "Prepare mandatory TOTP enrollment",
-        "description": "Requires a valid password-stage challenge cookie. Existing installations also require the administrator setup key. The secret and QR code are returned only for this challenge.",
+        "description": "Requires a valid password-stage challenge cookie. The secret and QR code are returned only for this challenge.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {
-                  "setupToken": {
-                    "type": "string",
-                    "format": "password"
-                  }
-                },
+                "properties": {},
                 "additionalProperties": false
               }
             }
@@ -4376,7 +4441,12 @@
             "$ref": "#/components/responses/503"
           }
         },
-        "x-owner-only": true
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       }
     },
     "/api/mfa/recovery-codes": {
@@ -4405,7 +4475,10 @@
                   }
                 },
                 "additionalProperties": false,
-                "required": ["password", "code"]
+                "required": [
+                  "password",
+                  "code"
+                ]
               }
             }
           }
@@ -4453,62 +4526,12 @@
             "$ref": "#/components/responses/503"
           }
         },
-        "x-owner-only": true
-      }
-    },
-    "/api/mfa/reset": {
-      "post": {
-        "operationId": "mfaReset",
-        "tags": [
-          "Account & keys"
-        ],
-        "summary": "Reset the authenticator with the administrator key",
-        "description": "Requires the administrative bearer, revokes all browser sessions and recovery codes, and requires a new TOTP enrollment. Named API keys and browser sessions cannot reset MFA.",
-        "responses": {
-          "200": {
-            "description": "Successful response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/400"
-          },
-          "401": {
-            "$ref": "#/components/responses/401"
-          },
-          "403": {
-            "$ref": "#/components/responses/403"
-          },
-          "409": {
-            "$ref": "#/components/responses/409"
-          },
-          "415": {
-            "$ref": "#/components/responses/415"
-          },
-          "429": {
-            "$ref": "#/components/responses/429"
-          },
-          "503": {
-            "$ref": "#/components/responses/503"
-          }
-        },
+        "x-owner-only": true,
         "security": [
           {
-            "bearerAuth": []
+            "ownerSession": []
           }
-        ],
-        "x-owner-only": true
+        ]
       }
     }
   },
@@ -4517,7 +4540,7 @@
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer",
-        "description": "Dedicated API key: read, capture, sync or full profile. Owner administration is forbidden for every named key. Recovery bearer is an explicit administrative bypass; do not use it for integrations. Authorization is not persisted across reloads."
+        "description": "Dedicated API key: read, capture, sync or full profile. Owner administration is forbidden for every named key. Authorization is not persisted across reloads."
       },
       "ownerSession": {
         "type": "apiKey",
@@ -4528,7 +4551,7 @@
       "davBasic": {
         "type": "http",
         "scheme": "basic",
-        "description": "Any username; a sync/full API key or recovery token as password. Personal account password is not accepted."
+        "description": "Any username; a sync/full API key as password. Personal account password is not accepted."
       }
     },
     "schemas": {
@@ -5402,18 +5425,12 @@
             "description": "Password; 12–1024 UTF-8 bytes when setting credentials.",
             "format": "password",
             "writeOnly": true
-          },
-          "setupToken": {
-            "type": "string",
-            "writeOnly": true,
-            "description": "Administrator recovery key from access-token or POCKETMARK_TOKEN; required only for first-run setup."
           }
         },
         "additionalProperties": false,
         "required": [
           "username",
-          "password",
-          "setupToken"
+          "password"
         ]
       },
       "BrowserSession": {
@@ -5477,9 +5494,6 @@
             "type": "boolean"
           },
           "enrollmentRequired": {
-            "type": "boolean"
-          },
-          "setupKeyConfirmed": {
             "type": "boolean"
           }
         },

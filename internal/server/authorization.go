@@ -28,7 +28,6 @@ var apiAccess = map[string]routeAccess{
 	"POST /api/reauth":                                  {owner: true},
 	"POST /api/mfa/replace":                             {owner: true},
 	"POST /api/mfa/recovery-codes":                      {owner: true},
-	"POST /api/mfa/reset":                               {owner: true},
 	"GET /api/sessions":                                 {owner: true},
 	"PATCH /api/sessions/current":                       {owner: true, confirm: true},
 	"DELETE /api/sessions/others":                       {owner: true, confirm: true},
@@ -94,9 +93,6 @@ func (a *Server) authenticate(r *http.Request, dav bool) (principal, bool) {
 		if key == "" {
 			return principal{}, false
 		}
-		if secretEqual(key, a.token) {
-			return principal{owner: true}, true
-		}
 		if len(key) != 64 {
 			return principal{}, false
 		}
@@ -140,8 +136,7 @@ func (a *Server) authorize(w http.ResponseWriter, r *http.Request) bool {
 		fail(w, 403, "API key does not permit this operation")
 		return false
 	}
-	// The administrative recovery credential remains the explicit break-glass
-	// path; browser sessions must prove recent password knowledge server-side.
+	// Sensitive actions require recent password knowledge from the owner.
 	if policy.confirm && p.session != "" && !a.Store.SessionConfirmed(r.Context(), p.session) {
 		respond(w, 403, map[string]string{"error": "Confirm your password to continue.", "code": "reauth_required"})
 		return false

@@ -90,7 +90,7 @@ func TestSlowHTMLImportLeavesDatabaseAvailable(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	r := httptest.NewRequest("GET", "/api/stats", nil).WithContext(ctx)
-	r.Header.Set("Authorization", "Bearer "+testToken)
+	r.Header.Set("Authorization", "Bearer "+key)
 	w := httptest.NewRecorder()
 	a.ServeHTTP(w, r)
 	requireStatus(t, w, 200)

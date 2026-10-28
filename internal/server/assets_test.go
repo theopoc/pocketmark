@@ -106,7 +106,7 @@ func TestBackupOutlivesServerWriteDeadline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("Authorization", "Bearer "+testToken)
+	req.AddCookie(fixtureOwnerCookie(a))
 	resp, err := srv.Client().Do(req)
 	if err != nil {
 		t.Fatal(err)

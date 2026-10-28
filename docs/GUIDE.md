@@ -15,9 +15,9 @@ make build
 
 Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account. Register an authenticator app with the local QR code or setup key, verify a code and save the single-use recovery codes. On later visits, sign in with your username, password and an authentication or recovery code. Once signed in, open **Settings → API keys** to create or revoke a key for each extension or client.
 
-Existing installations keep their credentials and keys. The first login after upgrading requires the administrator key to enroll an authenticator; existing browser sessions are signed out. If no password was configured before upgrading, follow [account recovery](API.md#existing-installations-and-account-recovery); public account creation cannot claim an existing library.
+Existing installations keep their credentials and keys. Existing MFA and browser sessions remain valid when the original server secret is preserved. Legacy administrator bearer access is removed; create named API keys and update integrations before upgrading to avoid interruption. If no password was configured before upgrading, follow [account recovery](API.md#existing-installations-and-account-recovery); public account creation cannot claim an existing library.
 
-The default data directory is `./data`, containing `pocketmark.db` and the private `access-token` file (mode `0600`). This file is the administrative recovery key, session-digest secret and key material protecting TOTP. Enter it once for initial setup or first MFA enrollment; later logins use password and TOTP or a recovery code. Preserve it separately with backups. Stop with Ctrl+C. To run without fetching bookmarked pages:
+The default data directory is `./data`, containing `pocketmark.db` and the automatically generated private `server-secret` file (mode `0600`). Existing installations continue to use their original `access-token` file or `POCKETMARK_TOKEN` as the internal secret. It protects TOTP and session digests, is never entered in the browser and is not an API credential. Preserve it separately with backups. Restrict access to an empty instance until account and MFA setup are complete. Stop with Ctrl+C. To run without fetching bookmarked pages:
 
 ```sh
 ./bin/pocketmark -no-capture
@@ -62,7 +62,7 @@ The unmodified third-party Android app (1.4.4) was also tested in an ARM64 emula
 | --- | --- | --- |
 | `POCKETMARK_DATA` / `-data` | `./data` | Database and generated token directory. |
 | `POCKETMARK_LISTEN` / `-listen` | `127.0.0.1:8090` | HTTP bind address; Docker uses `0.0.0.0:8090` internally. |
-| `POCKETMARK_TOKEN` | Generated token file | Override the administrative API recovery/setup/session-digest secret; at least 24 characters. |
+| `POCKETMARK_TOKEN` | Generated server secret | Legacy override for the internal TOTP/session secret; at least 24 characters, never an API credential. |
 | `POCKETMARK_ORIGIN` | Request origin | Public origin such as `https://bookmarks.example.com`, without a path. |
 | `POCKETMARK_TRUSTED_PROXIES` | Empty | Comma-separated trusted proxy CIDRs for HTTP and login client limits; see [HTTPS deployment](API.md#public-https-deployment). |
 | `POCKETMARK_RATE_LIMIT` | `10` | HTTP requests per second per client IP (1–1000); [rate limiting](API.md#http-rate-limiting). |
@@ -87,9 +87,9 @@ JSON import/export does not include captured HTML, extracted text or other archi
 
 ## Back up everything
 
-Choose **Settings → Full backup** to download a consistent ZIP while Pocketmark runs. It contains a SQLite snapshot including captures, uploaded files, highlights, account settings and hashed API keys. Keep your existing `access-token` file or `POCKETMARK_TOKEN` separately: the saved TOTP factor requires it. New ZIPs invalidate their recovery codes and the current TOTP window when restored; wait for up to two new authenticator codes, sign in and generate new recovery codes. Clock differences can add delay. Older ZIPs and raw copies cannot be detected automatically: reset MFA or regenerate codes manually after restore, and revoke restored sessions. The ZIP includes restore instructions; restore only while stopped into an empty data directory so stale WAL files cannot overwrite restored data. The operation uses temporary disk space approximately equal to the database size, not an in-memory copy.
+Choose **Settings → Full backup** to download a consistent ZIP while Pocketmark runs. It contains a SQLite snapshot including captures, uploaded files, highlights, account settings and hashed API keys. Keep your `server-secret` file (or legacy `access-token` / `POCKETMARK_TOKEN`) separately: the saved TOTP factor requires it. New ZIPs invalidate their recovery codes and the current TOTP window when restored; wait for up to two new authenticator codes, sign in and generate new recovery codes. Clock differences can add delay. Older ZIPs and raw copies cannot be detected automatically: reset MFA or regenerate codes manually after restore, and revoke restored sessions. The ZIP includes restore instructions; restore only while stopped into an empty data directory so stale WAL files cannot overwrite restored data. The operation uses temporary disk space approximately equal to the database size, not an in-memory copy.
 
-Alternatively, stop Pocketmark before copying its data directory. Preserve the complete directory, including any SQLite WAL files and the access token; a live copy of only `pocketmark.db` can miss committed data.
+Alternatively, stop Pocketmark before copying its data directory. Preserve the complete directory, including any SQLite WAL files and the server secret; a live copy of only `pocketmark.db` can miss committed data.
 
 For a local process, stop it with Ctrl+C, copy `./data` to your backup location, then restart. For the Compose deployment:
 
