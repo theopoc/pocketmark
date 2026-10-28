@@ -627,7 +627,9 @@ body:has(dialog[open]) { overflow: hidden; }
   .reader-sticky-heading { top: -20px; margin: -20px -8px 16px; padding: 12px 8px 8px; padding-top: max(12px,env(safe-area-inset-top)); }
   .reader-heading-row .icon-button { min-width: 44px; min-height: 44px; }
   .reader-section-nav { justify-content: space-between; gap: 4px; padding-top: 0; }
-  .reader-section-nav .text-button { min-height: 40px; min-width: 44px; }
+  #reader-dialog .button, #reader-dialog .reader-section-nav .text-button, #reader-recheck { min-height: 44px; font-size: 14px; }
+  .reader-section-nav .text-button { min-width: 44px; }
+  .reader-tools select { min-height: 44px; font-size: 16px; }
   .reader-modal { padding-bottom: max(20px,env(safe-area-inset-bottom)); }
   .filter-chip { min-height: 40px; }
   .tags-index-layout { grid-template-columns: minmax(0,1fr); }

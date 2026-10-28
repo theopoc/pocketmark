@@ -396,6 +396,13 @@ try {
     await page.locator(status).waitFor({ state: 'hidden' });
     await page.unroute(endpoint, delayed);
   }
+  await card(original).getByRole('button', { name: original, exact: true }).click();
+  await page.locator('#reader-dialog').waitFor({ state: 'visible' });
+  await page.locator('#reader-options summary').click();
+  for (const selector of ['[data-reader-section="reader-content"]', '[data-reader-section="annotations-section"]', '#reader-text-mode', '#reader-size']) {
+    assert.ok(await page.locator(selector).evaluate(node => node.getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
+  }
+  await page.getByRole('button', { name: 'Close reader', exact: true }).click();
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.locator('#all-tags').click();
   await page.locator('#tags-list').getByRole('button', { name: '#reading 1 bookmark' }).waitFor();
