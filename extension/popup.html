@@ -39,13 +39,13 @@
         </div>
         <details id="capture-options" class="capture-disclosure">
           <summary><span>Attach captures</span><span id="capture-count">Optional</span><svg class="disclosure" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></summary>
-          <fieldset class="captures"><legend class="sr-only">Capture formats</legend><div class="capture-options">
+          <p id="capture-hint" class="hint capture-hint">Captures can include signed-in content visible on this page. Keep the source tab open until capture finishes; uploads continue after this popup closes.</p>
+          <fieldset class="captures" aria-describedby="capture-hint"><legend class="sr-only">Capture formats</legend><div class="capture-options">
             <label class="capture-option"><input id="capture-html" type="checkbox"><span>Rendered HTML<small>Read offline</small></span></label>
             <label class="capture-option"><input id="capture-screenshot" type="checkbox"><span>Visible area<small>Current viewport</small></span></label>
             <label class="capture-option"><input id="capture-fullpage" type="checkbox"><span>Full page<small>Entire rendered page</small></span></label>
             <label class="capture-option"><input id="capture-pdf" type="checkbox"><span>PDF<small>Print layout</small></span></label>
           </div></fieldset>
-          <details class="capture-help"><summary>About captures</summary><p class="hint">Captures include signed-in content visible on this page. Keep the source tab open until capture finishes. Uploads continue after this popup closes.</p></details>
         </details>
       </fieldset>
     </form>
@@ -53,7 +53,7 @@
       <h2 id="settings-heading">Connect to Pocketmark</h2><p class="intro">Your bookmarks, on your own server.</p>
       <form id="settings-form">
         <div class="field"><label for="server">Server address</label><input id="server" type="url" placeholder="https://bookmarks.example.com" aria-describedby="server-hint" spellcheck="false" required><p id="server-hint" class="hint">Use your instance address, without a path.</p></div>
-        <div class="field"><label for="token">Dedicated API key</label><input id="token" type="password" autocomplete="off" aria-describedby="key-hint" required><p id="key-hint" class="hint">In Pocketmark, open <strong>API keys</strong> and create a key for this extension.</p></div>
+        <div class="field"><label for="token">Dedicated API key</label><input id="token" type="password" autocomplete="off" aria-describedby="key-hint" required><p id="key-hint" class="hint">In Pocketmark, open <strong>Settings → API keys</strong> and create a key with <strong>Add, edit &amp; capture</strong> permissions.</p></div>
         <p class="privacy-note">The key stays in this Chrome profile and is never synced. Use HTTP only on a trusted local network.</p>
       </form>
     </section>
