@@ -368,6 +368,22 @@ try {
     if (await toggle.isVisible()) await toggle.click();
   };
   await card(original).waitFor();
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.locator('#view-grid').click();
+  await card(original).hover();
+  await page.waitForFunction(title => {
+    const card = [...document.querySelectorAll('.bookmark-card')].find(node => node.textContent.includes(title));
+    return card && getComputedStyle(card).transform !== 'none';
+  }, original);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.waitForFunction(title => {
+    const card = [...document.querySelectorAll('.bookmark-card')].find(node => node.textContent.includes(title));
+    return card && getComputedStyle(card).transform === 'none';
+  }, original);
+  await page.locator('#view-list').click();
+  await page.locator('#add-bookmark').click();
+  assert.ok(await page.locator('#bookmark-dialog').evaluate(node => getComputedStyle(node).transitionDuration.split(',').every(value => parseFloat(value) === 0)), 'reduced motion removes dialog transitions');
+  await page.locator('#bookmark-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.setViewportSize({ width: 320, height: 700 });
   await card(original).getByRole('checkbox', { name: `Select ${original}` }).check();
   for (const id of ['bulk-open', 'clear-selection']) {
