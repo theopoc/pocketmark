@@ -82,7 +82,7 @@
       $("reader-mode-hint").textContent = "Checking saved HTML…";
       $("reader-recheck").hidden = true;
       $("reader-retry-capture").hidden = true;
-      $("reader-retry-capture").disabled = false;
+      $("reader-retry-capture").removeAttribute("aria-disabled");
       for (const section of ["annotations", "assets"]) { $(section + "-error").hidden = true; $(section + "-retry").hidden = true; $(section + "-retry").disabled = false; }
       $("reader-notes").value = "";
       $("asset-file").value = "";
@@ -178,7 +178,7 @@
       if (!state.reading || $("reader-capture").disabled) return;
       const id = state.reading.id, request = state.readerRequest;
       $("reader-capture").disabled = true;
-      $("reader-retry-capture").disabled = true;
+      $("reader-retry-capture").setAttribute("aria-disabled", "true");
       $("reader-error").textContent = "";
       try {
         await api(`/api/links/${id}/capture`, { method: "POST" });
@@ -191,7 +191,7 @@
           toast("Capture queued.");
         }
         await onChange();
-      } catch (error) { if (isCurrent(request)) { $("reader-error").textContent = error.message; if (!$("reader-retry-capture").hidden) $("reader-status").textContent = `Could not retry capture. ${error.message}`; } } finally { if (isCurrent(request)) { $("reader-capture").disabled = false; $("reader-retry-capture").disabled = false; } }
+      } catch (error) { if (isCurrent(request)) { $("reader-error").textContent = error.message; if (!$("reader-retry-capture").hidden) $("reader-status").textContent = `Could not retry capture. ${error.message}`; } } finally { if (isCurrent(request)) { $("reader-capture").disabled = false; $("reader-retry-capture").removeAttribute("aria-disabled"); } }
     }
     $("reader-capture").addEventListener("click", capture);
     $("reader-retry-capture").addEventListener("click", capture);

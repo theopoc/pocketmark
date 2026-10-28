@@ -140,6 +140,8 @@ test("failed capture offers a direct retry and prevents duplicate requests", asy
   env.document.activeElement = env.get("reader-retry-capture");
   const retry = fire(env.get("reader-retry-capture"), "click");
   assert.equal(env.get("reader-capture").disabled, true);
+  assert.equal(env.get("reader-retry-capture").attributes["aria-disabled"], "true");
+  await fire(env.get("reader-retry-capture"), "click");
   await fire(env.get("reader-capture"), "click");
   assert.equal(env.calls.filter(call => call.path.endsWith("/capture")).length, 1);
   pending.resolve({ ok: true }); await retry;
@@ -157,7 +159,7 @@ test("a rejected direct capture retry remains available with a visible error", a
   await env.reader.open(1);
   await fire(env.get("reader-retry-capture"), "click");
   assert.equal(env.get("reader-retry-capture").hidden, false);
-  assert.equal(env.get("reader-retry-capture").disabled, false);
+  assert.equal(env.get("reader-retry-capture").attributes["aria-disabled"], undefined);
   assert.match(env.get("reader-status").textContent, /Try again later/);
 });
 
