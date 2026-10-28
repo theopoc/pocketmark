@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0](https://github.com/theopoc/pocketmark/compare/v0.3.1...v1.0.0) (2026-10-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* **auth:** the legacy administrator bearer is no longer accepted; integrations must use named API keys.
+
+### Features
+
+* **auth:** remove administrator key ([#55](https://github.com/theopoc/pocketmark/issues/55)) ([e99792b](https://github.com/theopoc/pocketmark/commit/e99792b3728c191743306bff705e8fbff1d839ad))
+
 ## [0.3.1](https://github.com/theopoc/pocketmark/compare/v0.3.0...v0.3.1) (2026-10-27)
 
 
