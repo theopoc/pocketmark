@@ -73,7 +73,7 @@ kbd { font-size: 11px; line-height: 1.4; font-family: inherit; display: inline-f
 .collection-list > p { padding: 0 10px; margin: 8px 0; font-size: 12px; }
 .collection-row { display: flex; align-items: center; border-radius: 6px; min-width: 0; }
 .collection-row .nav-item { margin: 0; flex: 1; }
-.collection-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.collection-name { min-width: 0; overflow-wrap: anywhere; }
 .collection-row .delete-collection { min-width: 25px; width: 25px; padding: 5px; }
 .collection-row .delete-collection .icon { width: 13px; height: 13px; }
 .tag-cloud { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 10px; }
@@ -630,7 +630,6 @@ body:has(dialog[open]) { overflow: hidden; }
   .reader-modal > h2 { margin-bottom: 12px; }
   .reader-content { margin-top: 20px; }
   .navigation-dialog .tag-button { min-height: 44px; }
-  .navigation-dialog .collection-name { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
   .reader-sticky-heading { top: -20px; margin: -20px -8px 16px; padding: 12px 8px 8px; padding-top: max(12px,env(safe-area-inset-top)); }
   .reader-heading-row .icon-button { min-width: 44px; min-height: 44px; }
   .reader-section-nav { justify-content: space-between; gap: 4px; padding-top: 0; }

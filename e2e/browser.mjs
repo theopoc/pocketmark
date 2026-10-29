@@ -569,6 +569,7 @@ try {
   assert.equal(collectionResponse.status(), 201);
   await page.locator('#refresh-button').click();
   await page.getByRole('button', { name: collectionName, exact: true }).waitFor();
+  assert.ok(await page.getByRole('button', { name: collectionName, exact: true }).evaluate(node => node.getBoundingClientRect().height > 44), 'long collection names wrap on desktop');
   await page.setViewportSize({ width: 320, height: 700 });
   await page.locator('#open-navigation').click();
   const collection = page.getByRole('button', { name: collectionName, exact: true });
