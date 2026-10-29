@@ -78,6 +78,10 @@
     scrollTimer = setTimeout(rememberScroll, 150);
   }, { passive: true });
   window.addEventListener("popstate", () => { if (state.signedIn) restoreRoute(); });
+  document.querySelector(".skip-link").addEventListener("click", (event) => {
+    event.preventDefault();
+    $("main-content").focus();
+  });
   window.addEventListener("beforeunload", (event) => {
     if (drafts.size || mfaManagementBusy || ($("settings-dialog").open && !$("mfa-manage-codes").hidden)) { event.preventDefault(); event.returnValue = ""; }
   });

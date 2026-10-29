@@ -134,9 +134,11 @@ try {
   assert.equal(recoveryCodes.length, 10);
   await page.locator('#mfa-login-continue').click();
   await page.locator('#app-view').waitFor({ state: 'visible' });
+  const libraryURL = page.url();
   await page.locator('.skip-link').focus();
   await page.keyboard.press('Enter');
-  assert.equal(await page.evaluate(() => document.getElementById('main-content').contains(document.activeElement)), true, 'library shortcut moves keyboard focus into the main content');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'main-content', 'library shortcut moves keyboard focus to the main content');
+  assert.equal(page.url(), libraryURL, 'library shortcut does not add a history entry');
   const oldSession = (await page.context().cookies()).find(cookie => cookie.name === 'pocketmark');
   await page.locator('#logout-button').click();
   await page.locator('#login-view').waitFor({ state: 'visible' });
