@@ -15,6 +15,7 @@
     let readerLayoutURL = "";
     let layoutRequest = 0;
     let viewerRequest = 0;
+    let retryReaderID = null;
 
     function closeViewer() {
       viewerRequest++;
@@ -33,6 +34,7 @@
       closeViewer();
       state.readerRequest++; layoutRequest++; annotationSession++;
       state.reading = null; state.annotationDraft = null; state.readerSelection = null;
+      retryReaderID = null;
       state.annotations = []; readerAssets = []; readerLayoutURL = "";
       $("reader-layout").removeAttribute("src");
     }
@@ -53,6 +55,8 @@
 
     async function openReader(id, recheck = false) {
       closeViewer();
+      retryReaderID = null;
+      $("reader-retry-open").hidden = true;
       const scroll = recheck ? $("reader-dialog").scrollTop : 0;
       const request = ++state.readerRequest;
       annotationSession++;
@@ -132,8 +136,18 @@
         $("reader-title").textContent = "Could not open this bookmark";
         $("reader-error").textContent = error.message;
         $("reader-status").textContent = error.message;
+        retryReaderID = id;
+        $("reader-retry-open").hidden = false;
       }
     }
+
+    $("reader-retry-open").addEventListener("click", () => {
+      if (retryReaderID === null) return;
+      const id = retryReaderID;
+      $("reader-title").tabIndex = -1;
+      $("reader-title").focus({ preventScroll: true });
+      openReader(id);
+    });
 
     function readerSectionError(section, error) {
       $(section + "-error").textContent = `Could not load ${section === "assets" ? "saved files" : "highlights"}. ${error.message}`;

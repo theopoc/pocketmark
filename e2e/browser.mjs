@@ -429,8 +429,18 @@ try {
     await page.locator(status).waitFor({ state: 'hidden' });
     await page.unroute(endpoint, delayed);
   }
+  const currentLinks = await (await page.request.get(new URL('/api/links', base).href)).json();
+  const originalID = currentLinks.links.find(link => link.title === original).id;
+  const readerURL = new URL(`/api/links/${originalID}`, base).href;
+  const failReader = route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
+  await page.route(readerURL, failReader);
   await card(original).getByRole('button', { name: original, exact: true }).click();
   await page.locator('#reader-dialog').waitFor({ state: 'visible' });
+  await page.locator('#reader-retry-open').waitFor({ state: 'visible' });
+  await page.unroute(readerURL, failReader);
+  await page.locator('#reader-retry-open').click();
+  await page.locator('#reader-title').filter({ hasText: original }).waitFor();
+  assert.equal(await page.locator('#reader-retry-open').isVisible(), false);
   await page.locator('#reader-options summary').click();
   for (const selector of ['[data-reader-section="reader-content"]', '[data-reader-section="annotations-section"]', '#reader-text-mode', '#reader-size', '#asset-upload-button']) {
     assert.ok(await page.locator(selector).evaluate(node => node.getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);

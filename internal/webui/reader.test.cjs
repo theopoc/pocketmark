@@ -115,6 +115,23 @@ test("closing before a response and queued close events cannot repopulate a new 
   assert.equal(env.get("reader-layout").src, "");
 });
 
+test("a failed reader opening can retry the same bookmark", async () => {
+  let failing = true;
+  const env = setup({ handler: (path, options, fallback) => {
+    if (path === "/api/links/1" && failing) throw Error("Temporarily unavailable");
+    return fallback();
+  } });
+  await env.reader.open(1);
+  assert.equal(env.get("reader-retry-open").hidden, false);
+  assert.match(env.get("reader-status").textContent, /Temporarily unavailable/);
+  failing = false;
+  await fire(env.get("reader-retry-open"), "click");
+  await tick();
+  assert.equal(env.get("reader-title").textContent, "Page 1");
+  assert.equal(env.get("reader-retry-open").hidden, true);
+  assert.equal(env.calls.filter(call => call.path === "/api/links/1").length, 2);
+});
+
 test("partial section errors leave text usable and retry only the failed section", async () => {
   let fail = true;
   const env = setup({ handler: (path, options, fallback) => {
