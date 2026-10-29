@@ -113,6 +113,7 @@ try {
   const password = 'Synthetic-E2E-password-42';
   await page.goto(base.href);
   await page.locator('#login-title').filter({ hasText: 'Create your account' }).waitFor();
+  assert.equal(await page.locator('.skip-link').isVisible(), false, 'library shortcut is unavailable before sign-in');
   assert.match(await page.locator('#login-description').textContent(), /authenticator app.*recovery codes/i);
   assert.equal(await page.locator('#login-password').getAttribute('aria-describedby'), 'login-password-hint');
   assert.equal(await page.locator('#login-password-hint').isVisible(), true);
@@ -133,8 +134,13 @@ try {
   assert.equal(recoveryCodes.length, 10);
   await page.locator('#mfa-login-continue').click();
   await page.locator('#app-view').waitFor({ state: 'visible' });
+  await page.locator('.skip-link').focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => document.getElementById('main-content').contains(document.activeElement)), true, 'library shortcut moves keyboard focus into the main content');
   const oldSession = (await page.context().cookies()).find(cookie => cookie.name === 'pocketmark');
   await page.locator('#logout-button').click();
+  await page.locator('#login-view').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('.skip-link').isVisible(), false, 'library shortcut is unavailable after sign-out');
   assert.equal(await page.locator('#login-password').getAttribute('aria-describedby'), 'login-help');
   const replay = await page.request.post(new URL('/api/tokens', base).href, { headers: { Cookie: `pocketmark=${oldSession.value}` }, data: { name: 'replayed-session' } });
   assert.equal(replay.status(), 401, 'a signed-out cookie cannot mint API keys');
