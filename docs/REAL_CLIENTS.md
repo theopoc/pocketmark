@@ -5,6 +5,17 @@
 > Floccus Linkwarden API backend have been removed. The older dated observations
 > remain historical evidence; the new worker is qualified separately below.
 
+## Extension collection and tag check — 29 October 2026
+
+Chrome for Testing 156.0.8078.4 loaded a disposable copy of the extension and
+its actual MV3 worker against an isolated Pocketmark server and database. In a
+320 px viewport, collection creation and selection, the collection-name hint,
+and manual tag addition worked without horizontal page overflow. The test used
+a normal extension page rather than the native action popup, pre-granted the
+loopback host permission in the copied manifest, and simulated active-tab
+selection. It does not test the browser's permission prompt, native popup sizing,
+physical devices, or other browsers. Credentials and the profile were disposable.
+
 ## Extension popup UI/UX — 22 October 2026
 
 The popup keeps Pocketmark's existing dark/indigo workspace language. Connection
