@@ -1083,19 +1083,20 @@
   $("add-collection").addEventListener("click", () => {
     openCollectionEditor();
   });
+  let collectionEditorSession = 0;
   $("collection-form").addEventListener("submit", async (event) => {
     event.preventDefault();
-    const button = event.submitter;
+    const button = event.submitter, session = collectionEditorSession, editing = state.editingCollection;
     button.disabled = true;
     $("collection-error").textContent = "";
     try {
       const name = $("collection-name").value.trim();
       if (!name) throw new Error("Give your collection a name.");
-      await api(state.editingCollection ? `/api/collections/${state.editingCollection.id}` : "/api/collections", { method: state.editingCollection ? "PUT" : "POST", body: JSON.stringify({ name, parentId: $("collection-parent").value ? Number($("collection-parent").value) : null }) });
-      $("collection-dialog").close();
+      await api(editing ? `/api/collections/${editing.id}` : "/api/collections", { method: editing ? "PUT" : "POST", body: JSON.stringify({ name, parentId: $("collection-parent").value ? Number($("collection-parent").value) : null }) });
+      if (session === collectionEditorSession && $("collection-dialog").open) $("collection-dialog").close();
       await refresh();
-      toast(state.editingCollection ? "Collection updated." : "Collection created.");
-    } catch (error) { $("collection-error").textContent = error.message; } finally { button.disabled = false; }
+      toast(editing ? "Collection updated." : "Collection created.");
+    } catch (error) { if (session === collectionEditorSession && $("collection-dialog").open) $("collection-error").textContent = error.message; else toast(error.message, true); } finally { if (session === collectionEditorSession) button.disabled = false; }
   });
 
   $("import-button").addEventListener("click", () => $("import-file").click());
@@ -1127,8 +1128,10 @@
 
 
   function openCollectionEditor(collection = null) {
+    collectionEditorSession++;
     state.editingCollection = collection;
     $("collection-form").reset();
+    $("collection-form").querySelector('[type="submit"]').disabled = false;
     $("collection-error").textContent = "";
     $("collection-dialog-title").textContent = collection ? "Rename or move collection" : "New collection";
     $("collection-name").value = collection?.name || "";

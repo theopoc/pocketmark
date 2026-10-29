@@ -352,6 +352,25 @@ try {
     }
   } finally { await peer.close(); }
 
+  // A late collection response must not close or overwrite a newly opened editor.
+  for (const succeeds of [true, false]) {
+    const held = succeeds ? await holdResponse(page, '/api/collections') : await holdUnauthorized(page, '/api/collections', 'Earlier collection failed', 503);
+    await page.locator('#add-collection').click();
+    await page.locator('#collection-name').fill(succeeds ? 'Earlier collection' : 'Failed collection');
+    await page.locator('#save-collection').click(); await held.ready;
+    await page.locator('#collection-dialog').getByRole('button', { name: 'Cancel' }).click();
+    await page.locator('#add-collection').click();
+    await page.locator('#collection-name').fill('New collection draft');
+    assert.equal(await page.locator('#save-collection').isEnabled(), true);
+    held.release();
+    await page.getByText(succeeds ? 'Collection created.' : 'The server could not complete this action.', { exact: false }).first().waitFor();
+    await held.remove();
+    assert.equal(await page.locator('#collection-dialog').isVisible(), true);
+    assert.equal(await page.locator('#collection-name').inputValue(), 'New collection draft');
+    assert.equal(await page.locator('#collection-error').textContent(), '');
+    await page.locator('#collection-dialog').getByRole('button', { name: 'Cancel' }).click();
+  }
+
   const original = 'Browser integration bookmark';
   const revised = 'Browser revised bookmark';
   await page.locator('#add-bookmark').click();
