@@ -271,7 +271,7 @@
         mark.title = note.note || "Saved highlight";
         mark.setAttribute("role", "button");
         mark.setAttribute("tabindex", "0");
-        mark.setAttribute("aria-label", `Edit highlight: ${Array.from(text).slice(0, 100).join("")}`);
+        mark.setAttribute("aria-label", `Edit highlight: ${text}`);
         mark.addEventListener("click", () => editAnnotation(note));
         mark.addEventListener("keydown", (event) => {
           if (event.key === "Enter" || event.key === " ") { event.preventDefault(); editAnnotation(note); }

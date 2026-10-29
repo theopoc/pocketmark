@@ -422,6 +422,14 @@ test("a highlighted passage opens its annotation with keyboard activation", asyn
   assert.equal(env.get("annotation-dialog").open, true);
 });
 
+test("the accessible highlighted passage retains its complete text", async () => {
+  const env = setup(), quote = "A".repeat(120) + " ending";
+  env.records.set(1, link(1, { content: quote }));
+  env.annotations.set(1, [{ id: 11, quote, start: 0, end: quote.length, color: "yellow" }]);
+  await env.reader.open(1);
+  assert.equal(env.get("reader-content").children[0].attributes["aria-label"], `Edit highlight: ${quote}`);
+});
+
 test("refreshing highlights preserves focus or returns it to the text when removed", async () => {
   const env = setup();
   env.annotations.set(1, [{ id: 11, quote: "Text", start: 0, end: 4, note: "Remember this", color: "yellow" }]);
