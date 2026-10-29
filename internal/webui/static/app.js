@@ -525,7 +525,7 @@
     $("tags-list").setAttribute("aria-busy", "true");
     $("tags-results").textContent = "Loading tags…";
     $("tags-error").hidden = true;
-    $("tags-empty").hidden = true;
+    $("tags-empty-state").hidden = true;
     $("tags-list").replaceChildren();
     disableTagAlphabet();
     $("tags-pagination").hidden = true;
@@ -566,7 +566,8 @@
       }
       renderTagAlphabet(result.groups, jump || result.tags[0]?.letter);
       $("tags-results").textContent = `${result.total} tag${result.total === 1 ? "" : "s"}${query ? ` matching “${query}”` : " in your library"}`;
-      $("tags-empty").hidden = result.total > 0;
+      $("tags-empty-state").hidden = result.total > 0;
+      $("tags-clear-search").hidden = !query;
       $("tags-empty").textContent = query ? "No tags match your search. Try a different name." : "No tags yet. Add tags when saving or editing a bookmark.";
       $("tags-pagination").hidden = pages <= 1;
       $("tags-page-label").textContent = `Page ${tagsPage} of ${pages}`;
@@ -609,6 +610,10 @@
     tagsTimer = setTimeout(() => { tagsPage = 1; commitRoute(tagsSearchSession); tagsSearchSession = true; loadTagDirectory(); }, 250);
   });
   $("tags-search").addEventListener("blur", () => { tagsSearchSession = false; });
+  $("tags-clear-search").addEventListener("click", () => {
+    clearTimeout(tagsTimer); $("tags-search").value = ""; tagsPage = 1; tagsSearchSession = false;
+    commitRoute(); loadTagDirectory(); $("tags-search").focus();
+  });
   $("tags-letter-picker").addEventListener("change", () => { if ($("tags-letter-picker").value) loadTagDirectory($("tags-letter-picker").value); });
   $("tags-retry").addEventListener("click", () => { clearTimeout(tagsTimer); loadTagDirectory(); });
   $("tags-previous").addEventListener("click", () => { tagsPage--; commitRoute(); $("tags-title").focus(); loadTagDirectory(); });

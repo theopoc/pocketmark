@@ -470,6 +470,12 @@ try {
   await page.locator('#tags-list').getByRole('button', { name: '#reading 1 bookmark' }).waitFor();
   await page.setViewportSize({ width: 320, height: 700 });
   assert.equal(await page.locator('#tags-alphabet').isVisible(), false);
+  await page.locator('#tags-search').fill('no-such-tag-e2e');
+  await page.locator('#tags-clear-search').waitFor({ state: 'visible' });
+  await page.locator('#tags-clear-search').click();
+  assert.equal(await page.locator('#tags-search').inputValue(), '');
+  assert.equal(await page.locator('#tags-search').evaluate(node => document.activeElement === node), true);
+  await page.locator('#tags-list').getByRole('button', { name: '#reading 1 bookmark' }).waitFor();
   await page.locator('#tags-letter-picker').selectOption('R');
   await page.waitForFunction(() => document.activeElement.id === 'tags-letter-R');
   await page.locator('#tags-list').getByRole('button', { name: '#reading 1 bookmark' }).click();

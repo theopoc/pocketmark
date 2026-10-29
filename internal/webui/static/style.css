@@ -612,6 +612,7 @@ body:has(dialog[open]) { overflow: hidden; }
   .tag-picker-option { min-height: 44px; font-size: 14px; }
   .tags-letter-picker { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; margin: 0 0 16px; }
   .tags-letter-picker select { width: auto; min-height: 44px; font-size: 16px; }
+  #tags-clear-search { min-height: 44px; }
   .card-action, .view-list .card-action, .view-button { width: 44px; height: 44px; }
   .card-actions { gap: 4px; flex-wrap: wrap; }
   .view-list .card-footer { flex-wrap: wrap; }
