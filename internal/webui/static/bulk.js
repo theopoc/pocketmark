@@ -50,6 +50,7 @@
         }
         select(link, checked);
       }
+      render();
       onSelectionChange();
     });
     $("clear-selection").addEventListener("click", () => { clear(); onSelectionChange(); });
