@@ -262,6 +262,7 @@ test("saved files open images, PDF and sandboxed original HTML in the integrated
   ]);
   await env.reader.open(1);
   const row = env.get("asset-list").children[0];
+  assert.equal(row.children.find(node => node.textContent === "Delete").attributes["aria-label"], "Delete Full page.png");
   await fire(row.children.find(node => node.textContent === "View"), "click");
   await tick();
   assert.equal(env.get("asset-viewer").open, true);
@@ -464,6 +465,8 @@ for (const action of ["save", "delete"]) test(`${action} annotation remains succ
   env.annotations.set(1, [{ id: 11, quote: "Text", start: 0, end: 4, note: "Old note", color: "yellow" }]);
   await env.reader.open(1);
   const actions = env.get("annotation-list").children[0].children.at(-1);
+  assert.equal(actions.children[0].attributes["aria-label"], "Edit annotation: Text");
+  assert.equal(actions.children[1].attributes["aria-label"], "Delete annotation: Text");
   if (action === "save") {
     await fire(actions.children[0], "click");
     env.get("annotation-note").value = "Updated note";

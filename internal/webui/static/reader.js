@@ -297,8 +297,11 @@
         row.append(el("blockquote", `highlight-${annotation.color}`, annotation.quote), el("p", "", annotation.note || "Highlight"));
         if (annotation.stale) row.append(el("p", "small muted", "The captured text has changed. This highlight belongs to an earlier capture."));
         const edit = el("button", "text-button", "Edit note");
+        const passage = Array.from(annotation.quote).slice(0, 100).join("");
+        edit.setAttribute("aria-label", `Edit annotation: ${passage}`);
         edit.addEventListener("click", () => editAnnotation(annotation));
         const remove = el("button", "text-button", "Delete");
+        remove.setAttribute("aria-label", `Delete annotation: ${passage}`);
         remove.addEventListener("click", async () => {
           if (!browser.confirm("Delete this annotation?")) return;
           remove.disabled = true;
@@ -528,10 +531,12 @@
         }
         if (asset.mediaType === "text/html" && asset.size <= 2 * 1024 * 1024) {
           const read = el("button", "text-button", "Read");
+          read.setAttribute("aria-label", `Read ${asset.name}`);
           read.addEventListener("click", () => { readerLayoutURL = `/api/links/${id}/reader?asset=${asset.id}`; $("reader-layout-mode").disabled = false; $("reader-print").disabled = false; $("reader-layout-mode").click(); });
           row.append(read);
         }
         const remove = el("button", "text-button", "Delete");
+        remove.setAttribute("aria-label", `Delete ${asset.name}`);
         remove.addEventListener("click", async () => {
           if (!browser.confirm(`Delete saved file “${asset.name}”?`)) return;
           remove.disabled = true;
