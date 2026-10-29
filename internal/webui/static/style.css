@@ -635,6 +635,10 @@ body:has(dialog[open]) { overflow: hidden; }
   .reader-heading-row .icon-button { min-width: 44px; min-height: 44px; }
   .reader-section-nav { justify-content: space-between; gap: 4px; padding-top: 0; }
   #reader-dialog .button, #reader-dialog .reader-section-nav .text-button, #reader-recheck { min-height: 44px; font-size: 14px; }
+  #reader-dialog .asset-item .text-button, #reader-dialog .annotation-item .text-button,
+  #assets-retry, #annotations-retry { min-width: 44px; min-height: 44px; font-size: 14px; }
+  .asset-item { display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, auto); gap: 0 8px; }
+  .asset-item > a { grid-column: 1 / -1; display: flex; align-items: center; min-height: 44px; }
   .reader-section-nav .text-button { min-width: 44px; }
   .reader-tools select { min-height: 44px; font-size: 16px; }
   .reader-modal { padding-bottom: max(20px,env(safe-area-inset-bottom)); }
