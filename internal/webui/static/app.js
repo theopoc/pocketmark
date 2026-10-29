@@ -783,12 +783,12 @@
     $("empty-title").textContent = filtered ? "No bookmarks found" : "Your library starts here";
     const offerNearMatches = !!state.query && !state.fuzzy;
     $("empty-message").textContent = offerNearMatches ? "Try a different search, or look for near matches in titles, URLs, descriptions and tags." : filtered ? "Try a different search or clear your filters to see all bookmarks." : "Save your first bookmark, or import an existing library from the navigation.";
-    const emptyView = !state.query && !state.tag && {
+    const emptyView = !state.query && (state.tag ? ["No bookmarks with this tag", "Choose another tag or return to all bookmarks.", false] : {
       collection: ["This collection is empty", "Add a bookmark to start this collection.", true],
       inbox: ["Your inbox is empty", "Bookmarks without a collection appear here.", true],
       favorite: ["No favorites yet", "Select the star on a bookmark to keep it here.", false],
       unread: ["Nothing left to read", "Mark a bookmark as unread to see it here.", false],
-    }[state.filter];
+    }[state.filter]);
     if (emptyView) {
       $("empty-title").textContent = emptyView[0];
       $("empty-message").textContent = emptyView[1];

@@ -372,6 +372,11 @@ try {
     if (await toggle.isVisible()) await toggle.click();
   };
   await card(original).waitFor();
+  await page.goto(new URL('/?tag=no-such-tag-e2e', base).href);
+  await page.locator('#empty-title').filter({ hasText: 'No bookmarks with this tag' }).waitFor();
+  assert.equal(await page.locator('#empty-add').isVisible(), false);
+  await page.getByRole('button', { name: 'View all bookmarks', exact: true }).click();
+  await card(original).waitFor();
   const moreTags = card(original).getByRole('button', { name: `Show all 6 tags for ${original}` });
   await moreTags.focus();
   await moreTags.press('Enter');
