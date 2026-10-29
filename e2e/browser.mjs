@@ -440,7 +440,20 @@ try {
   await (await chooser).setFiles([]);
   await page.getByRole('button', { name: 'Close reader', exact: true }).click();
   await page.setViewportSize({ width: 1280, height: 720 });
+  const pagedTags = route => {
+    const pageNumber = Number(new URL(route.request().url()).searchParams.get('page'));
+    const tags = Array.from({ length: pageNumber === 1 ? 40 : 1 }, (_, index) => ({ name: `tag-${String((pageNumber - 1) * 40 + index).padStart(2, '0')}`, count: 1, letter: 'T' }));
+    return route.fulfill({ json: { tags, groups: [{ letter: 'T', count: 41 }], total: 41, page: pageNumber, pageSize: 40 } });
+  };
+  await page.route('**/api/tags/browse?*', pagedTags);
   await page.locator('#all-tags').click();
+  await page.locator('#tags-next').waitFor({ state: 'visible' });
+  await page.locator('#tags-next').focus();
+  await page.locator('#tags-next').press('Enter');
+  await page.locator('#tags-page-label').filter({ hasText: 'Page 2 of 2' }).waitFor();
+  assert.equal(await page.locator('#tags-title').evaluate(node => document.activeElement === node), true, 'pagination returns keyboard focus to the directory heading');
+  await page.unroute('**/api/tags/browse?*', pagedTags);
+  await page.locator('#tags-retry').click();
   await page.locator('#tags-list').getByRole('button', { name: '#reading 1 bookmark' }).waitFor();
   await page.setViewportSize({ width: 320, height: 700 });
   assert.equal(await page.locator('#tags-alphabet').isVisible(), false);

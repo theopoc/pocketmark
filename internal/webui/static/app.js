@@ -611,8 +611,8 @@
   $("tags-search").addEventListener("blur", () => { tagsSearchSession = false; });
   $("tags-letter-picker").addEventListener("change", () => { if ($("tags-letter-picker").value) loadTagDirectory($("tags-letter-picker").value); });
   $("tags-retry").addEventListener("click", () => { clearTimeout(tagsTimer); loadTagDirectory(); });
-  $("tags-previous").addEventListener("click", () => { tagsPage--; commitRoute(); loadTagDirectory(); });
-  $("tags-next").addEventListener("click", () => { tagsPage++; commitRoute(); loadTagDirectory(); });
+  $("tags-previous").addEventListener("click", () => { tagsPage--; commitRoute(); $("tags-title").focus(); loadTagDirectory(); });
+  $("tags-next").addEventListener("click", () => { tagsPage++; commitRoute(); $("tags-title").focus(); loadTagDirectory(); });
 
   function actionButton(symbol, label, callback, extraClass = "") {
     const button = el("button", `card-action ${extraClass}`);
