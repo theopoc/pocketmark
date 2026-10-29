@@ -179,9 +179,11 @@ $("tag-input").addEventListener("keydown", (event) => {
 });
 $("tag-input").addEventListener("input", () => {
   clearTimeout(tagTimer); const sequence = ++tagQuery;
+  tagOptions([]);
+  $("tag-hint").textContent = "Press Enter or use commas to add tags.";
   tagTimer = setTimeout(async () => {
     try { const data = await send("tags", { query: $("tag-input").value }); if (sequence === tagQuery) tagOptions(data.tags); }
-    catch { /* Manual creation remains available when suggestions fail. */ }
+    catch { if (sequence === tagQuery) $("tag-hint").textContent = "Suggestions unavailable. Type a tag and press Enter to add it."; }
   }, 200);
 });
 function collectionEditor(open) {
