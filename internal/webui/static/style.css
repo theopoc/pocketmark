@@ -294,6 +294,7 @@ body:has(dialog[open]) { overflow: hidden; }
 .reader-content:focus-visible { outline: 2px solid var(--focus); outline-offset: 8px; }
 .reader-layout { width: 100%; height: 65dvh; border: 1px solid var(--line); border-radius: 6px; margin-top: 20px; background: white; }
 .reader-content mark { cursor: pointer; color: inherit; border-radius: 2px; padding: 1px 0; }
+.reader-content mark:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 .highlight-yellow { background: #fff0a8; }
 .highlight-green { background: #d8edc9; }
 .highlight-blue { background: #d9eaff; }

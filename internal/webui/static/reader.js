@@ -258,7 +258,13 @@
         if (!note) { fragment.append(document.createTextNode(text)); continue; }
         const mark = el("mark", `highlight-${["yellow", "green", "blue", "pink"].includes(note.color) ? note.color : "yellow"}`, text);
         mark.title = note.note || "Saved highlight";
+        mark.setAttribute("role", "button");
+        mark.setAttribute("tabindex", "0");
+        mark.setAttribute("aria-label", `Edit highlight: ${Array.from(text).slice(0, 100).join("")}`);
         mark.addEventListener("click", () => editAnnotation(note));
+        mark.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); editAnnotation(note); }
+        });
         fragment.append(mark);
       }
       root.append(fragment);

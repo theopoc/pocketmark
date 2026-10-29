@@ -403,6 +403,24 @@ test("highlights use Unicode offsets and preserve edits made during annotation s
   assert.equal(root.textContent, content);
 });
 
+test("a highlighted passage opens its annotation with keyboard activation", async () => {
+  const env = setup();
+  env.annotations.set(1, [{ id: 11, quote: "Text", start: 0, end: 4, note: "Remember this", color: "yellow" }]);
+  await env.reader.open(1);
+  const mark = env.get("reader-content").children[0];
+  assert.equal(mark.attributes.role, "button");
+  assert.equal(mark.attributes.tabindex, "0");
+  assert.match(mark.attributes["aria-label"], /Edit highlight: Text/);
+  let prevented = false;
+  await fire(mark, "keydown", { key: "Enter", preventDefault: () => { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(env.get("annotation-dialog").open, true);
+  assert.equal(env.get("annotation-note").value, "Remember this");
+  env.get("annotation-dialog").close(); await tick();
+  await fire(mark, "keydown", { key: " ", preventDefault: () => { prevented = true; } });
+  assert.equal(env.get("annotation-dialog").open, true);
+});
+
 test("annotation completion cannot close or overwrite another document's annotation", async () => {
   const save = deferred();
   const env = setup({ handler: (path, options, fallback) => options.method === "PUT" ? save.promise : fallback() });
