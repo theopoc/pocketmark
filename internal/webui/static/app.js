@@ -1092,10 +1092,14 @@
     try {
       const name = $("collection-name").value.trim();
       if (!name) throw new Error("Give your collection a name.");
-      await api(editing ? `/api/collections/${editing.id}` : "/api/collections", { method: editing ? "PUT" : "POST", body: JSON.stringify({ name, parentId: $("collection-parent").value ? Number($("collection-parent").value) : null }) });
-      if (session === collectionEditorSession && $("collection-dialog").open) $("collection-dialog").close();
+      const parentId = $("collection-parent").value ? Number($("collection-parent").value) : null;
+      const saved = await api(editing ? `/api/collections/${editing.id}` : "/api/collections", { method: editing ? "PUT" : "POST", body: JSON.stringify({ name, parentId }) });
+      const active = session === collectionEditorSession && $("collection-dialog").open;
+      const newer = active && ($("collection-name").value.trim() !== name || ($("collection-parent").value ? Number($("collection-parent").value) : null) !== parentId);
+      if (newer) { state.editingCollection = editing || saved; $("collection-dialog-title").textContent = "Rename or move collection"; }
+      else if (active) $("collection-dialog").close();
       await refresh();
-      toast(editing ? "Collection updated." : "Collection created.");
+      toast(newer ? "Saved. Your newer collection edits are still open." : editing ? "Collection updated." : "Collection created.");
     } catch (error) { if (session === collectionEditorSession && $("collection-dialog").open) $("collection-error").textContent = error.message; else toast(error.message, true); } finally { if (session === collectionEditorSession) button.disabled = false; }
   });
 

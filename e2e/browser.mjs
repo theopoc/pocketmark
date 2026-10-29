@@ -370,6 +370,19 @@ try {
     assert.equal(await page.locator('#collection-error').textContent(), '');
     await page.locator('#collection-dialog').getByRole('button', { name: 'Cancel' }).click();
   }
+  const pendingCollection = await holdResponse(page, '/api/collections');
+  await page.locator('#add-collection').click();
+  await page.locator('#collection-name').fill('Collection before save');
+  await page.locator('#save-collection').click(); await pendingCollection.ready;
+  await page.locator('#collection-name').fill('Collection after save');
+  pendingCollection.release();
+  await page.getByText('Saved. Your newer collection edits are still open.').waitFor();
+  await pendingCollection.remove();
+  assert.equal(await page.locator('#collection-name').inputValue(), 'Collection after save');
+  await page.locator('#save-collection').click();
+  await page.locator('#collection-dialog').waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: 'Collection after save', exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Collection before save', exact: true }).count(), 0);
 
   const original = 'Browser integration bookmark';
   const revised = 'Browser revised bookmark';
