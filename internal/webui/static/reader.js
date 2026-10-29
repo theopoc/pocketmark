@@ -281,13 +281,29 @@
         remove.addEventListener("click", async () => {
           if (!browser.confirm("Delete this annotation?")) return;
           remove.disabled = true;
-          try { await api(`/api/links/${id}/annotations/${annotation.id}`, { method: "DELETE" }); await loadAnnotations(id, request); }
-          catch (error) { toast(error.message, true); remove.disabled = false; }
+          try {
+            await api(`/api/links/${id}/annotations/${annotation.id}`, { method: "DELETE" });
+            if (isCurrent(request)) toast("Annotation deleted.");
+            await refreshAnnotationsAfterChange(id, request);
+          } catch (error) { if (isCurrent(request)) { toast(error.message, true); remove.disabled = false; } }
         });
         const actions = el("div", "reader-actions"); actions.append(edit, remove); row.append(actions);
         $("annotation-list").append(row);
       }
       if (!state.annotations.length) $("annotation-list").append(el("p", "small muted", "No highlights yet."));
+    }
+
+    async function refreshAnnotationsAfterChange(id, request) {
+      try {
+        await loadAnnotations(id, request);
+        if (isCurrent(request)) { $("annotations-error").hidden = true; $("annotations-retry").hidden = true; }
+      } catch (error) {
+        if (!isCurrent(request)) return;
+        state.annotations = [];
+        renderReaderText();
+        $("annotation-list").replaceChildren();
+        readerSectionError("annotations", error);
+      }
     }
 
     function editAnnotation(annotation) {
@@ -348,8 +364,8 @@
           state.annotationDraft = { ...draft, ...submitted, id: saved.id };
           if (!drafts.get(savedKey)) $("annotation-dialog").close();
         }
-        if (isCurrent(request)) await loadAnnotations(linkID, request);
-        toast("Annotation saved.");
+        if (isCurrent(request)) toast("Annotation saved.");
+        await refreshAnnotationsAfterChange(linkID, request);
       } catch (error) { if (session === annotationSession && isCurrent(request)) $("annotation-error").textContent = error.message; }
       finally { if (session === annotationSession && isCurrent(request)) event.submitter.disabled = false; }
     });

@@ -422,6 +422,34 @@ test("annotation completion cannot close or overwrite another document's annotat
   assert.equal(env.get("annotation-form").querySelector("button[type=submit]").disabled, false);
 });
 
+for (const action of ["save", "delete"]) test(`${action} annotation remains successful when refreshing highlights fails`, async () => {
+  let failRefresh = false;
+  const env = setup({ handler: (path, options, fallback) => {
+    if (path === "/api/links/1/annotations" && failRefresh) throw Error("Highlights unavailable");
+    if (["PUT", "DELETE"].includes(options.method)) { failRefresh = true; return { id: 11 }; }
+    return fallback();
+  } });
+  env.annotations.set(1, [{ id: 11, quote: "Text", start: 0, end: 4, note: "Old note", color: "yellow" }]);
+  await env.reader.open(1);
+  const actions = env.get("annotation-list").children[0].children.at(-1);
+  if (action === "save") {
+    await fire(actions.children[0], "click");
+    env.get("annotation-note").value = "Updated note";
+    await fire(env.get("annotation-form"), "submit");
+    assert.equal(env.get("annotation-dialog").open, false);
+  } else await fire(actions.children[1], "click");
+  assert.match(env.notices.at(-1)[0], action === "save" ? /Annotation saved/ : /Annotation deleted/);
+  assert.notEqual(env.notices.at(-1)[1], true);
+  assert.equal(env.get("annotation-list").children.length, 0);
+  assert.equal(env.get("annotations-retry").hidden, false);
+  assert.match(env.get("annotations-error").textContent, /Highlights unavailable/);
+  failRefresh = false;
+  await fire(env.get("annotations-retry"), "click");
+  assert.equal(env.get("annotations-error").hidden, true);
+  assert.equal(env.get("annotations-retry").hidden, true);
+  assert.match(env.get("annotation-list").textContent, /Old note/);
+});
+
 test("an old file upload cannot release another document's active upload control", async () => {
   const first = deferred(), second = deferred();
   const env = setup({ handler: (path, options, fallback) => options.method === "POST" && path.includes("/assets?") ? (path.includes("/1/") ? first.promise : second.promise) : fallback() });
