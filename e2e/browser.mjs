@@ -429,6 +429,14 @@ try {
   }), 'the bulk action fits the mobile dialog');
   await page.locator('#bulk-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.locator('#clear-selection').click();
+  await card(original).getByRole('button', { name: `Add to favorites: ${original}` }).click();
+  const undo = page.locator('#toast').getByRole('button', { name: 'Undo' });
+  await undo.waitFor({ state: 'visible' });
+  await undo.focus();
+  await page.waitForTimeout(12500);
+  assert.equal(await undo.isVisible(), true, 'the undo action stays available while focused');
+  await undo.press('Enter');
+  await card(original).getByRole('button', { name: `Add to favorites: ${original}` }).waitFor();
   for (const [endpoint, input, status, file] of [
     ['**/api/import', '#import-file', '#import-progress', { name: 'bookmarks.json', mimeType: 'application/json', buffer: Buffer.from('{}') }],
     ['**/api/files?*', '#library-file', '#upload-progress', { name: 'fixture.png', mimeType: 'image/png', buffer: Buffer.from('fixture') }],

@@ -3,7 +3,7 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const state = { filter: "all", collection: null, tag: "", query: "", page: 1, pageSize: 40, total: 0, links: [], collections: [], editing: null, request: 0, timer: null, signedIn: false, sort: "newest", fuzzy: false, editingCollection: null };
-  let toastTimer;
+  let toastTimer, toastActionPending = false;
   let expandedBookmarkActions = null;
   const expandedBookmarkTags = new Set();
   let searchTimer;
@@ -225,6 +225,7 @@
 
   function toast(message, error = false, action = null) {
     clearTimeout(toastTimer);
+    toastActionPending = true;
     const notice = $("toast");
     // Native dialogs live in the top layer. Feedback must be in that same
     // layer to be visible and exposed to assistive technology.
@@ -238,14 +239,23 @@
       button.type = "button";
       button.addEventListener("click", async () => {
         clearTimeout(toastTimer);
+        toastActionPending = true;
         button.disabled = true;
         try { await action.run(); } catch (error) { toast(error.message, true); }
       });
       notice.append(button);
     }
     notice.hidden = false;
+    toastActionPending = false;
     toastTimer = setTimeout(() => { notice.hidden = true; }, action || error ? 12000 : 5000);
   }
+  $("toast").addEventListener("focusin", () => clearTimeout(toastTimer));
+  $("toast").addEventListener("focusout", (event) => {
+    const notice = $("toast");
+    if (!notice.hidden && !toastActionPending && !notice.contains(event.relatedTarget)) {
+      toastTimer = setTimeout(() => { notice.hidden = true; }, 12000);
+    }
+  });
   document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("close", () => {
     if (dialog.contains($("toast"))) {
       clearTimeout(toastTimer);
