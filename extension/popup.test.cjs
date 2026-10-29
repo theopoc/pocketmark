@@ -56,7 +56,9 @@ test("a late collection creation leaves a reopened editor and its parent intact"
   el("new-collection").listeners.click(); el("collection-name").value = "Earlier";
   const creating = el("create-collection").listeners.click();
   assert.equal(el("collection-name").readOnly, true); assert.equal(el("collection-parent").disabled, true);
+  assert.equal(el("create-collection").textContent, "Creating collection…");
   el("cancel-collection").listeners.click(); el("new-collection").listeners.click();
+  assert.equal(el("create-collection").textContent, "Create collection");
   el("collection-name").value = "New draft"; el("collection-parent").value = "7";
   resolve({ id: 8, name: "Earlier", parentId: null }); await creating;
   assert.equal(el("collection-create").hidden, false); assert.equal(el("collection-name").value, "New draft");

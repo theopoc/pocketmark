@@ -191,7 +191,7 @@ $("tag-input").addEventListener("input", () => {
 function collectionEditor(open) {
   collectionSession++;
   $("collection-create").hidden = !open; $("new-collection").setAttribute("aria-expanded", String(open));
-  if (open) { $("create-collection").disabled = false; $("collection-name").readOnly = false; $("collection-parent").disabled = false; $("collection-parent").value = $("collection").value; $("collection-name").focus(); }
+  if (open) { $("create-collection").disabled = false; $("create-collection").textContent = "Create collection"; $("collection-name").readOnly = false; $("collection-parent").disabled = false; $("collection-parent").value = $("collection").value; $("collection-name").focus(); }
 }
 $("new-collection").addEventListener("click", () => collectionEditor($("collection-create").hidden));
 $("cancel-collection").addEventListener("click", () => { collectionEditor(false); $("new-collection").focus(); });
@@ -202,6 +202,7 @@ $("collection-name").addEventListener("keydown", (event) => {
 $("create-collection").addEventListener("click", async () => {
   const session = collectionSession;
   $("create-collection").disabled = true;
+  $("create-collection").textContent = "Creating collection…";
   $("collection-name").readOnly = true; $("collection-parent").disabled = true;
   try {
     const collection = await send("collection", { name: $("collection-name").value, parentId: Number($("collection-parent").value) || null });
@@ -215,7 +216,7 @@ $("create-collection").addEventListener("click", async () => {
       status($("collection-create").hidden ? "Collection created." : "Collection created. Your current draft is unchanged.");
     }
   } catch (error) { status(error.message, true); }
-  finally { if (session === collectionSession) { $("create-collection").disabled = false; $("collection-name").readOnly = false; $("collection-parent").disabled = false; } }
+  finally { if (session === collectionSession) { $("create-collection").disabled = false; $("create-collection").textContent = "Create collection"; $("collection-name").readOnly = false; $("collection-parent").disabled = false; } }
 });
 $("save-form").addEventListener("submit", async (event) => {
   event.preventDefault(); $("save").disabled = true;
