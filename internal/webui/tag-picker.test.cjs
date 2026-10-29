@@ -92,8 +92,10 @@ test('closed or reset dialogs ignore late suggestions and a queued close cannot 
 });
 test('suggestion failures offer retry and preserve typed and selected tags', async () => {
   let failing = true; const env = setup(async () => { if (failing) throw Error('Offline'); return { tags: [], total: 0 }; }), { host } = env;
-  host.picker.set(['saved']); host.input.value = 'custom'; env.fire(host.input, 'input'); await env.flush();
+  host.picker.set(['saved']); host.input.focus(); host.input.value = 'custom'; env.fire(host.input, 'input'); await env.flush();
   assert.equal(host.retry.hidden, false); assert.equal(host.source.value, 'saved, custom');
+  env.fire(host.input, 'keydown', { key: 'Tab' }); host.retry.focus();
+  assert.equal(host.panel.hidden, false); assert.equal(host.input.value, 'custom');
   failing = false; host.retry.click(); await env.flush(); assert.equal(host.retry.hidden, true); assert.match(host.list.textContent, /custom/);
 });
 test('focus leaving the field commits pending text and closes suggestions', () => {

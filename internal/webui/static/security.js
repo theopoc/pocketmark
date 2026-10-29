@@ -32,9 +32,10 @@ globalThis.PocketmarkSecurity = {
     });
     const date = value => value ? new Date(value * 1000).toLocaleString() : "Unavailable for older sessions";
     const node = (tag, text, className = "") => { const n = document.createElement(tag); n.textContent = text; n.className = className; return n; };
+    function clearSessionMessages() { $("sessions-error").textContent = $("sessions-feedback").textContent = ""; }
     async function loadSessions() {
       const attempt = ++generation;
-      $("sessions-error").textContent = "";
+      clearSessionMessages();
       $("sessions-list").replaceChildren(node("li", "Loading sessions…", "muted"));
       try {
         const sessions = await api("/api/sessions");
@@ -54,6 +55,7 @@ globalThis.PocketmarkSecurity = {
           button.type = "button";
           button.setAttribute("aria-label", session.current ? "Sign out this browser" : `Revoke session ${session.id}`);
           button.addEventListener("click", async () => {
+            clearSessionMessages();
             button.disabled = true;
             try {
               await api(session.current ? "/api/logout" : `/api/sessions/${session.id}`, { method: session.current ? "POST" : "DELETE" });
@@ -67,12 +69,13 @@ globalThis.PocketmarkSecurity = {
     }
     $("sessions-refresh").addEventListener("click", loadSessions);
     $("sessions-others").addEventListener("click", async () => {
+      clearSessionMessages();
       $("sessions-others").disabled = true;
       try { await api("/api/sessions/others", { method: "DELETE" }); await loadSessions(); $("sessions-feedback").textContent = "All other browsers have been signed out."; }
       catch (error) { $("sessions-error").textContent = error.message; $("sessions-others").disabled = false; }
     });
     $("session-idle-form").addEventListener("submit", async event => {
-      event.preventDefault(); event.submitter.disabled = true;
+      event.preventDefault(); clearSessionMessages(); event.submitter.disabled = true;
       try { await api("/api/sessions/current", { method: "PATCH", body: JSON.stringify({ idleTimeoutMinutes: Number($("session-idle").value) }) }); $("sessions-feedback").textContent = "Inactivity timeout saved for this browser."; }
       catch (error) { $("sessions-error").textContent = error.message; }
       finally { event.submitter.disabled = false; }

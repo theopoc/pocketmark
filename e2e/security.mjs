@@ -20,6 +20,16 @@ export async function securityJourney({ browser, page, base, username, password,
     assert.equal((await peer.request.post(url('/api/mfa/verify'), { data: { code: recoveryCode } })).status(), 200);
     await page.locator('#settings-button').click();
     await page.locator('#sessions-list .token-row').nth(1).waitFor();
+    await page.setViewportSize({ width: 320, height: 700 });
+    for (const selector of ['#settings-dialog .dialog-heading .icon-button', '#token-name', '#token-profile', '#sessions-refresh', '#settings-dialog a[href="/api/backup"]']) {
+      assert.ok(await page.locator(selector).evaluate(node => node.getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
+    }
+    assert.ok(await page.locator('#settings-dialog').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), 'mobile settings do not overflow');
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: 'Backup' }).click();
+    assert.equal(await page.locator('#backup-title').evaluate(node => document.activeElement === node), true);
+    await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: 'API keys' }).click();
+    assert.equal(await page.locator('#api-keys-title').evaluate(node => document.activeElement === node), true);
     if (process.env.E2E_SCREENSHOTS) {
       await mkdir(process.env.E2E_SCREENSHOTS, { recursive: true });
       for (const [name, width, height, theme] of [['desktop', 1280, 1000, 'dark'], ['mobile', 390, 844, 'dark'], ['mobile-light', 390, 844, 'light']]) {

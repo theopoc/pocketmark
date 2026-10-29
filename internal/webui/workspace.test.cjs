@@ -17,6 +17,9 @@ test('collection/search/sort/page survive a reload and a history round trip', ()
   assert.deepEqual(readRoute(routeSearch(first)), first);
   assert.equal(second.collection, 42);
   assert.equal(second.page, 3);
+  const descending = readRoute('?sort=title_desc');
+  assert.equal(descending.sort, 'title_desc');
+  assert.deepEqual(readRoute(routeSearch(descending)), descending);
 });
 
 test('tags directory retains its query and the library context it returns to', () => {
