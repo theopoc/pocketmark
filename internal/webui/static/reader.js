@@ -459,6 +459,19 @@
       showAsset(asset.id);
     }
 
+    async function refreshAssetsAfterChange(id, request) {
+      try {
+        await loadAssets(id, request);
+        if (isCurrent(request)) { $("assets-error").hidden = true; $("assets-retry").hidden = true; }
+      } catch (error) {
+        if (!isCurrent(request)) return;
+        readerAssets = [];
+        $("asset-list").replaceChildren();
+        readerAvailability();
+        readerSectionError("assets", error);
+      }
+    }
+
     async function loadAssets(id, request = state.readerRequest) {
       if (!isCurrent(request) || state.reading?.id !== id) return;
       const assets = await api(`/api/links/${id}/assets`);
@@ -485,8 +498,11 @@
         remove.addEventListener("click", async () => {
           if (!browser.confirm(`Delete saved file “${asset.name}”?`)) return;
           remove.disabled = true;
-          try { await api(`/api/assets/${asset.id}`, { method: "DELETE" }); await loadAssets(id, request); }
-          catch (error) { toast(error.message, true); remove.disabled = false; }
+          try {
+            await api(`/api/assets/${asset.id}`, { method: "DELETE" });
+            if (isCurrent(request)) toast("File deleted.");
+            await refreshAssetsAfterChange(id, request);
+          } catch (error) { if (isCurrent(request)) { toast(error.message, true); remove.disabled = false; } }
         });
         row.append(remove); $("asset-list").append(row);
       }
@@ -504,8 +520,9 @@
       try {
         if (file.size > 20 * 1024 * 1024) throw new Error("Choose a file smaller than 20 MiB.");
         await api(`/api/links/${id}/assets?name=${encodeURIComponent(file.name)}`, { method: "POST", headers: { "Content-Type": file.type || (/\.html?$/i.test(file.name) ? "text/html" : "application/octet-stream") }, body: file });
-        await loadAssets(id, request); toast("File saved.");
-      } catch (error) { toast(error.message, true); } finally { if (isCurrent(request)) { $("asset-file").value = ""; $("asset-file").disabled = false; $("asset-upload-button").removeAttribute("aria-disabled"); $("asset-upload-button").textContent = "Attach a saved file"; } }
+        if (isCurrent(request)) toast("File saved.");
+        await refreshAssetsAfterChange(id, request);
+      } catch (error) { if (isCurrent(request)) toast(error.message, true); } finally { if (isCurrent(request)) { $("asset-file").value = ""; $("asset-file").disabled = false; $("asset-upload-button").removeAttribute("aria-disabled"); $("asset-upload-button").textContent = "Attach a saved file"; } }
     });
     $("preserve-page").addEventListener("click", async () => {
       if (!state.reading) return;
@@ -513,8 +530,9 @@
       $("preserve-page").disabled = true;
       try {
         const result = await api(`/api/links/${id}/preserve`, { method: "POST" });
-        await loadAssets(id, request); toast(`Page saved with ${result.embedded || 0} resources.${result.omitted ? ` ${result.omitted} resources could not be embedded.` : ""}`);
-      } catch (error) { toast(error.message, true); } finally { if (isCurrent(request)) $("preserve-page").disabled = false; }
+        if (isCurrent(request)) toast(`Page saved with ${result.embedded || 0} resources.${result.omitted ? ` ${result.omitted} resources could not be embedded.` : ""}`);
+        await refreshAssetsAfterChange(id, request);
+      } catch (error) { if (isCurrent(request)) toast(error.message, true); } finally { if (isCurrent(request)) $("preserve-page").disabled = false; }
     });
 
     return { open: openReader, close };

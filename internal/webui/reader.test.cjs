@@ -449,6 +449,35 @@ test("an old file upload cannot release another document's active upload control
   assert.equal(env.calls.filter(call => call.path === "/api/links/1/assets").length, 1);
 });
 
+for (const action of ["upload", "preserve", "delete"]) test(`${action} remains successful when refreshing saved files fails`, async () => {
+  let failRefresh = false;
+  const env = setup({ handler: (path, options, fallback) => {
+    if (path === "/api/links/1/assets" && failRefresh) throw Error("Files unavailable");
+    if (options.method === "POST" || options.method === "DELETE") {
+      failRefresh = true;
+      return action === "preserve" ? { embedded: 2, omitted: 0 } : { id: 8 };
+    }
+    return fallback();
+  } });
+  env.assets.set(1, [{ id: 8, name: "old.pdf", mediaType: "application/pdf", size: 100 }]);
+  await env.reader.open(1);
+  if (action === "upload") {
+    env.get("asset-file").files = [{ name: "new.pdf", size: 32, type: "application/pdf" }];
+    await fire(env.get("asset-file"), "change");
+  } else if (action === "preserve") await fire(env.get("preserve-page"), "click");
+  else await fire(env.get("asset-list").children[0].children.find(node => node.textContent === "Delete"), "click");
+  assert.match(env.notices.at(-1)[0], action === "delete" ? /File deleted/ : action === "preserve" ? /Page saved/ : /File saved/);
+  assert.notEqual(env.notices.at(-1)[1], true);
+  assert.equal(env.get("asset-list").children.length, 0);
+  assert.equal(env.get("assets-retry").hidden, false);
+  assert.match(env.get("assets-error").textContent, /Files unavailable/);
+  failRefresh = false;
+  await fire(env.get("assets-retry"), "click");
+  assert.equal(env.get("assets-error").hidden, true);
+  assert.equal(env.get("assets-retry").hidden, true);
+  assert.match(env.get("asset-list").textContent, /old.pdf/);
+});
+
 test("the shipped script order and worker cache include the reader without private data", () => {
   const html = fs.readFileSync(`${__dirname}/static/index.html`, "utf8");
   const scripts = [...html.matchAll(/<script src="([^"]+)"[^>]*>/g)].map(match => match[1]);
