@@ -437,10 +437,13 @@ try {
   await card(original).getByRole('button', { name: original, exact: true }).click();
   await page.locator('#reader-dialog').waitFor({ state: 'visible' });
   await page.locator('#reader-retry-open').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#reader-files').isVisible(), false, 'unavailable reader actions are hidden after an opening failure');
+  assert.equal(await page.locator('#reader-section-nav').isVisible(), false);
   await page.unroute(readerURL, failReader);
   await page.locator('#reader-retry-open').click();
   await page.locator('#reader-title').filter({ hasText: original }).waitFor();
   assert.equal(await page.locator('#reader-retry-open').isVisible(), false);
+  assert.equal(await page.locator('#reader-files').isVisible(), true);
   await page.locator('#reader-options summary').click();
   for (const selector of ['[data-reader-section="reader-content"]', '[data-reader-section="annotations-section"]', '#reader-text-mode', '#reader-size', '#asset-upload-button']) {
     assert.ok(await page.locator(selector).evaluate(node => node.getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);

@@ -70,7 +70,8 @@
       $("reader-title").textContent = "Opening your bookmark…";
       $("reader-domain").textContent = "";
       $("reader-content").textContent = "";
-      $("reader-content").hidden = false;
+      $("reader-content").hidden = true;
+      for (const id of ["reader-section-nav", "reader-reading-bar", "annotations-section", "reader-files"]) $(id).hidden = true;
       $("reader-layout").hidden = true;
       $("reader-layout").removeAttribute("src");
       $("reader-layout-mode").setAttribute("aria-pressed", "false");
@@ -106,6 +107,8 @@
         const link = await api(`/api/links/${id}`);
         if (!isCurrent(request)) return;
         state.reading = link;
+        $("reader-content").hidden = false;
+        for (const id of ["reader-section-nav", "reader-reading-bar", "annotations-section", "reader-files"]) $(id).hidden = false;
         $("reader-title").textContent = link.title || link.url;
         $("reader-domain").textContent = link.type === "file" ? "Saved file" : domain(link.url);
         $("reader-capture").hidden = link.type === "file";
@@ -162,7 +165,12 @@
       catch (error) { if (isCurrent(request)) readerSectionError(section, error); }
       finally { if (isCurrent(request)) $(section + "-retry").disabled = false; }
     });
-    $("reader-recheck").addEventListener("click", () => { if (state.reading) openReader(state.reading.id, true); });
+    $("reader-recheck").addEventListener("click", () => {
+      if (!state.reading) return;
+      $("reader-title").tabIndex = -1;
+      $("reader-title").focus({ preventScroll: true });
+      openReader(state.reading.id, true);
+    });
     document.querySelectorAll("[data-reader-section]").forEach((button) => button.addEventListener("click", () => {
       const target = $(button.dataset.readerSection);
       if (target.id === "reader-content" && target.hidden) $("reader-text-mode").click();

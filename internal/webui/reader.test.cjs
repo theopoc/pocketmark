@@ -124,12 +124,24 @@ test("a failed reader opening can retry the same bookmark", async () => {
   await env.reader.open(1);
   assert.equal(env.get("reader-retry-open").hidden, false);
   assert.match(env.get("reader-status").textContent, /Temporarily unavailable/);
+  for (const id of ["reader-section-nav", "reader-reading-bar", "annotations-section", "reader-files"]) assert.equal(env.get(id).hidden, true);
   failing = false;
   await fire(env.get("reader-retry-open"), "click");
   await tick();
   assert.equal(env.get("reader-title").textContent, "Page 1");
   assert.equal(env.get("reader-retry-open").hidden, true);
+  for (const id of ["reader-section-nav", "reader-reading-bar", "annotations-section", "reader-files"]) assert.equal(env.get(id).hidden, false);
   assert.equal(env.calls.filter(call => call.path === "/api/links/1").length, 2);
+});
+
+test("checking capture status keeps a keyboard focus target", async () => {
+  const env = setup();
+  env.records.set(1, link(1, { status: "pending" }));
+  await env.reader.open(1);
+  await fire(env.get("reader-recheck"), "click");
+  await tick();
+  assert.equal(env.get("reader-title").focused, true);
+  assert.equal(env.get("reader-recheck").hidden, false);
 });
 
 test("partial section errors leave text usable and retry only the failed section", async () => {
