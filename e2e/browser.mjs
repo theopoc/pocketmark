@@ -372,6 +372,13 @@ try {
     if (await toggle.isVisible()) await toggle.click();
   };
   await card(original).waitFor();
+  await page.locator('#sort-order').selectOption('title_desc');
+  await page.waitForURL(url => url.searchParams.get('sort') === 'title_desc');
+  await page.reload();
+  await card(original).waitFor();
+  assert.equal(await page.locator('#sort-order').inputValue(), 'title_desc', 'descending title sort survives reload');
+  await page.locator('#sort-order').selectOption('newest');
+  await page.waitForURL(url => !url.searchParams.has('sort'));
   await page.locator('#help-button').click();
   await page.locator('#help-search').fill('retry capture');
   const captureHelp = page.locator('#help-topics > details').filter({ hasText: 'Failed or missing captures' });
@@ -582,6 +589,7 @@ try {
   await page.locator('#save-bookmark').click();
   await page.locator('#bookmark-dialog').waitFor({ state: 'hidden' });
   await page.locator('#search').fill('Browser revised');
+  await page.waitForURL(url => url.searchParams.get('q') === 'Browser revised');
   await card(revised).waitFor();
   await page.reload();
   await card(revised).waitFor();
