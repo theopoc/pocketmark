@@ -44,7 +44,10 @@
     $("select-page").addEventListener("change", () => {
       const checked = $("select-page").checked;
       for (const link of visible) {
-        if (checked && !selected.has(link.id) && selected.size >= 500) break;
+        if (checked && !selected.has(link.id) && selected.size >= 500) {
+          toast("Only 500 bookmarks can be selected at a time. Some bookmarks on this page were not selected.", true);
+          break;
+        }
         select(link, checked);
       }
       onSelectionChange();

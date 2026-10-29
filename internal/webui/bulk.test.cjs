@@ -76,10 +76,16 @@ test("select-page and individual selection enforce 500 while clear updates the t
   const env = setup(), links = Array.from({ length: 502 }, (_, i) => env.link(i + 1));
   env.bulk.render(links); env.get("select-page").checked = true; await fire(env.get("select-page"), "change");
   assert.equal(env.bulk.has(500), true); assert.equal(env.bulk.has(501), false);
-  assert.equal(env.bulk.select(links[501], true), false); assert.match(env.notices[0][0], /500/);
+  assert.match(env.notices[0][0], /500.*not selected/);
+  assert.equal(env.bulk.select(links[501], true), false); assert.match(env.notices[1][0], /500/);
   assert.equal(env.get("select-page").indeterminate, true);
   await fire(env.get("clear-selection"), "click");
   assert.equal(env.bulk.has(1), false); assert.equal(env.get("bulk-open").hidden, true);
+});
+test("selecting exactly 500 bookmarks does not report a partial selection", async () => {
+  const env = setup(), links = Array.from({ length: 500 }, (_, i) => env.link(i + 1));
+  env.bulk.render(links); env.get("select-page").checked = true; await fire(env.get("select-page"), "change");
+  assert.equal(env.get("select-page").checked, true); assert.equal(env.notices.length, 0);
 });
 test("select page is unavailable when the current page has no bookmarks", () => {
   const env = setup();
