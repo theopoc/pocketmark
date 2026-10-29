@@ -244,8 +244,16 @@
     function renderReaderText() {
       const content = state.reading?.content || "";
       const root = $("reader-content");
+      const active = document.activeElement;
+      const focusedMark = active?.dataset?.annotationId && root.contains(active)
+        ? { id: active.dataset.annotationId, start: active.dataset.segmentStart } : null;
+      let restoredMark = null;
       root.replaceChildren();
-      if (!content) { root.textContent = state.reading?.description || "No readable content captured yet."; return; }
+      if (!content) {
+        root.textContent = state.reading?.description || "No readable content captured yet.";
+        if (focusedMark) { root.tabIndex = -1; root.focus({ preventScroll: true }); }
+        return;
+      }
       const points = Array.from(content);
       const notes = state.annotations.filter((item) => !item.stale && item.start >= 0 && item.end <= points.length && item.start < item.end && points.slice(item.start, item.end).join("") === item.quote);
       // Split overlapping highlights into bounded segments without trusting any captured markup.
@@ -257,6 +265,9 @@
         const note = notes.find((item) => item.start <= start && item.end >= end);
         if (!note) { fragment.append(document.createTextNode(text)); continue; }
         const mark = el("mark", `highlight-${["yellow", "green", "blue", "pink"].includes(note.color) ? note.color : "yellow"}`, text);
+        mark.dataset.annotationId = String(note.id);
+        mark.dataset.segmentStart = String(start);
+        if (focusedMark?.id === mark.dataset.annotationId && focusedMark.start === mark.dataset.segmentStart) restoredMark = mark;
         mark.title = note.note || "Saved highlight";
         mark.setAttribute("role", "button");
         mark.setAttribute("tabindex", "0");
@@ -268,6 +279,10 @@
         fragment.append(mark);
       }
       root.append(fragment);
+      if (focusedMark) {
+        if (restoredMark) restoredMark.focus({ preventScroll: true });
+        else { root.tabIndex = -1; root.focus({ preventScroll: true }); }
+      }
     }
 
     async function loadAnnotations(id, request = state.readerRequest) {

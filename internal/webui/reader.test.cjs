@@ -421,6 +421,20 @@ test("a highlighted passage opens its annotation with keyboard activation", asyn
   assert.equal(env.get("annotation-dialog").open, true);
 });
 
+test("refreshing highlights preserves focus or returns it to the text when removed", async () => {
+  const env = setup();
+  env.annotations.set(1, [{ id: 11, quote: "Text", start: 0, end: 4, note: "Remember this", color: "yellow" }]);
+  await env.reader.open(1);
+  const root = env.get("reader-content");
+  env.document.activeElement = root.children[0];
+  await fire(env.get("annotations-retry"), "click");
+  assert.equal(root.children[0].focused, true);
+  env.document.activeElement = root.children[0];
+  env.annotations.set(1, []);
+  await fire(env.get("annotations-retry"), "click");
+  assert.equal(root.focused, true);
+});
+
 test("annotation completion cannot close or overwrite another document's annotation", async () => {
   const save = deferred();
   const env = setup({ handler: (path, options, fallback) => options.method === "PUT" ? save.promise : fallback() });
