@@ -372,6 +372,16 @@ try {
     if (await toggle.isVisible()) await toggle.click();
   };
   await card(original).waitFor();
+  await page.locator('#help-button').click();
+  await page.locator('#help-search').fill('retry capture');
+  const captureHelp = page.locator('#help-topics > details').filter({ hasText: 'Failed or missing captures' });
+  assert.equal(await captureHelp.isVisible(), true);
+  assert.equal(await captureHelp.evaluate(node => node.open), true);
+  await page.locator('#help-search').fill('Floccus sync');
+  const syncHelp = page.locator('#help-topics > details').filter({ hasText: 'Extensions & browser sync' });
+  assert.equal(await syncHelp.isVisible(), true);
+  assert.equal(await syncHelp.evaluate(node => node.open), true);
+  await page.locator('#help-dialog').getByRole('button', { name: 'Close help' }).click();
   await page.goto(new URL('/?tag=no-such-tag-e2e', base).href);
   await page.locator('#empty-title').filter({ hasText: 'No bookmarks with this tag' }).waitFor();
   assert.equal(await page.locator('#empty-add').isVisible(), false);
