@@ -352,6 +352,14 @@ try {
     }
   } finally { await peer.close(); }
 
+  await page.locator('#add-collection').click();
+  await page.locator('#collection-name').fill('é'.repeat(61));
+  await page.locator('#save-collection').click();
+  await page.locator('#collection-error').filter({ hasText: '120 UTF-8 bytes' }).waitFor();
+  assert.equal(await page.locator('#collection-name').inputValue(), 'é'.repeat(61));
+  assert.equal(await page.locator('#save-collection').isEnabled(), true);
+  await page.locator('#collection-dialog').getByRole('button', { name: 'Cancel' }).click();
+
   // A late collection response must not close or overwrite a newly opened editor.
   for (const succeeds of [true, false]) {
     const held = succeeds ? await holdResponse(page, '/api/collections') : await holdUnauthorized(page, '/api/collections', 'Earlier collection failed', 503);

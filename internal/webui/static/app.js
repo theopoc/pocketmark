@@ -1092,6 +1092,7 @@
     try {
       const name = $("collection-name").value.trim();
       if (!name) throw new Error("Give your collection a name.");
+      if (new TextEncoder().encode(name).length > 120) throw new Error("Collection names can use up to 120 UTF-8 bytes. Accented characters and emoji may use more than one byte.");
       const parentId = $("collection-parent").value ? Number($("collection-parent").value) : null;
       const saved = await api(editing ? `/api/collections/${editing.id}` : "/api/collections", { method: editing ? "PUT" : "POST", body: JSON.stringify({ name, parentId }) });
       const active = session === collectionEditorSession && $("collection-dialog").open;
