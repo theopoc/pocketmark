@@ -359,6 +359,18 @@ try {
   await page.locator('#bookmark-url').fill('http://127.0.0.1/e2e-fixture');
   await page.locator('#bookmark-title').fill(original);
   await page.locator('#bookmark-notes').fill('Persisted browser notes');
+  const tagSuggestionsFailure = route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
+  await page.route('**/api/tags/browse?*', tagSuggestionsFailure);
+  await page.locator('#bookmark-tags-query').fill('recovery-tag');
+  const retryTags = page.getByRole('button', { name: 'Retry tag suggestions' });
+  await retryTags.waitFor({ state: 'visible' });
+  await page.locator('#bookmark-tags-query').press('Tab');
+  assert.equal(await retryTags.evaluate(node => document.activeElement === node), true, 'keyboard users can reach the retry action');
+  await page.unroute('**/api/tags/browse?*', tagSuggestionsFailure);
+  await retryTags.press('Enter');
+  await retryTags.waitFor({ state: 'hidden' });
+  assert.equal(await page.locator('#bookmark-tags-query').inputValue(), 'recovery-tag');
+  await page.locator('#bookmark-tags-query').fill('');
   await page.locator('#bookmark-tags-query').fill('reading');
   await page.locator('#bookmark-tags-query').press('Enter');
   for (const tag of ['design', 'research', 'archive', 'reference', 'web']) {
