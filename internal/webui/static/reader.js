@@ -291,12 +291,17 @@
       if (!isCurrent(request) || state.reading?.id !== id) return;
       state.annotations = annotations || [];
       renderReaderText();
+      const list = $("annotation-list"), active = document.activeElement;
+      const focusedEdit = list.contains(active) ? active?.dataset?.annotationEdit : null;
+      let restoredEdit = null;
       $("annotation-list").replaceChildren();
       for (const annotation of state.annotations) {
         const row = el("article", "annotation-item");
         row.append(el("blockquote", `highlight-${annotation.color}`, annotation.quote), el("p", "", annotation.note || "Highlight"));
         if (annotation.stale) row.append(el("p", "small muted", "The captured text has changed. This highlight belongs to an earlier capture."));
         const edit = el("button", "text-button", "Edit note");
+        edit.dataset.annotationEdit = String(annotation.id);
+        if (focusedEdit === edit.dataset.annotationEdit) restoredEdit = edit;
         const passage = Array.from(annotation.quote).slice(0, 100).join("");
         edit.setAttribute("aria-label", `Edit annotation: ${passage}`);
         edit.addEventListener("click", () => editAnnotation(annotation));
@@ -315,6 +320,10 @@
         $("annotation-list").append(row);
       }
       if (!state.annotations.length) $("annotation-list").append(el("p", "small muted", "No highlights yet."));
+      if (focusedEdit) {
+        if (restoredEdit) restoredEdit.focus({ preventScroll: true });
+        else { $("annotations-section").tabIndex = -1; $("annotations-section").focus({ preventScroll: true }); }
+      }
     }
 
     async function refreshAnnotationsAfterChange(id, request) {

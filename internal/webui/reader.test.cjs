@@ -436,6 +436,20 @@ test("refreshing highlights preserves focus or returns it to the text when remov
   assert.equal(root.focused, true);
 });
 
+test("refreshing the annotation list preserves the focused edit action", async () => {
+  const env = setup();
+  env.annotations.set(1, [{ id: 11, quote: "Text", start: 0, end: 4, note: "Remember this", color: "yellow" }]);
+  await env.reader.open(1);
+  const edit = () => env.get("annotation-list").children[0].children.at(-1).children[0];
+  env.document.activeElement = edit();
+  await fire(env.get("annotations-retry"), "click");
+  assert.equal(edit().focused, true);
+  env.document.activeElement = edit();
+  env.annotations.set(1, []);
+  await fire(env.get("annotations-retry"), "click");
+  assert.equal(env.get("annotations-section").focused, true);
+});
+
 test("annotation completion cannot close or overwrite another document's annotation", async () => {
   const save = deferred();
   const env = setup({ handler: (path, options, fallback) => options.method === "PUT" ? save.promise : fallback() });
