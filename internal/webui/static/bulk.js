@@ -17,6 +17,7 @@
       $("selected-count").hidden = !selected.size;
       $("bulk-open").hidden = !selected.size; $("bulk-open").disabled = !selected.size;
       $("clear-selection").hidden = !selected.size;
+      $("select-page").disabled = visible.length === 0;
       $("select-page").checked = visible.length > 0 && count === visible.length;
       $("select-page").indeterminate = count > 0 && count < visible.length;
     }
@@ -43,9 +44,13 @@
     $("select-page").addEventListener("change", () => {
       const checked = $("select-page").checked;
       for (const link of visible) {
-        if (checked && !selected.has(link.id) && selected.size >= 500) break;
+        if (checked && !selected.has(link.id) && selected.size >= 500) {
+          toast("Only 500 bookmarks can be selected at a time. Some bookmarks on this page were not selected.", true);
+          break;
+        }
         select(link, checked);
       }
+      render();
       onSelectionChange();
     });
     $("clear-selection").addEventListener("click", () => { clear(); onSelectionChange(); });

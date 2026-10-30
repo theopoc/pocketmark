@@ -11,7 +11,7 @@ if (chrome.extension?.getViews({ type: "popup" }).includes(window)) {
     document.body.style.maxBlockSize = `${window.innerHeight}px`;
   });
 }
-let activeTab, connected = false, connecting = false, loaded = false, ready = false, settingsOpen = false, task = null, tags = [], collections = [], poll, tagTimer, tagQuery = 0, taskSignature;
+let activeTab, connected = false, connecting = false, loaded = false, ready = false, settingsOpen = false, task = null, tags = [], collections = [], poll, tagTimer, tagQuery = 0, taskSignature, collectionSession = 0;
 function status(message, error = false, success = false) {
   const changed = $("status").textContent !== message;
   $("status").setAttribute("role", error ? "alert" : "status");
@@ -66,6 +66,8 @@ function renderTags() {
   }
 }
 function addTags() {
+  clearTimeout(tagTimer); tagQuery++; tagOptions([]);
+  $("tag-hint").textContent = "Press Enter or use commas to add tags.";
   tags = [...new Set([...tags, ...$("tag-input").value.split(",").map((tag) => tag.trim()).filter(Boolean)])];
   $("tag-input").value = ""; renderTags();
 }
@@ -179,14 +181,17 @@ $("tag-input").addEventListener("keydown", (event) => {
 });
 $("tag-input").addEventListener("input", () => {
   clearTimeout(tagTimer); const sequence = ++tagQuery;
+  tagOptions([]);
+  $("tag-hint").textContent = "Press Enter or use commas to add tags.";
   tagTimer = setTimeout(async () => {
     try { const data = await send("tags", { query: $("tag-input").value }); if (sequence === tagQuery) tagOptions(data.tags); }
-    catch { /* Manual creation remains available when suggestions fail. */ }
+    catch { if (sequence === tagQuery) $("tag-hint").textContent = "Suggestions unavailable. Type a tag and press Enter to add it."; }
   }, 200);
 });
 function collectionEditor(open) {
+  collectionSession++;
   $("collection-create").hidden = !open; $("new-collection").setAttribute("aria-expanded", String(open));
-  if (open) { $("collection-parent").value = $("collection").value; $("collection-name").focus(); }
+  if (open) { $("create-collection").disabled = false; $("create-collection").textContent = "Create collection"; $("collection-name").readOnly = false; $("collection-parent").disabled = false; $("collection-parent").value = $("collection").value; $("collection-name").focus(); }
 }
 $("new-collection").addEventListener("click", () => collectionEditor($("collection-create").hidden));
 $("cancel-collection").addEventListener("click", () => { collectionEditor(false); $("new-collection").focus(); });
@@ -195,14 +200,23 @@ $("collection-name").addEventListener("keydown", (event) => {
   if (event.key === "Escape") { event.preventDefault(); collectionEditor(false); $("new-collection").focus(); }
 });
 $("create-collection").addEventListener("click", async () => {
+  const session = collectionSession;
   $("create-collection").disabled = true;
+  $("create-collection").textContent = "Creating collection…";
+  $("collection-name").readOnly = true; $("collection-parent").disabled = true;
   try {
     const collection = await send("collection", { name: $("collection-name").value, parentId: Number($("collection-parent").value) || null });
-    collections.push(collection); renderCollections(collection.id); collectionEditor(false); $("collection-name").value = "";
-    $("collection").focus();
-    status("Collection created and selected.");
+    collections.push(collection);
+    if (session === collectionSession) {
+      renderCollections(collection.id); collectionEditor(false); $("collection-name").value = "";
+      $("collection").focus(); status("Collection created and selected.");
+    } else {
+      const parent = $("collection-parent").value;
+      renderCollections($("collection").value); $("collection-parent").value = parent;
+      status($("collection-create").hidden ? "Collection created." : "Collection created. Your current draft is unchanged.");
+    }
   } catch (error) { status(error.message, true); }
-  finally { $("create-collection").disabled = false; }
+  finally { if (session === collectionSession) { $("create-collection").disabled = false; $("create-collection").textContent = "Create collection"; $("collection-name").readOnly = false; $("collection-parent").disabled = false; } }
 });
 $("save-form").addEventListener("submit", async (event) => {
   event.preventDefault(); $("save").disabled = true;

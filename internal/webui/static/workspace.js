@@ -12,7 +12,7 @@
     return {
       filter: tag ? "all" : filter, collection: !tag && filter === "collection" ? collection : null, tag,
       query: (params.get("q") || "").trim(), page: positive(params.get("page")),
-      sort: ["newest", "oldest", "title", "updated"].includes(params.get("sort")) ? params.get("sort") : "newest",
+      sort: ["newest", "oldest", "title", "title_desc", "updated"].includes(params.get("sort")) ? params.get("sort") : "newest",
       fuzzy: params.get("fuzzy") === "1", showingTags: params.get("view") === "tags",
       tagsQuery: (params.get("tagQuery") || "").slice(0, 512), tagsPage: positive(params.get("tagPage")),
     };

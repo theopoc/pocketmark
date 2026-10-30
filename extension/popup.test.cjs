@@ -1,6 +1,6 @@
 "use strict";
 const { test } = require("node:test"), assert = require("node:assert/strict"), vm = require("node:vm"), fs = require("node:fs"), path = require("node:path");
-async function setup({ stored, permissionCloses = false, granted = true, hostGranted = true, authenticated = true, existing = false, job = null } = {}) {
+async function setup({ stored, permissionCloses = false, granted = true, hostGranted = true, authenticated = true, existing = false, job = null, collectionResult, tagsFail = false, tagsResult } = {}) {
   const elements = new Map(), calls = [], writes = [], permissions = [], data = stored || { server: "https://library.example", token: "key" };
   let closeCount = 0;
   function node(id = "") { return { id, value: "", hidden: true, children: [], listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; }, setAttribute() {}, replaceChildren() { this.children = []; }, append(child) { this.children.push(child); }, focus() {} }; }
@@ -18,6 +18,8 @@ async function setup({ stored, permissionCloses = false, granted = true, hostGra
           Object.assign(data, message.connection, { pendingConnection: null }); value = { connected: true };
         }
         if (message.type === "load") value = { server: data.server, collections: [{ id: 7, name: "Reading", parentId: null }], tags: [{ name: "docs" }], link: existing ? { id: 17, title: "Existing title", tags: ["existing"], collectionId: 7 } : null };
+        if (message.type === "collection") value = await collectionResult;
+        if (message.type === "tags") { if (tagsFail) return { ok: false, error: "Unavailable" }; value = tagsResult ? await tagsResult : { tags: [] }; }
         if (message.type === "save") value = job = { id: "task", fields: message.fields, status: "running", message: "Starting", items: message.modes.map((mode) => ({ mode, status: "pending" })) };
         if (message.type === "retry") value = job = { ...job, status: "running", message: "Retrying" };
         return { ok: true, value };
@@ -29,6 +31,39 @@ async function setup({ stored, permissionCloses = false, granted = true, hostGra
   const submit = async (id) => element(id).listeners.submit({ preventDefault() {} });
   return { element, calls, writes, permissions, data, submit, context, get closeCount() { return closeCount; }, setJob(value) { job = value; } };
 }
+test("adding a tag invalidates an outstanding suggestions request", async () => {
+  let resolve; const pending = new Promise(done => { resolve = done; });
+  const env = await setup({ tagsResult: pending }), el = env.element;
+  el("tag-input").value = "news"; el("tag-input").listeners.input();
+  await new Promise(done => setTimeout(done, 250));
+  assert.equal(env.calls.some(call => call.type === "tags"), true);
+  el("add-tag").listeners.click(); resolve({ tags: [{ name: "newsletter" }] });
+  await new Promise(setImmediate);
+  assert.equal(el("tag-options").children.length, 0); assert.equal(el("selected-tags").children.length, 1);
+});
+test("failed tag suggestions clear stale options and explain manual entry", async () => {
+  const env = await setup({ tagsFail: true }), el = env.element;
+  assert.equal(el("tag-options").children.length, 1);
+  el("tag-input").value = "new"; el("tag-input").listeners.input();
+  assert.equal(el("tag-options").children.length, 0);
+  await new Promise(resolve => setTimeout(resolve, 250));
+  assert.match(el("tag-hint").textContent, /unavailable.*press Enter/i);
+  el("add-tag").listeners.click(); assert.equal(el("selected-tags").children.length, 1);
+});
+test("a late collection creation leaves a reopened editor and its parent intact", async () => {
+  let resolve; const pending = new Promise(done => { resolve = done; });
+  const env = await setup({ collectionResult: pending }), el = env.element;
+  el("new-collection").listeners.click(); el("collection-name").value = "Earlier";
+  const creating = el("create-collection").listeners.click();
+  assert.equal(el("collection-name").readOnly, true); assert.equal(el("collection-parent").disabled, true);
+  assert.equal(el("create-collection").textContent, "Creating collection…");
+  el("cancel-collection").listeners.click(); el("new-collection").listeners.click();
+  assert.equal(el("create-collection").textContent, "Create collection");
+  el("collection-name").value = "New draft"; el("collection-parent").value = "7";
+  resolve({ id: 8, name: "Earlier", parentId: null }); await creating;
+  assert.equal(el("collection-create").hidden, false); assert.equal(el("collection-name").value, "New draft");
+  assert.equal(el("collection-parent").value, "7"); assert.equal(el("create-collection").disabled, false);
+});
 test("existing bookmark preloads editable fields, collection and selected tags", async () => {
   const env = await setup({ existing: true });
   assert.equal(env.element("title").value, "Existing title"); assert.equal(env.element("collection").value, "7");

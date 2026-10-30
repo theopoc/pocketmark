@@ -3,8 +3,9 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const state = { filter: "all", collection: null, tag: "", query: "", page: 1, pageSize: 40, total: 0, links: [], collections: [], editing: null, request: 0, timer: null, signedIn: false, sort: "newest", fuzzy: false, editingCollection: null };
-  let toastTimer;
+  let toastTimer, toastActionPending = false;
   let expandedBookmarkActions = null;
+  const expandedBookmarkTags = new Set();
   let searchTimer;
   let tagsTimer;
   let tagsPage = 1;
@@ -20,6 +21,8 @@
   const activeMotion = new Map();
   let themeTransition = null;
   let renderedLibraryRoute = null;
+  let libraryUnavailable = false;
+  let libraryLoading = false;
   const sharedParams = new URLSearchParams(location.search);
   let editorBaseline = null;
   let editorSession = 0;
@@ -75,6 +78,10 @@
     scrollTimer = setTimeout(rememberScroll, 150);
   }, { passive: true });
   window.addEventListener("popstate", () => { if (state.signedIn) restoreRoute(); });
+  document.querySelector(".skip-link").addEventListener("click", (event) => {
+    event.preventDefault();
+    $("main-content").focus();
+  });
   window.addEventListener("beforeunload", (event) => {
     if (drafts.size || mfaManagementBusy || ($("settings-dialog").open && !$("mfa-manage-codes").hidden)) { event.preventDefault(); event.returnValue = ""; }
   });
@@ -216,11 +223,13 @@
   navigation.addEventListener("close", () => $("open-navigation").setAttribute("aria-expanded", "false"));
   navigation.addEventListener("click", (event) => { if (event.target === navigation) closeNavigation(); });
   $("sidebar").addEventListener("click", (event) => {
-    if (event.target.closest("button") && event.target.closest("button").id !== "close-navigation") closeNavigation();
+    const button = event.target.closest("button");
+    if (button && button.id !== "close-navigation" && !button.hasAttribute("data-keep-navigation")) closeNavigation();
   }, true);
 
   function toast(message, error = false, action = null) {
     clearTimeout(toastTimer);
+    toastActionPending = true;
     const notice = $("toast");
     // Native dialogs live in the top layer. Feedback must be in that same
     // layer to be visible and exposed to assistive technology.
@@ -234,14 +243,23 @@
       button.type = "button";
       button.addEventListener("click", async () => {
         clearTimeout(toastTimer);
+        toastActionPending = true;
         button.disabled = true;
         try { await action.run(); } catch (error) { toast(error.message, true); }
       });
       notice.append(button);
     }
     notice.hidden = false;
+    toastActionPending = false;
     toastTimer = setTimeout(() => { notice.hidden = true; }, action || error ? 12000 : 5000);
   }
+  $("toast").addEventListener("focusin", () => clearTimeout(toastTimer));
+  $("toast").addEventListener("focusout", (event) => {
+    const notice = $("toast");
+    if (!notice.hidden && !toastActionPending && !notice.contains(event.relatedTarget)) {
+      toastTimer = setTimeout(() => { notice.hidden = true; }, 12000);
+    }
+  });
   document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("close", () => {
     if (dialog.contains($("toast"))) {
       clearTimeout(toastTimer);
@@ -262,6 +280,7 @@
   function showLogin() {
     if (mfaManagementBusy || ($("settings-dialog").open && !$("mfa-manage-codes").hidden)) {
       deferredLogin = true;
+      syncSettingsNavigation();
       if (!mfaManagementBusy) {
         document.querySelectorAll("#settings-dialog > section").forEach(section => { if (section.getAttribute("aria-labelledby") !== "mfa-settings-title") section.inert = true; });
         document.querySelectorAll("#mfa-manage-form button[type='submit'], #mfa-manage-verify button[type='submit']").forEach(button => { button.disabled = true; });
@@ -276,6 +295,10 @@
     clearTimeout(tagsTimer);
     tagsRequest++;
     state.signedIn = false;
+    renderedLibraryRoute = null;
+    libraryUnavailable = true;
+    expandedBookmarkTags.clear();
+    state.links = [];
     bulk.clear();
     state.request++;
     clearTimeout(state.timer);
@@ -447,10 +470,11 @@
       button.addEventListener("click", () => selectFilter("collection", collection.id));
       const remove = el("button", "icon-button delete-collection"); remove.append(icon("trash"));
       remove.dataset.focusKey = `delete-collection:${collection.id}`;
+      remove.setAttribute("data-keep-navigation", "");
       remove.title = `Delete ${collection.name}`;
       remove.setAttribute("aria-label", remove.title);
       remove.addEventListener("click", async () => {
-        if (!confirm(`Delete “${collection.name}”? Its bookmarks will move to Inbox.`)) return;
+        if (!confirm(`Delete “${collection.name}”? Bookmarks directly in it move to Inbox. Direct subcollections move to the library root.`)) return;
         remove.disabled = true;
         try {
           await api(`/api/collections/${collection.id}`, { method: "DELETE" });
@@ -515,7 +539,7 @@
     $("tags-list").setAttribute("aria-busy", "true");
     $("tags-results").textContent = "Loading tags…";
     $("tags-error").hidden = true;
-    $("tags-empty").hidden = true;
+    $("tags-empty-state").hidden = true;
     $("tags-list").replaceChildren();
     disableTagAlphabet();
     $("tags-pagination").hidden = true;
@@ -556,7 +580,8 @@
       }
       renderTagAlphabet(result.groups, jump || result.tags[0]?.letter);
       $("tags-results").textContent = `${result.total} tag${result.total === 1 ? "" : "s"}${query ? ` matching “${query}”` : " in your library"}`;
-      $("tags-empty").hidden = result.total > 0;
+      $("tags-empty-state").hidden = result.total > 0;
+      $("tags-clear-search").hidden = !query;
       $("tags-empty").textContent = query ? "No tags match your search. Try a different name." : "No tags yet. Add tags when saving or editing a bookmark.";
       $("tags-pagination").hidden = pages <= 1;
       $("tags-page-label").textContent = `Page ${tagsPage} of ${pages}`;
@@ -599,10 +624,14 @@
     tagsTimer = setTimeout(() => { tagsPage = 1; commitRoute(tagsSearchSession); tagsSearchSession = true; loadTagDirectory(); }, 250);
   });
   $("tags-search").addEventListener("blur", () => { tagsSearchSession = false; });
+  $("tags-clear-search").addEventListener("click", () => {
+    clearTimeout(tagsTimer); $("tags-search").value = ""; tagsPage = 1; tagsSearchSession = false;
+    commitRoute(); loadTagDirectory(); $("tags-search").focus();
+  });
   $("tags-letter-picker").addEventListener("change", () => { if ($("tags-letter-picker").value) loadTagDirectory($("tags-letter-picker").value); });
   $("tags-retry").addEventListener("click", () => { clearTimeout(tagsTimer); loadTagDirectory(); });
-  $("tags-previous").addEventListener("click", () => { tagsPage--; commitRoute(); loadTagDirectory(); });
-  $("tags-next").addEventListener("click", () => { tagsPage++; commitRoute(); loadTagDirectory(); });
+  $("tags-previous").addEventListener("click", () => { tagsPage--; commitRoute(); $("tags-title").focus(); loadTagDirectory(); });
+  $("tags-next").addEventListener("click", () => { tagsPage++; commitRoute(); $("tags-title").focus(); loadTagDirectory(); });
 
   function actionButton(symbol, label, callback, extraClass = "") {
     const button = el("button", `card-action ${extraClass}`);
@@ -678,21 +707,28 @@
         body.append(excerpt);
       }
       const tags = el("div", "card-tags");
-      for (const name of (link.tags || []).slice(0, 5)) {
+      for (const name of (link.tags || []).slice(0, expandedBookmarkTags.has(link.id) ? undefined : 5)) {
         const tag = el("button", "card-tag", `#${name}`);
+        tag.dataset.focusKey = `link:${link.id}:tag:${name}`;
         tag.addEventListener("click", () => selectFilter("all", null, name));
         tags.append(tag);
       }
-      if ((link.tags || []).length > 5) {
+      if ((link.tags || []).length > 5 && !expandedBookmarkTags.has(link.id)) {
         const more = el("button", "card-tag", `+${link.tags.length - 5}`);
+        more.dataset.focusKey = `link:${link.id}:more-tags`;
         more.setAttribute("aria-label", `Show all ${link.tags.length} tags for ${link.title || link.url}`);
         more.addEventListener("click", () => {
+          expandedBookmarkTags.add(link.id);
           more.remove();
+          let firstAdded;
           for (const name of link.tags.slice(5)) {
             const tag = el("button", "card-tag", `#${name}`);
+            tag.dataset.focusKey = `link:${link.id}:tag:${name}`;
             tag.addEventListener("click", () => selectFilter("all", null, name));
             tags.append(tag);
+            if (!firstAdded) firstAdded = tag;
           }
+          firstAdded?.focus();
         });
         tags.append(more);
       }
@@ -754,24 +790,40 @@
       card.append(top, body, footer);
       grid.append(card);
     }
-    bulk.render(state.links);
-    $("empty-state").hidden = state.links.length > 0;
+    bulk.render(libraryUnavailable || libraryLoading ? [] : state.links);
+    grid.hidden = libraryUnavailable || libraryLoading;
+    $("empty-state").hidden = libraryUnavailable || libraryLoading || state.links.length > 0;
     const filtered = !!state.query || state.filter !== "all" || !!state.tag;
     $("empty-title").textContent = filtered ? "No bookmarks found" : "Your library starts here";
-    $("empty-message").textContent = filtered ? "Try a different search or clear your filters to see all bookmarks." : "Save your first bookmark, or bring your existing bookmarks with you.";
-    $("empty-reset").hidden = !filtered;
+    const offerNearMatches = !!state.query && !state.fuzzy;
+    $("empty-message").textContent = offerNearMatches ? "Try a different search, or look for near matches in titles, URLs, descriptions and tags." : filtered ? "Try a different search or clear your filters to see all bookmarks." : "Save your first bookmark, or bring your existing bookmarks with you.";
+    const emptyView = !state.query && (state.tag ? ["No bookmarks with this tag", "Choose another tag or return to all bookmarks.", false] : {
+      collection: ["This collection is empty", "Add a bookmark to start this collection.", true],
+      inbox: ["Your inbox is empty", "Bookmarks without a collection appear here.", true],
+      favorite: ["No favorites yet", "Select the star on a bookmark to keep it here.", false],
+      unread: ["Nothing left to read", "Mark a bookmark as unread to see it here.", false],
+    }[state.filter]);
+    if (emptyView) {
+      $("empty-title").textContent = emptyView[0];
+      $("empty-message").textContent = emptyView[1];
+    }
+    $("empty-near-matches").hidden = !offerNearMatches;
     $("empty-import").hidden = filtered;
+    $("empty-reset").hidden = !filtered;
+    $("empty-reset").textContent = emptyView ? "View all bookmarks" : "Clear filters";
+    $("empty-add").hidden = !!emptyView && !emptyView[2];
     $("empty-add").textContent = filtered ? "Add a bookmark" : "Add your first bookmark";
-    $("empty-add").classList.toggle("primary", !filtered);
-    $("empty-add").classList.toggle("subtle", filtered);
-    $("empty-reset").classList.toggle("primary", filtered);
-    $("empty-reset").classList.toggle("subtle", !filtered);
+    const primaryAdd = !filtered || !!emptyView?.[2];
+    $("empty-add").classList.toggle("primary", primaryAdd);
+    $("empty-add").classList.toggle("subtle", !primaryAdd);
+    $("empty-reset").classList.toggle("primary", !primaryAdd);
+    $("empty-reset").classList.toggle("subtle", primaryAdd);
     const pages = Math.max(1, Math.ceil(state.total / state.pageSize));
-    $("pagination").hidden = pages <= 1;
+    $("pagination").hidden = libraryUnavailable || libraryLoading || pages <= 1;
     $("page-label").textContent = `Page ${state.page} of ${pages}`;
     $("previous-page").disabled = state.page <= 1;
     $("next-page").disabled = state.page >= pages;
-    $("results-label").textContent = `${state.total} bookmark${state.total === 1 ? "" : "s"}${state.query ? ` matching “${state.query}”` : " in this view"}`;
+    $("results-label").textContent = libraryLoading ? "Loading your library…" : libraryUnavailable ? "Could not load this view" : `${state.total} bookmark${state.total === 1 ? "" : "s"}${state.query ? ` matching “${state.query}”` : " in this view"}`;
     restoreFocus(grid, key);
   }
 
@@ -787,13 +839,25 @@
     if (state.filter === "unread") params.set("unread", "1");
     if (state.filter === "inbox") params.set("collection", "0");
     if (state.filter === "collection") params.set("collection", state.collection);
+    libraryLoading = renderedLibraryRoute !== params.toString();
+    if (libraryLoading) {
+      if ($("bookmark-grid").contains(document.activeElement) || $("pagination").contains(document.activeElement)) $("page-title").focus();
+      $("bookmark-grid").hidden = true;
+      $("empty-state").hidden = true;
+      $("pagination").hidden = true;
+      bulk.render([]);
+    }
     $("bookmark-grid").setAttribute("aria-busy", "true");
-    if (!quiet) $("results-label").textContent = "Loading your library…";
+    if (!quiet || libraryLoading) $("results-label").textContent = "Loading your library…";
     $("library-error").hidden = true;
     try {
       const [result, collections, tags, stats] = await Promise.all([api(`/api/links?${params}`), api("/api/collections"), api("/api/tags"), api("/api/stats")]);
       if (request !== state.request) return;
+      libraryUnavailable = false;
+      libraryLoading = false;
       state.links = result.links || [];
+      const visibleIds = new Set(state.links.map(link => link.id));
+      for (const id of expandedBookmarkTags) if (!visibleIds.has(id)) expandedBookmarkTags.delete(id);
       state.total = result.total || 0;
       state.pageSize = result.pageSize || 40;
       const lastPage = Math.max(1, Math.ceil(state.total / state.pageSize));
@@ -812,7 +876,14 @@
       if (stats.pending && !document.hidden) state.timer = setTimeout(() => refresh(true), 5000);
     } catch (error) {
       if (request !== state.request) return;
-      $("library-error").textContent = error.message;
+      libraryLoading = false;
+      libraryUnavailable = renderedLibraryRoute !== params.toString();
+      renderLinks();
+      const message = el("span", "", `${error.message}${libraryUnavailable ? "" : " Showing the last loaded results."} `);
+      const retry = el("button", "text-button", "Try again");
+      retry.type = "button";
+      retry.addEventListener("click", () => { $("page-title").focus(); refresh(); });
+      $("library-error").replaceChildren(message, retry);
       $("library-error").hidden = false;
       $("results-label").textContent = "Could not refresh library";
     } finally {
@@ -968,8 +1039,15 @@
   $("add-bookmark").addEventListener("click", () => openEditor());
   $("empty-add").addEventListener("click", () => openEditor());
   $("empty-import").addEventListener("click", () => $("import-file").click());
+  $("empty-near-matches").addEventListener("click", () => {
+    clearTimeout(searchTimer); state.query = $("search").value.trim();
+    if (!state.query) { $("search").focus(); return; }
+    $("search").focus(); $("empty-near-matches").hidden = true;
+    $("fuzzy-search").checked = true; $("fuzzy-search").dispatchEvent(new Event("change"));
+  });
   $("empty-reset").addEventListener("click", () => {
     clearTimeout(searchTimer); state.query = ""; $("search").value = "";
+    state.fuzzy = false; $("fuzzy-search").checked = false;
     selectFilter("all"); $("search").focus();
   });
   $("refresh-button").addEventListener("click", () => refresh());
@@ -1011,19 +1089,25 @@
   $("add-collection").addEventListener("click", () => {
     openCollectionEditor();
   });
+  let collectionEditorSession = 0;
   $("collection-form").addEventListener("submit", async (event) => {
     event.preventDefault();
-    const button = event.submitter;
+    const button = event.submitter, session = collectionEditorSession, editing = state.editingCollection;
     button.disabled = true;
     $("collection-error").textContent = "";
     try {
       const name = $("collection-name").value.trim();
       if (!name) throw new Error("Give your collection a name.");
-      await api(state.editingCollection ? `/api/collections/${state.editingCollection.id}` : "/api/collections", { method: state.editingCollection ? "PUT" : "POST", body: JSON.stringify({ name, parentId: $("collection-parent").value ? Number($("collection-parent").value) : null }) });
-      $("collection-dialog").close();
+      if (new TextEncoder().encode(name).length > 120) throw new Error("Collection names can use up to 120 UTF-8 bytes. Accented characters and emoji may use more than one byte.");
+      const parentId = $("collection-parent").value ? Number($("collection-parent").value) : null;
+      const saved = await api(editing ? `/api/collections/${editing.id}` : "/api/collections", { method: editing ? "PUT" : "POST", body: JSON.stringify({ name, parentId }) });
+      const active = session === collectionEditorSession && $("collection-dialog").open;
+      const newer = active && ($("collection-name").value.trim() !== name || ($("collection-parent").value ? Number($("collection-parent").value) : null) !== parentId);
+      if (newer) { state.editingCollection = editing || saved; $("collection-dialog-title").textContent = "Rename or move collection"; }
+      else if (active) $("collection-dialog").close();
       await refresh();
-      toast(state.editingCollection ? "Collection updated." : "Collection created.");
-    } catch (error) { $("collection-error").textContent = error.message; } finally { button.disabled = false; }
+      toast(newer ? "Saved. Your newer collection edits are still open." : editing ? "Collection updated." : "Collection created.");
+    } catch (error) { if (session === collectionEditorSession && $("collection-dialog").open) $("collection-error").textContent = error.message; else toast(error.message, true); } finally { if (session === collectionEditorSession) button.disabled = false; }
   });
 
   $("import-button").addEventListener("click", () => $("import-file").click());
@@ -1032,6 +1116,7 @@
     if (!file) return;
     $("import-button").disabled = true;
     $("empty-import").disabled = true;
+    $("import-progress").hidden = false;
     try {
       if (file.size > 8 * 1024 * 1024) throw new Error("Choose an export smaller than 8 MiB.");
       const body = await file.text();
@@ -1040,7 +1125,7 @@
       const result = await api(html ? "/api/import/html" : "/api/import", { method: "POST", headers: { "Content-Type": html ? "text/html" : "application/json" }, body });
       toast(`Imported ${result.imported} bookmarks. ${result.skipped || 0} skipped.`);
       await refresh();
-    } catch (error) { toast(error.message, true); } finally { $("import-button").disabled = false; $("empty-import").disabled = false; $("import-file").value = ""; }
+    } catch (error) { toast(error.message, true); } finally { $("import-progress").hidden = true; $("import-button").disabled = false; $("empty-import").disabled = false; $("import-file").value = ""; }
   });
 
   document.addEventListener("keydown", (event) => {
@@ -1055,8 +1140,10 @@
 
 
   function openCollectionEditor(collection = null) {
+    collectionEditorSession++;
     state.editingCollection = collection;
     $("collection-form").reset();
+    $("collection-form").querySelector('[type="submit"]').disabled = false;
     $("collection-error").textContent = "";
     $("collection-dialog-title").textContent = collection ? "Rename or move collection" : "New collection";
     $("collection-name").value = collection?.name || "";
@@ -1078,6 +1165,7 @@
     const file = $("library-file").files[0];
     if (!file) return;
     $("upload-file-button").disabled = true;
+    $("upload-progress").hidden = false;
     try {
       if (file.size > 20 * 1024 * 1024) throw new Error("Choose a file smaller than 20 MiB.");
       const params = new URLSearchParams({ name: file.name });
@@ -1085,7 +1173,7 @@
       const result = await api(`/api/files?${params}`, { method: "POST", headers: { "Content-Type": file.type || (/\.html?$/i.test(file.name) ? "text/html" : "application/octet-stream") }, body: file });
       await refresh(); toast("File saved to your library.");
       await reader.open(result.link.id);
-    } catch (error) { toast(error.message, true); } finally { $("library-file").value = ""; $("upload-file-button").disabled = false; }
+    } catch (error) { toast(error.message, true); } finally { $("upload-progress").hidden = true; $("library-file").value = ""; $("upload-file-button").disabled = false; }
   });
   function updateHelp() {
     const query = $("help-search").value.trim().toLocaleLowerCase();
@@ -1109,13 +1197,15 @@
 
   function configureLogin(passwordEnabled = true) {
     $("login-title").textContent = setupRequired ? "Create your account" : "Welcome back";
-    $("login-description").textContent = setupRequired ? "Set up your personal Pocketmark library." : "Sign in to your Pocketmark library.";
+    $("login-description").textContent = setupRequired ? "After creating your account, you’ll set up an authenticator app and save recovery codes." : "Sign in with your password and an authentication or recovery code.";
     $("login-submit-label").textContent = setupRequired ? "Create account" : "Sign in";
     $("login-confirm-fields").hidden = !setupRequired;
+    $("login-password-hint").hidden = !setupRequired;
+    $("login-password").setAttribute("aria-describedby", setupRequired ? "login-password-hint" : "login-help");
     $("login-confirm").required = setupRequired;
     $("login-password").autocomplete = setupRequired ? "new-password" : "current-password";
     $("login-password").minLength = setupRequired ? 12 : 1;
-    $("login-help").textContent = setupRequired ? "Choose a password of at least 12 characters. This instance has one personal account." : passwordEnabled ? "Use your Pocketmark username and password." : "Your existing library needs a password. Ask the server administrator to configure it using the account recovery instructions.";
+    $("login-help").textContent = setupRequired ? "This instance has one personal account." : passwordEnabled ? "Use your Pocketmark username and password." : "Your existing library needs a password. Ask the server administrator to configure it using the account recovery instructions.";
     $("login-submit").disabled = !setupRequired && !passwordEnabled;
   }
   const profileHelp = {
@@ -1308,6 +1398,18 @@
     }
     setTokensBusy(tokensBusy);
   }
+  function syncSettingsNavigation() {
+    document.querySelectorAll("[data-settings-section]").forEach(button => {
+      button.disabled = (mfaManagementBusy || deferredLogin) && button.dataset.settingsSection !== "mfa-settings-title";
+    });
+  }
+  document.querySelectorAll("[data-settings-section]").forEach(button => button.addEventListener("click", () => {
+    const target = $(button.dataset.settingsSection);
+    if (target.closest("section").inert) return;
+    target.tabIndex = -1;
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }));
   $("settings-button").addEventListener("click", async () => {
     const session = ++settingsSession;
     $("settings-error").textContent = "";
@@ -1347,6 +1449,7 @@
   }
   function setMFAManagementBusy(busy) {
     mfaManagementBusy = busy;
+    syncSettingsNavigation();
     $("settings-dialog").querySelector(".close-dialog").disabled = busy;
     $("mfa-manage-cancel").disabled = busy;
     document.querySelectorAll("#settings-dialog > section").forEach(section => { if (section.getAttribute("aria-labelledby") !== "mfa-settings-title") section.inert = busy || deferredLogin; });

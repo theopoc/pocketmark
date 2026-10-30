@@ -112,6 +112,11 @@ try {
   const username = 'ci-owner';
   const password = 'Synthetic-E2E-password-42';
   await page.goto(base.href);
+  await page.locator('#login-title').filter({ hasText: 'Create your account' }).waitFor();
+  assert.equal(await page.locator('.skip-link').isVisible(), false, 'library shortcut is unavailable before sign-in');
+  assert.match(await page.locator('#login-description').textContent(), /authenticator app.*recovery codes/i);
+  assert.equal(await page.locator('#login-password').getAttribute('aria-describedby'), 'login-password-hint');
+  assert.equal(await page.locator('#login-password-hint').isVisible(), true);
   await page.locator('#login-username').fill(username);
   await page.locator('#login-password').fill(password);
   await page.locator('#login-confirm').fill(password);
@@ -129,8 +134,16 @@ try {
   assert.equal(recoveryCodes.length, 10);
   await page.locator('#mfa-login-continue').click();
   await page.locator('#app-view').waitFor({ state: 'visible' });
+  const libraryURL = page.url();
+  await page.locator('.skip-link').focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'main-content', 'library shortcut moves keyboard focus to the main content');
+  assert.equal(page.url(), libraryURL, 'library shortcut does not add a history entry');
   const oldSession = (await page.context().cookies()).find(cookie => cookie.name === 'pocketmark');
   await page.locator('#logout-button').click();
+  await page.locator('#login-view').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('.skip-link').isVisible(), false, 'library shortcut is unavailable after sign-out');
+  assert.equal(await page.locator('#login-password').getAttribute('aria-describedby'), 'login-help');
   const replay = await page.request.post(new URL('/api/tokens', base).href, { headers: { Cookie: `pocketmark=${oldSession.value}` }, data: { name: 'replayed-session' } });
   assert.equal(replay.status(), 401, 'a signed-out cookie cannot mint API keys');
   await page.locator('#login-username').fill(username);
@@ -273,6 +286,8 @@ try {
     await page.locator('#mfa-manage-form button[value="codes"]').click();
     await heldCodes.ready;
     assert.equal(await page.locator('#settings-dialog').getByRole('button', { name: 'Close', exact: true }).isDisabled(), true);
+    assert.equal(await page.locator('[data-settings-section="backup-title"]').isDisabled(), true);
+    assert.equal(await page.locator('[data-settings-section="mfa-settings-title"]').isEnabled(), true);
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('#settings-dialog').isVisible(), true);
     await page.evaluate(() => history.pushState({}, '', '?test=mfa-pending'));
@@ -345,6 +360,46 @@ try {
     }
   } finally { await peer.close(); }
 
+  await page.locator('#add-collection').click();
+  await page.locator('#collection-name').fill('é'.repeat(61));
+  await page.locator('#save-collection').click();
+  await page.locator('#collection-error').filter({ hasText: '120 UTF-8 bytes' }).waitFor();
+  assert.equal(await page.locator('#collection-name').inputValue(), 'é'.repeat(61));
+  assert.equal(await page.locator('#save-collection').isEnabled(), true);
+  await page.locator('#collection-dialog').getByRole('button', { name: 'Cancel' }).click();
+
+  // A late collection response must not close or overwrite a newly opened editor.
+  for (const succeeds of [true, false]) {
+    const held = succeeds ? await holdResponse(page, '/api/collections') : await holdUnauthorized(page, '/api/collections', 'Earlier collection failed', 503);
+    await page.locator('#add-collection').click();
+    await page.locator('#collection-name').fill(succeeds ? 'Earlier collection' : 'Failed collection');
+    await page.locator('#save-collection').click(); await held.ready;
+    await page.locator('#collection-dialog').getByRole('button', { name: 'Cancel' }).click();
+    await page.locator('#add-collection').click();
+    await page.locator('#collection-name').fill('New collection draft');
+    assert.equal(await page.locator('#save-collection').isEnabled(), true);
+    held.release();
+    await page.getByText(succeeds ? 'Collection created.' : 'The server could not complete this action.', { exact: false }).first().waitFor();
+    await held.remove();
+    assert.equal(await page.locator('#collection-dialog').isVisible(), true);
+    assert.equal(await page.locator('#collection-name').inputValue(), 'New collection draft');
+    assert.equal(await page.locator('#collection-error').textContent(), '');
+    await page.locator('#collection-dialog').getByRole('button', { name: 'Cancel' }).click();
+  }
+  const pendingCollection = await holdResponse(page, '/api/collections');
+  await page.locator('#add-collection').click();
+  await page.locator('#collection-name').fill('Collection before save');
+  await page.locator('#save-collection').click(); await pendingCollection.ready;
+  await page.locator('#collection-name').fill('Collection after save');
+  pendingCollection.release();
+  await page.getByText('Saved. Your newer collection edits are still open.').waitFor();
+  await pendingCollection.remove();
+  assert.equal(await page.locator('#collection-name').inputValue(), 'Collection after save');
+  await page.locator('#save-collection').click();
+  await page.locator('#collection-dialog').waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: 'Collection after save', exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Collection before save', exact: true }).count(), 0);
+
   const original = 'Browser integration bookmark';
   const revised = 'Browser revised bookmark';
   await page.locator('#add-bookmark').click();
@@ -352,6 +407,24 @@ try {
   await page.locator('#bookmark-url').fill('http://127.0.0.1/e2e-fixture');
   await page.locator('#bookmark-title').fill(original);
   await page.locator('#bookmark-notes').fill('Persisted browser notes');
+  const tagSuggestionsFailure = route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
+  await page.route('**/api/tags/browse?*', tagSuggestionsFailure);
+  await page.locator('#bookmark-tags-query').fill('recovery-tag');
+  const retryTags = page.getByRole('button', { name: 'Retry tag suggestions' });
+  await retryTags.waitFor({ state: 'visible' });
+  await page.locator('#bookmark-tags-query').press('Tab');
+  assert.equal(await retryTags.evaluate(node => document.activeElement === node), true, 'keyboard users can reach the retry action');
+  await page.unroute('**/api/tags/browse?*', tagSuggestionsFailure);
+  await retryTags.press('Enter');
+  await retryTags.waitFor({ state: 'hidden' });
+  assert.equal(await page.locator('#bookmark-tags-query').inputValue(), 'recovery-tag');
+  await page.locator('#bookmark-tags-query').fill('');
+  await page.locator('#bookmark-tags-query').fill('reading');
+  await page.locator('#bookmark-tags-query').press('Enter');
+  for (const tag of ['design', 'research', 'archive', 'reference', 'web']) {
+    await page.locator('#bookmark-tags-query').fill(tag);
+    await page.locator('#bookmark-tags-query').press('Enter');
+  }
   await page.locator('#save-bookmark').click();
   const card = title => page.locator('.bookmark-card').filter({ has: page.getByRole('button', { name: title, exact: true }) });
   const openActions = async title => {
@@ -359,8 +432,215 @@ try {
     if (await toggle.isVisible()) await toggle.click();
   };
   await card(original).waitFor();
+  await page.locator('#sort-order').selectOption('title_desc');
+  await page.waitForURL(url => url.searchParams.get('sort') === 'title_desc');
+  await page.reload();
+  await card(original).waitFor();
+  assert.equal(await page.locator('#sort-order').inputValue(), 'title_desc', 'descending title sort survives reload');
+  await page.locator('#sort-order').selectOption('newest');
+  await page.waitForURL(url => !url.searchParams.has('sort'));
+  await page.locator('#help-button').click();
+  await page.locator('#help-search').fill('retry capture');
+  const captureHelp = page.locator('#help-topics > details').filter({ hasText: 'Failed or missing captures' });
+  assert.equal(await captureHelp.isVisible(), true);
+  assert.equal(await captureHelp.evaluate(node => node.open), true);
+  await page.locator('#help-search').fill('Floccus sync');
+  const syncHelp = page.locator('#help-topics > details').filter({ hasText: 'Extensions & browser sync' });
+  assert.equal(await syncHelp.isVisible(), true);
+  assert.equal(await syncHelp.evaluate(node => node.open), true);
+  await page.locator('#help-dialog').getByRole('button', { name: 'Close help' }).click();
+  await page.goto(new URL('/?tag=no-such-tag-e2e', base).href);
+  await page.locator('#empty-title').filter({ hasText: 'No bookmarks with this tag' }).waitFor();
+  assert.equal(await page.locator('#empty-add').isVisible(), false);
+  await page.getByRole('button', { name: 'View all bookmarks', exact: true }).click();
+  await card(original).waitFor();
+  const moreTags = card(original).getByRole('button', { name: `Show all 6 tags for ${original}` });
+  await moreTags.focus();
+  await moreTags.press('Enter');
+  assert.equal(await card(original).locator('.card-tags button').nth(5).evaluate(node => document.activeElement === node), true, 'expanding tags moves focus to the first revealed tag');
+  await page.locator('#refresh-button').evaluate(button => button.click());
+  await page.waitForFunction(() => document.querySelector('#bookmark-grid').getAttribute('aria-busy') === 'false');
+  assert.equal(await card(original).locator('.card-tags button').nth(5).evaluate(node => document.activeElement === node), true, 'refresh preserves the revealed tag and its focus');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.locator('#view-grid').click();
+  await card(original).hover();
+  await page.waitForFunction(title => {
+    const card = [...document.querySelectorAll('.bookmark-card')].find(node => node.textContent.includes(title));
+    return card && getComputedStyle(card).transform !== 'none';
+  }, original);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.waitForFunction(title => {
+    const card = [...document.querySelectorAll('.bookmark-card')].find(node => node.textContent.includes(title));
+    return card && getComputedStyle(card).transform === 'none';
+  }, original);
+  await page.locator('#view-list').click();
+  await page.locator('#add-bookmark').click();
+  assert.ok(await page.locator('#bookmark-dialog').evaluate(node => getComputedStyle(node).transitionDuration.split(',').every(value => parseFloat(value) === 0)), 'reduced motion removes dialog transitions');
+  await page.locator('#bookmark-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.locator('#add-bookmark').click();
+  for (const selector of ['#bookmark-dialog .dialog-heading .icon-button', '#save-bookmark', '#bookmark-favorite', '#bookmark-read']) {
+    assert.ok(await page.locator(selector).evaluate(node => (node.matches('input') ? node.closest('label') : node).getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
+  }
+  assert.ok(await page.locator('#bookmark-dialog').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), 'mobile bookmark form does not overflow');
+  await page.locator('#bookmark-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await card(original).getByRole('checkbox', { name: `Select ${original}` }).check();
+  for (const id of ['bulk-open', 'clear-selection']) {
+    assert.ok(await page.locator(`#${id}`).evaluate(node => node.getBoundingClientRect().height >= 44), `${id} has a mobile touch target`);
+  }
+  await page.locator('#bulk-open').click();
+  await page.locator('#bulk-action').selectOption('capture');
+  assert.ok(await page.locator('#bulk-apply').evaluate(node => {
+    const button = node.getBoundingClientRect(), dialog = node.closest('dialog').getBoundingClientRect();
+    return button.height >= 44 && button.left >= dialog.left && button.right <= dialog.right;
+  }), 'the bulk action fits the mobile dialog');
+  await page.locator('#bulk-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.locator('#clear-selection').click();
+  await card(original).getByRole('button', { name: `Add to favorites: ${original}` }).click();
+  const undo = page.locator('#toast').getByRole('button', { name: 'Undo' });
+  await undo.waitFor({ state: 'visible' });
+  await undo.focus();
+  await page.waitForTimeout(12500);
+  assert.equal(await undo.isVisible(), true, 'the undo action stays available while focused');
+  await undo.press('Enter');
+  await card(original).getByRole('button', { name: `Add to favorites: ${original}` }).waitFor();
+  for (const [endpoint, input, status, file] of [
+    ['**/api/import', '#import-file', '#import-progress', { name: 'bookmarks.json', mimeType: 'application/json', buffer: Buffer.from('{}') }],
+    ['**/api/files?*', '#library-file', '#upload-progress', { name: 'fixture.png', mimeType: 'image/png', buffer: Buffer.from('fixture') }],
+  ]) {
+    let release, notify;
+    const requested = new Promise(resolve => { notify = resolve; });
+    const delayed = async route => { notify(); await new Promise(resolve => { release = resolve; }); await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }); };
+    await page.route(endpoint, delayed);
+    await page.locator(input).setInputFiles(file);
+    await requested;
+    assert.equal(await page.locator(status).isVisible(), true, `${status} is visible during the operation`);
+    release();
+    await page.locator(status).waitFor({ state: 'hidden' });
+    await page.unroute(endpoint, delayed);
+  }
+  const currentLinks = await (await page.request.get(new URL('/api/links', base).href)).json();
+  const originalID = currentLinks.links.find(link => link.title === original).id;
+  const readerURL = new URL(`/api/links/${originalID}`, base).href;
+  const failReader = route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
+  await page.route(readerURL, failReader);
+  await card(original).getByRole('button', { name: original, exact: true }).click();
+  await page.locator('#reader-dialog').waitFor({ state: 'visible' });
+  await page.locator('#reader-retry-open').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#reader-files').isVisible(), false, 'unavailable reader actions are hidden after an opening failure');
+  assert.equal(await page.locator('#reader-section-nav').isVisible(), false);
+  await page.unroute(readerURL, failReader);
+  await page.locator('#reader-retry-open').click();
+  await page.locator('#reader-title').filter({ hasText: original }).waitFor();
+  assert.equal(await page.locator('#reader-retry-open').isVisible(), false);
+  assert.equal(await page.locator('#reader-files').isVisible(), true);
+  await page.locator('#reader-options summary').click();
+  for (const selector of ['[data-reader-section="reader-content"]', '[data-reader-section="annotations-section"]', '#reader-text-mode', '#reader-size', '#asset-upload-button']) {
+    assert.ok(await page.locator(selector).evaluate(node => node.getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
+  }
+  const chooser = page.waitForEvent('filechooser');
+  await page.locator('#asset-upload-button').click();
+  await (await chooser).setFiles([]);
+  await page.getByRole('button', { name: 'Close reader', exact: true }).click();
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const pagedTags = route => {
+    const pageNumber = Number(new URL(route.request().url()).searchParams.get('page'));
+    const tags = Array.from({ length: pageNumber === 1 ? 40 : 1 }, (_, index) => ({ name: `tag-${String((pageNumber - 1) * 40 + index).padStart(2, '0')}`, count: 1, letter: 'T' }));
+    return route.fulfill({ json: { tags, groups: [{ letter: 'T', count: 41 }], total: 41, page: pageNumber, pageSize: 40 } });
+  };
+  await page.route('**/api/tags/browse?*', pagedTags);
+  await page.locator('#all-tags').click();
+  await page.locator('#tags-next').waitFor({ state: 'visible' });
+  await page.locator('#tags-next').focus();
+  await page.locator('#tags-next').press('Enter');
+  await page.locator('#tags-page-label').filter({ hasText: 'Page 2 of 2' }).waitFor();
+  assert.equal(await page.locator('#tags-title').evaluate(node => document.activeElement === node), true, 'pagination returns keyboard focus to the directory heading');
+  await page.unroute('**/api/tags/browse?*', pagedTags);
+  await page.locator('#tags-retry').click();
+  await page.locator('#tags-list').getByRole('button', { name: '#reading 1 bookmark' }).waitFor();
+  await page.setViewportSize({ width: 320, height: 700 });
+  assert.equal(await page.locator('#tags-alphabet').isVisible(), false);
+  await page.locator('#tags-search').fill('no-such-tag-e2e');
+  await page.locator('#tags-clear-search').waitFor({ state: 'visible' });
+  await page.locator('#tags-clear-search').click();
+  assert.equal(await page.locator('#tags-search').inputValue(), '');
+  assert.equal(await page.locator('#tags-search').evaluate(node => document.activeElement === node), true);
+  await page.locator('#tags-list').getByRole('button', { name: '#reading 1 bookmark' }).waitFor();
+  await page.locator('#tags-letter-picker').selectOption('R');
+  await page.waitForFunction(() => document.activeElement.id === 'tags-letter-R');
+  await page.locator('#tags-list').getByRole('button', { name: '#reading 1 bookmark' }).click();
+  await card(original).waitFor();
+  await page.getByRole('button', { name: 'Remove #reading filter' }).click();
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const collectionName = 'A deliberately long collection name for mobile navigation';
+  const collectionResponse = await page.request.post(new URL('/api/collections', base).href, { data: { name: collectionName, parentId: null } });
+  assert.equal(collectionResponse.status(), 201);
+  await page.locator('#refresh-button').click();
+  await page.getByRole('button', { name: collectionName, exact: true }).waitFor();
+  assert.ok(await page.getByRole('button', { name: collectionName, exact: true }).evaluate(node => node.getBoundingClientRect().height > 44), 'long collection names wrap on desktop');
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.locator('#open-navigation').click();
+  const collection = page.getByRole('button', { name: collectionName, exact: true });
+  assert.ok(await collection.evaluate(node => node.getBoundingClientRect().height > 44), 'long collection names wrap on mobile');
+  const confirmation = page.waitForEvent('dialog');
+  const deleting = page.getByRole('button', { name: `Delete ${collectionName}`, exact: true }).click();
+  const prompt = await confirmation;
+  assert.match(prompt.message(), /Direct subcollections move to the library root/);
+  await prompt.dismiss(); await deleting;
+  assert.equal(await collection.isVisible(), true);
+  await page.locator('#close-navigation').click();
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await collection.click();
+  await page.locator('#empty-title').filter({ hasText: 'This collection is empty' }).waitFor();
+  await page.locator('#empty-add').click();
+  assert.equal(await page.locator('#bookmark-collection option:checked').textContent(), collectionName);
+  await page.locator('#bookmark-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.locator('#empty-reset').click();
+  await card(original).waitFor();
+  const failLibrary = route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
+  await page.route('**/api/links?*', failLibrary);
+  await page.locator('#refresh-button').click();
+  await page.locator('#library-error').getByRole('button', { name: 'Try again' }).waitFor();
+  assert.equal(await card(original).isVisible(), true, 'a failed refresh preserves the last results for the same view');
+  assert.match(await page.locator('#library-error').textContent(), /Showing the last loaded results/);
+  await page.unroute('**/api/links?*', failLibrary);
+  await page.locator('#library-error').getByRole('button', { name: 'Try again' }).click();
+  await page.locator('#library-error').waitFor({ state: 'hidden' });
+  let releaseDelayedFailure;
+  let notifyRequest;
+  const requested = new Promise(resolve => { notifyRequest = resolve; });
+  const delayedFailure = async route => {
+    notifyRequest();
+    await new Promise(resolve => { releaseDelayedFailure = resolve; });
+    await failLibrary(route);
+  };
+  await page.route('**/api/links?*', delayedFailure);
+  await page.locator('[data-filter="favorite"]').click();
+  await requested;
+  assert.equal(await card(original).isVisible(), false, 'old results are hidden while a different view loads');
+  assert.equal(await page.locator('#empty-state').isVisible(), false);
+  assert.equal(await page.locator('#page-title').evaluate(node => document.activeElement === node), true, 'focus stays on the new view heading');
+  assert.match(await page.locator('#results-label').textContent(), /Loading/);
+  releaseDelayedFailure();
+  await page.locator('#library-error').getByRole('button', { name: 'Try again' }).waitFor();
+  assert.equal(await card(original).isVisible(), false, 'old results do not appear under a failed new filter');
+  assert.equal(await page.locator('#empty-state').isVisible(), false, 'a failed request is not presented as an empty view');
+  await page.unroute('**/api/links?*', delayedFailure);
+  await page.locator('#library-error').getByRole('button', { name: 'Try again' }).click();
+  await page.locator('#empty-title').filter({ hasText: 'No favorites yet' }).waitFor();
+  assert.equal(await page.locator('#empty-add').isVisible(), false);
+  await page.locator('#empty-reset').click();
+  await card(original).waitFor();
+  await page.locator('#search').fill('browzer');
+  await page.locator('#empty-near-matches').waitFor({ state: 'visible' });
+  await page.locator('#empty-near-matches').click();
+  await card(original).waitFor();
+  assert.equal(await page.locator('#fuzzy-search').isChecked(), true);
   await page.locator('#search').fill('absent-e2e-bookmark-42');
   await page.locator('#empty-title').filter({ hasText: 'No bookmarks found' }).waitFor();
+  await page.locator('#empty-reset').click();
+  assert.equal(await page.locator('#fuzzy-search').isChecked(), false);
+  assert.equal(await page.locator('#search').inputValue(), '');
   await page.locator('#search').fill('Browser integration');
   await card(original).waitFor();
   await page.waitForFunction(() => document.querySelectorAll('.bookmark-card').length === 1);
@@ -370,6 +650,7 @@ try {
   await page.locator('#save-bookmark').click();
   await page.locator('#bookmark-dialog').waitFor({ state: 'hidden' });
   await page.locator('#search').fill('Browser revised');
+  await page.waitForURL(url => url.searchParams.get('q') === 'Browser revised');
   await card(revised).waitFor();
   await page.reload();
   await card(revised).waitFor();
