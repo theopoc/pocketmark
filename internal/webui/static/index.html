@@ -49,6 +49,7 @@
         <p class="small muted">Each code works once if you lose your authenticator. Store them somewhere safe; they will not be shown again.</p>
         <pre id="mfa-login-codes-value" class="mfa-codes" tabindex="0"></pre>
         <button id="mfa-login-copy" type="button" class="button subtle">Copy recovery codes</button>
+        <button id="mfa-login-download" type="button" class="button subtle">Download recovery codes</button>
         <button id="mfa-login-continue" type="button" class="button primary">I saved my codes</button>
       </section>
       <button id="mfa-back" type="button" class="text-button login-help" hidden>Back to sign in</button>
@@ -194,7 +195,7 @@
       <div class="token-actions"><button class="button subtle" type="submit" value="replace">Replace authenticator</button><button class="button subtle" type="submit" value="codes" aria-describedby="mfa-codes-warning">Generate recovery codes</button></div>
     </form>
     <div id="mfa-manage-enrollment" hidden><p class="small muted">Scan the new QR code or enter the setup key in your authenticator.</p><img id="mfa-manage-qr" class="mfa-qr" alt="New authenticator setup QR code" width="220" height="220"><label for="mfa-manage-secret">Manual setup key</label><textarea id="mfa-manage-secret" class="mfa-secret" rows="2" readonly spellcheck="false"></textarea><form id="mfa-manage-verify"><label for="mfa-manage-new-code">Code from the new authenticator</label><input id="mfa-manage-new-code" autocomplete="one-time-code" inputmode="numeric" required><button class="button primary" type="submit">Confirm new authenticator</button><button id="mfa-manage-cancel" class="button subtle" type="button">Cancel replacement</button></form></div>
-    <div id="mfa-manage-codes" hidden><p class="small muted">Save these single-use codes now. Previous codes no longer work.</p><pre id="mfa-manage-codes-value" class="mfa-codes" tabindex="0"></pre><button id="mfa-manage-copy" class="button subtle" type="button">Copy recovery codes</button></div>
+    <div id="mfa-manage-codes" hidden><p class="small muted">Save these single-use codes now. Previous codes no longer work.</p><pre id="mfa-manage-codes-value" class="mfa-codes" tabindex="0"></pre><div class="token-actions"><button id="mfa-manage-copy" class="button subtle" type="button">Copy recovery codes</button><button id="mfa-manage-download" class="button subtle" type="button">Download recovery codes</button></div></div>
     <p id="mfa-manage-feedback" class="small muted" role="status"></p><p id="mfa-manage-error" class="form-error" role="alert"></p>
   </section><section class="settings-section" aria-labelledby="sessions-title">
     <h3 id="sessions-title">Browser sessions</h3>

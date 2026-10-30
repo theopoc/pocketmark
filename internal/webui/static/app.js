@@ -1018,6 +1018,14 @@
     } catch (error) { $("login-error").textContent = error.message; }
     finally { event.submitter.disabled = false; }
   });
+  function downloadRecoveryCodes(element) {
+    const url = URL.createObjectURL(new Blob([element.textContent + "\n"], { type: "text/plain;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url; link.download = "pocketmark-recovery-codes.txt";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  $("mfa-login-download").addEventListener("click", () => downloadRecoveryCodes($("mfa-login-codes-value")));
   $("mfa-login-copy").addEventListener("click", async () => {
     try { await navigator.clipboard.writeText($("mfa-login-codes-value").textContent); toast("Recovery codes copied."); }
     catch { $("login-error").textContent = "Select and copy the recovery codes shown above."; }
@@ -1554,6 +1562,7 @@
     $("mfa-manage-enrollment").hidden = true; $("mfa-manage-form").hidden = false;
     $("mfa-manage-error").textContent = ""; $("mfa-manage-password").focus();
   });
+  $("mfa-manage-download").addEventListener("click", () => downloadRecoveryCodes($("mfa-manage-codes-value")));
   $("mfa-manage-copy").addEventListener("click", async () => {
     try { await navigator.clipboard.writeText($("mfa-manage-codes-value").textContent); $("mfa-manage-feedback").textContent = "Recovery codes copied."; }
     catch { $("mfa-manage-error").textContent = "Select and copy the recovery codes shown above."; }
