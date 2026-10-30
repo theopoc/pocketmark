@@ -138,7 +138,7 @@ Dark controls, dialogs, cards, metadata, highlights and selection share the them
 
 **Body and interface font:** the system sans stack in the frontmatter. There is no separately loaded display face. Monospace is used for generated credentials, including API keys, authenticator setup keys and recovery codes.
 
-The hierarchy is compact: headline for library headings, title for bookmark names, body for the base interface, and label for buttons and field labels. Secondary metadata commonly uses (11px–13px). Dialog headings use (20px); the reader title uses (28px). The sign-in introduction uses (42px) on desktop and (30px) on phones; this is an entrance-specific treatment, not a general display scale.
+The hierarchy is compact: headline for library headings, title for bookmark names, body for the base interface, and label for buttons and field labels. Secondary metadata commonly uses (11px–13px). Dialog headings use (20px); the reader title uses (22px). The sign-in introduction uses (42px) on desktop and (30px) on phones; this is an entrance-specific treatment, not a general display scale.
 
 **The Reading Measure Rule.** Keep reading text within 70ch and give it more leading than workspace metadata.
 
@@ -201,10 +201,10 @@ Bookmark, reader-note and annotation drafts stay in the current tab. A bounded s
 
 Mobile bookmark actions retain a named Favorite control and disclose the other labeled commands under Actions. Quick favorite/read changes confirm with an Undo action; feedback appears inside any active native dialog so its message is visible and announced. Search-only excerpts highlight matches and display decoded tag names. Near-match scope is visible beside its checkbox: titles, URLs, descriptions and tags only. Task-based Help is searchable from the navigation.
 
-The reader keeps a compact close/highlight header and section shortcuts visible while scrolling. Formatted and printable views require a suitable HTML capture or attachment; unavailable modes explain the next step. Text size and highlighting follow the active mode. Highlights and saved-file loading errors remain local to their sections. On phones, row action targets are 44px and a 44px letter picker complements the A–Z rail.
+The reader opens directly on the saved article. Its short toolbar keeps a prominent Open original link and a secondary Notes action visible. Notes opens a companion pane on screens wider than 1000px; narrower windows show the notebook with an explicit Back to reading action. The article keeps its own scroll position while the notebook opens or changes sections. Notes, Highlights and Files are local notebook tabs with arrow-key navigation. The notebook starts closed for each new bookmark. Anchored highlights offer Show in text; stale excerpts remain visible without a misleading jump action. An absent captured article is labeled explicitly rather than presenting the bookmark description as article text. Formatted and printable views require a suitable HTML capture or attachment; unavailable modes explain the next step. Text size and highlighting follow the active mode. Highlights and saved-file loading errors remain local to their sections. On phones, row action targets are 44px and a 44px letter picker complements the A–Z rail.
 
 ### Reader and dialogs
-Dialogs use theme-matched panels, a dimmed backdrop, labeled headings and separated footer actions. The reader widens to (920px), uses the reader type role and a generous text measure, with highlights, assets and notes below its tools. Highlight colors describe user annotations rather than application status. On phones, the reader becomes an edge-to-edge reading surface.
+Dialogs use theme-matched panels, a dimmed backdrop, labeled headings and separated footer actions. The reader widens to (1200px), keeps its toolbar separate from the scrolling article and constrains text to a (680px) measure. Its optional companion pane is (320px) wide; notes, highlights and files stay secondary to reading. Highlight excerpts use their saved color; annotation notes and quiet editing actions sit beneath each quote. Highlight colors describe user annotations rather than application status. On phones, the reader becomes an edge-to-edge reading surface.
 
 ## Do's and Don'ts
 
