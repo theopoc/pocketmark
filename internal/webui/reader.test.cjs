@@ -563,6 +563,31 @@ for (const action of ["upload", "preserve", "delete"]) test(`${action} remains s
   assert.match(env.get("asset-list").textContent, /old.pdf/);
 });
 
+test("PDF capture guides keep printable availability and the original page scoped to the current bookmark", async () => {
+  const env = setup();
+  env.records.set(1, link(1, { archiveAvailable: true }));
+  await env.reader.open(1);
+  assert.equal(env.get("pdf-original").href, "https://example.com/1");
+  assert.equal(env.get("pdf-extension-guide").hidden, false);
+  assert.equal(env.get("reader-print").disabled, false);
+  await fire(env.get("reader-print"), "click");
+  assert.deepEqual(env.windows, [["/api/links/1/reader", "_blank", "noopener,noreferrer"]]);
+  assert.match(env.notices.at(-1)[0], /Save as PDF/);
+  env.get("reader-pdf").open = true;
+  await env.reader.open(1, { recheck: true });
+  assert.equal(env.get("reader-pdf").open, true);
+  await env.reader.open(2);
+  assert.equal(env.get("reader-pdf").open, false);
+  assert.equal(env.get("reader-print").disabled, true);
+  assert.match(env.get("reader-pdf-hint").textContent, /No printable HTML/);
+  await fire(env.get("reader-print"), "click");
+  assert.equal(env.windows.length, 1);
+  env.records.set(2, link(2, { type: "file", url: "", content: "" }));
+  await env.reader.open(2);
+  assert.equal(env.get("pdf-extension-guide").hidden, true);
+  assert.equal(env.get("html-capture").hidden, true);
+});
+
 test("the shipped script order and worker cache include the reader without private data", () => {
   const html = fs.readFileSync(`${__dirname}/static/index.html`, "utf8");
   const scripts = [...html.matchAll(/<script src="([^"]+)"[^>]*>/g)].map(match => match[1]);

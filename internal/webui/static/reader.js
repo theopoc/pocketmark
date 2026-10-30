@@ -62,7 +62,7 @@
       annotationSession++;
       state.annotationDraft = null;
       if ($("annotation-dialog").open) $("annotation-dialog").close();
-      if (!recheck) $("reader-options").open = false;
+      if (!recheck) { $("reader-options").open = false; $("reader-pdf").open = false; }
       layoutRequest++;
       state.reading = null;
       readerAssets = []; readerLayoutURL = "";
@@ -77,6 +77,7 @@
       $("reader-layout-mode").setAttribute("aria-pressed", "false");
       $("reader-layout-mode").disabled = true;
       $("reader-print").disabled = true;
+      $("reader-pdf-hint").textContent = "Checking saved HTML…";
       $("reader-size").disabled = false;
       document.querySelectorAll("[data-highlight-selection]").forEach((button) => { button.disabled = true; });
       $("reader-text-mode").setAttribute("aria-pressed", "true");
@@ -95,6 +96,7 @@
       $("asset-upload-button").removeAttribute("aria-disabled");
       $("asset-upload-button").textContent = "Attach a saved file";
       $("preserve-page").disabled = false;
+      $("preserve-page").textContent = "Save HTML with resources";
       $("reader-notes-form").querySelector("button[type=submit]").disabled = false;
       $("reader-error").textContent = "";
       $("reader-original").hidden = true;
@@ -113,9 +115,11 @@
         $("reader-domain").textContent = link.type === "file" ? "Saved file" : domain(link.url);
         $("reader-capture").hidden = link.type === "file";
         $("preserve-page").hidden = link.type === "file";
+        $("html-capture").hidden = link.type === "file";
         const url = safeURL(link.url);
         $("reader-original").hidden = !url;
-        if (url) $("reader-original").href = url;
+        if (url) { $("reader-original").href = url; $("pdf-original").href = url; }
+        $("pdf-extension-guide").hidden = !url || link.type === "file";
         $("reader-archive").hidden = !link.archiveAvailable;
         $("reader-archive").href = `/api/links/${id}/archive`;
         $("reader-archive").setAttribute("download", "");
@@ -155,7 +159,10 @@
     function readerSectionError(section, error) {
       $(section + "-error").textContent = `Could not load ${section === "assets" ? "saved files" : "highlights"}. ${error.message}`;
       $(section + "-error").hidden = false; $(section + "-retry").hidden = false;
-      if (section === "assets") $("reader-mode-hint").textContent = "Could not check saved HTML. Retry saved files below; text view remains available.";
+      if (section === "assets") {
+        $("reader-mode-hint").textContent = "Could not check saved HTML. Retry saved files below; text view remains available.";
+        $("reader-pdf-hint").textContent = "Could not check saved HTML. Retry saved files to check printable view availability.";
+      }
     }
     for (const section of ["annotations", "assets"]) $(section + "-retry").addEventListener("click", async () => {
       if (!state.reading) return;
@@ -319,7 +326,7 @@
         const actions = el("div", "reader-actions"); actions.append(edit, remove); row.append(actions);
         $("annotation-list").append(row);
       }
-      if (!state.annotations.length) $("annotation-list").append(el("p", "small muted", "No highlights yet."));
+      if (!state.annotations.length) $("annotation-list").append(el("p", "reader-section-empty muted", "No highlights yet. Select a passage in the text reader, then choose Highlight. Highlights stay with the captured version."));
       if (focusedEdit) {
         if (restoredEdit) restoredEdit.focus({ preventScroll: true });
         else { $("annotations-section").tabIndex = -1; $("annotations-section").focus({ preventScroll: true }); }
@@ -417,6 +424,7 @@
       readerLayoutURL = snapshot.url;
       $("reader-layout-mode").disabled = !snapshot.url; $("reader-print").disabled = !snapshot.url;
       $("reader-mode-hint").textContent = snapshot.message;
+      $("reader-pdf-hint").textContent = snapshot.url ? "Opens the saved HTML in a new tab." : state.reading.type === "file" ? "No printable HTML yet. Attach an HTML snapshot first." : "No printable HTML yet. Save HTML with resources or attach an HTML snapshot first.";
       if (!snapshot.url) readerMode(false);
     }
     $("reader-layout-mode").addEventListener("click", async () => {
@@ -557,7 +565,7 @@
         });
         row.append(remove); $("asset-list").append(row);
       }
-      if (!assets?.length) $("asset-list").append(el("p", "small muted", "No additional files saved."));
+      if (!assets?.length) $("asset-list").append(el("p", "reader-section-empty muted", "No saved files yet. Capture a PDF, save an HTML copy or attach a file to keep it with this bookmark."));
     }
 
     $("asset-upload-button").addEventListener("click", () => { if (!$("asset-file").disabled) $("asset-file").click(); });
@@ -579,11 +587,12 @@
       if (!state.reading) return;
       const id = state.reading.id, request = state.readerRequest;
       $("preserve-page").disabled = true;
+      $("preserve-page").textContent = "Saving HTML…";
       try {
         const result = await api(`/api/links/${id}/preserve`, { method: "POST" });
         if (isCurrent(request)) toast(`Page saved with ${result.embedded || 0} resources.${result.omitted ? ` ${result.omitted} resources could not be embedded.` : ""}`);
         await refreshAssetsAfterChange(id, request);
-      } catch (error) { if (isCurrent(request)) toast(error.message, true); } finally { if (isCurrent(request)) $("preserve-page").disabled = false; }
+      } catch (error) { if (isCurrent(request)) toast(error.message, true); } finally { if (isCurrent(request)) { $("preserve-page").disabled = false; $("preserve-page").textContent = "Save HTML with resources"; } }
     });
 
     return { open: openReader, close };

@@ -306,6 +306,20 @@ body:has(dialog[open]) { overflow: hidden; }
 .annotation-item p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .asset-item { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
 .asset-item > a, .asset-item > span:first-child { flex: 1; min-width: 100px; overflow-wrap: anywhere; }
+.reader-section-empty { margin: 0; padding: 8px 0 16px; font-size: 13px; max-width: 70ch; }
+.capture-tools { padding: 16px; background: var(--surface); border-radius: 6px; }
+.pdf-capture > summary { cursor: pointer; width: fit-content; font-size: 14px; font-weight: 600; padding: 8px 0; min-height: 40px; }
+.pdf-instructions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; padding: 12px 0 20px; }
+.pdf-instructions h4 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+.pdf-instructions p { color: var(--muted); font-size: 13px; line-height: 1.65; margin-bottom: 12px; }
+.pdf-instructions #reader-pdf-hint { margin: 8px 0 0; font-size: 12px; }
+.html-capture { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding-top: 12px; border-top: 1px solid var(--line); margin-top: 8px; }
+.file-types-hint { margin: 12px 0 4px; }
+@media (max-width: 600px) {
+  .pdf-instructions { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .pdf-capture > summary { min-height: 44px; }
+  .reader-assets .section-heading { align-items: center; }
+}
 .asset-viewer { width: min(1200px, 96vw); max-width: 96vw; }
 .asset-viewer-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .asset-viewer-toolbar select { flex: 1; min-width: 120px; width: auto; }
