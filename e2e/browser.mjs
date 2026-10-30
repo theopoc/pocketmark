@@ -27,6 +27,13 @@ function authenticatorCode(secret, offsetSeconds = 0) {
   const offset = digest[digest.length - 1] & 15;
   return String((digest.readUInt32BE(offset) & 0x7fffffff) % 1000000).padStart(6, '0');
 }
+async function assertRecoveryDownload(page, button, codes) {
+  const [download] = await Promise.all([page.waitForEvent('download'), page.locator(button).click()]);
+  assert.equal(download.suggestedFilename(), 'pocketmark-recovery-codes.txt');
+  const chunks = [];
+  for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+  assert.equal(Buffer.concat(chunks).toString('utf8'), codes.join('\n') + '\n');
+}
 async function captureMFA(page, name) {
   if (!process.env.E2E_SCREENSHOTS) return;
   await mkdir(process.env.E2E_SCREENSHOTS, { recursive: true });
@@ -132,6 +139,7 @@ try {
   await captureMFA(page, 'mfa-recovery');
   const recoveryCodes = (await page.locator('#mfa-login-codes-value').textContent()).trim().split('\n');
   assert.equal(recoveryCodes.length, 10);
+  await assertRecoveryDownload(page, '#mfa-login-download', recoveryCodes);
   await page.locator('#mfa-login-continue').click();
   await page.locator('#app-view').waitFor({ state: 'visible' });
   const libraryURL = page.url();
@@ -197,6 +205,7 @@ try {
     await heldReplacement.remove();
     const replacementCodes = (await page.locator('#mfa-manage-codes-value').textContent()).trim().split('\n');
     assert.equal(replacementCodes.length, 10);
+    await assertRecoveryDownload(page, '#mfa-manage-download', replacementCodes);
     assert.equal((await peer.request.get(new URL('/api/session', base).href)).status(), 401);
     // A displayed recovery code used for replacement is consumed by the real server.
     const replaceURL = new URL('/api/mfa/replace', base).href;
