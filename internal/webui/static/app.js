@@ -796,7 +796,7 @@
     const filtered = !!state.query || state.filter !== "all" || !!state.tag;
     $("empty-title").textContent = filtered ? "No bookmarks found" : "Your library starts here";
     const offerNearMatches = !!state.query && !state.fuzzy;
-    $("empty-message").textContent = offerNearMatches ? "Try a different search, or look for near matches in titles, URLs, descriptions and tags." : filtered ? "Try a different search or clear your filters to see all bookmarks." : "Save your first bookmark, or import an existing library from the navigation.";
+    $("empty-message").textContent = offerNearMatches ? "Try a different search, or look for near matches in titles, URLs, descriptions and tags." : filtered ? "Try a different search or clear your filters to see all bookmarks." : "Save your first bookmark, or bring your existing bookmarks with you.";
     const emptyView = !state.query && (state.tag ? ["No bookmarks with this tag", "Choose another tag or return to all bookmarks.", false] : {
       collection: ["This collection is empty", "Add a bookmark to start this collection.", true],
       inbox: ["Your inbox is empty", "Bookmarks without a collection appear here.", true],
@@ -808,6 +808,7 @@
       $("empty-message").textContent = emptyView[1];
     }
     $("empty-near-matches").hidden = !offerNearMatches;
+    $("empty-import").hidden = filtered;
     $("empty-reset").hidden = !filtered;
     $("empty-reset").textContent = emptyView ? "View all bookmarks" : "Clear filters";
     $("empty-add").hidden = !!emptyView && !emptyView[2];
@@ -1037,6 +1038,7 @@
   document.querySelectorAll(".close-dialog").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
   $("add-bookmark").addEventListener("click", () => openEditor());
   $("empty-add").addEventListener("click", () => openEditor());
+  $("empty-import").addEventListener("click", () => $("import-file").click());
   $("empty-near-matches").addEventListener("click", () => {
     clearTimeout(searchTimer); state.query = $("search").value.trim();
     if (!state.query) { $("search").focus(); return; }
@@ -1113,6 +1115,7 @@
     const file = $("import-file").files[0];
     if (!file) return;
     $("import-button").disabled = true;
+    $("empty-import").disabled = true;
     $("import-progress").hidden = false;
     try {
       if (file.size > 8 * 1024 * 1024) throw new Error("Choose an export smaller than 8 MiB.");
@@ -1122,7 +1125,7 @@
       const result = await api(html ? "/api/import/html" : "/api/import", { method: "POST", headers: { "Content-Type": html ? "text/html" : "application/json" }, body });
       toast(`Imported ${result.imported} bookmarks. ${result.skipped || 0} skipped.`);
       await refresh();
-    } catch (error) { toast(error.message, true); } finally { $("import-progress").hidden = true; $("import-button").disabled = false; $("import-file").value = ""; }
+    } catch (error) { toast(error.message, true); } finally { $("import-progress").hidden = true; $("import-button").disabled = false; $("empty-import").disabled = false; $("import-file").value = ""; }
   });
 
   document.addEventListener("keydown", (event) => {
