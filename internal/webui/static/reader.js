@@ -16,7 +16,8 @@
     let layoutRequest = 0;
     let viewerRequest = 0;
     let retryReaderID = null;
-    let activeSection = "reader-content";
+    let activeSection = "reader-notes-form";
+    const highlightAnchors = new Map();
     const sectionButtons = [...document.querySelectorAll("[data-reader-section]")];
     function selectSection(section) {
       activeSection = section;
@@ -24,10 +25,27 @@
         const selected = button.dataset.readerSection === section;
         button.setAttribute("aria-selected", String(selected));
         button.tabIndex = selected ? 0 : -1;
-        const panel = $(button.dataset.readerSection === "reader-content" ? "reader-text-panel" : button.dataset.readerSection);
+        const panel = $(button.dataset.readerSection);
         panel.hidden = !selected;
       }
-      $("reader-highlight").hidden = section !== "reader-content";
+
+    }
+
+    function showNotebook(open) {
+      $("reader-notebook").hidden = !open;
+      $("reader-dialog").setAttribute("data-notebook-open", String(open));
+      $("reader-notebook-toggle").setAttribute("aria-expanded", String(open));
+    }
+    $("reader-notebook-toggle").addEventListener("click", () => showNotebook($("reader-notebook").hidden));
+    $("reader-notebook-close").addEventListener("click", () => {
+      showNotebook(false);
+      $("reader-notebook-toggle").focus({ preventScroll: true });
+    });
+
+    function emptyReaderText() {
+      return safeURL(state.reading?.url)
+        ? "No article text was saved. Open the original page to read it."
+        : "No article text was saved. Open a saved file under Notes → Files.";
     }
 
     function closeViewer() {
@@ -70,12 +88,14 @@
       closeViewer();
       retryReaderID = null;
       $("reader-retry-open").hidden = true;
-      const scroll = recheck ? $("reader-dialog").scrollTop : 0;
+      const scroll = recheck ? $("reader-text-panel").scrollTop : 0;
       const request = ++state.readerRequest;
       annotationSession++;
       state.annotationDraft = null;
       if ($("annotation-dialog").open) $("annotation-dialog").close();
-      if (!recheck) { $("reader-options").open = false; activeSection = "reader-content"; }
+      if (!recheck) { $("reader-options").open = false; activeSection = "reader-notes-form"; showNotebook(false); }
+      $("reader-notebook-toggle").disabled = true;
+      $("reader-text-panel").scrollTop = 0;
       $("reader-dialog").scrollTop = 0;
       $("reader-text-panel").hidden = false;
       $("reader-highlight").hidden = false;
@@ -135,8 +155,8 @@
         $("reader-archive").hidden = !link.archiveAvailable;
         $("reader-archive").href = `/api/links/${id}/archive`;
         $("reader-archive").setAttribute("download", "");
-        $("reader-content").textContent = link.content || link.description || "No readable content captured yet. Visit the original page, or try refreshing the capture.";
-        $("reader-status").textContent = { ready: "Captured text", failed: `Capture failed. ${workspace.captureFailure(link.error)} Retry the capture, or attach a snapshot under Files.`, pending: "Capture queued. You can check its status here.", processing: "Capture in progress. You can check its status here." }[link.status] || "";
+        $("reader-content").textContent = link.content || emptyReaderText();
+        $("reader-status").textContent = { ready: link.content ? "Captured text" : "No readable capture", failed: `Capture failed. ${workspace.captureFailure(link.error)} Retry the capture, or attach a snapshot under Files.`, pending: "Capture queued. You can check its status here.", processing: "Capture in progress. You can check its status here." }[link.status] || "";
         $("reader-retry-capture").hidden = link.status !== "failed" || link.type === "file";
         $("reader-recheck").hidden = !["pending", "processing"].includes(link.status);
         const draft = drafts.get(draftKey(link));
@@ -145,11 +165,12 @@
         $("reader-capture").disabled = false;
         $("reader-edit").disabled = false;
         selectSection(activeSection);
+        $("reader-notebook-toggle").disabled = false;
         document.querySelectorAll("[data-highlight-selection]").forEach((button) => { button.disabled = !link.content; });
         const loaded = await Promise.allSettled([loadAnnotations(id, request), loadAssets(id, request)]);
         if (!isCurrent(request)) return;
         loaded.forEach((result, i) => { if (result.status === "rejected") readerSectionError(i ? "assets" : "annotations", result.reason); });
-        if (recheck) $("reader-dialog").scrollTop = scroll;
+        if (recheck) $("reader-text-panel").scrollTop = scroll;
       } catch (error) {
         if (!isCurrent(request)) return;
         $("reader-title").textContent = "Could not open this bookmark";
@@ -190,7 +211,7 @@
     sectionButtons.forEach((button, index) => {
       button.addEventListener("click", () => {
         selectSection(button.dataset.readerSection);
-        $("reader-dialog").scrollTop = 0;
+        showNotebook(true);
       });
       button.addEventListener("keydown", (event) => {
         let next;
@@ -275,8 +296,9 @@
         ? { id: active.dataset.annotationId, start: active.dataset.segmentStart } : null;
       let restoredMark = null;
       root.replaceChildren();
+      highlightAnchors.clear();
       if (!content) {
-        root.textContent = state.reading?.description || "No readable content captured yet.";
+        root.textContent = emptyReaderText();
         if (focusedMark) { root.tabIndex = -1; root.focus({ preventScroll: true }); }
         return;
       }
@@ -293,6 +315,7 @@
         const mark = el("mark", `highlight-${["yellow", "green", "blue", "pink"].includes(note.color) ? note.color : "yellow"}`, text);
         mark.dataset.annotationId = String(note.id);
         mark.dataset.segmentStart = String(start);
+        if (!highlightAnchors.has(note.id)) highlightAnchors.set(note.id, mark);
         if (focusedMark?.id === mark.dataset.annotationId && focusedMark.start === mark.dataset.segmentStart) restoredMark = mark;
         mark.title = note.note || "Saved highlight";
         mark.setAttribute("role", "button");
@@ -343,7 +366,21 @@
             await refreshAnnotationsAfterChange(id, request);
           } catch (error) { if (isCurrent(request)) { toast(error.message, true); remove.disabled = false; } }
         });
-        const actions = el("div", "reader-actions"); actions.append(edit, remove); row.append(actions);
+        const actions = el("div", "reader-actions");
+        actions.append(edit, remove);
+        const anchor = highlightAnchors.get(annotation.id);
+        if (anchor) {
+          const show = el("button", "text-button", "Show in text");
+          show.addEventListener("click", () => {
+            showNotebook(false);
+            $("reader-text-mode").click();
+            const currentAnchor = highlightAnchors.get(annotation.id);
+            currentAnchor?.focus({ preventScroll: true });
+            currentAnchor?.scrollIntoView({ block: "center", behavior: "auto" });
+          });
+          actions.append(show);
+        }
+        row.append(actions);
         $("annotation-list").append(row);
       }
       if (!state.annotations.length) $("annotation-list").append(el("p", "small muted", "No highlights yet."));
@@ -568,7 +605,7 @@
         if (asset.mediaType === "text/html" && asset.size <= 2 * 1024 * 1024) {
           const read = el("button", "text-button", "Read");
           read.setAttribute("aria-label", `Read ${asset.name}`);
-          read.addEventListener("click", () => { selectSection("reader-content"); sectionButtons[0].focus({ preventScroll: true }); $("reader-dialog").scrollTop = 0; readerLayoutURL = `/api/links/${id}/reader?asset=${asset.id}`; $("reader-layout-mode").disabled = false; $("reader-print").disabled = false; $("reader-layout-mode").click(); });
+          read.addEventListener("click", () => { showNotebook(false); $("reader-text-panel").focus({ preventScroll: true }); $("reader-text-panel").scrollTop = 0; readerLayoutURL = `/api/links/${id}/reader?asset=${asset.id}`; $("reader-layout-mode").disabled = false; $("reader-print").disabled = false; $("reader-layout-mode").click(); });
           row.append(read);
         }
         const remove = el("button", "text-button", "Delete");
