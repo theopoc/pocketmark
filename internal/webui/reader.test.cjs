@@ -81,7 +81,7 @@ function setup({ handler, head } = {}) {
     return handler ? handler(path, options, fallback) : fallback();
   }
   const reader = create({ api, drafts, toast: (...args) => notices.push(args), onEdit: value => edits.push(value), onChange: async () => changes.push(true), onSessionExpired: () => expired++ }, browser);
-  return { reader, get, document, browser, records, annotations, assets, calls, notices, edits, changes, headCalls, windows, drafts, expired: () => expired };
+  return { reader, get, sections, document, browser, records, annotations, assets, calls, notices, edits, changes, headCalls, windows, drafts, expired: () => expired };
 }
 
 test("opening a later bookmark ignores reversed document and section responses", async () => {
@@ -130,7 +130,8 @@ test("a failed reader opening can retry the same bookmark", async () => {
   await tick();
   assert.equal(env.get("reader-title").textContent, "Page 1");
   assert.equal(env.get("reader-retry-open").hidden, true);
-  for (const id of ["reader-section-nav", "reader-reading-bar", "annotations-section", "reader-files"]) assert.equal(env.get(id).hidden, false);
+  for (const id of ["reader-section-nav", "reader-reading-bar", "reader-text-panel"]) assert.equal(env.get(id).hidden, false);
+  for (const id of ["annotations-section", "reader-files", "reader-notes-form"]) assert.equal(env.get(id).hidden, true);
   assert.equal(env.calls.filter(call => call.path === "/api/links/1").length, 2);
 });
 
@@ -579,4 +580,55 @@ test("the shipped script order and worker cache include the reader without priva
     handlers.get("fetch")({ request: { method: "GET", url: `https://pocketmark.test${pathname}` }, respondWith() { intercepted = true; } });
     assert.equal(intercepted, false);
   }
+});
+
+
+test("reader tabs isolate sections, support keyboard navigation and preserve unsaved notes", async () => {
+  const env = setup();
+  await env.reader.open(1);
+  const panels = ["reader-text-panel", "annotations-section", "reader-files", "reader-notes-form"];
+  function selected(index) {
+    panels.forEach((id, i) => assert.equal(env.get(id).hidden, i !== index));
+    env.sections.forEach((tab, i) => {
+      assert.equal(tab.attributes["aria-selected"], String(i === index));
+      assert.equal(tab.tabIndex, i === index ? 0 : -1);
+    });
+  }
+  selected(0);
+  await fire(env.sections[0], "keydown", { key: "End" });
+  selected(3);
+  assert.equal(env.get("reader-highlight").hidden, true);
+  env.get("reader-notes").value = "Unfinished thought";
+  await fire(env.get("reader-notes"), "input");
+  await fire(env.sections[3], "keydown", { key: "ArrowRight" });
+  selected(0);
+  await fire(env.sections[0], "keydown", { key: "ArrowLeft" });
+  selected(3);
+  assert.equal(env.get("reader-notes").value, "Unfinished thought");
+  await env.reader.open(1, true);
+  selected(3);
+  await fire(env.sections[3], "keydown", { key: "Home" });
+  selected(0);
+  await fire(env.sections[0], "keydown", { key: "ArrowRight" });
+  selected(1);
+  await env.reader.open(2);
+  selected(0);
+  assert.equal(env.get("reader-highlight").hidden, false);
+});
+
+
+test("reading a saved HTML file reveals the text panel and focuses its tab", async () => {
+  const env = setup();
+  env.assets.set(1, [{ id: 8, name: "saved.html", mediaType: "text/html", size: 120 }]);
+  await env.reader.open(1);
+  env.sections[2].click();
+  const read = env.get("asset-list").children[0].children.find(node => node.textContent === "Read");
+  read.click();
+  await tick();
+  assert.equal(env.get("reader-text-panel").hidden, false);
+  assert.equal(env.get("reader-files").hidden, true);
+  assert.equal(env.sections[0].attributes["aria-selected"], "true");
+  assert.equal(env.sections[0].focused, true);
+  assert.equal(env.get("reader-layout").hidden, false);
+  assert.equal(env.get("reader-layout").src, "/api/links/1/reader?asset=8");
 });

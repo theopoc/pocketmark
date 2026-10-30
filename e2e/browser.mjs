@@ -542,11 +542,13 @@ try {
   await page.locator('#reader-retry-open').click();
   await page.locator('#reader-title').filter({ hasText: original }).waitFor();
   assert.equal(await page.locator('#reader-retry-open').isVisible(), false);
-  assert.equal(await page.locator('#reader-files').isVisible(), true);
+  assert.equal(await page.locator('#reader-files').isVisible(), false);
   await page.locator('#reader-options summary').click();
-  for (const selector of ['[data-reader-section="reader-content"]', '[data-reader-section="annotations-section"]', '#reader-text-mode', '#reader-size', '#asset-upload-button']) {
+  for (const selector of ['[data-reader-section="reader-content"]', '[data-reader-section="annotations-section"]', '#reader-text-mode', '#reader-size']) {
     assert.ok(await page.locator(selector).evaluate(node => node.getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
   }
+  await page.locator('#reader-tab-files').click();
+  assert.ok(await page.locator('#asset-upload-button').evaluate(node => node.getBoundingClientRect().height >= 44));
   const chooser = page.waitForEvent('filechooser');
   await page.locator('#asset-upload-button').click();
   await (await chooser).setFiles([]);
@@ -701,6 +703,7 @@ try {
   await page.route(previews, route => route.request().method() === 'GET'
     ? route.fulfill({ status: 422, contentType: 'application/json', body: '{"error":"Synthetic preparation failure"}' })
     : route.continue());
+  await page.locator('#reader-tab-files').click();
   await page.getByRole('button', { name: 'View capture.html', exact: true }).click();
   const viewer = page.locator('#asset-viewer');
   await viewer.waitFor({ state: 'visible' });

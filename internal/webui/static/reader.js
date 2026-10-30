@@ -16,6 +16,19 @@
     let layoutRequest = 0;
     let viewerRequest = 0;
     let retryReaderID = null;
+    let activeSection = "reader-content";
+    const sectionButtons = [...document.querySelectorAll("[data-reader-section]")];
+    function selectSection(section) {
+      activeSection = section;
+      for (const button of sectionButtons) {
+        const selected = button.dataset.readerSection === section;
+        button.setAttribute("aria-selected", String(selected));
+        button.tabIndex = selected ? 0 : -1;
+        const panel = $(button.dataset.readerSection === "reader-content" ? "reader-text-panel" : button.dataset.readerSection);
+        panel.hidden = !selected;
+      }
+      $("reader-highlight").hidden = section !== "reader-content";
+    }
 
     function closeViewer() {
       viewerRequest++;
@@ -62,7 +75,10 @@
       annotationSession++;
       state.annotationDraft = null;
       if ($("annotation-dialog").open) $("annotation-dialog").close();
-      if (!recheck) $("reader-options").open = false;
+      if (!recheck) { $("reader-options").open = false; activeSection = "reader-content"; }
+      $("reader-dialog").scrollTop = 0;
+      $("reader-text-panel").hidden = false;
+      $("reader-highlight").hidden = false;
       layoutRequest++;
       state.reading = null;
       readerAssets = []; readerLayoutURL = "";
@@ -128,7 +144,7 @@
         $("reader-notes-draft").hidden = !draft || draft.notes === (link.notes || "");
         $("reader-capture").disabled = false;
         $("reader-edit").disabled = false;
-        $("reader-notes-form").hidden = false;
+        selectSection(activeSection);
         document.querySelectorAll("[data-highlight-selection]").forEach((button) => { button.disabled = !link.content; });
         const loaded = await Promise.allSettled([loadAnnotations(id, request), loadAssets(id, request)]);
         if (!isCurrent(request)) return;
@@ -171,13 +187,23 @@
       $("reader-title").focus({ preventScroll: true });
       openReader(state.reading.id, true);
     });
-    document.querySelectorAll("[data-reader-section]").forEach((button) => button.addEventListener("click", () => {
-      const target = $(button.dataset.readerSection);
-      if (target.id === "reader-content" && target.hidden) $("reader-text-mode").click();
-      target.tabIndex = -1;
-      target.focus({ preventScroll: true });
-      target.scrollIntoView({ block: "start", behavior: browser.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
-    }));
+    sectionButtons.forEach((button, index) => {
+      button.addEventListener("click", () => {
+        selectSection(button.dataset.readerSection);
+        $("reader-dialog").scrollTop = 0;
+      });
+      button.addEventListener("keydown", (event) => {
+        let next;
+        if (event.key === "ArrowRight") next = (index + 1) % sectionButtons.length;
+        else if (event.key === "ArrowLeft") next = (index + sectionButtons.length - 1) % sectionButtons.length;
+        else if (event.key === "Home") next = 0;
+        else if (event.key === "End") next = sectionButtons.length - 1;
+        else return;
+        event.preventDefault();
+        sectionButtons[next].click();
+        sectionButtons[next].focus({ preventScroll: true });
+      });
+    });
     $("reader-notes").addEventListener("input", () => {
       if (!state.reading) return;
       const draft = drafts.get(draftKey(state.reading)) || editable(state.reading);
@@ -297,7 +323,8 @@
       $("annotation-list").replaceChildren();
       for (const annotation of state.annotations) {
         const row = el("article", "annotation-item");
-        row.append(el("blockquote", `highlight-${annotation.color}`, annotation.quote), el("p", "", annotation.note || "Highlight"));
+        row.append(el("blockquote", `highlight-${annotation.color}`, annotation.quote));
+        if (annotation.note) row.append(el("p", "annotation-note", annotation.note));
         if (annotation.stale) row.append(el("p", "small muted", "The captured text has changed. This highlight belongs to an earlier capture."));
         const edit = el("button", "text-button", "Edit note");
         edit.dataset.annotationEdit = String(annotation.id);
@@ -541,7 +568,7 @@
         if (asset.mediaType === "text/html" && asset.size <= 2 * 1024 * 1024) {
           const read = el("button", "text-button", "Read");
           read.setAttribute("aria-label", `Read ${asset.name}`);
-          read.addEventListener("click", () => { readerLayoutURL = `/api/links/${id}/reader?asset=${asset.id}`; $("reader-layout-mode").disabled = false; $("reader-print").disabled = false; $("reader-layout-mode").click(); });
+          read.addEventListener("click", () => { selectSection("reader-content"); sectionButtons[0].focus({ preventScroll: true }); $("reader-dialog").scrollTop = 0; readerLayoutURL = `/api/links/${id}/reader?asset=${asset.id}`; $("reader-layout-mode").disabled = false; $("reader-print").disabled = false; $("reader-layout-mode").click(); });
           row.append(read);
         }
         const remove = el("button", "text-button", "Delete");
