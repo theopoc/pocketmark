@@ -894,12 +894,16 @@
   function openEditor(link = null) {
     editorSession++;
     $("save-bookmark").disabled = false;
+    $("save-bookmark").textContent = "Save bookmark";
+    $("bookmark-save-status").hidden = true;
     state.editing = link;
     $("bookmark-form").reset();
     $("bookmark-error").textContent = "";
     $("bookmark-dialog-title").textContent = link ? "Edit bookmark" : "Add bookmark";
     $("bookmark-url").value = link?.url || "";
     const file = link?.type === "file";
+    $("bookmark-capture-option").hidden = file;
+    $("bookmark-save-html").disabled = file;
     $("bookmark-url").readOnly = file;
     $("bookmark-url").type = file ? "text" : "url";
     $("bookmark-title").value = link?.title || "";
@@ -919,7 +923,7 @@
   }
 
   function editorValues() {
-    return { url: $("bookmark-url").value, title: $("bookmark-title").value, description: $("bookmark-description").value, notes: $("bookmark-notes").value, collectionId: $("bookmark-collection").value ? Number($("bookmark-collection").value) : null, tags: [...new Set($("bookmark-tags").value.split(",").map((tag) => tag.trim()).filter(Boolean))], favorite: $("bookmark-favorite").checked, read: $("bookmark-read").checked };
+    return { url: $("bookmark-url").value, title: $("bookmark-title").value, description: $("bookmark-description").value, notes: $("bookmark-notes").value, collectionId: $("bookmark-collection").value ? Number($("bookmark-collection").value) : null, tags: [...new Set($("bookmark-tags").value.split(",").map((tag) => tag.trim()).filter(Boolean))], favorite: $("bookmark-favorite").checked, read: $("bookmark-read").checked, saveHTML: !$("bookmark-save-html").disabled && $("bookmark-save-html").checked };
   }
   function validateBookmarkFields() {
     const issues = workspace.bookmarkIssues({ ...editorValues(), type: state.editing?.type });
@@ -929,6 +933,7 @@
     return issues;
   }
   function fillEditor(value) {
+    $("bookmark-save-html").checked = !!value.saveHTML;
     for (const field of ["url", "title", "description", "notes"]) $("bookmark-" + field).value = value[field] || "";
     tagPickers.get("bookmark-tags").set(value.tags || []);
     fillCollections($("bookmark-collection"), value.collectionId);
@@ -1078,26 +1083,46 @@
     if (Object.keys(validateBookmarkFields()).length) { $("bookmark-form").reportValidity(); return; }
     const button = event.submitter;
     const session = editorSession, editing = state.editing, key = draftKey(editing), submitted = editorValues();
+    if (button.disabled) return;
     button.disabled = true;
+    button.textContent = submitted.saveHTML ? "Saving bookmark & HTML…" : "Saving bookmark…";
+    $("bookmark-save-status").hidden = !submitted.saveHTML;
+    $("bookmark-save-status").textContent = "Saving the bookmark and its HTML copy. This can take up to 45 seconds.";
     $("bookmark-error").textContent = "";
     const body = { url: $("bookmark-url").value.trim(), title: $("bookmark-title").value.trim(), description: $("bookmark-description").value.trim(), notes: $("bookmark-notes").value, collectionId: $("bookmark-collection").value ? Number($("bookmark-collection").value) : null, tags: [...new Set($("bookmark-tags").value.split(",").map((tag) => tag.trim()).filter(Boolean))], favorite: $("bookmark-favorite").checked, read: $("bookmark-read").checked };
     try {
       if (state.editing?.type !== "file" && !safeURL(body.url)) throw new Error("Please enter a complete http:// or https:// URL.");
-      await api(state.editing ? `/api/links/${state.editing.id}` : "/api/links", { method: state.editing ? "PUT" : "POST", body: JSON.stringify(body) });
+      const result = await workspace.saveBookmark(api, editing, body, submitted.saveHTML);
+      const baseline = { ...body, saveHTML: submitted.saveHTML };
       const active = session === editorSession && $("bookmark-dialog").open;
       const latest = active ? editorValues() : drafts.get(key);
       const newer = latest && JSON.stringify(latest) !== JSON.stringify(submitted);
-      if (newer) drafts.put(key, latest, body); else drafts.delete(key);
+      if (newer && active && !editing) {
+        drafts.delete(key);
+        state.editing = result.link;
+        $("bookmark-dialog-title").textContent = "Edit bookmark";
+        drafts.put(draftKey(result.link), latest, baseline);
+      } else if (newer) drafts.put(key, latest, baseline); else drafts.delete(key);
       if (active) {
-        editorBaseline = body;
+        editorBaseline = baseline;
         $("bookmark-draft").hidden = !newer;
         if (!newer) $("bookmark-dialog").close();
       }
-      toast(newer ? "Saved. Your newer edits remain a draft." : editing ? "Bookmark updated." : "Bookmark saved.");
+      if (result.captureError) htmlCaptureFailed(result.link.id, result.captureError);
+      else toast(newer ? "Saved. Your newer edits remain a draft." : result.capture ? `Bookmark and HTML copy saved.${result.capture.omitted ? ` ${result.capture.omitted} resource${result.capture.omitted === 1 ? "" : "s"} could not be included.` : ""}` : editing ? "Bookmark updated." : "Bookmark saved.");
       await refresh();
     } catch (error) { if (session === editorSession) $("bookmark-error").textContent = error.message; else toast(error.message, true); }
-    finally { if (session === editorSession) button.disabled = false; }
+    finally { if (session === editorSession) { button.disabled = false; button.textContent = "Save bookmark"; $("bookmark-save-status").hidden = true; } }
   });
+
+  function htmlCaptureFailed(id, error) {
+    toast(`Bookmark saved. The HTML copy could not be saved. ${error.message}`, true, { label: "Retry HTML", run: async () => {
+      try {
+        const result = await api(`/api/links/${id}/preserve`, { method: "POST" });
+        toast(`HTML copy saved.${result.omitted ? ` ${result.omitted} resource${result.omitted === 1 ? "" : "s"} could not be included.` : ""}`);
+      } catch (failure) { htmlCaptureFailed(id, failure); }
+    } });
+  }
 
   $("add-collection").addEventListener("click", () => {
     openCollectionEditor();

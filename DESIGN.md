@@ -201,9 +201,12 @@ Bookmark, reader-note and annotation drafts stay in the current tab. A bounded s
 
 Mobile bookmark actions retain a named Favorite control and disclose the other labeled commands under Actions. Quick favorite/read changes confirm with an Undo action; feedback appears inside any active native dialog so its message is visible and announced. Search-only excerpts highlight matches and display decoded tag names. Near-match scope is visible beside its checkbox: titles, URLs, descriptions and tags only. Task-based Help is searchable from the navigation.
 
-The reader keeps a compact close/highlight header and section shortcuts visible while scrolling. Formatted and printable views require a suitable HTML capture or attachment; unavailable modes explain the next step. Text size and highlighting follow the active mode. Highlights and saved-file loading errors remain local to their sections. On phones, row action targets are 44px and a 44px letter picker complements the A–Z rail.
+The reader keeps a compact close/highlight header and section shortcuts visible while scrolling. Formatted views require a suitable HTML capture or attachment; unavailable modes explain the next step. Text size and highlighting follow the active mode. Highlights and saved-file loading errors remain local to their sections. On phones, row action targets are 44px and a 44px letter picker complements the A–Z rail.
 
 ### Reader and dialogs
+
+The bookmark editor offers an unchecked **Save an HTML copy** option for website bookmarks. Capture starts after metadata is saved, reports partial failure without undoing the bookmark, and offers a capture-only retry. Standalone files hide this option. Saved files in the reader focus on attachments and previews; PDF capture stays in the Chrome extension.
+
 Dialogs use theme-matched panels, a dimmed backdrop, labeled headings and separated footer actions. The reader widens to (920px), uses the reader type role and a generous text measure, with highlights, assets and notes below its tools. Highlight colors describe user annotations rather than application status. On phones, the reader becomes an edge-to-edge reading surface.
 
 ## Do's and Don'ts

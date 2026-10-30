@@ -133,6 +133,8 @@
       <div class="form-columns bookmark-organization"><div><label for="bookmark-collection">Collection</label><select id="bookmark-collection"></select></div><div><label for="bookmark-tags">Tags</label><input id="bookmark-tags" placeholder="Choose or create tags" autocomplete="off" spellcheck="false"><p id="bookmark-tags-hint" class="field-hint">Choose a tag or type a new one, then press Enter. Use commas to add several.</p></div></div>
       <label for="bookmark-notes">Personal notes</label><textarea id="bookmark-notes" rows="3" placeholder="Your thoughts, in your words…"></textarea>
       <div class="checkbox-row"><label><input id="bookmark-favorite" type="checkbox"> Favorite</label><label><input id="bookmark-read" type="checkbox"> Already read</label></div>
+      <div id="bookmark-capture-option" class="bookmark-capture-option"><label><input id="bookmark-save-html" type="checkbox" aria-describedby="bookmark-html-hint"><span>Save an HTML copy</span></label><p id="bookmark-html-hint" class="field-hint">Keep an offline copy with images and styles when available. Interactive content is not saved.</p></div>
+      <p id="bookmark-save-status" class="small muted" role="status" hidden></p>
       <div id="bookmark-draft" class="draft-notice" hidden><span>Draft kept in this tab. Save it before closing the tab.</span><button id="discard-bookmark-draft" type="button" class="text-button">Discard draft</button></div>
       <p id="bookmark-error" class="form-error" role="alert"></p>
       <div class="dialog-actions"><button type="button" class="button subtle close-dialog">Cancel</button><button type="submit" class="button primary" id="save-bookmark">Save bookmark</button></div>
@@ -147,16 +149,6 @@
   </section>
   <section id="reader-files" class="reader-assets" aria-labelledby="saved-files-title">
     <div class="section-heading"><h3 id="saved-files-title">Saved files</h3><button id="asset-upload-button" type="button" class="button subtle">Attach a saved file</button></div>
-    <div class="capture-tools">
-      <details id="reader-pdf" class="pdf-capture">
-        <summary>Capture a PDF</summary>
-        <div class="pdf-instructions">
-          <div id="pdf-extension-guide"><h4>From the original page</h4><p>Open the page in Chrome, then open the Pocketmark extension. Under <strong>Attach captures</strong>, select <strong>PDF</strong> and save. Reopen this bookmark to see the uploaded PDF.</p><a id="pdf-original" class="button subtle" target="_blank" rel="noopener noreferrer">Open original page <span data-icon="external" aria-hidden="true"></span></a></div>
-          <div><h4>From the saved snapshot</h4><p>Open the printable view, use your browser’s <strong>Print → Save as PDF</strong>, then attach the file here.</p><button id="reader-print" type="button" class="button subtle" aria-describedby="reader-pdf-hint" disabled>Open printable view</button><p id="reader-pdf-hint" class="small muted" role="status"></p></div>
-        </div>
-      </details>
-      <div id="html-capture" class="html-capture"><button id="preserve-page" type="button" class="button subtle">Save HTML with resources</button><span class="small muted">An offline copy with images and styles.</span></div>
-    </div>
     <p class="small muted file-types-hint">Attach PDF, image or HTML / SingleFile files · Up to 20 MiB each.</p>
     <p id="assets-error" class="form-error" role="alert" hidden></p><button id="assets-retry" type="button" class="text-button" hidden>Retry saved files</button>
     <input id="asset-file" type="file" accept="application/pdf,image/png,image/jpeg,image/gif,image/webp,text/html,.html,.htm" hidden><div id="asset-list"></div>

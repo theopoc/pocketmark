@@ -348,7 +348,6 @@ test("reader edits return the selected record and standalone files hide network 
   await env.reader.open(1);
   assert.equal(env.get("reader-original").hidden, true);
   assert.equal(env.get("reader-capture").hidden, true);
-  assert.equal(env.get("preserve-page").hidden, true);
   await fire(env.get("reader-edit"), "click");
   assert.equal(env.edits[0].id, 1);
   assert.equal(env.get("reader-dialog").open, false);
@@ -534,13 +533,13 @@ test("an old file upload cannot release another document's active upload control
   assert.equal(env.calls.filter(call => call.path === "/api/links/1/assets").length, 1);
 });
 
-for (const action of ["upload", "preserve", "delete"]) test(`${action} remains successful when refreshing saved files fails`, async () => {
+for (const action of ["upload", "delete"]) test(`${action} remains successful when refreshing saved files fails`, async () => {
   let failRefresh = false;
   const env = setup({ handler: (path, options, fallback) => {
     if (path === "/api/links/1/assets" && failRefresh) throw Error("Files unavailable");
     if (options.method === "POST" || options.method === "DELETE") {
       failRefresh = true;
-      return action === "preserve" ? { embedded: 2, omitted: 0 } : { id: 8 };
+      return { id: 8 };
     }
     return fallback();
   } });
@@ -549,9 +548,8 @@ for (const action of ["upload", "preserve", "delete"]) test(`${action} remains s
   if (action === "upload") {
     env.get("asset-file").files = [{ name: "new.pdf", size: 32, type: "application/pdf" }];
     await fire(env.get("asset-file"), "change");
-  } else if (action === "preserve") await fire(env.get("preserve-page"), "click");
-  else await fire(env.get("asset-list").children[0].children.find(node => node.textContent === "Delete"), "click");
-  assert.match(env.notices.at(-1)[0], action === "delete" ? /File deleted/ : action === "preserve" ? /Page saved/ : /File saved/);
+  } else await fire(env.get("asset-list").children[0].children.find(node => node.textContent === "Delete"), "click");
+  assert.match(env.notices.at(-1)[0], action === "delete" ? /File deleted/ : /File saved/);
   assert.notEqual(env.notices.at(-1)[1], true);
   assert.equal(env.get("asset-list").children.length, 0);
   assert.equal(env.get("assets-retry").hidden, false);
@@ -561,31 +559,6 @@ for (const action of ["upload", "preserve", "delete"]) test(`${action} remains s
   assert.equal(env.get("assets-error").hidden, true);
   assert.equal(env.get("assets-retry").hidden, true);
   assert.match(env.get("asset-list").textContent, /old.pdf/);
-});
-
-test("PDF capture guides keep printable availability and the original page scoped to the current bookmark", async () => {
-  const env = setup();
-  env.records.set(1, link(1, { archiveAvailable: true }));
-  await env.reader.open(1);
-  assert.equal(env.get("pdf-original").href, "https://example.com/1");
-  assert.equal(env.get("pdf-extension-guide").hidden, false);
-  assert.equal(env.get("reader-print").disabled, false);
-  await fire(env.get("reader-print"), "click");
-  assert.deepEqual(env.windows, [["/api/links/1/reader", "_blank", "noopener,noreferrer"]]);
-  assert.match(env.notices.at(-1)[0], /Save as PDF/);
-  env.get("reader-pdf").open = true;
-  await env.reader.open(1, { recheck: true });
-  assert.equal(env.get("reader-pdf").open, true);
-  await env.reader.open(2);
-  assert.equal(env.get("reader-pdf").open, false);
-  assert.equal(env.get("reader-print").disabled, true);
-  assert.match(env.get("reader-pdf-hint").textContent, /No printable HTML/);
-  await fire(env.get("reader-print"), "click");
-  assert.equal(env.windows.length, 1);
-  env.records.set(2, link(2, { type: "file", url: "", content: "" }));
-  await env.reader.open(2);
-  assert.equal(env.get("pdf-extension-guide").hidden, true);
-  assert.equal(env.get("html-capture").hidden, true);
 });
 
 test("the shipped script order and worker cache include the reader without private data", () => {
