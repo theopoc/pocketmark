@@ -1026,6 +1026,11 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   $("mfa-login-download").addEventListener("click", () => downloadRecoveryCodes($("mfa-login-codes-value")));
+  $("mfa-secret-copy").addEventListener("click", async () => {
+    $("login-error").textContent = "";
+    try { await navigator.clipboard.writeText($("mfa-secret").value); toast("Setup key copied."); }
+    catch { $("mfa-secret").select(); $("login-error").textContent = "Select and copy the setup key shown above."; }
+  });
   $("mfa-login-copy").addEventListener("click", async () => {
     try { await navigator.clipboard.writeText($("mfa-login-codes-value").textContent); toast("Recovery codes copied."); }
     catch { $("login-error").textContent = "Select and copy the recovery codes shown above."; }
@@ -1563,6 +1568,11 @@
     $("mfa-manage-error").textContent = ""; $("mfa-manage-password").focus();
   });
   $("mfa-manage-download").addEventListener("click", () => downloadRecoveryCodes($("mfa-manage-codes-value")));
+  $("mfa-manage-secret-copy").addEventListener("click", async () => {
+    $("mfa-manage-error").textContent = $("mfa-manage-feedback").textContent = "";
+    try { await navigator.clipboard.writeText($("mfa-manage-secret").value); $("mfa-manage-feedback").textContent = "Setup key copied."; }
+    catch { $("mfa-manage-secret").select(); $("mfa-manage-error").textContent = "Select and copy the setup key shown above."; }
+  });
   $("mfa-manage-copy").addEventListener("click", async () => {
     try { await navigator.clipboard.writeText($("mfa-manage-codes-value").textContent); $("mfa-manage-feedback").textContent = "Recovery codes copied."; }
     catch { $("mfa-manage-error").textContent = "Select and copy the recovery codes shown above."; }
