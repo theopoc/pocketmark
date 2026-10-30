@@ -92,6 +92,8 @@ make test
 make test-extension
 ```
 
+During development, enable auto-merge for the pull request so it merges into `main` once all required CI checks, including `CI passed`, have succeeded.
+
 ## Documentation
 
 - [User guide](docs/GUIDE.md) — configuration, migration and full backups.
