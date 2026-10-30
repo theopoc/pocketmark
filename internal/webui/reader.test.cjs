@@ -81,7 +81,7 @@ function setup({ handler, head } = {}) {
     return handler ? handler(path, options, fallback) : fallback();
   }
   const reader = create({ api, drafts, toast: (...args) => notices.push(args), onEdit: value => edits.push(value), onChange: async () => changes.push(true), onSessionExpired: () => expired++ }, browser);
-  return { reader, get, document, browser, records, annotations, assets, calls, notices, edits, changes, headCalls, windows, drafts, expired: () => expired };
+  return { reader, get, sections, document, browser, records, annotations, assets, calls, notices, edits, changes, headCalls, windows, drafts, expired: () => expired };
 }
 
 test("opening a later bookmark ignores reversed document and section responses", async () => {
@@ -130,7 +130,8 @@ test("a failed reader opening can retry the same bookmark", async () => {
   await tick();
   assert.equal(env.get("reader-title").textContent, "Page 1");
   assert.equal(env.get("reader-retry-open").hidden, true);
-  for (const id of ["reader-section-nav", "reader-reading-bar", "annotations-section", "reader-files"]) assert.equal(env.get(id).hidden, false);
+  for (const id of ["reader-section-nav", "reader-reading-bar", "reader-text-panel"]) assert.equal(env.get(id).hidden, false);
+  for (const id of ["annotations-section", "reader-files", "reader-notebook"]) assert.equal(env.get(id).hidden, true);
   assert.equal(env.calls.filter(call => call.path === "/api/links/1").length, 2);
 });
 
@@ -577,4 +578,93 @@ test("the shipped script order and worker cache include the reader without priva
     handlers.get("fetch")({ request: { method: "GET", url: `https://pocketmark.test${pathname}` }, respondWith() { intercepted = true; } });
     assert.equal(intercepted, false);
   }
+});
+
+
+test("the article opens directly; optional notebook navigation preserves reading and notes", async () => {
+  const env = setup();
+  await env.reader.open(1);
+  assert.equal(env.get("reader-notebook").hidden, true);
+  assert.equal(env.get("reader-original").href, "https://example.com/1");
+  assert.equal(env.get("reader-original").hidden, false);
+  env.get("reader-text-panel").scrollTop = 350;
+  env.get("reader-notebook-toggle").click();
+  assert.equal(env.get("reader-notebook").hidden, false);
+  const panels = ["reader-notes-form", "annotations-section", "reader-files"];
+  function selected(index) {
+    assert.equal(env.get("reader-text-panel").hidden, false);
+    assert.equal(env.get("reader-original").hidden, false);
+    panels.forEach((id, i) => assert.equal(env.get(id).hidden, i !== index));
+    env.sections.forEach((tab, i) => {
+      assert.equal(tab.attributes["aria-selected"], String(i === index));
+      assert.equal(tab.tabIndex, i === index ? 0 : -1);
+    });
+  }
+  selected(0);
+  env.get("reader-notes").value = "Unfinished thought";
+  await fire(env.get("reader-notes"), "input");
+  await fire(env.sections[0], "keydown", { key: "End" }); selected(2);
+  await fire(env.sections[2], "keydown", { key: "ArrowRight" }); selected(0);
+  await fire(env.sections[0], "keydown", { key: "ArrowLeft" }); selected(2);
+  await fire(env.sections[2], "keydown", { key: "Home" }); selected(0);
+  await fire(env.sections[0], "keydown", { key: "ArrowRight" }); selected(1);
+  env.get("reader-notebook-close").click();
+  assert.equal(env.get("reader-notebook").hidden, true);
+  assert.equal(env.get("reader-text-panel").scrollTop, 350);
+  assert.equal(env.get("reader-notes").value, "Unfinished thought");
+  assert.equal(env.get("reader-notebook-toggle").focused, true);
+  env.get("reader-notebook-toggle").click();
+  await env.reader.open(1, true);
+  assert.equal(env.get("reader-notebook").hidden, false);
+  selected(1);
+  assert.equal(env.get("reader-text-panel").scrollTop, 350);
+  await env.reader.open(2);
+  assert.equal(env.get("reader-notebook").hidden, true);
+  selected(0);
+});
+
+test("reading a saved HTML file closes the notebook and focuses the article", async () => {
+  const env = setup();
+  env.assets.set(1, [{ id: 8, name: "saved.html", mediaType: "text/html", size: 120 }]);
+  await env.reader.open(1);
+  env.sections[2].click();
+  const read = env.get("asset-list").children[0].children.find(node => node.textContent === "Read");
+  read.click();
+  await tick();
+  assert.equal(env.get("reader-text-panel").hidden, false);
+  assert.equal(env.get("reader-notebook").hidden, true);
+  assert.equal(env.get("reader-text-panel").focused, true);
+  assert.equal(env.get("reader-layout").hidden, false);
+  assert.equal(env.get("reader-layout").src, "/api/links/1/reader?asset=8");
+});
+
+
+test("an empty or failed capture keeps a direct original link and distinguishes absent article text", async () => {
+  const env = setup();
+  env.records.set(1, link(1, { content: "", description: "Only a bookmark summary", status: "failed" }));
+  await env.reader.open(1);
+  assert.match(env.get("reader-content").textContent, /No article text was saved/);
+  assert.doesNotMatch(env.get("reader-content").textContent, /Only a bookmark summary/);
+  assert.equal(env.get("reader-original").href, "https://example.com/1");
+  assert.equal(env.get("reader-original").hidden, false);
+  assert.equal(env.get("reader-notebook").hidden, true);
+});
+
+test("show in text restores an anchored passage without losing the article position in a notebook switch", async () => {
+  const env = setup();
+  env.annotations.set(1, [
+    { id: 11, quote: "Text", start: 0, end: 4, note: "Remember this", color: "yellow" },
+    { id: 12, quote: "Old", start: 0, end: 3, color: "blue", stale: true },
+  ]);
+  await env.reader.open(1);
+  env.sections[1].click();
+  const rows = env.get("annotation-list").children;
+  const show = rows[0].children.at(-1).children.find(node => node.textContent === "Show in text");
+  assert.ok(show);
+  assert.equal(rows[1].children.at(-1).children.some(node => node.textContent === "Show in text"), false);
+  show.click();
+  const mark = env.get("reader-content").children[0];
+  assert.equal(mark.focused, true);
+  assert.equal(mark.scrollOptions.block, "center");
+  assert.equal(env.get("reader-notebook").hidden, true);
 });
