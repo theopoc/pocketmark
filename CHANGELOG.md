@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0](https://github.com/theopoc/pocketmark/compare/v1.0.0...v1.1.0) (2026-10-30)
+
+
+### Features
+
+* **web:** improve library and reader usability ([#58](https://github.com/theopoc/pocketmark/issues/58)) ([b1c64c4](https://github.com/theopoc/pocketmark/commit/b1c64c4c06479595de24d053684cf3142b448281))
+
+
+### Bug Fixes
+
+* **web:** make importing visible in empty library ([#57](https://github.com/theopoc/pocketmark/issues/57)) ([f920b66](https://github.com/theopoc/pocketmark/commit/f920b66fd148e8753bf51ce2d0687eff4b66e97f))
+
 ## [1.0.0](https://github.com/theopoc/pocketmark/compare/v0.3.1...v1.0.0) (2026-10-28)
 
 
