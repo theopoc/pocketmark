@@ -146,8 +146,18 @@
     return { url: link.url, title: link.title || "", description: link.description || "", notes: link.notes || "", collectionId: link.collectionId ?? null, tags: link.tags || [], favorite: !!link.favorite, read: !!link.read };
   }
 
+  async function saveBookmark(api, editing, fields, saveHTML = false) {
+    const link = await api(editing ? `/api/links/${editing.id}` : "/api/links", { method: editing ? "PUT" : "POST", body: JSON.stringify(fields) });
+    let capture = null, captureError = null;
+    if (saveHTML && link.type !== "file") {
+      try { capture = await api(`/api/links/${link.id}/preserve`, { method: "POST" }); }
+      catch (error) { captureError = error; }
+    }
+    return { link, capture, captureError };
+  }
+
   function bookmarkDraftKey(link) { return `bookmark:${link?.id || "new"}`; }
-  const workspace = { editableBookmark, bookmarkDraftKey, safeURL, domain, readRoute, routeSearch, createDrafts, readerSnapshot, tagValues, searchExcerpt, captureFailure, bookmarkIssues, requestFailure };
+  const workspace = { saveBookmark, editableBookmark, bookmarkDraftKey, safeURL, domain, readRoute, routeSearch, createDrafts, readerSnapshot, tagValues, searchExcerpt, captureFailure, bookmarkIssues, requestFailure };
   if (typeof module !== "undefined" && module.exports) module.exports = workspace;
   else root.PocketmarkWorkspace = workspace;
 })(globalThis);

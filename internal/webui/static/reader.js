@@ -112,7 +112,6 @@
       $("reader-layout").removeAttribute("src");
       $("reader-layout-mode").setAttribute("aria-pressed", "false");
       $("reader-layout-mode").disabled = true;
-      $("reader-print").disabled = true;
       $("reader-size").disabled = false;
       document.querySelectorAll("[data-highlight-selection]").forEach((button) => { button.disabled = true; });
       $("reader-text-mode").setAttribute("aria-pressed", "true");
@@ -130,7 +129,6 @@
       $("asset-file").disabled = false;
       $("asset-upload-button").removeAttribute("aria-disabled");
       $("asset-upload-button").textContent = "Attach a saved file";
-      $("preserve-page").disabled = false;
       $("reader-notes-form").querySelector("button[type=submit]").disabled = false;
       $("reader-error").textContent = "";
       $("reader-original").hidden = true;
@@ -148,7 +146,6 @@
         $("reader-title").textContent = link.title || link.url;
         $("reader-domain").textContent = link.type === "file" ? "Saved file" : domain(link.url);
         $("reader-capture").hidden = link.type === "file";
-        $("preserve-page").hidden = link.type === "file";
         const url = safeURL(link.url);
         $("reader-original").hidden = !url;
         if (url) $("reader-original").href = url;
@@ -192,7 +189,9 @@
     function readerSectionError(section, error) {
       $(section + "-error").textContent = `Could not load ${section === "assets" ? "saved files" : "highlights"}. ${error.message}`;
       $(section + "-error").hidden = false; $(section + "-retry").hidden = false;
-      if (section === "assets") $("reader-mode-hint").textContent = "Could not check saved HTML. Retry saved files below; text view remains available.";
+      if (section === "assets") {
+        $("reader-mode-hint").textContent = "Could not check saved HTML. Retry saved files below; text view remains available.";
+      }
     }
     for (const section of ["annotations", "assets"]) $(section + "-retry").addEventListener("click", async () => {
       if (!state.reading) return;
@@ -383,7 +382,7 @@
         row.append(actions);
         $("annotation-list").append(row);
       }
-      if (!state.annotations.length) $("annotation-list").append(el("p", "small muted", "No highlights yet."));
+      if (!state.annotations.length) $("annotation-list").append(el("p", "reader-section-empty muted", "No highlights yet. Select a passage in the text reader, then choose Highlight. Highlights stay with the captured version."));
       if (focusedEdit) {
         if (restoredEdit) restoredEdit.focus({ preventScroll: true });
         else { $("annotations-section").tabIndex = -1; $("annotations-section").focus({ preventScroll: true }); }
@@ -479,7 +478,7 @@
       if (!state.reading) return;
       const snapshot = workspace.readerSnapshot(state.reading, readerAssets);
       readerLayoutURL = snapshot.url;
-      $("reader-layout-mode").disabled = !snapshot.url; $("reader-print").disabled = !snapshot.url;
+      $("reader-layout-mode").disabled = !snapshot.url;
       $("reader-mode-hint").textContent = snapshot.message;
       if (!snapshot.url) readerMode(false);
     }
@@ -501,12 +500,6 @@
       } finally { if (request === layoutRequest && isCurrent(readingRequest) && url === readerLayoutURL) $("reader-layout-mode").disabled = !readerLayoutURL; }
     });
     $("reader-text-mode").addEventListener("click", () => { layoutRequest++; readerMode(false); readerAvailability(); });
-    $("reader-print").addEventListener("click", () => {
-      if (!readerLayoutURL) return;
-      window.open(readerLayoutURL, "_blank", "noopener,noreferrer");
-      toast("Use your browser’s Print command, then Save as PDF. Upload the PDF below to keep it here.");
-    });
-
     const previewable = (asset) => ["text/html", "application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp"].includes(asset.mediaType);
     $("asset-viewer-close").addEventListener("click", closeViewer);
     $("asset-viewer").addEventListener("close", () => { if (!$("asset-viewer").open) closeViewer(); });
@@ -605,7 +598,8 @@
         if (asset.mediaType === "text/html" && asset.size <= 2 * 1024 * 1024) {
           const read = el("button", "text-button", "Read");
           read.setAttribute("aria-label", `Read ${asset.name}`);
-          read.addEventListener("click", () => { showNotebook(false); $("reader-text-panel").focus({ preventScroll: true }); $("reader-text-panel").scrollTop = 0; readerLayoutURL = `/api/links/${id}/reader?asset=${asset.id}`; $("reader-layout-mode").disabled = false; $("reader-print").disabled = false; $("reader-layout-mode").click(); });
+          read.addEventListener("click", () => { showNotebook(false); $("reader-text-panel").focus({ preventScroll: true }); $("reader-text-panel").scrollTop = 0; readerLayoutURL = `/api/links/${id}/reader?asset=${asset.id}`; $("reader-layout-mode").disabled = false; $("reader-layout-mode").click(); });
+
           row.append(read);
         }
         const remove = el("button", "text-button", "Delete");
@@ -621,7 +615,7 @@
         });
         row.append(remove); $("asset-list").append(row);
       }
-      if (!assets?.length) $("asset-list").append(el("p", "small muted", "No additional files saved."));
+      if (!assets?.length) $("asset-list").append(el("p", "reader-section-empty muted", state.reading.type === "file" ? "No saved files yet. Attach a file to keep it with this bookmark." : "No saved files yet. Attach a file or choose an HTML copy when adding or editing this bookmark."));
     }
 
     $("asset-upload-button").addEventListener("click", () => { if (!$("asset-file").disabled) $("asset-file").click(); });
@@ -639,17 +633,6 @@
         await refreshAssetsAfterChange(id, request);
       } catch (error) { if (isCurrent(request)) toast(error.message, true); } finally { if (isCurrent(request)) { $("asset-file").value = ""; $("asset-file").disabled = false; $("asset-upload-button").removeAttribute("aria-disabled"); $("asset-upload-button").textContent = "Attach a saved file"; } }
     });
-    $("preserve-page").addEventListener("click", async () => {
-      if (!state.reading) return;
-      const id = state.reading.id, request = state.readerRequest;
-      $("preserve-page").disabled = true;
-      try {
-        const result = await api(`/api/links/${id}/preserve`, { method: "POST" });
-        if (isCurrent(request)) toast(`Page saved with ${result.embedded || 0} resources.${result.omitted ? ` ${result.omitted} resources could not be embedded.` : ""}`);
-        await refreshAssetsAfterChange(id, request);
-      } catch (error) { if (isCurrent(request)) toast(error.message, true); } finally { if (isCurrent(request)) $("preserve-page").disabled = false; }
-    });
-
     return { open: openReader, close };
   }
   if (typeof module !== "undefined" && module.exports) module.exports = { create };

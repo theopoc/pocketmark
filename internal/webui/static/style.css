@@ -337,6 +337,15 @@ body:has(dialog[open]) { overflow: hidden; }
 .annotation-item .reader-actions button:last-child { color: var(--muted); }
 .asset-item { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
 .asset-item > a, .asset-item > span:first-child { flex: 1; min-width: 100px; overflow-wrap: anywhere; }
+.reader-section-empty { margin: 0; padding: 8px 0 16px; font-size: 13px; max-width: 70ch; }
+.file-types-hint { margin: 0 0 4px; }
+.bookmark-capture-option { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.bookmark-capture-option label { display: flex; align-items: center; gap: 8px; margin: 0; cursor: pointer; }
+.bookmark-capture-option input { width: 16px; height: 16px; margin: 0; flex-shrink: 0; }
+.bookmark-capture-option .field-hint { margin: 4px 0 0 24px; }
+@media (max-width: 600px) {
+  .bookmark-capture-option label { min-height: 44px; }
+}
 .asset-viewer { width: min(1200px, 96vw); max-width: 96vw; }
 .asset-viewer-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .asset-viewer-toolbar select { flex: 1; min-width: 120px; width: auto; }
