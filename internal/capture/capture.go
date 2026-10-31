@@ -33,6 +33,7 @@ const (
 type Result struct {
 	Title, Description, Content string
 	HTML                        []byte
+	Thumbnail                   []byte
 }
 
 // Fetch captures a single document. HTML is untrusted and must never be served
@@ -196,6 +197,7 @@ func fetch(ctx context.Context, rawURL string, client *http.Client) (Result, err
 		return Result{}, err
 	}
 	result.HTML = body
+	result.Thumbnail = thumbnail(ctx, body, resp.Request.URL, client)
 	return result, nil
 }
 

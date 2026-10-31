@@ -30,6 +30,7 @@ type Store struct {
 	path      string
 }
 type Link struct {
+	HasThumbnail     bool     `json:"hasThumbnail,omitempty"`
 	ID               int64    `json:"id"`
 	Type             string   `json:"type"`
 	URL              string   `json:"url"`
@@ -285,14 +286,16 @@ func (s *Store) List(ctx context.Context, f Filter) (Page, error) {
 		snippet = ",(SELECT substr(snippet(links_fts,-1,char(30),char(31),'…',24),1,600) FROM links_fts WHERE rowid=l.id AND links_fts MATCH ?)"
 		args = append([]any{ftsQuery}, args...)
 	}
-	rows, err := s.db.QueryContext(ctx, "SELECT "+columns+snippet+" FROM links l"+where+" ORDER BY "+order+" LIMIT ? OFFSET ?", args...)
+	rows, err := s.db.QueryContext(ctx, "SELECT "+columns+snippet+",EXISTS(SELECT 1 FROM thumbnails t WHERE t.link_id=l.id) FROM links l"+where+" ORDER BY "+order+" LIMIT ? OFFSET ?", args...)
 	if err != nil {
 		return p, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var excerpt string
-		l, err := scan(rows, false, &excerpt)
+		var hasThumbnail bool
+		l, err := scan(rows, false, &excerpt, &hasThumbnail)
+		l.HasThumbnail = hasThumbnail
 		if err != nil {
 			return p, err
 		}
@@ -343,11 +346,36 @@ func (s *Store) Next(ctx context.Context) (Link, error) {
 	// The service runs exactly one worker. This atomic claim also guards accidental second workers.
 	return scan(s.db.QueryRowContext(ctx, `UPDATE links SET status='processing' WHERE id=(SELECT id FROM links WHERE status='pending' AND url NOT LIKE 'pocketmark-file:%' ORDER BY id LIMIT 1) RETURNING id,url,title,description,notes,collection_id,tags,favorite,read,status,error,archive IS NOT NULL,created_at,updated_at`), false)
 }
-func (s *Store) Finish(ctx context.Context, l Link, title, description, content string, archive []byte, fetchErr error) error {
+func (s *Store) Finish(ctx context.Context, l Link, title, description, content string, archive []byte, fetchErr error, thumbnail ...[]byte) error {
 	if fetchErr != nil {
 		_, e := s.db.ExecContext(ctx, "UPDATE links SET status='failed',error=? WHERE id=? AND url=? AND status='processing'", fetchErr.Error(), l.ID, l.URL)
 		return e
 	}
-	_, e := s.db.ExecContext(ctx, `UPDATE links SET status='ready',error='',title=CASE WHEN title=url AND ?<>'' THEN ? ELSE title END,description=CASE WHEN description='' THEN ? ELSE description END,content=?,archive=? WHERE id=? AND url=? AND status='processing'`, title, title, description, content, archive, l.ID, l.URL)
-	return e
+	tx, e := s.db.BeginTx(ctx, nil)
+	if e != nil {
+		return e
+	}
+	defer tx.Rollback()
+	result, e := tx.ExecContext(ctx, `UPDATE links SET status='ready',error='',title=CASE WHEN title=url AND ?<>'' THEN ? ELSE title END,description=CASE WHEN description='' THEN ? ELSE description END,content=?,archive=? WHERE id=? AND url=? AND status='processing'`, title, title, description, content, archive, l.ID, l.URL)
+	if e != nil {
+		return e
+	}
+	changed, e := result.RowsAffected()
+	if e != nil {
+		return e
+	}
+	if changed > 0 && len(thumbnail) > 0 {
+		if len(thumbnail[0]) > 512<<10 {
+			return errors.New("thumbnail exceeds 512 KiB")
+		}
+		if _, e = tx.ExecContext(ctx, "DELETE FROM thumbnails WHERE link_id=?", l.ID); e != nil {
+			return e
+		}
+		if len(thumbnail[0]) > 0 {
+			if _, e = tx.ExecContext(ctx, "INSERT INTO thumbnails(link_id,data) VALUES(?,?)", l.ID, thumbnail[0]); e != nil {
+				return e
+			}
+		}
+	}
+	return tx.Commit()
 }

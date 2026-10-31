@@ -222,7 +222,11 @@
     const titleRow = card.querySelector(".card-title-row");
     const favorite = card.querySelector(".favorite-button");
     const host = card.querySelector(".card-domain");
-    if (libraryView === "grid") top.append(host, favorite);
+    if (libraryView === "grid") {
+      top.append(host, favorite);
+      const thumbnail = card.querySelector(".card-thumbnail");
+      if (thumbnail && !thumbnail.src) thumbnail.src = thumbnail.dataset.src;
+    }
     else { titleRow.prepend(favorite); titleRow.after(host); }
   }
   function setLibraryView(view) {
@@ -907,7 +911,17 @@
         button.append(el("span", "mobile-action-label", button.title));
         button.setAttribute("aria-label", `${button.title}: ${link.title || link.url}`);
       });
-      card.append(top, body, footer);
+      card.append(top);
+      if (link.hasThumbnail) {
+        const thumbnail = el("img", "card-thumbnail");
+        thumbnail.alt = "";
+        thumbnail.loading = "lazy";
+        thumbnail.decoding = "async";
+        thumbnail.dataset.src = `/api/links/${link.id}/thumbnail`;
+        thumbnail.addEventListener("error", () => thumbnail.remove());
+        card.append(thumbnail);
+      }
+      card.append(body, footer);
       arrangeBookmarkCard(card);
       grid.append(card);
     }

@@ -1832,6 +1832,61 @@
         }
       ]
     },
+    "/api/links/{id}/thumbnail": {
+      "get": {
+        "operationId": "getThumbnail",
+        "tags": [
+          "Archives"
+        ],
+        "summary": "Get cached page thumbnail",
+        "responses": {
+          "200": {
+            "description": "Cached JPEG or PNG, at most 512 KiB; private revalidation cache",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Cached image unchanged"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "404": {
+            "description": "No thumbnail"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          }
+        },
+        "x-api-key-profiles": [
+          "read",
+          "capture",
+          "full"
+        ]
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ]
+    },
     "/api/links/{id}/assets": {
       "get": {
         "operationId": "listAssets",
