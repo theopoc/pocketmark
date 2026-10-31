@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict';
 
+export async function openWorkspaceActions(page) {
+  if (page.viewportSize().width <= 900 && !await page.locator('#navigation-dialog').isVisible()) {
+    await page.locator('#open-navigation').click();
+  }
+  await page.locator('#workspace-button').click();
+  await page.locator('#workspace-popover').waitFor({ state: 'visible' });
+}
+
 export async function selectSettings(page, section) {
   if (page.viewportSize().width <= 900) await page.locator('#settings-section-picker').selectOption(section);
   else await page.locator(`[data-settings-section="${section}"]`).click();
@@ -15,6 +23,7 @@ export async function settingsNavigationJourney(page) {
   context.searchParams.set('sort', 'title');
   await page.goto(context.href);
   await page.locator('#library-content').waitFor({ state: 'visible' });
+  await openWorkspaceActions(page);
   await page.locator('#settings-button').click();
   assert.equal(await page.locator('#settings-page').evaluate(node => node.tagName), 'SECTION');
   assert.equal(await page.locator('dialog[open]').count(), 0);
@@ -38,16 +47,20 @@ export async function settingsNavigationJourney(page) {
   await page.locator('#library-content').waitFor({ state: 'visible' });
   assert.equal(new URL(page.url()).searchParams.has('settings'), false);
   assert.equal(await page.locator('#search').inputValue(), 'settings navigation');
-  assert.equal(await page.locator('#sort-order').inputValue(), 'title');
+  assert.equal(await page.locator('#sort-toggle').getAttribute('aria-label'), 'Sort bookmarks: Title A–Z');
   assert.equal(new URL(page.url()).searchParams.get('filter'), 'favorite');
   await page.goto(original.href);
   await page.locator('#library-content').waitFor({ state: 'visible' });
+  await openWorkspaceActions(page);
   await page.locator('#settings-button').click();
   await page.locator('[data-settings-panel="api-keys"]').waitFor({ state: 'visible' });
 }
 
 export async function openSettings(page, section = 'api-keys') {
-  if (!await page.locator('#settings-page').isVisible()) await page.locator('#settings-button').click();
+  if (!await page.locator('#settings-page').isVisible()) {
+    await openWorkspaceActions(page);
+    await page.locator('#settings-button').click();
+  }
   await selectSettings(page, section);
 }
 
