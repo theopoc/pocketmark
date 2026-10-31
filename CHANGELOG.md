@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.0](https://github.com/theopoc/pocketmark/compare/v1.2.0...v1.3.0) (2026-10-31)
+
+
+### Features
+
+* **ui:** add automatic and fixed sidebar modes ([#79](https://github.com/theopoc/pocketmark/issues/79)) ([7584f3d](https://github.com/theopoc/pocketmark/commit/7584f3d2d94beafd5c5fc3b5e5b9e94a47fd499c))
+* **ui:** add cached bookmark thumbnails ([5a58294](https://github.com/theopoc/pocketmark/commit/5a58294066b65d1106307732deac56ff2aefaf82))
+* **ui:** refine bookmark cards and library branding ([#81](https://github.com/theopoc/pocketmark/issues/81)) ([200397a](https://github.com/theopoc/pocketmark/commit/200397ab7a27a00fb45847a5b3fbbba588d9ac11))
+
+
+### Bug Fixes
+
+* align sidebar help links ([e84fc75](https://github.com/theopoc/pocketmark/commit/e84fc7538c967242a2d48b8b31e992fd47b396c5))
+* dismiss all dialogs when clicking outside ([2de80f1](https://github.com/theopoc/pocketmark/commit/2de80f178b74811496ffbec255b0b870da8b7ab5))
+
 ## [1.2.0](https://github.com/theopoc/pocketmark/compare/v1.1.0...v1.2.0) (2026-10-31)
 
 
