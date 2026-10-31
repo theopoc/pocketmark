@@ -124,11 +124,18 @@ h1 { font-size: 26px; line-height: 1.3; font-weight: 650; letter-spacing: -.7px;
 .search-box:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
 .search-box .icon { width: 17px; height: 17px; }
 .search-box kbd { height: 21px; }
-.library-sort { display: flex; align-items: center; gap: 8px; }
-.library-sort select { width: auto; max-width: 180px; padding: 8px 30px 8px 12px; font-size: 12px; min-height: 39px; }
 #view-options-toggle { display: none; }
 .library-options { display: flex; align-items: center; justify-content: space-between; padding: 12px 0 18px; gap: 16px; }
-.library-options > .inline-check { margin-right: auto; }
+.library-option-details { display: flex; align-items: center; gap: 16px; }
+.library-view-controls { position: relative; display: flex; align-items: center; gap: 8px; margin-left: auto; }
+#sort-toggle[aria-expanded=true] { background: var(--accent-soft); border-color: var(--focus); color: var(--ink); }
+.sort-menu { position: absolute; top: calc(100% + 6px); right: 78px; z-index: 10; width: 220px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); box-shadow: 0 8px 24px #171a3426; }
+.sort-menu-title { margin: 0; padding: 8px 10px; color: var(--muted); font-size: 12px; }
+.sort-menu button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 8px 10px; border: 0; border-radius: 4px; background: transparent; color: var(--ink); font-size: 13px; text-align: left; }
+.sort-menu button:hover, .sort-menu button:focus-visible, .sort-menu button[aria-checked=true] { background: var(--accent-soft); }
+.sort-menu button:focus-visible { outline-offset: -2px; }
+.sort-menu .icon { width: 16px; height: 16px; }
+.sort-menu button[aria-checked=false] [data-icon] { visibility: hidden; }
 .inline-check { display: inline-flex; align-items: center; gap: 7px; margin: 0; font-size: 12px; font-weight: 400; color: var(--muted); }
 input[type=checkbox] { width: 15px; height: 15px; padding: 0; flex-shrink: 0; accent-color: var(--accent); cursor: pointer; margin: 0; }
 .view-switch { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
@@ -542,8 +549,10 @@ body:has(dialog[open]) { overflow: hidden; }
   #view-options-toggle { display: inline-flex; min-height: 44px; width: auto; }
   .library-options { padding: 0 0 14px; flex-wrap: wrap; gap: 8px 16px; }
   .library-options .inline-check { flex-basis: 100%; }
-  .library-sort { flex: 1; }
-  .library-sort select { max-width: none; width: 100%; min-height: 44px; font-size: 16px; }
+  .library-option-details { order: 3; flex-basis: 100%; }
+  .library-view-controls .icon-only { width: 44px; min-height: 44px; }
+  .sort-menu { right: 0; max-width: calc(100vw - 32px); }
+  .sort-menu button { min-height: 44px; }
   .inline-check { min-height: 32px; }
   .results-bar { align-items: flex-start; flex-wrap: wrap; padding: 7px 12px; gap: 0; }
   .capture-summary:not(:empty) { padding: 4px 0 6px 27px; }
@@ -759,6 +768,21 @@ body:has(dialog[open]) { overflow: hidden; }
 #help-topics summary:focus-visible { outline-offset: -2px; border-radius: 4px; }
 #help-topics summary .icon { width: 16px; height: 16px; color: var(--muted); }
 #help-topics details[open] summary .icon { transform: rotate(90deg); }
+@media (prefers-reduced-motion: no-preference) {
+  #help-topics summary .icon { transition: transform var(--motion-enter) var(--ease-ui); }
+  @supports (interpolate-size: allow-keywords) and selector(details::details-content) {
+    #help-topics > details { interpolate-size: allow-keywords; }
+    #help-topics > details::details-content {
+      block-size: 0;
+      overflow: clip;
+      transition: block-size var(--motion-exit) var(--ease-ui), content-visibility var(--motion-exit) allow-discrete;
+    }
+    #help-topics > details[open]::details-content {
+      block-size: auto;
+      transition-duration: var(--motion-enter);
+    }
+  }
+}
 .help-answer { padding: 0 24px 20px 0; font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
 .help-answer p, .help-answer ol, .help-answer ul { margin: 0 0 12px; }
 .help-answer > :last-child { margin-bottom: 0; }

@@ -180,11 +180,26 @@
       </section>
       <div class="library-toolbar">
         <label class="search-box"><span data-icon="search" aria-hidden="true"></span><span class="sr-only">Search bookmarks</span><input id="search" type="search" placeholder="Search bookmarks, tags, and content…" autocomplete="off"><kbd aria-hidden="true">/</kbd></label>
-        <button id="view-options-toggle" class="button subtle mobile-only" type="button" aria-controls="library-view-options" aria-expanded="false">View options</button>
       </div>
-      <div id="library-view-options" class="library-options"><div class="library-sort"><label class="sr-only" for="sort-order">Sort bookmarks</label><select id="sort-order" aria-label="Sort bookmarks"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="title">Title A–Z</option><option value="title_desc">Title Z–A</option><option value="updated">Recently updated</option></select>
+      <div class="library-options">
+        <button id="view-options-toggle" class="button subtle mobile-only" type="button" aria-controls="library-view-options" aria-expanded="false">View options</button>
+        <div id="library-view-options" class="library-option-details">
         <button id="refresh-button" class="button subtle icon-only" title="Refresh library" aria-label="Refresh library"><span data-icon="refresh" aria-hidden="true"></span></button>
-      </div><label class="inline-check"><input id="fuzzy-search" type="checkbox"><span>Include near matches<span class="search-scope">Titles, URLs, descriptions and tags only.</span></span></label><div class="view-switch" role="group" aria-label="Library view"><button id="view-list" class="view-button" aria-label="List view" aria-pressed="true" title="List view"><span data-icon="list" aria-hidden="true"></span></button><button id="view-grid" class="view-button" aria-label="Grid view" aria-pressed="false" title="Grid view"><span data-icon="grid" aria-hidden="true"></span></button></div></div>
+        <label class="inline-check"><input id="fuzzy-search" type="checkbox"><span>Include near matches<span class="search-scope">Titles, URLs, descriptions and tags only.</span></span></label>
+        </div>
+        <div class="library-view-controls">
+          <button id="sort-toggle" class="button subtle icon-only" type="button" aria-label="Sort bookmarks: Newest first" title="Sort bookmarks: Newest first" aria-haspopup="menu" aria-controls="sort-menu" aria-expanded="false"><span data-icon="sort" aria-hidden="true"></span></button>
+          <div id="sort-menu" class="sort-menu" role="menu" aria-labelledby="sort-menu-title" hidden>
+            <p id="sort-menu-title" class="sort-menu-title">Sort bookmarks</p>
+            <button type="button" role="menuitemradio" aria-checked="true" data-sort="newest" tabindex="-1"><span data-icon="check" aria-hidden="true"></span>Newest first</button>
+            <button type="button" role="menuitemradio" aria-checked="false" data-sort="oldest" tabindex="-1"><span data-icon="check" aria-hidden="true"></span>Oldest first</button>
+            <button type="button" role="menuitemradio" aria-checked="false" data-sort="title" tabindex="-1"><span data-icon="check" aria-hidden="true"></span>Title A–Z</button>
+            <button type="button" role="menuitemradio" aria-checked="false" data-sort="title_desc" tabindex="-1"><span data-icon="check" aria-hidden="true"></span>Title Z–A</button>
+            <button type="button" role="menuitemradio" aria-checked="false" data-sort="updated" tabindex="-1"><span data-icon="check" aria-hidden="true"></span>Recently updated</button>
+          </div>
+          <div class="view-switch" role="group" aria-label="Library view"><button id="view-list" class="view-button" aria-label="List view" aria-pressed="true" title="List view"><span data-icon="list" aria-hidden="true"></span></button><button id="view-grid" class="view-button" aria-label="Grid view" aria-pressed="false" title="Grid view"><span data-icon="grid" aria-hidden="true"></span></button></div>
+        </div>
+      </div>
       <div id="active-filters" class="active-filters" aria-label="Active filters" hidden></div>
       <div class="results-bar"><div class="bulk-toolbar"><label class="inline-check"><input id="select-page" type="checkbox"><span>Select page</span></label><span id="results-label" aria-live="polite">Loading your library…</span><span id="selected-count" aria-live="polite" hidden>0 selected</span><button id="bulk-open" class="button subtle" hidden disabled>Actions</button><button id="clear-selection" class="text-button" hidden>Clear</button></div><span id="capture-label" class="capture-summary"></span></div>
       <div id="library-error" class="error-banner" role="alert" hidden></div>

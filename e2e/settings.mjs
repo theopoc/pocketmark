@@ -47,7 +47,7 @@ export async function settingsNavigationJourney(page) {
   await page.locator('#library-content').waitFor({ state: 'visible' });
   assert.equal(new URL(page.url()).searchParams.has('settings'), false);
   assert.equal(await page.locator('#search').inputValue(), 'settings navigation');
-  assert.equal(await page.locator('#sort-order').inputValue(), 'title');
+  assert.equal(await page.locator('#sort-toggle').getAttribute('aria-label'), 'Sort bookmarks: Title A–Z');
   assert.equal(new URL(page.url()).searchParams.get('filter'), 'favorite');
   await page.goto(original.href);
   await page.locator('#library-content').waitFor({ state: 'visible' });
