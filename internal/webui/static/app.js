@@ -21,7 +21,6 @@
   const tagPickers = new Map();
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
   const activeMotion = new Map();
-  let themeTransition = null;
   let renderedLibraryRoute = null;
   let libraryUnavailable = false;
   let libraryLoading = false;
@@ -119,7 +118,7 @@
     animation.finished.catch(() => {}).then(() => { if (activeMotion.get(element) === animation) activeMotion.delete(element); });
   }
   reducedMotion.addEventListener("change", () => {
-    if (reducedMotion.matches) { activeMotion.forEach((animation) => animation.cancel()); activeMotion.clear(); themeTransition?.skipTransition(); }
+    if (reducedMotion.matches) { activeMotion.forEach((animation) => animation.cancel()); activeMotion.clear(); }
   });
 
   // Small, authored SVG icons keep the embedded UI independent of icon libraries.
@@ -175,33 +174,17 @@
     document.querySelector('meta[name="theme-color"]').content = dark ? "#15161b" : "#ffffff";
     document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
       button.setAttribute("aria-pressed", String(dark));
+      button.setAttribute("aria-label", dark ? "Dark mode" : "Light mode");
       button.title = dark ? "Switch to light mode" : "Switch to dark mode";
       button.querySelector("[data-theme-icon]").replaceChildren(icon(dark ? "moon" : "sun"));
       button.querySelector("[data-theme-label]").textContent = dark ? "Dark" : "Light";
     });
   }
-  let requestedTheme = document.documentElement.dataset.theme === "light" ? "light" : "dark";
-  applyTheme(requestedTheme);
-  function changeTheme(theme) {
-    requestedTheme = theme;
-    // Repeated clicks always apply the latest choice, even before a snapshot is ready.
-    if (themeTransition) { themeTransition.skipTransition(); applyTheme(theme); return; }
-    if (reducedMotion.matches || document.hidden || !document.startViewTransition) { applyTheme(theme); return; }
-    document.documentElement.classList.add("theme-transition");
-    try {
-      const transition = document.startViewTransition(() => applyTheme(requestedTheme));
-      themeTransition = transition;
-      transition.ready.catch(() => {}); // Skipped or unsupported snapshots still apply the theme.
-      transition.finished.catch(() => applyTheme(requestedTheme)).then(() => {
-        if (themeTransition === transition) { themeTransition = null; document.documentElement.classList.remove("theme-transition"); }
-      });
-    } catch {
-      document.documentElement.classList.remove("theme-transition"); applyTheme(theme);
-    }
-  }
+  const themeSwitch = globalThis.PocketmarkThemeSwitch.create({ initial: document.documentElement.dataset.theme === "light" ? "light" : "dark", apply: applyTheme });
+  applyTheme(themeSwitch.requested);
   document.querySelectorAll("[data-theme-toggle]").forEach((button) => button.addEventListener("click", () => {
-    const theme = requestedTheme === "dark" ? "light" : "dark";
-    changeTheme(theme);
+    const theme = themeSwitch.requested === "dark" ? "light" : "dark";
+    themeSwitch.set(theme);
     try { localStorage.setItem("pocketmark-theme", theme); } catch { /* Keep the session choice when storage is unavailable. */ }
   }));
 
@@ -786,6 +769,22 @@
   $("tags-previous").addEventListener("click", () => { tagsPage--; commitRoute(); $("tags-title").focus(); loadTagDirectory(); });
   $("tags-next").addEventListener("click", () => { tagsPage++; commitRoute(); $("tags-title").focus(); loadTagDirectory(); });
 
+  function closeBookmarkActions() {
+    expandedBookmarkActions = null;
+    document.querySelectorAll(".card-overflow-actions.is-open").forEach(panel => {
+      const restore = panel.contains(document.activeElement);
+      const trigger = panel.parentElement.querySelector(".card-actions-toggle");
+      panel.hidden = true; panel.classList.remove("is-open");
+      trigger.setAttribute("aria-expanded", "false");
+      if (restore) trigger.focus({ preventScroll: true });
+    });
+  }
+  document.addEventListener("pointerdown", event => {
+    if (!event.target.closest(".card-actions")) closeBookmarkActions();
+  });
+  document.addEventListener("focusin", event => {
+    if (!event.target.closest(".card-actions")) closeBookmarkActions();
+  });
   function actionButton(symbol, label, callback, extraClass = "") {
     const button = el("button", `card-action ${extraClass}`);
     button.append(icon(symbol));
@@ -903,16 +902,33 @@
       const overflow = el("div", "card-overflow-actions");
       overflow.id = `link-${link.id}-actions`;
       const expanded = expandedBookmarkActions === link.id;
+      overflow.hidden = !expanded;
       overflow.classList.toggle("is-open", expanded);
       moreActions.setAttribute("aria-controls", overflow.id);
       moreActions.setAttribute("aria-expanded", String(expanded));
       moreActions.addEventListener("click", () => {
-        expandedBookmarkActions = expandedBookmarkActions === link.id ? null : link.id;
-        renderLinks();
+        const opening = overflow.hidden;
+        closeBookmarkActions();
+        expandedBookmarkActions = opening ? link.id : null;
+        const bounds = actions.getBoundingClientRect();
+        overflow.dataset.side = innerHeight - bounds.bottom < 160 && bounds.top > innerHeight - bounds.bottom ? "above" : "below";
+        overflow.hidden = !opening;
+        overflow.classList.toggle("is-open", opening);
+        moreActions.setAttribute("aria-expanded", String(opening));
+      });
+      actions.addEventListener("keydown", event => {
+        if (event.key === "Escape" && !overflow.hidden) {
+          event.preventDefault(); event.stopPropagation(); closeBookmarkActions(); moreActions.focus();
+        }
+      });
+      overflow.addEventListener("click", event => {
+        if (event.target.closest("button,a")) closeBookmarkActions();
       });
       actions.append(moreActions, overflow);
       overflow.append(actionButton(link.read ? "check" : "clock", link.read ? "Mark unread" : "Mark as read", (event) => updateLink(link, { read: !link.read }, event.currentTarget), link.read ? "read" : ""));
-      overflow.append(actionButton("edit", "Edit bookmark", () => openEditor(link)));
+      const edit = actionButton("edit", "Edit bookmark", () => openEditor(link), "quick-edit");
+      edit.append(el("span", "quick-action-label", "Edit"));
+      actions.prepend(edit);
       overflow.append(actionButton("trash", "Delete bookmark", () => {
         deleteBookmark = link;
         $("delete-bookmark-name").textContent = `“${link.title || link.url}”`;
@@ -933,8 +949,8 @@
       footer.append(actions);
       actions.querySelectorAll("button,a").forEach((button, i) => {
         if (button === moreActions) return;
-        button.dataset.focusKey = `link:${link.id}:action:${i}`;
-        button.append(el("span", "mobile-action-label", button.title));
+        button.dataset.focusKey = `link:${link.id}:action:${i + 1}`;
+        if (button !== edit) button.append(el("span", "mobile-action-label", button.title));
         button.setAttribute("aria-label", `${button.title}: ${link.title || link.url}`);
       });
       card.append(top);
@@ -1242,7 +1258,13 @@
   let deleteBookmark = null;
   let deletingBookmark = false;
   deleteBookmarkDialog.addEventListener("cancel", (event) => { if (deletingBookmark) event.preventDefault(); });
-  deleteBookmarkDialog.addEventListener("close", () => { deleteBookmark = null; });
+  deleteBookmarkDialog.addEventListener("close", () => {
+    const id = deleteBookmark?.id;
+    deleteBookmark = null;
+    if (!deletingBookmark && state.signedIn && !document.querySelector("dialog[open]")) {
+      (document.querySelector(`[data-focus-key="link:${id}:more"]`) || $("page-title")).focus({ preventScroll: true });
+    }
+  });
   $("delete-bookmark-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (deletingBookmark || !deleteBookmark) return;
@@ -1390,6 +1412,7 @@
     openCollectionEditor();
   });
   let collectionEditorSession = 0;
+  const collectionNameLimit = globalThis.PocketmarkNameLimit.create($("collection-name"), $("collection-name-hint"));
   $("collection-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const button = event.submitter, session = collectionEditorSession, editing = state.editingCollection;
@@ -1475,6 +1498,7 @@
     $("collection-error").textContent = "";
     $("collection-dialog-title").textContent = collection ? "Rename or move collection" : "New collection";
     $("collection-name").value = collection?.name || "";
+    collectionNameLimit.update();
     fillCollections($("collection-parent"), collection?.parentId, "None — top level");
     if (collection) {
       const excluded = new Set([collection.id]);

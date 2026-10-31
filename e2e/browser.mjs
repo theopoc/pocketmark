@@ -379,7 +379,8 @@ try {
   await clickNavigation(page, '#add-collection');
   await page.locator('#collection-name').fill('é'.repeat(61));
   await page.locator('#save-collection').click();
-  await page.locator('#collection-error').filter({ hasText: 'This name is too long' }).waitFor();
+  assert.equal(await page.locator('#collection-name').evaluate(node => node.validity.customError), true);
+  assert.match(await page.locator('#collection-name-hint').textContent(), /102%/);
   assert.equal(await page.locator('#collection-name').inputValue(), 'é'.repeat(61));
   assert.equal(await page.locator('#save-collection').isEnabled(), true);
   await page.locator('#collection-dialog').getByRole('button', { name: 'Cancel' }).click();
@@ -487,7 +488,8 @@ try {
   assert.equal(await gridHeader.locator('.card-domain').textContent(), '127.0.0.1');
   assert.equal(await gridHeader.locator('.card-domain').getAttribute('title'), 'http://127.0.0.1/e2e-fixture');
   assert.equal(await gridHeader.locator('.favorite-button').count(), 1, 'grid favorite is in the card header');
-  assert.equal(await card(original).locator('.card-footer .card-overflow-actions .card-action').count(), 4, 'grid retains its four footer actions');
+  assert.equal(await card(original).locator('.card-footer .card-overflow-actions .card-action').count(), 3, 'grid retains its three secondary actions');
+  assert.equal(await card(original).locator('.quick-edit').isVisible(), true, 'Edit stays directly available');
   assert.equal(await gridHeader.getByRole('button', { name: `Add to favorites: ${original}` }).getAttribute('aria-pressed'), 'false');
   await card(original).hover();
   await page.waitForFunction(title => {
@@ -592,8 +594,7 @@ try {
   for (const selector of ['#reader-original', '#reader-notebook-toggle', '#reader-text-mode', '#reader-size']) {
     assert.ok(await page.locator(selector).evaluate(node => node.getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
   }
-  await page.locator('#reader-notebook-toggle').click();
-  await page.locator('#reader-tab-files').click();
+  await page.locator('#reader-files-toggle').click();
   assert.ok(await page.locator('#asset-upload-button').evaluate(node => node.getBoundingClientRect().height >= 44));
   const chooser = page.waitForEvent('filechooser');
   await page.locator('#asset-upload-button').click();
@@ -772,7 +773,7 @@ try {
     ? route.fulfill({ status: 422, contentType: 'application/json', body: '{"error":"Synthetic preparation failure"}' })
     : route.continue());
   assert.equal(await page.locator('#reader-content').isVisible(), false);
-  await page.getByRole('button', { name: 'Open saved HTML', exact: true }).click();
+  await page.locator('#reader-format-html').click();
   const viewer = page.locator('#asset-viewer');
   await viewer.waitFor({ state: 'visible' });
   await page.locator('#asset-viewer-status').filter({ hasText: 'Could not open this preview' }).waitFor();
@@ -801,11 +802,11 @@ try {
   await page.locator('#asset-viewer-select').selectOption({ label: 'legacy.html' });
   await capture.getByRole('heading', { name: 'Café €' }).waitFor();
   await page.getByRole('button', { name: 'Close preview', exact: true }).click();
-  await page.getByRole('button', { name: 'Open saved Screenshot', exact: true }).click();
+  await page.locator('#reader-format-image').click();
   await page.waitForFunction(() => { const image = document.querySelector('#asset-viewer-content img'); return image?.complete && image.naturalWidth > 0; });
   const nativeViewer = page.waitForEvent('framenavigated', { predicate: frame => frame.url().startsWith('chrome-extension://') });
   await page.getByRole('button', { name: 'Close preview', exact: true }).click();
-  await page.getByRole('button', { name: 'Open saved PDF', exact: true }).click();
+  await page.locator('#reader-format-pdf').click();
   await page.waitForFunction(() => document.getElementById('asset-viewer-status').textContent === 'capture.pdf');
   assert.equal(await page.locator('#asset-viewer-content iframe').getAttribute('sandbox'), null);
   await (await nativeViewer).locator('pdf-viewer').waitFor({ state: 'attached' });
@@ -830,6 +831,7 @@ try {
   assert.equal(await page.locator('#asset-viewer-content').innerHTML(), '');
   await page.getByRole('button', { name: 'Close reader', exact: true }).click();
 
+  await card(revised).getByRole('button', { name: `Actions for ${revised}`, exact: true }).click();
   await card(revised).getByRole('button', { name: `Delete bookmark: ${revised}`, exact: true }).click();
   const deleteDialog = page.getByRole('alertdialog', { name: 'Delete bookmark?' });
   await deleteDialog.waitFor({ state: 'visible' });
@@ -838,6 +840,7 @@ try {
   await page.keyboard.press('Escape');
   await deleteDialog.waitFor({ state: 'hidden' });
   assert.equal(await card(revised).count(), 1);
+  await card(revised).getByRole('button', { name: `Actions for ${revised}`, exact: true }).click();
   await card(revised).getByRole('button', { name: `Delete bookmark: ${revised}`, exact: true }).click();
   await deleteDialog.getByRole('button', { name: 'Delete bookmark', exact: true }).click();
   await card(revised).waitFor({ state: 'detached' });

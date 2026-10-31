@@ -1,16 +1,21 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pocketmark</title>
+  <script src="theme-switch.js"></script>
+  <script src="ui-theme.js"></script>
+  <link rel="stylesheet" href="ui-tokens.css">
   <link rel="stylesheet" href="popup.css">
+  <script src="name-limit.js" defer></script>
   <script src="common.js" defer></script>
   <script src="popup.js" defer></script>
 </head>
 <body>
   <header class="popup-header">
     <div class="brand"><span class="brand-mark" aria-hidden="true">p.</span><div><h1>Pocketmark</h1><p id="page-title">Your current page</p></div></div>
+    <button id="theme-toggle" type="button" class="secondary theme-toggle" aria-label="Dark mode" aria-pressed="true">Dark</button>
     <button id="connection-toggle" type="button" class="text-button connection-toggle" aria-controls="settings" aria-expanded="false" hidden>Connection</button>
   </header>
   <main id="content">
@@ -27,7 +32,7 @@
           <div class="field-heading"><label for="collection">Collection</label><button id="new-collection" type="button" class="text-button" aria-expanded="false" aria-controls="collection-create">New collection</button></div>
           <select id="collection"><option value="">Inbox</option></select>
           <div id="collection-create" class="collection-create" hidden>
-            <label for="collection-name">New collection name</label><input id="collection-name" maxlength="120" aria-describedby="collection-name-hint"><p id="collection-name-hint" class="hint">Keep the name short. Names with accents or emoji may reach the limit sooner.</p>
+            <label for="collection-name">New collection name</label><input id="collection-name" maxlength="120" disabled aria-describedby="collection-name-hint"><p id="collection-name-hint" class="hint" aria-live="polite">0 characters · 0% of name limit used</p>
             <label for="collection-parent">Inside</label><select id="collection-parent"><option value="">Library root</option></select>
             <div class="actions"><button id="create-collection" type="button" class="secondary">Create collection</button><button id="cancel-collection" type="button" class="text-button">Cancel</button></div>
           </div>

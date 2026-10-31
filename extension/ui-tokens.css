@@ -1,0 +1,117 @@
+/* Canonical UI tokens. Extension copies are checked by scripts/sync_ui_assets.py. */
+:root {
+  color-scheme: light;
+  --ink: #20232c;
+  --muted: #626978;
+  --paper: #fff;
+  --sidebar: #f6f7f9;
+  --surface: #f8f9fb;
+  --line: #e3e5eb;
+  --control-line: #818896;
+  --panel: #fff;
+  --control-bg: #fff;
+  --control-ink: #4b5263;
+  --control-border: #818896;
+  --control-hover: #f1f2f7;
+  --control-hover-border: #818896;
+  --accent: #4f46e5;
+  --accent-hover: #4038c5;
+  --accent-soft: #eeedff;
+  --focus: #7067ef;
+  --on-accent: #fff;
+  --link: #5146c8;
+  --nav-ink: #565c6b;
+  --icon-ink: #727989;
+  --hover: #eaecef;
+  --selected-ink: #4338b7;
+  --selected-bg: #e9e7fc;
+  --selected-border: #b5acf8;
+  --tag-bg: #f0f1f6;
+  --tag-ink: #5b6272;
+  --row-hover: #fafaff;
+  --row-selected: #f2f0ff;
+  --reader-ink: #343947;
+  --placeholder: #626978;
+  --success: #23714a;
+  --success-bg: #e8f4ee;
+  --danger: #b12e35;
+  --danger-bg: #fcebed;
+  --danger-solid: #b12e35;
+  --danger-hover: #92242b;
+  --error-bg: #fff2f3;
+  --error-line: #b12e35;
+  --warning: #805015;
+  --warning-bg: #fff0da;
+  --favorite: #805015;
+  --favorite-bg: #f9e5ad;
+  --toast-bg: #252a3b;
+  --backdrop: #1e233960;
+  --text-xs: 12px;
+  --text-small: 13px;
+  --text-body: 14px;
+  --text-title: 16px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --motion-fast: 120ms;
+  --motion-content: 180ms;
+  --motion-enter: 220ms;
+  --motion-exit: 140ms;
+  --motion-theme: 240ms;
+  --ease-ui: cubic-bezier(.16,1,.3,1);
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #e8e9ef;
+  --muted: #a3a7b6;
+  --paper: #15161b;
+  --sidebar: #191a21;
+  --surface: #1e2029;
+  --line: #30323e;
+  --control-line: #747b92;
+  --panel: #1b1d25;
+  --control-bg: #1b1d25;
+  --control-ink: #d0d3df;
+  --control-border: #747b92;
+  --control-hover: #292b38;
+  --control-hover-border: #a3a7b6;
+  --accent: #6359ed;
+  --accent-hover: #5a50df;
+  --accent-soft: #2b2750;
+  --focus: #a39aff;
+  --link: #bfb6ff;
+  --nav-ink: #b4b7c5;
+  --icon-ink: #989fb2;
+  --hover: #262833;
+  --selected-ink: #c6bfff;
+  --selected-bg: #2c2850;
+  --selected-border: #756bac;
+  --tag-bg: #2c2f3b;
+  --tag-ink: #b9bfd1;
+  --row-hover: #222430;
+  --row-selected: #292542;
+  --reader-ink: #d7dae5;
+  --placeholder: #a3a7b6;
+  --success: #80c9a3;
+  --success-bg: #203a31;
+  --danger: #f58a96;
+  --danger-bg: #422631;
+  --error-bg: #39212b;
+  --error-line: #b97888;
+  --warning: #d9b87c;
+  --warning-bg: #3b3020;
+  --favorite: #e2c17b;
+  --favorite-bg: #604b24;
+  --backdrop: #080a1480;
+}
+
+/* Theme snapshots use the same interruption-safe visual treatment on every surface. */
+:root.theme-transition::view-transition { pointer-events: none; }
+:root.theme-transition::view-transition-group(root) { animation: none; }
+:root.theme-transition::view-transition-old(root) { animation: none; mix-blend-mode: normal; }
+:root.theme-transition::view-transition-new(root) { animation: theme-crossfade var(--motion-theme) ease-in-out both; mix-blend-mode: normal; }
+@keyframes theme-crossfade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { :root.theme-transition::view-transition-new(root) { animation: none; } }

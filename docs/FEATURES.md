@@ -42,7 +42,7 @@ The staged upload/MOVE sequence preserves exact uploaded bytes. Native changes d
 ## Remaining qualification, not implemented guarantees
 
 - No server-side Chromium or perfect arbitrary-site offline reproduction. Full-page/PDF generation uses the Chrome extension in the user's browser.
-- Chrome runtime evidence is recorded in [REAL_CLIENTS.md](REAL_CLIENTS.md). Historical third-party Android and extension results no longer describe supported clients. iOS, physical phones, Firefox and Safari remain untested.
+- Chrome runtime evidence is recorded in [REAL_CLIENTS.md](REAL_CLIENTS.md). Historical third-party Android and extension results no longer describe supported clients. Bounded Chromium, Firefox and WebKit interface checks are recorded in [UI_POLISH.md](UI_POLISH.md); they do not qualify complete clients. iOS, physical phones and Safari remain untested.
 - Uploaded PDF/image bytes are preserved; PDF text extraction and image OCR are not provided.
 - A server snapshot cannot log into websites; the user's browser can capture a page they have opened, subject to its permissions and resource restrictions.
 - RAM measurements exclude the user's browser and Docker VM; see [BENCHMARK.md](BENCHMARK.md) for measured workloads rather than a universal memory guarantee.
