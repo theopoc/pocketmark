@@ -227,7 +227,29 @@
   setLibraryView(libraryView);
 
   const navigation = $("navigation-dialog");
+  const workspaceButton = $("workspace-button");
+  const workspacePopover = $("workspace-popover");
+  function closeWorkspacePopover() {
+    if (workspacePopover.matches(":popover-open")) workspacePopover.hidePopover();
+  }
+  function positionWorkspacePopover() {
+    const anchor = workspaceButton.getBoundingClientRect();
+    const width = Math.min(224, window.innerWidth - 16);
+    workspacePopover.style.left = `${Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8))}px`;
+    workspacePopover.style.top = `${Math.max(8, anchor.bottom + 4)}px`;
+    workspacePopover.style.maxHeight = `${Math.max(44, window.innerHeight - anchor.bottom - 12)}px`;
+  }
+  workspacePopover.addEventListener("beforetoggle", (event) => {
+    workspaceButton.setAttribute("aria-expanded", String(event.newState === "open"));
+    if (event.newState === "open") positionWorkspacePopover();
+  });
+  workspacePopover.addEventListener("click", (event) => {
+    if (event.target.closest("button")) closeWorkspacePopover();
+  }, true);
+  window.addEventListener("resize", closeWorkspacePopover);
+  $("sidebar").addEventListener("scroll", closeWorkspacePopover);
   function closeNavigation() {
+    closeWorkspacePopover();
     if (!navigation.open) return;
     navigation.close();
     $("open-navigation").setAttribute("aria-expanded", "false");
@@ -240,7 +262,10 @@
   });
   $("close-navigation").addEventListener("click", closeNavigation);
   navigation.addEventListener("cancel", (event) => { event.preventDefault(); closeNavigation(); });
-  navigation.addEventListener("close", () => $("open-navigation").setAttribute("aria-expanded", String(navigation.open)));
+  navigation.addEventListener("close", () => {
+    if (!navigation.open) closeWorkspacePopover();
+    $("open-navigation").setAttribute("aria-expanded", String(navigation.open));
+  });
   navigation.addEventListener("click", (event) => { if (event.target === navigation) closeNavigation(); });
   $("sidebar").addEventListener("click", (event) => {
     const button = event.target.closest("button");
@@ -298,6 +323,7 @@
     $("login-help").hidden = false;
   }
   function showLogin() {
+    closeNavigation();
     if (mfaManagementBusy || (Boolean(settingsSection) && !$("mfa-manage-codes").hidden)) {
       deferredLogin = true;
       settingsSection = "2fa";

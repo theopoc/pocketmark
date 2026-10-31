@@ -1,3 +1,4 @@
+export { openWorkspaceActions } from './navigation.mjs';
 import { clickNavigation } from './navigation.mjs';
 import assert from 'node:assert/strict';
 

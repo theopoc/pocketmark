@@ -6,8 +6,18 @@ export async function openNavigation(page) {
   }
 }
 
-export async function clickNavigation(page, selector) {
+export async function openWorkspaceActions(page) {
   await openNavigation(page);
+  if (!await page.locator('#workspace-popover').evaluate(node => node.matches(':popover-open'))) {
+    await page.locator('#workspace-button').click();
+  }
+  await page.locator('#workspace-popover').waitFor({ state: 'visible' });
+}
+
+export async function clickNavigation(page, selector) {
+  if (['#import-button', '#export-button', '#settings-button', '#logout-button'].includes(selector)) {
+    await openWorkspaceActions(page);
+  } else await openNavigation(page);
   await page.locator(selector).click();
 }
 
@@ -28,6 +38,11 @@ export async function navigationJourney(page) {
     await openNavigation(page);
     await page.mouse.click(width - 5, 400);
     await page.locator('#navigation-dialog').waitFor({ state: 'hidden' });
+    await openWorkspaceActions(page);
+    await page.keyboard.press('Escape');
+    await page.locator('#workspace-popover').waitFor({ state: 'hidden' });
+    assert.equal(await page.locator('#navigation-dialog').evaluate(node => node.open), true);
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'workspace-button');
     await clickNavigation(page, '#logout-button');
     await page.getByRole('alertdialog', { name: 'Sign out of Pocketmark?' }).waitFor();
     assert.equal(await page.locator('#navigation-dialog').evaluate(node => node.open), false);

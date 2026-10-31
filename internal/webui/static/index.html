@@ -171,7 +171,15 @@
     <aside id="sidebar" class="sidebar" aria-label="Library navigation">
       <div class="sidebar-brand"><a class="brand" href="/" aria-label="Pocketmark home"><span class="brand-mark" data-icon="bookmark" aria-hidden="true"></span><span>Pocketmark</span></a><button id="close-navigation" class="icon-button" aria-label="Close navigation"><span data-icon="close" aria-hidden="true"></span></button></div>
       <div id="library-navigation">
-      <div class="workspace-label"><span class="workspace-avatar" aria-hidden="true">P</span><div>Personal workspace<span>My library</span></div></div>
+      <button id="workspace-button" type="button" class="workspace-label" popovertarget="workspace-popover" aria-expanded="false" aria-controls="workspace-popover" data-keep-navigation><span class="workspace-avatar" aria-hidden="true">P</span><span class="workspace-name">Personal workspace<span class="workspace-subtitle">My library</span></span><span class="workspace-chevron" data-icon="chevron-right" aria-hidden="true"></span></button>
+      <div id="workspace-popover" class="workspace-popover" popover aria-label="Workspace actions">
+        <button id="import-button" type="button" class="nav-item" autofocus><span data-icon="download" aria-hidden="true"></span>Import</button>
+        <button id="export-button" type="button" class="nav-item"><span data-icon="upload" aria-hidden="true"></span>Export</button>
+        <hr>
+        <button id="settings-button" type="button" class="nav-item"><span data-icon="settings" aria-hidden="true"></span>Settings</button>
+        <hr>
+        <button id="logout-button" type="button" class="nav-item workspace-sign-out"><span data-icon="logout" aria-hidden="true"></span>Sign out</button>
+      </div>
       <nav aria-label="Library">
         <button class="nav-item active" data-filter="all" aria-current="page"><span data-icon="library" aria-hidden="true"></span>All bookmarks <span id="total-count" class="nav-count">0</span></button>
         <button class="nav-item" data-filter="inbox"><span data-icon="inbox" aria-hidden="true"></span>Inbox</button>
@@ -184,7 +192,7 @@
       <div class="sidebar-bottom">
         <div class="sidebar-section-title"><h2>Frequent tags</h2></div>
         <div id="tags" class="tag-cloud"></div>
-        <div class="sidebar-tools"><button id="import-button" class="nav-item"><span data-icon="download" aria-hidden="true"></span>Import</button><button id="export-button" class="nav-item"><span data-icon="upload" aria-hidden="true"></span>Export</button><button id="help-button" class="nav-item"><span data-icon="book" aria-hidden="true"></span>Help</button><button id="settings-button" class="nav-item"><span data-icon="settings" aria-hidden="true"></span>Settings</button><button id="logout-button" class="nav-item"><span data-icon="logout" aria-hidden="true"></span>Sign out</button></div>
+        <div class="sidebar-tools"><button id="help-button" class="nav-item"><span data-icon="book" aria-hidden="true"></span>Help</button></div>
         <a class="nav-item api-documentation-link" href="/api-docs/"><span data-icon="book" aria-hidden="true"></span>API documentation</a>
         <input id="import-file" type="file" accept="application/json,text/html,.json,.html,.htm" hidden>
       </div>
