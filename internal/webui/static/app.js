@@ -736,6 +736,8 @@
       favorite.title = link.favorite ? "Remove from favorites" : "Add to favorites";
       favorite.setAttribute("aria-label", `${favorite.title}: ${link.title || link.url}`);
       favorite.setAttribute("aria-pressed", String(!!link.favorite));
+      favorite.dataset.focusKey = `link:${link.id}:action:0`;
+      favorite.append(el("span", "mobile-action-label", "Favorite"));
       favorite.addEventListener("click", () => updateLink(link, { favorite: !link.favorite }, favorite));
       const select = el("input", "bookmark-select");
       select.type = "checkbox";
@@ -756,7 +758,9 @@
       open.dataset.focusKey = `link:${link.id}:open`;
       open.addEventListener("click", () => reader.open(link.id));
       heading.append(open);
-      body.append(heading, el("p", "card-domain", host));
+      const titleRow = el("div", "card-title-row");
+      titleRow.append(favorite, heading);
+      body.append(titleRow, el("p", "card-domain", host));
       if (link.description) body.append(el("p", "card-description", link.description));
       if (state.query && link.searchSnippet) {
         const excerpt = el("p", "search-excerpt");
@@ -800,7 +804,6 @@
       status.prepend(icon(link.status === "ready" ? "check" : link.status === "failed" ? "warning" : "clock"));
       footer.append(status);
       const actions = el("div", "card-actions");
-      favorite.append(el("span", "mobile-action-label", "Favorite"));
       const moreActions = el("button", "card-actions-toggle button subtle", "Actions");
       moreActions.type = "button";
       moreActions.dataset.focusKey = `link:${link.id}:more`;
@@ -815,7 +818,7 @@
         expandedBookmarkActions = expandedBookmarkActions === link.id ? null : link.id;
         renderLinks();
       });
-      actions.append(favorite, moreActions, overflow);
+      actions.append(moreActions, overflow);
       overflow.append(actionButton(link.read ? "check" : "clock", link.read ? "Mark unread" : "Mark as read", (event) => updateLink(link, { read: !link.read }, event.currentTarget), link.read ? "read" : ""));
       overflow.append(actionButton("edit", "Edit bookmark", () => openEditor(link)));
       overflow.append(actionButton("trash", "Delete bookmark", async (event) => {
@@ -843,8 +846,8 @@
       footer.append(actions);
       actions.querySelectorAll("button,a").forEach((button, i) => {
         if (button === moreActions) return;
-        button.dataset.focusKey = `link:${link.id}:action:${button === favorite ? 0 : i - 1}`;
-        if (button !== favorite) button.append(el("span", "mobile-action-label", button.title));
+        button.dataset.focusKey = `link:${link.id}:action:${i}`;
+        button.append(el("span", "mobile-action-label", button.title));
         button.setAttribute("aria-label", `${button.title}: ${link.title || link.url}`);
       });
       card.append(top, body, footer);
