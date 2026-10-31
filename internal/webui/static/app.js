@@ -217,10 +217,19 @@
 
   let libraryView = "list";
   try { if (localStorage.getItem("pocketmark-view") === "grid") libraryView = "grid"; } catch { /* Storage is optional. */ }
+  function arrangeBookmarkCard(card) {
+    const top = card.querySelector(".card-top");
+    const titleRow = card.querySelector(".card-title-row");
+    const favorite = card.querySelector(".favorite-button");
+    const host = card.querySelector(".card-domain");
+    if (libraryView === "grid") top.append(host, favorite);
+    else { titleRow.prepend(favorite); titleRow.after(host); }
+  }
   function setLibraryView(view) {
     const changed = $("bookmark-grid").classList.contains("view-list") !== (view === "list");
     libraryView = view;
     $("bookmark-grid").classList.toggle("view-list", view === "list");
+    $("bookmark-grid").querySelectorAll(".bookmark-card").forEach(arrangeBookmarkCard);
     for (const value of ["list", "grid"]) $("view-" + value).setAttribute("aria-pressed", String(view === value));
     try { localStorage.setItem("pocketmark-view", view); } catch { /* Private browsing may disallow storage. */ }
     if (changed && state.signedIn) move($("bookmark-grid"), [{ opacity: .8 }, { opacity: 1 }]);
@@ -806,7 +815,9 @@
       heading.append(open);
       const titleRow = el("div", "card-title-row");
       titleRow.append(favorite, heading);
-      body.append(titleRow, el("p", "card-domain", host));
+      const hostLabel = el("p", "card-domain", host);
+      if (link.type !== "file") hostLabel.title = link.url;
+      body.append(titleRow, hostLabel);
       if (link.description) body.append(el("p", "card-description", link.description));
       if (state.query && link.searchSnippet) {
         const excerpt = el("p", "search-excerpt");
@@ -897,6 +908,7 @@
         button.setAttribute("aria-label", `${button.title}: ${link.title || link.url}`);
       });
       card.append(top, body, footer);
+      arrangeBookmarkCard(card);
       grid.append(card);
     }
     bulk.render(libraryUnavailable || libraryLoading ? [] : state.links);
