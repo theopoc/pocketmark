@@ -29,7 +29,7 @@ INSERT INTO links_fts(links_fts) VALUES('rebuild');`)
 		if err != nil {
 			t.Fatal(err)
 		}
-		page, err := s.List(context.Background(), Filter{Query: "cafe"})
+		page, err := s.List(context.Background(), Filter{Query: "cafe", Fuzzy: true})
 		s.Close()
 		if err != nil || page.Total != 1 || len(page.Links) != 1 {
 			t.Fatalf("legacy restart %d: %+v, %v", restart, page, err)

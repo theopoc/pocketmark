@@ -176,8 +176,8 @@ func TestSearchExcerptBoundsAndOrdinaryLists(t *testing.T) {
 			if !strings.Contains(link.SearchSnippet, "\x1eneedle\x1f") {
 				t.Fatalf("missing content match: %q", link.SearchSnippet)
 			}
-		} else if link.SearchSnippet != "" {
-			t.Fatal("ordinary/fuzzy list should not carry an FTS excerpt")
+		} else if filter.Query == "" && link.SearchSnippet != "" {
+			t.Fatal("ordinary list should not carry an FTS excerpt")
 		}
 	}
 }

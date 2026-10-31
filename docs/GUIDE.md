@@ -43,7 +43,7 @@ The supplied Compose configuration sets a **128 MiB container memory limit** and
 - A persistent, sequential capture queue; failed captures can be retried. Interrupted jobs resume after restart.
 - Plain-text reading and downloadable original HTML for public HTML pages.
 - Legacy JSON import, Pocketmark JSON export/import and an authenticated [HTTP API](API.md).
-- Rename/move collections, atomic bulk actions, sorting and optional typo-tolerant metadata search.
+- Rename/move collections, atomic bulk actions, sorting and automatic typo-tolerant metadata matches alongside full-text search.
 - Anchored highlights and annotations, with stale highlights identified after a page changes; a separate structural reader preserves headings, lists, code and tables.
 - Browser bookmarks HTML import/export and WebDAV/XBEL synchronization for Floccus.
 - PDF, image and SingleFile/HTML files (standalone or attached) streamed in 64 KiB SQLite chunks; manual offline snapshots with embedded resources.

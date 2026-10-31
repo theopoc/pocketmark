@@ -107,7 +107,7 @@ Query parameters combine with AND:
 | `unread=1` | Unread only. |
 | `page` | One-based page; omitted or nonpositive values become 1. |
 
-The result is `{"links":[…],"total":123,"page":1,"pageSize":40}`. `sort=newest|oldest|title|title_desc|updated` selects ordering; default is newest. List records omit captured text to keep responses small. `fuzzy=1` enables edit-distance-one matching of metadata terms (plus prefix matches), using bounded row-by-row scanning; it does not fuzzy-scan captured bodies. `url=<exact URL>` performs an exact duplicate lookup and bypasses other filters.
+The result is `{"links":[…],"total":123,"page":1,"pageSize":40}`. `sort=newest|oldest|title|title_desc|updated` selects ordering; default is newest. List records omit captured text to keep responses small. `fuzzy=1` adds edit-distance-one matches of metadata terms (plus prefix matches) to full-text results, using bounded row-by-row scanning. The web UI sends it automatically for searches; it does not fuzzy-scan captured bodies. `url=<exact URL>` performs an exact duplicate lookup and bypasses other filters.
 
 ## Import and export
 

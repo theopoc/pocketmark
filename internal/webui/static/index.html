@@ -138,11 +138,7 @@
         <label class="search-box"><span data-icon="search" aria-hidden="true"></span><span class="sr-only">Search bookmarks</span><input id="search" type="search" placeholder="Search bookmarks, tags, and content…" autocomplete="off"><kbd aria-hidden="true">/</kbd></label>
       </div>
       <div class="library-options">
-        <button id="view-options-toggle" class="button subtle mobile-only" type="button" aria-controls="library-view-options" aria-expanded="false">View options</button>
-        <div id="library-view-options" class="library-option-details">
         <button id="refresh-button" class="button subtle icon-only" title="Refresh library" aria-label="Refresh library"><span data-icon="refresh" aria-hidden="true"></span></button>
-        <label class="inline-check"><input id="fuzzy-search" type="checkbox"><span>Include near matches<span class="search-scope">Titles, URLs, descriptions and tags only.</span></span></label>
-        </div>
         <div class="library-view-controls">
           <button id="sort-toggle" class="button subtle icon-only" type="button" aria-label="Sort bookmarks: Newest first" title="Sort bookmarks: Newest first" aria-haspopup="menu" aria-controls="sort-menu" aria-expanded="false"><span data-icon="sort" aria-hidden="true"></span></button>
           <div id="sort-menu" class="sort-menu" role="menu" aria-labelledby="sort-menu-title" hidden>
@@ -160,7 +156,7 @@
       <div class="results-bar"><div class="bulk-toolbar"><label class="inline-check"><input id="select-page" type="checkbox"><span>Select page</span></label><span id="results-label" aria-live="polite">Loading your library…</span><span id="selected-count" aria-live="polite" hidden>0 selected</span><button id="bulk-open" class="button subtle" hidden disabled>Actions</button><button id="clear-selection" class="text-button" hidden>Clear</button></div><span id="capture-label" class="capture-summary"></span></div>
       <div id="library-error" class="error-banner" role="alert" hidden></div>
       <section id="bookmark-grid" class="bookmark-grid view-list" aria-label="Bookmarks" aria-busy="true"></section>
-      <section id="empty-state" class="empty-state" aria-labelledby="empty-title" hidden><div id="empty-art" class="empty-art" data-icon="bookmark" aria-hidden="true"></div><h2 id="empty-title">Your library starts here</h2><p id="empty-message" class="muted">Save your first bookmark, or bring your existing bookmarks with you.</p><div class="reader-actions"><button id="empty-add" class="button primary"><span data-icon="plus" aria-hidden="true"></span>Add bookmark</button><button id="empty-import" class="button subtle" type="button">Import bookmarks</button><button id="empty-near-matches" class="button subtle" type="button" hidden>Try near matches</button><button id="empty-reset" class="button subtle" hidden>Clear filters</button></div></section>
+      <section id="empty-state" class="empty-state" aria-labelledby="empty-title" hidden><div id="empty-art" class="empty-art" data-icon="bookmark" aria-hidden="true"></div><h2 id="empty-title">Your library starts here</h2><p id="empty-message" class="muted">Save your first bookmark, or bring your existing bookmarks with you.</p><div class="reader-actions"><button id="empty-add" class="button primary"><span data-icon="plus" aria-hidden="true"></span>Add bookmark</button><button id="empty-import" class="button subtle" type="button">Import bookmarks</button><button id="empty-reset" class="button subtle" hidden>Clear filters</button></div></section>
       <nav id="pagination" class="pagination" aria-label="Results pages" hidden><button id="previous-page" class="button subtle"><span data-icon="arrow-left" aria-hidden="true"></span>Previous</button><span id="page-label"></span><button id="next-page" class="button subtle">Next<span data-icon="arrow-right" aria-hidden="true"></span></button></nav>
       </div>
       <footer class="main-footer"><span>Pocketmark</span><span><kbd>/</kbd> Search <span class="shortcut-divider">·</span> <kbd>N</kbd> New bookmark</span></footer>
@@ -232,7 +228,7 @@
       <p id="bookmark-save-status" class="small muted" role="status" hidden></p>
       <div id="bookmark-draft" class="draft-notice" hidden><span>Draft kept in this tab. Save it before closing the tab.</span><button id="discard-bookmark-draft" type="button" class="text-button">Discard draft</button></div>
       <p id="bookmark-error" class="form-error" role="alert"></p>
-      <div class="dialog-actions"><button type="button" class="button subtle close-dialog">Cancel</button><button type="submit" class="button primary" id="save-bookmark">Save bookmark</button></div>
+      <div class="dialog-actions"><button type="button" class="button subtle close-dialog">Cancel</button><button type="submit" class="button primary" id="save-bookmark">Save</button></div>
     </form>
   </dialog>
   <dialog id="collection-dialog" class="modal compact-modal" aria-labelledby="collection-dialog-title"><form id="collection-form"><div class="dialog-heading"><h2 id="collection-dialog-title">New collection</h2><button type="button" class="icon-button close-dialog" aria-label="Close"><span data-icon="close" aria-hidden="true"></span></button></div><label for="collection-name">Name</label><input id="collection-name" required maxlength="120" placeholder="Collection name" aria-describedby="collection-name-hint"><p id="collection-name-hint" class="field-hint">Up to 120 UTF-8 bytes; accented characters and emoji may use more than one byte.</p><label for="collection-parent">Parent collection</label><select id="collection-parent"></select><p id="collection-error" class="form-error" role="alert"></p><div class="dialog-actions"><button type="button" class="button subtle close-dialog">Cancel</button><button type="submit" class="button primary" id="save-collection">Save collection</button></div></form></dialog>
@@ -325,7 +321,7 @@
           <summary>Search &amp; filters<span data-icon="chevron-right" aria-hidden="true"></span></summary>
           <div class="help-answer">
             <p>Search covers titles, URLs, descriptions, notes, tags and captured text. A highlighted excerpt shows the match.</p>
-            <p>In <strong>View options</strong>, <strong>Include near matches</strong> also finds similar words in bookmark metadata. It does not search captured text.</p>
+            <p>Search automatically includes similar words in bookmark titles, URLs, descriptions and tags, alongside full-text matches in notes and captured text.</p>
             <p>Clear the active chips to remove filters.</p>
           </div>
         </details>

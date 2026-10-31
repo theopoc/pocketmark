@@ -1157,7 +1157,7 @@
             "name": "fuzzy",
             "in": "query",
             "required": false,
-            "description": "1 enables bounded edit-distance-one metadata matching; captured bodies are excluded.",
+            "description": "1 adds bounded edit-distance-one metadata matches to full-text results. Captured bodies remain searchable by exact prefix terms but are not typo-scanned. The web UI enables this automatically.",
             "schema": {
               "type": "string",
               "enum": [

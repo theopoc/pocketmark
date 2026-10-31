@@ -240,18 +240,20 @@ func (s *Store) List(ctx context.Context, f Filter) (Page, error) {
 	if len(f.Query) > 512 {
 		return p, errors.New("query exceeds 512 bytes")
 	}
-	if f.Query != "" && f.Fuzzy {
-		where += " AND fuzzy_match(?,l.title || ' ' || l.url || ' ' || l.description || ' ' || l.tags)=1"
-		args = append(args, f.Query)
-	} else if f.Query != "" {
+	if f.Query != "" {
 		terms := strings.Fields(f.Query)
 		for i, t := range terms {
 			terms[i] = `"` + strings.ReplaceAll(t, `"`, `""`) + `"*`
 		}
 		if len(terms) > 0 {
 			ftsQuery = strings.Join(terms, " AND ")
-			where += " AND l.id IN (SELECT rowid FROM links_fts WHERE links_fts MATCH ?)"
+			where += " AND (l.id IN (SELECT rowid FROM links_fts WHERE links_fts MATCH ?)"
 			args = append(args, ftsQuery)
+			if f.Fuzzy {
+				where += " OR fuzzy_match(?,l.title || ' ' || l.url || ' ' || l.description || ' ' || l.tags)=1"
+				args = append(args, f.Query)
+			}
+			where += ")"
 		}
 	}
 	if f.Collection == "0" {
@@ -283,7 +285,7 @@ func (s *Store) List(ctx context.Context, f Filter) (Page, error) {
 	// Control-character markers are rendered as text nodes/marks by the UI.
 	snippet := ",''"
 	if ftsQuery != "" {
-		snippet = ",(SELECT substr(snippet(links_fts,-1,char(30),char(31),'…',24),1,600) FROM links_fts WHERE rowid=l.id AND links_fts MATCH ?)"
+		snippet = ",COALESCE((SELECT substr(snippet(links_fts,-1,char(30),char(31),'…',24),1,600) FROM links_fts WHERE rowid=l.id AND links_fts MATCH ?),'')"
 		args = append([]any{ftsQuery}, args...)
 	}
 	rows, err := s.db.QueryContext(ctx, "SELECT "+columns+snippet+",EXISTS(SELECT 1 FROM thumbnails t WHERE t.link_id=l.id) FROM links l"+where+" ORDER BY "+order+" LIMIT ? OFFSET ?", args...)
