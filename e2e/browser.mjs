@@ -500,7 +500,7 @@ try {
   }, original);
   await page.locator('#view-list').click();
   assert.equal(await card(original).locator('.card-title-row .favorite-button').count(), 1, 'list view restores its existing favorite position');
-  assert.equal(await card(original).locator('.card-body > .card-domain').count(), 1, 'list view restores its existing domain position');
+  assert.equal(await card(original).locator('.card-metadata > .card-domain').count(), 1, 'list view restores the domain to its metadata row');
   await page.locator('#add-bookmark').click();
   assert.ok(await page.locator('#bookmark-dialog').evaluate(node => getComputedStyle(node).transitionDuration.split(',').every(value => parseFloat(value) === 0)), 'reduced motion removes dialog transitions');
   await page.locator('#bookmark-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();

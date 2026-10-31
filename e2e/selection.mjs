@@ -15,6 +15,14 @@ export async function selectionJourney(page, screenshots) {
   await page.locator('#bookmark-grid[aria-busy="false"]').waitFor();
   await page.locator("#view-list").click();
   const cards = page.locator('#bookmark-grid .bookmark-card').filter({ hasText: 'Selection fixture' });
+  const layout = await cards.first().evaluate(card => {
+    const rect = selector => card.querySelector(selector).getBoundingClientRect();
+    const title = rect('.card-title'), description = rect('.card-description'), domain = rect('.card-domain'), tags = rect('.card-tags');
+    return { aligned: Math.abs(title.x - description.x) < 1 && Math.abs(title.x - domain.x) < 1,
+      ordered: title.y < description.y && description.y < domain.y, metadataRow: Math.abs(domain.y - tags.y) < 5 };
+  });
+  assert.deepEqual(layout, { aligned: true, ordered: true, metadataRow: true }, 'list metadata follows the annotated hierarchy');
+  assert.equal(await page.locator('.results-tools #refresh-button').count(), 1, 'Refresh is grouped with selection help and view controls');
   const surface = async (index, modifiers = []) => {
     await cards.nth(index).scrollIntoViewIfNeeded();
     const rect = await cards.nth(index).boundingBox();
@@ -93,8 +101,8 @@ export async function selectionJourney(page, screenshots) {
   await page.locator('.selection-help summary').click();
   await page.locator('#bulk-open').click();
   await page.locator('#bulk-action').selectOption('delete');
-  page.once('dialog', dialog => dialog.accept());
   await page.locator('#bulk-apply').click();
+  await page.locator('#delete-selection-dialog button[value="delete"]').click();
   await page.locator('#bulk-dialog').waitFor({ state: 'hidden' });
   await count(0);
   assert.equal(await page.locator('.bookmark-exit-layer').count(), 0, 'reduced motion omits exit layers');
