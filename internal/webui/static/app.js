@@ -456,6 +456,7 @@
 
   const bulk = globalThis.PocketmarkBulk.create({
     api, toast, onChange: () => refresh(true), onSelectionChange: syncBookmarkSelection, fillCollections,
+    confirmDelete: confirmBulkDelete,
     defaultCollection: () => state.filter === "collection" ? state.collection : null, onSessionExpired: showLogin,
   });
 
@@ -901,17 +902,12 @@
       actions.append(moreActions, overflow);
       overflow.append(actionButton(link.read ? "check" : "clock", link.read ? "Mark unread" : "Mark as read", (event) => updateLink(link, { read: !link.read }, event.currentTarget), link.read ? "read" : ""));
       overflow.append(actionButton("edit", "Edit bookmark", () => openEditor(link)));
-      overflow.append(actionButton("trash", "Delete bookmark", async (event) => {
-        if (!confirm(`Delete “${link.title || link.url}” and its saved content?`)) return;
-        const button = event.currentTarget;
-        button.disabled = true;
-        try {
-          await api(`/api/links/${link.id}`, { method: "DELETE" });
-          bulk.select(link, false);
-          if (state.links.length === 1 && state.page > 1) state.page--;
-          await refresh();
-          toast("Bookmark deleted.");
-        } catch (error) { toast(error.message, true); button.disabled = false; }
+      overflow.append(actionButton("trash", "Delete bookmark", () => {
+        deleteBookmark = link;
+        $("delete-bookmark-name").textContent = `“${link.title || link.url}”`;
+        $("delete-bookmark-error").textContent = "";
+        $("delete-bookmark-dialog").showModal();
+        $("delete-bookmark-cancel").focus();
       }));
       const url = safeURL(link.url);
       if (url) {
@@ -1201,6 +1197,47 @@
     finally { $("mfa-login-continue").disabled = false; }
   });
   $("mfa-back").addEventListener("click", () => { resetMFALogin(); configureLogin(); $("login-error").textContent = ""; $("login-username").focus(); });
+
+  function confirmBulkDelete(count) {
+    const dialog = $("delete-selection-dialog");
+    $("delete-selection-description").textContent = `Delete ${count} selected bookmark${count === 1 ? "" : "s"} and its saved content? This cannot be undone.`;
+    dialog.returnValue = "";
+    return new Promise((resolve) => {
+      dialog.addEventListener("close", () => resolve(dialog.returnValue === "delete"), { once: true });
+      dialog.showModal();
+      dialog.querySelector("button").focus();
+    });
+  }
+
+  const deleteBookmarkDialog = $("delete-bookmark-dialog");
+  let deleteBookmark = null;
+  let deletingBookmark = false;
+  deleteBookmarkDialog.addEventListener("cancel", (event) => { if (deletingBookmark) event.preventDefault(); });
+  deleteBookmarkDialog.addEventListener("close", () => { deleteBookmark = null; });
+  $("delete-bookmark-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (deletingBookmark || !deleteBookmark) return;
+    const link = deleteBookmark;
+    deletingBookmark = true;
+    $("delete-bookmark-confirm").disabled = $("delete-bookmark-cancel").disabled = true;
+    $("delete-bookmark-confirm").textContent = "Deleting…";
+    $("delete-bookmark-error").textContent = "";
+    try {
+      await api(`/api/links/${link.id}`, { method: "DELETE" });
+      bulk.select(link, false);
+      if (state.links.length === 1 && state.page > 1) state.page--;
+      deleteBookmarkDialog.close();
+      await refresh();
+      toast("Bookmark deleted.");
+    } catch (error) {
+      if (deleteBookmarkDialog.open) $("delete-bookmark-error").textContent = error.message;
+      else toast(error.message, true);
+    } finally {
+      deletingBookmark = false;
+      $("delete-bookmark-confirm").disabled = $("delete-bookmark-cancel").disabled = false;
+      $("delete-bookmark-confirm").textContent = "Delete bookmark";
+    }
+  });
 
   const logoutDialog = $("logout-dialog");
   let signingOut = false;

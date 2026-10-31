@@ -18,7 +18,7 @@ function setup(request = async () => {}, confirm = () => true) {
   const get = id => { assert.ok(nodes.has(id), `unknown shipped element ${id}`); return nodes.get(id); };
   get("bulk-form").reset = () => { for (const id of ["bulk-action", "bulk-tags", "bulk-collection", "bulk-value"]) get(id).value = ""; };
   const calls = [], notices = [], changes = [], selections = [], expiries = [];
-  const bulk = create({ api: async (path, options) => { const call = { path, ...options, body: JSON.parse(options.body) }; calls.push(call); return request(call); }, toast: (...args) => notices.push(args), onChange: async () => changes.push(true), onSelectionChange: () => selections.push(true), fillCollections: (select, value) => { select.value = value == null ? "" : String(value); }, defaultCollection: () => 7, onSessionExpired: () => expiries.push(true) }, { document: { getElementById: get, createElement: () => new Element() }, confirm });
+  const bulk = create({ api: async (path, options) => { const call = { path, ...options, body: JSON.parse(options.body) }; calls.push(call); return request(call); }, toast: (...args) => notices.push(args), onChange: async () => changes.push(true), onSelectionChange: () => selections.push(true), fillCollections: (select, value) => { select.value = value == null ? "" : String(value); }, defaultCollection: () => 7, onSessionExpired: () => expiries.push(true), confirmDelete: confirm }, { document: { getElementById: get, createElement: () => new Element() } });
   const link = id => ({ id, title: `Page ${id}`, url: `https://example.org/${id}` });
   const open = async (action = "favorite") => { await fire(get("bulk-open"), "click"); get("bulk-action").value = action; await fire(get("bulk-action"), "change"); };
   const submit = () => fire(get("bulk-form"), "submit");
@@ -70,6 +70,7 @@ test("the reviewed scope is frozen and remove/reselect survives a submitted succ
   const pending = deferred(), env = setup(() => pending.promise);
   env.bulk.select(env.link(1), true); await env.open("delete");
   env.bulk.select(env.link(2), true); const save = env.submit();
+  await Promise.resolve();
   env.bulk.select(env.link(1), false); env.bulk.select(env.link(1), true);
   pending.resolve(); await save;
   assert.deepEqual(env.calls[0].body.ids, [1]); assert.equal(env.bulk.has(1), true); assert.equal(env.bulk.has(2), true);

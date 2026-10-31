@@ -817,8 +817,16 @@ try {
   assert.equal(await page.locator('#asset-viewer-content').innerHTML(), '');
   await page.getByRole('button', { name: 'Close reader', exact: true }).click();
 
-  page.once('dialog', dialog => dialog.accept());
   await card(revised).getByRole('button', { name: `Delete bookmark: ${revised}`, exact: true }).click();
+  const deleteDialog = page.getByRole('alertdialog', { name: 'Delete bookmark?' });
+  await deleteDialog.waitFor({ state: 'visible' });
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'delete-bookmark-cancel');
+  assert.ok((await deleteDialog.textContent()).includes(revised));
+  await page.keyboard.press('Escape');
+  await deleteDialog.waitFor({ state: 'hidden' });
+  assert.equal(await card(revised).count(), 1);
+  await card(revised).getByRole('button', { name: `Delete bookmark: ${revised}`, exact: true }).click();
+  await deleteDialog.getByRole('button', { name: 'Delete bookmark', exact: true }).click();
   await card(revised).waitFor({ state: 'detached' });
   await page.reload();
   await page.locator('#empty-title').filter({ hasText: 'No bookmarks found' }).waitFor();
