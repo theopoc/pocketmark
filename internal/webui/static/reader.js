@@ -87,17 +87,7 @@
       catch (error) { if (error.status === 401) expireSession(); throw error; }
     }
     const readerDialog = $("reader-dialog");
-    function outsideReader(event) {
-      const rect = readerDialog.getBoundingClientRect();
-      return event.target === readerDialog && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom);
-    }
-    let backdropPress = false;
-    readerDialog.addEventListener("pointerdown", (event) => { backdropPress = outsideReader(event); });
-    readerDialog.addEventListener("click", (event) => {
-      if (backdropPress && outsideReader(event)) readerDialog.close();
-      backdropPress = false;
-    });
-    readerDialog.addEventListener("close", () => { backdropPress = false; if (!readerDialog.open) invalidate(); });
+    readerDialog.addEventListener("close", () => { if (!readerDialog.open) invalidate(); });
     $("annotation-dialog").addEventListener("close", () => {
       if (!$("annotation-dialog").open) { annotationSession++; state.annotationDraft = null; }
     });

@@ -1,4 +1,4 @@
-import { clickNavigation, openNavigation, navigationJourney } from './navigation.mjs';
+import { clickNavigation, openNavigation, navigationJourney, dialogDismissalJourney } from './navigation.mjs';
 // Real Chromium, real HTTP and SQLite. Run only against the disposable smoke instance.
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
@@ -150,6 +150,7 @@ try {
   assert.equal(await page.evaluate(() => document.activeElement.id), 'main-content', 'library shortcut moves keyboard focus to the main content');
   assert.equal(page.url(), libraryURL, 'library shortcut does not add a history entry');
   await navigationJourney(page);
+  await dialogDismissalJourney(page);
   const oldSession = (await page.context().cookies()).find(cookie => cookie.name === 'pocketmark');
   await clickNavigation(page, '#logout-button');
   await page.locator('#logout-confirm').click();

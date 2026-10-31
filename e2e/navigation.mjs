@@ -25,6 +25,59 @@ export async function clickNavigation(page, selector) {
   await page.locator(selector).click();
 }
 
+// Exercise every actual dialog template, including nested overlays, with native pointer events.
+export async function dialogDismissalJourney(page) {
+  const original = page.viewportSize();
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const ids = await page.locator('dialog').evaluateAll(nodes => nodes.map(node => node.id));
+    for (const id of ids) {
+      if (id === 'navigation-dialog' && width > 900) continue;
+      const dialog = page.locator(`#${id}`);
+      await dialog.evaluate(node => node.showModal());
+      // Wait for the entry animation before measuring the visible boundary.
+      await dialog.evaluate(async node => { await Promise.all(node.getAnimations().map(animation => animation.finished.catch(() => {}))); });
+      const bounds = await dialog.boundingBox();
+      assert.ok(bounds, `${id}: dialog is visible at ${width}px`);
+      const outside = bounds.x > 1 ? { x: 0, y: 0 } : bounds.x + bounds.width < width - 1 ? { x: width - 1, y: 0 } : null;
+      if (!outside) {
+        await dialog.evaluate(node => new Promise(resolve => { node.addEventListener('close', resolve, { once: true }); node.close(); }));
+        continue;
+      }
+      await page.mouse.click(bounds.x + 1, bounds.y + 1);
+      assert.equal(await dialog.evaluate(node => node.open), true, `${id}: inside click stays open at ${width}px`);
+      await page.mouse.move(bounds.x + 1, bounds.y + 1);
+      await page.mouse.down();
+      await page.mouse.move(outside.x, outside.y);
+      await page.mouse.up();
+      assert.equal(await dialog.evaluate(node => node.open), true, `${id}: dragging outside stays open at ${width}px`);
+      await page.mouse.click(outside.x, outside.y);
+      await dialog.waitFor({ state: 'hidden' });
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    }
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.locator('#help-dialog').evaluate(node => node.showModal());
+  await page.locator('#export-dialog').evaluate(node => {
+    // Exercise older browsers without requestClose and a prevented cancellation.
+    node.requestClose = undefined;
+    node.addEventListener('cancel', event => event.preventDefault(), { once: true });
+    node.showModal();
+  });
+  await page.mouse.click(0, 0);
+  assert.equal(await page.locator('#export-dialog').evaluate(node => node.open), true, 'cancellation guards also work without requestClose');
+  await page.mouse.click(0, 0);
+  await page.locator('#export-dialog').waitFor({ state: 'hidden' });
+  await page.locator('#export-dialog').evaluate(node => { delete node.requestClose; });
+  assert.equal(await page.locator('#help-dialog').evaluate(node => node.open), true, 'only the top dialog closes');
+  await page.locator('#help-dialog').evaluate(node => new Promise(resolve => { node.addEventListener('close', resolve, { once: true }); node.close(); }));
+  await page.setViewportSize(original);
+  await page.locator('#main-content').focus();
+  await page.mouse.move(original.width / 2, original.height / 2);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
 export async function navigationJourney(page) {
   const original = page.viewportSize();
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -75,7 +128,8 @@ export async function navigationJourney(page) {
   await page.setViewportSize(original);
   await page.locator('#add-bookmark').click();
   await page.locator('#bookmark-title').fill('Unsaved sign-out draft');
-  await page.locator('#bookmark-dialog .close-dialog').first().click();
+  await page.mouse.click(0, 0);
+  await page.locator('#bookmark-dialog').waitFor({ state: 'hidden' });
   await clickNavigation(page, '#logout-button');
   assert.match(await page.locator('#logout-description').textContent(), /discard the unsaved drafts/);
   await page.locator('#logout-cancel').click();
@@ -97,6 +151,7 @@ export async function navigationJourney(page) {
   assert.equal(await page.locator('#logout-confirm').isDisabled(), true);
   assert.equal(await page.locator('#logout-cancel').isDisabled(), true);
   await page.keyboard.press('Escape');
+  await page.mouse.click(0, 0);
   assert.equal(await page.locator('#logout-dialog').evaluate(node => node.open), true);
   release();
   await page.locator('#logout-error').filter({ hasText: 'The server could not complete this action' }).waitFor();
