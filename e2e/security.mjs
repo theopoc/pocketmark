@@ -147,11 +147,11 @@ export async function securityJourney({ browser, page, base, username, password,
     await page.locator('#sessions-feedback').filter({ hasText: 'All other browsers' }).waitFor();
     assert.equal((await peer.request.get(url('/api/session'))).status(), 401);
     assert.equal((await request.get(url('/api/session'))).status(), 200);
-    // Cancel must not start a download or retain the entered password.
+    // Clicking outside must cancel without starting a download or retaining the password.
     await selectSettings(page, 'backup');
     await page.getByRole('link', { name: 'Download full backup', exact: true }).click();
     await page.locator('#reauth-password').fill('not-submitted');
-    await page.locator('#reauth-cancel').click();
+    await page.mouse.click(0, 0);
     await page.waitForFunction(() => document.getElementById('reauth-password').value === '');
     assert.equal(await page.locator('#reauth-password').inputValue(), '');
     await page.locator('#settings-page [data-settings-back]').click();

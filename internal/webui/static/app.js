@@ -328,7 +328,6 @@
     if (!navigation.open) closeWorkspacePopover();
     if (!desktopNavigation.matches) $("open-navigation").setAttribute("aria-expanded", String(navigation.open));
   });
-  navigation.addEventListener("click", (event) => { if (event.target === navigation) closeNavigation(); });
   $("sidebar").addEventListener("click", (event) => {
     const button = event.target.closest("button");
     if (button && button.id !== "close-navigation" && button.id !== "sidebar-mode" && !button.hasAttribute("data-keep-navigation")) closeNavigation();
@@ -1217,6 +1216,24 @@
   });
 
   document.querySelectorAll("[data-filter]").forEach((button) => button.addEventListener("click", () => selectFilter(button.dataset.filter)));
+  // Treat an outside click like Escape so each dialog keeps its cancellation guards.
+  document.querySelectorAll("dialog").forEach((dialog) => {
+    let backdropPress = false;
+    function outside(event) {
+      const rect = dialog.getBoundingClientRect();
+      return event.target === dialog && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom);
+    }
+    dialog.addEventListener("pointerdown", (event) => { backdropPress = event.button === 0 && outside(event); });
+    dialog.addEventListener("pointercancel", () => { backdropPress = false; });
+    dialog.addEventListener("close", () => { backdropPress = false; });
+    dialog.addEventListener("click", (event) => {
+      const dismiss = backdropPress && outside(event);
+      backdropPress = false;
+      if (!dismiss || !dialog.open) return;
+      if (typeof dialog.requestClose === "function") dialog.requestClose();
+      else if (dialog.dispatchEvent(new Event("cancel", { cancelable: true }))) dialog.close();
+    });
+  });
   document.querySelectorAll(".close-dialog").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
   $("add-bookmark").addEventListener("click", () => openEditor());
   $("empty-add").addEventListener("click", () => openEditor());
