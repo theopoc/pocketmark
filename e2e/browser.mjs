@@ -544,6 +544,12 @@ try {
   await page.locator('#reader-title').filter({ hasText: original }).waitFor();
   assert.equal(await page.locator('#reader-retry-open').isVisible(), false);
   assert.equal(await page.locator('#reader-files').isVisible(), false);
+  assert.equal(await page.locator('#reader-formats').isVisible(), true);
+  assert.equal(await page.locator('#reader-content').isVisible(), false);
+  for (const format of ['html', 'image', 'pdf']) {
+    assert.equal(await page.locator(`#reader-format-${format}`).isVisible(), true);
+    assert.ok(await page.locator(`#reader-format-${format}`).evaluate(node => node.getBoundingClientRect().height >= 44));
+  }
   await page.locator('#reader-options summary').click();
   for (const selector of ['#reader-original', '#reader-notebook-toggle', '#reader-text-mode', '#reader-size']) {
     assert.ok(await page.locator(selector).evaluate(node => node.getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
@@ -705,9 +711,8 @@ try {
   await page.route(previews, route => route.request().method() === 'GET'
     ? route.fulfill({ status: 422, contentType: 'application/json', body: '{"error":"Synthetic preparation failure"}' })
     : route.continue());
-  await page.locator('#reader-notebook-toggle').click();
-  await page.locator('#reader-tab-files').click();
-  await page.getByRole('button', { name: 'View capture.html', exact: true }).click();
+  assert.equal(await page.locator('#reader-content').isVisible(), false);
+  await page.getByRole('button', { name: 'Open saved HTML', exact: true }).click();
   const viewer = page.locator('#asset-viewer');
   await viewer.waitFor({ state: 'visible' });
   await page.locator('#asset-viewer-status').filter({ hasText: 'Could not open this preview' }).waitFor();
@@ -735,10 +740,12 @@ try {
   ]);
   await page.locator('#asset-viewer-select').selectOption({ label: 'legacy.html' });
   await capture.getByRole('heading', { name: 'Café €' }).waitFor();
-  await page.locator('#asset-viewer-select').selectOption({ label: 'capture.png' });
+  await page.getByRole('button', { name: 'Close preview', exact: true }).click();
+  await page.getByRole('button', { name: 'Open saved Screenshot', exact: true }).click();
   await page.waitForFunction(() => { const image = document.querySelector('#asset-viewer-content img'); return image?.complete && image.naturalWidth > 0; });
   const nativeViewer = page.waitForEvent('framenavigated', { predicate: frame => frame.url().startsWith('chrome-extension://') });
-  await page.locator('#asset-viewer-select').selectOption({ label: 'capture.pdf' });
+  await page.getByRole('button', { name: 'Close preview', exact: true }).click();
+  await page.getByRole('button', { name: 'Open saved PDF', exact: true }).click();
   await page.waitForFunction(() => document.getElementById('asset-viewer-status').textContent === 'capture.pdf');
   assert.equal(await page.locator('#asset-viewer-content iframe').getAttribute('sandbox'), null);
   await (await nativeViewer).locator('pdf-viewer').waitFor({ state: 'attached' });

@@ -161,6 +161,9 @@
     "chevron-right": ["m9 5 7 7-7 7"], "arrow-right": ["M4 12h16m-6-6 6 6-6 6"],
     "arrow-left": ["M20 12H4m6-6-6 6 6 6"],
     book: ["M12 5C8 2 4 3 2 4v16c3-2 7-2 10 0 3-2 7-2 10 0V4c-2-1-6-2-10 1ZM12 5v15"],
+    html: ["M4 3h16v18H4Z", "M4 8h16M7 5.5h.01M10 5.5h.01", "m9 12-3 3 3 3m6-6 3 3-3 3"],
+    image: ["M3 3h18v18H3Z", "m3 17 6-6 5 5 3-3 4 4", "M17 7h.01"],
+    pdf: ["M5 3h9l5 5v13H5Z", "M14 3v5h5M8 12h8M8 16h5"],
   };
   function icon(name) {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
