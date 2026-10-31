@@ -146,3 +146,24 @@ La leçon commune applicable n'est pas « plus de jobs » : c'est une séparatio
 5. Optimiser la release ensuite, en conservant exactement les artefacts et digests testés. Aucun tag ni publication n'est autorisé par cet audit.
 
 Pour les futures modifications de code/workflows, exécuter `make check`, `make test`, `make test-extension`, `make build` et les régressions des scripts/gates ; pour Docker, le smoke test de l'image construite. Ce rapport seul n'exige pas de relancer les tests applicatifs. Les gains ne s'additionnent pas mécaniquement : une fois un goulot supprimé, un autre job peut devenir limitant.
+
+
+## Mesure d'implémentation locale
+
+La première optimisation des fixtures de routes a été mesurée sur le même hôte
+AMD64, avec Go 1.26.10, `-race -p 1 -count=1 -covermode=atomic`, les deux tags SQLite
+et un profil CPU dans les deux runs. Le paquet serveur passe de **160,288 s** à
+**104,826 s** (environ **−34,6 %**), avec **76,8 %** de couverture dans les deux cas.
+La dérivation de production, les tests de login/MFA/réauthentification et les bases
+jetables par test sont conservés. Un test vérifie le hash synthétique précalculé
+contre le KDF de production. Cette comparaison locale à un run par variante ne
+prouve pas le même gain sur les runners GitHub ou une médiane à 3–4 minutes.
+
+La CI ajoute des résumés de durées, des caches de compilation renouvelés par SHA
+et séparés par mode, un gate explicite sans polling, et des images de release qui
+incorporent les exécutables CI validés. Les scripts de release/expression sont
+exécutés une seule fois sur AMD64 ; les tests Go race et la couverture restent
+sur les deux architectures. Les filtres de PR restent sélectifs, mais chaque
+push main construit désormais les artefacts complets. Le fonctionnement courant
+est décrit dans [CI.md](CI.md) ; les sections précédentes conservent le constat
+avant optimisation.

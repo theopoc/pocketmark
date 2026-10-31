@@ -61,7 +61,6 @@ jobs:
         run: |
           branch=$(gh pr view "$PR_NUMBER" --json headRefName --jq .headRefName)
           gh workflow run ci.yml --ref "$branch"
-          gh workflow run ci-required.yml --ref "$branch"
 
   validate:
     name: Validate release ref

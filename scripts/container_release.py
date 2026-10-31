@@ -45,8 +45,8 @@ def prepare(tag):
     revision = run("git", "rev-parse", f"refs/tags/{tag}^{{}}")
     require(re.fullmatch(REVISION, revision), "invalid source revision")
     run("git", "merge-base", "--is-ancestor", revision, "origin/main")
-    wait(revision)
-    output(tag=tag, revision=revision, image="ghcr.io/" + repo.lower())
+    run_id = wait(revision)
+    output(tag=tag, revision=revision, image="ghcr.io/" + repo.lower(), run_id=str(run_id))
 
 
 def validate_index(index, expected):

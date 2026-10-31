@@ -1,0 +1,48 @@
+name: Go toolchain and mode-specific caches
+description: Reuse modules and refresh compiled packages independently for each compiler and test mode.
+inputs:
+  mode:
+    description: Compilation mode (quality, security, race-cover or musl-static)
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version-file: go.mod
+        cache: false
+    - id: identity
+      shell: bash
+      env:
+        CACHE_MODE: ${{ inputs.mode }}
+      run: |
+        case "$CACHE_MODE" in
+          quality|security|race-cover) compiler=gcc ;;
+          musl-static) compiler=musl-gcc ;;
+          *) echo 'Unknown Go cache mode' >&2; exit 1 ;;
+        esac
+        echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+        echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+        echo "go=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
+        echo "image=${ImageOS:-unknown}" >> "$GITHUB_OUTPUT"
+        toolchain=$({ "$compiler" --version; dpkg-query -W libc6-dev musl musl-dev musl-tools 2>/dev/null || true; } | sha256sum | cut -d' ' -f1)
+        echo "toolchain=$toolchain" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+      with:
+        path: ${{ steps.identity.outputs.modules }}
+        key: go-mod-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.identity.outputs.go }}-${{ hashFiles('go.sum') }}
+    - id: compiled
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+      with:
+        path: ${{ steps.identity.outputs.build }}
+        key: go-build-v1-${{ runner.os }}-${{ steps.identity.outputs.image }}-${{ runner.arch }}-${{ steps.identity.outputs.go }}-${{ steps.identity.outputs.toolchain }}-${{ inputs.mode }}-${{ hashFiles('go.sum', 'Makefile', '.github/actions/go-cache/action.yml') }}-${{ github.sha }}
+        restore-keys: |
+          go-build-v1-${{ runner.os }}-${{ steps.identity.outputs.image }}-${{ runner.arch }}-${{ steps.identity.outputs.go }}-${{ steps.identity.outputs.toolchain }}-${{ inputs.mode }}-${{ hashFiles('go.sum', 'Makefile', '.github/actions/go-cache/action.yml') }}-
+    - name: Report cache identity
+      shell: bash
+      env:
+        CACHE_MODE: ${{ inputs.mode }}
+        CACHE_HIT: ${{ steps.compiled.outputs.cache-hit }}
+        GO_VERSION: ${{ steps.identity.outputs.go }}
+      run: |
+        printf 'Go cache: mode=%s, version=%s, arch=%s, exact hit=%s\n' "$CACHE_MODE" "$GO_VERSION" "$RUNNER_ARCH" "${CACHE_HIT:-false}" >> "$GITHUB_STEP_SUMMARY"
