@@ -187,7 +187,7 @@ try {
     await page.locator('#mfa-manage-form button[value="replace"]').click();
     await page.locator('#mfa-manage-enrollment').waitFor({ state: 'visible' });
     // Closing settings must not spend the recovery grant before confirmation.
-    await page.locator('[data-settings-back]:visible').click();
+    await page.locator('#settings-page [data-settings-back]').click();
     await page.locator('#settings-page').waitFor({ state: 'hidden' });
     await openSettings(page, '2fa');
     await page.locator('#mfa-manage-password').fill(password);
@@ -201,7 +201,7 @@ try {
     const heldReplacement = await holdResponse(page, '/api/mfa/verify');
     await page.locator('#mfa-manage-verify button[type="submit"]').click();
     await heldReplacement.ready;
-    assert.equal(await page.locator('[data-settings-back]:visible').isDisabled(), true);
+    assert.equal(await page.locator('#settings-page [data-settings-back]').isDisabled(), true);
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('#settings-page').isVisible(), true);
     heldReplacement.release();
@@ -298,7 +298,7 @@ try {
     const heldCodes = await holdResponse(page, '/api/mfa/recovery-codes');
     await page.locator('#mfa-manage-form button[value="codes"]').click();
     await heldCodes.ready;
-    assert.equal(await page.locator('[data-settings-back]:visible').isDisabled(), true);
+    assert.equal(await page.locator('#settings-page [data-settings-back]').isDisabled(), true);
     assert.equal(await page.locator('[data-settings-section="backup"]').isDisabled(), true);
     assert.equal(await page.locator('[data-settings-section="2fa"]').isEnabled(), true);
     await page.keyboard.press('Escape');
@@ -321,7 +321,7 @@ try {
     freshRecoveryCodes = (await page.locator('#mfa-manage-codes-value').textContent()).trim().split('\n');
     assert.equal(freshRecoveryCodes.length, 10);
     await page.locator('#mfa-manage-feedback').filter({ hasText: 'These recovery codes may have changed' }).waitFor();
-    await page.locator('[data-settings-back]:visible').click();
+    await page.locator('#settings-page [data-settings-back]').click();
     await page.waitForFunction(() => document.getElementById('mfa-manage-codes-value').textContent === '');
     assert.equal(await page.locator('#mfa-manage-codes-value').textContent(), '');
     assert.equal(await page.locator('#mfa-manage-secret').inputValue(), '');
@@ -366,7 +366,7 @@ try {
       assert.equal((await page.locator('#mfa-manage-codes-value').textContent()).trim(), replacementCodes.slice(4).join('\n'));
       await invalid.remove();
       await expired.remove();
-      await page.locator('[data-settings-back]:visible').click();
+      await page.locator('#settings-page [data-settings-back]').click();
       await page.locator('#login-view').waitFor({ state: 'visible' });
       await page.reload();
       await page.locator('#app-view').waitFor({ state: 'visible' });

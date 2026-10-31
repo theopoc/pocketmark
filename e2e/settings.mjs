@@ -36,7 +36,7 @@ export async function settingsNavigationJourney(page) {
   await page.locator('[data-settings-panel="backup"]').waitFor({ state: 'visible' });
   await page.goForward();
   await page.locator('[data-settings-panel="2fa"]').waitFor({ state: 'visible' });
-  await page.locator('[data-settings-back]:visible').click();
+  await clickNavigation(page, '#settings-navigation [data-settings-back]');
   await page.locator('#library-content').waitFor({ state: 'visible' });
   assert.equal(new URL(page.url()).searchParams.has('settings'), false);
   assert.equal(await page.locator('#search').inputValue(), 'settings navigation');

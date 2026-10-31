@@ -158,6 +158,8 @@
     upload: ["M12 16V4m-5 5 5-5 5 5M4 16v5h16v-5"],
     settings: ["M4 7h16M4 17h16M8 4v6M16 14v6"],
     logout: ["M10 4H3v16h7M8 12h13m-5-5 5 5-5 5"],
+    "panel-open": ["M4 4h16v16H4zM9 4v16", "m14 9 3 3-3 3"],
+    "panel-close": ["M4 4h16v16H4zM9 4v16", "m17 9-3 3 3 3"],
     menu: ["M4 6h16M4 12h16M4 18h16"], lock: ["M5 10h14v11H5V10Z", "M8 10V6a4 4 0 0 1 8 0v4"],
     "chevron-right": ["m9 5 7 7-7 7"], "arrow-right": ["M4 12h16m-6-6 6 6-6 6"],
     "arrow-left": ["M20 12H4m6-6-6 6 6 6"],
@@ -228,6 +230,45 @@
   setLibraryView(libraryView);
 
   const navigation = $("navigation-dialog");
+  const sidebar = $("sidebar");
+  const desktopNavigation = matchMedia("(min-width: 901px) and (hover: hover) and (pointer: fine)");
+  const sidebarRail = document.createElement("div");
+  sidebarRail.className = "sidebar-rail";
+  let sidebarFixed = false;
+  try { sidebarFixed = localStorage.getItem("pocketmark-sidebar") === "fixed"; } catch { /* Storage is optional. */ }
+  function renderSidebarMode() {
+    $("app-view").classList.toggle("sidebar-fixed", desktopNavigation.matches && sidebarFixed);
+    const button = $("sidebar-mode");
+    const label = sidebarFixed ? "Hide navigation automatically" : "Keep navigation open";
+    button.setAttribute("aria-pressed", String(sidebarFixed));
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    $("sidebar-mode-icon").replaceChildren(icon(sidebarFixed ? "panel-close" : "panel-open"));
+  }
+  function arrangeNavigation() {
+    if (navigation.open) navigation.close();
+    closeWorkspacePopover();
+    if (desktopNavigation.matches) {
+      $("app-view").insertBefore(sidebarRail, $("main-content"));
+      sidebarRail.append(sidebar);
+    } else {
+      navigation.append(sidebar);
+      sidebarRail.remove();
+    }
+    $("open-navigation").setAttribute("aria-controls", desktopNavigation.matches ? "sidebar" : "navigation-dialog");
+    if (desktopNavigation.matches) $("open-navigation").removeAttribute("aria-expanded");
+    else $("open-navigation").setAttribute("aria-expanded", "false");
+    renderSidebarMode();
+  }
+  $("sidebar-mode").addEventListener("click", () => {
+    sidebarFixed = !sidebarFixed;
+    try { localStorage.setItem("pocketmark-sidebar", sidebarFixed ? "fixed" : "auto"); } catch { /* Storage is optional. */ }
+    renderSidebarMode();
+  });
+  sidebar.addEventListener("focusout", (event) => {
+    if (!sidebar.contains(event.relatedTarget)) sidebarRail.classList.remove("revealed");
+  });
+  desktopNavigation.addEventListener("change", arrangeNavigation);
   const workspaceButton = $("workspace-button");
   const workspacePopover = $("workspace-popover");
   function closeWorkspacePopover() {
@@ -249,14 +290,21 @@
   }, true);
   window.addEventListener("resize", closeWorkspacePopover);
   $("sidebar").addEventListener("scroll", closeWorkspacePopover);
+  arrangeNavigation();
   function closeNavigation() {
     closeWorkspacePopover();
+    if (desktopNavigation.matches) {
+      sidebarRail.classList.remove("revealed");
+      if (sidebar.contains(document.activeElement)) $("main-content").focus({ preventScroll: true });
+      return;
+    }
     if (!navigation.open) return;
     navigation.close();
     $("open-navigation").setAttribute("aria-expanded", "false");
     $("open-navigation").focus({ preventScroll: true });
   }
   $("open-navigation").addEventListener("click", () => {
+    if (desktopNavigation.matches) { sidebarRail.classList.add("revealed"); $("sidebar-mode").focus(); return; }
     navigation.showModal();
     $("open-navigation").setAttribute("aria-expanded", "true");
     $("close-navigation").focus();
@@ -265,12 +313,12 @@
   navigation.addEventListener("cancel", (event) => { event.preventDefault(); closeNavigation(); });
   navigation.addEventListener("close", () => {
     if (!navigation.open) closeWorkspacePopover();
-    $("open-navigation").setAttribute("aria-expanded", String(navigation.open));
+    if (!desktopNavigation.matches) $("open-navigation").setAttribute("aria-expanded", String(navigation.open));
   });
   navigation.addEventListener("click", (event) => { if (event.target === navigation) closeNavigation(); });
   $("sidebar").addEventListener("click", (event) => {
     const button = event.target.closest("button");
-    if (button && button.id !== "close-navigation" && !button.hasAttribute("data-keep-navigation")) closeNavigation();
+    if (button && button.id !== "close-navigation" && button.id !== "sidebar-mode" && !button.hasAttribute("data-keep-navigation")) closeNavigation();
   }, true);
 
   function toast(message, error = false, action = null) {
