@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS links(
  status TEXT NOT NULL DEFAULT 'pending', error TEXT NOT NULL DEFAULT '', content TEXT NOT NULL DEFAULT '', archive BLOB,
  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS thumbnails(link_id INTEGER PRIMARY KEY REFERENCES links(id) ON DELETE CASCADE, data BLOB NOT NULL);
+CREATE TRIGGER IF NOT EXISTS thumbnail_url_change AFTER UPDATE OF url ON links WHEN old.url<>new.url BEGIN DELETE FROM thumbnails WHERE link_id=new.id; END;
 CREATE TABLE IF NOT EXISTS annotations(id INTEGER PRIMARY KEY, link_id INTEGER NOT NULL REFERENCES links(id) ON DELETE CASCADE, quote TEXT NOT NULL, start_offset INTEGER NOT NULL, end_offset INTEGER NOT NULL, note TEXT NOT NULL DEFAULT '', color TEXT NOT NULL DEFAULT 'yellow', created_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS annotations_link ON annotations(link_id,id);
 CREATE INDEX IF NOT EXISTS links_collection ON links(collection_id,id DESC);

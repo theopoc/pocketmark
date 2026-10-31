@@ -101,3 +101,26 @@ again. Preserve the `server-secret` file (or legacy `access-token` file or
 directory, never alongside an old WAL/SHM file. New ZIP snapshots invalidate recovery codes and the current TOTP window on restore; wait for up to two new authenticator codes before signing in and generating recovery codes, or use the local `-reset-mfa` command if the authenticator is unavailable. Clock differences can add delay. Older ZIPs and raw copies are not detected and may restore earlier TOTP counters: reset MFA or regenerate recovery codes manually, and revoke restored sessions. Changing the server secret invalidates session digests and makes the encrypted TOTP secret unreadable. A still-valid recovery code can be used to sign in and replace the authenticator; otherwise reset MFA and enroll again. A new ZIP restored with a different key requires reset because its recovery codes are invalidated. Named API keys are independent of that key: review them because a rollback can restore keys revoked after the backup. No scheduled backup is enabled.
 
 HTML token filtering removes ordinary `href`/SVG `xlink:href` destinations as defense in depth; it is not a complete HTML5 sanitizer. The nested viewer and attachment disposition are mandatory security boundaries. Downloaded originals remain untrusted files; opening them outside Pocketmark is outside this boundary.
+
+## Card thumbnails
+
+Automatic HTML capture also tries the page's first `og:image` (falling back to
+`twitter:image`). Relative URLs use the final page URL after redirects. The
+optional image uses the same public-address DNS pinning and redirect filtering,
+with a five-second deadline, a 512 KiB response limit and at most one million
+pixels. JPEG and PNG are accepted; animated PNG, SVG and other formats are
+omitted. Only image headers are decoded on the server. Image failure does not
+fail HTML capture. Existing bookmarks obtain an image on their next capture.
+
+Thumbnail bytes are a persistent SQLite cache, committed with capture status.
+There is no resident image map or background renderer. Recapture replaces the
+cache; changing the URL or deleting the bookmark removes it. Full database
+backups preserve it; metadata exports omit it. Disk use is at most 512 KiB per
+cached bookmark (plus SQLite overhead). This is optional preview metadata, not
+an archive attachment.
+
+Grid cards load thumbnails lazily from the authenticated
+`GET /api/links/{id}/thumbnail` endpoint. List view does not initiate image loads.
+Private HTTP caching uses ETag revalidation, so a recapture cannot leave a stale
+image cached indefinitely. Missing or failed images leave the original card
+layout. The original page remains the source of the preview's appearance.

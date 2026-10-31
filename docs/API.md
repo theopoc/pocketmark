@@ -352,3 +352,13 @@ an open library. Server-side conditional updates cannot revive an expired sessio
 Choosing 0 disables only inactivity expiry. Legacy sessions retain their original
 absolute expiry and require fresh confirmation before sensitive actions. Password
 changes revoke all previous sessions, and backups continue to omit browser sessions.
+
+### Cached card image
+
+`GET /api/links/{id}/thumbnail` returns the optional cached JPEG/PNG (at most
+512 KiB), or 404 when absent. It requires library read access (`read`, `capture`
+or `full` keys, or the owner session). Responses use `Cache-Control: private,
+no-cache` and ETag revalidation (304). Link-list records include
+`hasThumbnail:true` only when an image is cached. No original image URL or image
+bytes are included in the list response. See [archive boundaries](ARCHIVES.md)
+for capture, invalidation and image limits.
