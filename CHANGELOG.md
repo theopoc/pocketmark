@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.2.0](https://github.com/theopoc/pocketmark/compare/v1.1.0...v1.2.0) (2026-10-31)
+
+
+### Features
+
+* **auth:** allow copying MFA setup key ([#61](https://github.com/theopoc/pocketmark/issues/61)) ([2049afb](https://github.com/theopoc/pocketmark/commit/2049afb16098187e058fbda96cf1a7360600cc62))
+* **auth:** download recovery codes ([#60](https://github.com/theopoc/pocketmark/issues/60)) ([7881bb1](https://github.com/theopoc/pocketmark/commit/7881bb14764a834f299662ff07eb47fb96c09a63))
+* refine library empty states and rename Tags ([368ae4d](https://github.com/theopoc/pocketmark/commit/368ae4d7369fb35afdf1e8a34d0d10ddfcbaf811))
+* **ui:** add bookmark sort menu beside view controls ([273b218](https://github.com/theopoc/pocketmark/commit/273b2187e40c0e804f8476262136f7967d9198cd))
+* **ui:** add off-canvas navigation and sign-out confirmation ([#76](https://github.com/theopoc/pocketmark/issues/76)) ([f4ff490](https://github.com/theopoc/pocketmark/commit/f4ff490d91faf0fd60650cb34e164f615694aa4e))
+* **ui:** move settings into workspace navigation ([#68](https://github.com/theopoc/pocketmark/issues/68)) ([a50b225](https://github.com/theopoc/pocketmark/commit/a50b22522ad67970018b7dad86bfe2f2850ff9c7))
+* **ui:** move workspace actions into a popover ([aec3a4f](https://github.com/theopoc/pocketmark/commit/aec3a4f2442571f307b1a3527f1996b16944a711))
+* **ui:** prioritize reading with a direct original link ([#65](https://github.com/theopoc/pocketmark/issues/65)) ([8835234](https://github.com/theopoc/pocketmark/commit/88352345c9b29add815a2edb6600bd4be6ac67f6))
+* **ui:** prioritize saved bookmark formats ([231f90e](https://github.com/theopoc/pocketmark/commit/231f90e6d6f004c958199524b9ef482da0b24bbc))
+
+
+### Bug Fixes
+
+* animate entry to settings workspace ([0ac769c](https://github.com/theopoc/pocketmark/commit/0ac769c5695b2f81cd4628323557affd289bb9eb))
+* **reader:** close on backdrop click ([#66](https://github.com/theopoc/pocketmark/issues/66)) ([b6b28a0](https://github.com/theopoc/pocketmark/commit/b6b28a0d337646e0687fd76214847ba9dec36a77))
+* **ui:** animate help topic accordions ([1cf4f91](https://github.com/theopoc/pocketmark/commit/1cf4f91ea09795a1e1570cefb2351f0e4cfa1fd3))
+* **ui:** choose HTML capture when saving bookmarks ([#64](https://github.com/theopoc/pocketmark/issues/64)) ([5fe7a8e](https://github.com/theopoc/pocketmark/commit/5fe7a8ebb7c15fbccc8201d5042476a9f62b9499))
+* **ui:** clarify bookmark actions and favorite placement ([9cb9a95](https://github.com/theopoc/pocketmark/commit/9cb9a95ae7ae4b77ab5c1985791c000fbe04833e))
+
 ## [1.1.0](https://github.com/theopoc/pocketmark/compare/v1.0.0...v1.1.0) (2026-10-30)
 
 
