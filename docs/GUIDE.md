@@ -13,7 +13,7 @@ make build
 ./bin/pocketmark
 ```
 
-Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account. Register an authenticator app with the local QR code or setup key, verify a code and save the single-use recovery codes. On later visits, sign in with your username, password and an authentication or recovery code. Once signed in, open **Settings → API keys** to create or revoke a key for each extension or client.
+Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account. Register an authenticator app with the local QR code or setup key, verify a code and save the single-use recovery codes. On later visits, sign in with your username, password and an authentication or recovery code. Once signed in, open **Settings → Account & security → API keys** to create or revoke a key for each extension or client.
 
 Existing installations keep their credentials and keys. Existing MFA and browser sessions remain valid when the original server secret is preserved. Legacy administrator bearer access is removed; create named API keys and update integrations before upgrading to avoid interruption. If no password was configured before upgrading, follow [account recovery](API.md#existing-installations-and-account-recovery); public account creation cannot claim an existing library.
 

@@ -257,8 +257,15 @@ body:has(dialog[open]) { overflow: hidden; }
 .settings-section form > .button { margin-top: 14px; }
 .settings-back { margin-bottom: 24px; }
 .settings-mobile-back { display: inline-flex; margin-bottom: 24px; }
-.settings-mobile-picker { display: block; margin: 0 0 28px; }
-.settings-mobile-picker select { margin-top: 8px; }
+ .settings-subitem { padding-left: 44px; }
+.settings-section + .settings-section:not([hidden]) { margin-top: 36px; padding-top: 28px; border-top: 1px solid var(--line); }
+.settings-section h3 { font-size: 15px; margin: 24px 0 12px; }
+.token-create { margin: 20px 0; }
+.token-create summary { width: fit-content; cursor: pointer; list-style: none; }
+.token-create summary::-webkit-details-marker { display: none; }
+.token-create[open] form { margin-top: 18px; padding: 20px; border: 1px solid var(--line); border-radius: 8px; }
+#new-token:not([hidden]) { margin: 20px 0; padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+
 #library-navigation { display: flex; flex: 1; flex-direction: column; }
 @media (max-width: 600px) {
   .settings-page { padding: 24px 18px 48px; }

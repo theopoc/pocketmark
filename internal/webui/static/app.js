@@ -1561,9 +1561,15 @@
     if (session !== settingsSession) return;
     renderTokens(tokens, session);
   }
+  function showTokenError(message) {
+    const error = $("tokens-error");
+    error.textContent = message;
+    error.tabIndex = -1;
+    error.focus();
+  }
   function tokenLoadError(error, session) {
     if (session !== settingsSession) return;
-    $("tokens-error").textContent = error.message;
+    showTokenError(error.message);
     const retry = el("button", "button subtle", "Retry loading keys");
     retry.type = "button";
     retry.addEventListener("click", async () => {
@@ -1687,11 +1693,11 @@
           else token.active = active;
           tokensBusy = false;
           renderTokens(tokens, session, remove ? tokens[0]?.id : token.id);
-          if (remove && !tokens.length) $("token-name").focus();
+          if (remove && !tokens.length) $("token-create").querySelector("summary").focus();
           $("tokens-feedback").textContent = `“${token.name}” ${remove ? "deleted permanently" : active ? "reactivated" : "disabled. Apps using this key can no longer connect"}.`;
         } catch (error) {
           if (session !== settingsSession) return;
-          $("tokens-error").textContent = error.message;
+          showTokenError(error.message);
           setTokensBusy(false);
           row.removeAttribute("aria-busy");
         }
@@ -1710,7 +1716,7 @@
           setTokenVisibility(false); $("new-token-value").value = result.token; $("new-token").hidden = false; $("new-token-value").focus();
           $("tokens-feedback").textContent = "Key replaced. Copy the new key into your app; its permissions and expiry are unchanged.";
           await loadTokens(session);
-        } catch (error) { if (session === settingsSession) $("tokens-error").textContent = error.message; }
+        } catch (error) { if (session === settingsSession) showTokenError(error.message); }
         finally { if (session === settingsSession) setTokensBusy(false); }
       });
       actions.append(toggle, rotate, revoke); row.append(details, actions); $("token-list").append(row);
@@ -1720,10 +1726,9 @@
   }
   function syncSettingsNavigation() {
     document.querySelectorAll("[data-settings-section]").forEach(button => {
-      button.disabled = (mfaManagementBusy || deferredLogin) && button.dataset.settingsSection !== "2fa";
+      button.disabled = (mfaManagementBusy || deferredLogin) && button.dataset.settingsSection !== "password";
     });
     document.querySelectorAll("[data-settings-back]").forEach(button => { button.disabled = mfaManagementBusy; });
-    $("settings-section-picker").disabled = mfaManagementBusy || deferredLogin;
   }
   function renderSettings(animate = false) {
     const active = Boolean(settingsSection);
@@ -1735,13 +1740,12 @@
     $("sidebar").setAttribute("aria-label", active ? "Settings navigation" : "Library navigation");
     $("app-view").classList.toggle("showing-settings", active);
     $("breadcrumb-current").textContent = active ? "Settings" : showingTags ? "Tags" : currentTitle();
-    document.querySelectorAll("[data-settings-panel]").forEach(panel => { panel.hidden = panel.dataset.settingsPanel !== settingsSection; });
+    document.querySelectorAll("[data-settings-panel]").forEach(panel => { panel.hidden = panel.dataset.settingsPanel !== settingsSection && !( ["password", "2fa", "sessions"].includes(settingsSection) && ["password", "2fa", "sessions"].includes(panel.dataset.settingsPanel)); });
     document.querySelectorAll("[data-settings-section]").forEach(button => {
-      const selected = button.dataset.settingsSection === settingsSection;
+      const selected = button.dataset.settingsSection === settingsSection || (button.dataset.settingsSection === "password" && ["2fa", "sessions"].includes(settingsSection));
       button.classList.toggle("active", selected);
       if (selected) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
     });
-    if (active) $("settings-section-picker").value = settingsSection;
     syncSettingsNavigation();
     if (!active) {
       [$("settings-page"), $("settings-navigation")].forEach(element => activeMotion.get(element)?.cancel());
@@ -1754,7 +1758,8 @@
   function focusSettings() {
     const heading = document.querySelector(`[data-settings-panel="${settingsSection}"] h2`);
     heading.tabIndex = -1; heading.focus({ preventScroll: true });
-    window.scrollTo({ top: 0, behavior: "instant" });
+    if (["2fa", "sessions"].includes(settingsSection)) heading.scrollIntoView({ block: "start", behavior: "instant" });
+    else window.scrollTo({ top: 0, behavior: "instant" });
   }
   function navigateSettings(section) {
     if (mfaManagementBusy || deferredLogin) return;
@@ -1764,7 +1769,6 @@
     restoreRoute();
   }
   document.querySelectorAll("[data-settings-section]").forEach(button => button.addEventListener("click", () => navigateSettings(button.dataset.settingsSection)));
-  $("settings-section-picker").addEventListener("change", event => navigateSettings(event.target.value));
   document.querySelectorAll("[data-settings-back]").forEach(button => button.addEventListener("click", () => {
     if (mfaManagementBusy) return;
     commitRoute(false, { ...route(), settingsSection: null });
@@ -1933,10 +1937,10 @@
       const token = await api("/api/tokens", { method: "POST", body: JSON.stringify({ name: $("token-name").value.trim(), profile: $("token-profile").value, expiresAt: Number($("token-expiry").value) ? Math.floor(Date.now() / 1000) + Number($("token-expiry").value) * 86400 : 0 }) });
       if (session !== settingsSession) return;
       setTokenVisibility(false);
-      $("new-token-value").value = token.token; $("new-token").hidden = false; $("token-name").value = "";
+      $("new-token-value").value = token.token; $("new-token").hidden = false; $("token-name").value = ""; $("token-create").open = false;
       $("new-token-value").focus();
       await loadTokens(session);
-    } catch (error) { if (session === settingsSession) $("tokens-error").textContent = error.message; } finally { if (session === settingsSession) setTokensBusy(false); }
+    } catch (error) { if (session === settingsSession) showTokenError(error.message); } finally { if (session === settingsSession) setTokensBusy(false); }
   });
   $("toggle-token").addEventListener("click", () => setTokenVisibility($("new-token-value").type === "password"));
   $("copy-token").addEventListener("click", async () => { try { await navigator.clipboard.writeText($("new-token-value").value); toast("Key copied."); } catch { setTokenVisibility(true); $("new-token-value").select(); toast("Select and copy the key."); } });

@@ -3,8 +3,8 @@ import { clickNavigation } from './navigation.mjs';
 import assert from 'node:assert/strict';
 
 export async function selectSettings(page, section) {
-  if (page.viewportSize().width <= 900) await page.locator('#settings-section-picker').selectOption(section);
-  else await clickNavigation(page, `[data-settings-section="${section}"]`);
+  const target = ['2fa', 'sessions'].includes(section) ? 'password' : section;
+  await clickNavigation(page, `[data-settings-section="${target}"]`);
   await page.locator(`[data-settings-panel="${section}"]`).waitFor({ state: 'visible' });
 }
 
@@ -21,13 +21,19 @@ export async function settingsNavigationJourney(page) {
   assert.equal(await page.locator('#settings-page').evaluate(node => node.tagName), 'SECTION');
   assert.equal(await page.locator('dialog[open]').count(), 0);
   assert.equal(await page.locator('#library-navigation').isVisible(), false);
-  assert.equal(await page.locator('[data-settings-section]').count(), 7);
-  assert.equal(await page.locator('[data-settings-section="2fa"]').textContent(), '2FA');
+  assert.equal(await page.locator('[data-settings-section]').count(), 5);
+  assert.equal(await page.locator('#settings-section-picker').count(), 0);
+  assert.match(await page.locator('[data-settings-section="password"]').textContent(), /Account & security/);
   for (const section of ['2fa', 'sessions', 'backup', 'password', 'sync', 'mobile', 'api-keys']) {
     await selectSettings(page, section);
-    assert.equal(new URL(page.url()).searchParams.get('settings'), section);
-    assert.equal(await page.locator('[data-settings-panel]:visible').count(), 1);
+    assert.equal(new URL(page.url()).searchParams.get('settings'), ['2fa', 'sessions'].includes(section) ? 'password' : section);
+    assert.equal(await page.locator('[data-settings-panel]:visible').count(), ['2fa', 'sessions', 'password'].includes(section) ? 3 : 1);
   }
+  const legacy = new URL(page.url());
+  legacy.searchParams.set('settings', '2fa');
+  await page.goto(legacy.href);
+  await page.locator('#mfa-settings-title').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#mfa-settings-title').evaluate(node => document.activeElement === node && node.getBoundingClientRect().top >= 0 && node.getBoundingClientRect().top < innerHeight), true);
   await selectSettings(page, 'backup');
   await page.reload();
   await page.locator('[data-settings-panel="backup"]').waitFor({ state: 'visible' });

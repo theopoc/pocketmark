@@ -36,7 +36,7 @@ correlation. See [observability](OBSERVABILITY.md) for metrics, JSON log fields 
 optional OpenTelemetry tracing; `/metrics` is operational and outside the native
 JSON API specification.
 
-Create a dedicated API key in **Settings → API keys** and keep it private. Set `POCKETMARK_ACCESS_TOKEN` from a secure source before running the examples:
+Create a dedicated API key in **Settings → Account & security → API keys** and keep it private. Set `POCKETMARK_ACCESS_TOKEN` from a secure source before running the examples:
 
 ```sh
 POCKETMARK_URL=http://127.0.0.1:8090
