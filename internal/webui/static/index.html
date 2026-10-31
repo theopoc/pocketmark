@@ -143,7 +143,7 @@
   <dialog id="collection-dialog" class="modal compact-modal" aria-labelledby="collection-dialog-title"><form id="collection-form"><div class="dialog-heading"><h2 id="collection-dialog-title">New collection</h2><button type="button" class="icon-button close-dialog" aria-label="Close"><span data-icon="close" aria-hidden="true"></span></button></div><label for="collection-name">Name</label><input id="collection-name" required maxlength="120" placeholder="Collection name" aria-describedby="collection-name-hint"><p id="collection-name-hint" class="field-hint">Up to 120 UTF-8 bytes; accented characters and emoji may use more than one byte.</p><label for="collection-parent">Parent collection</label><select id="collection-parent"></select><p id="collection-error" class="form-error" role="alert"></p><div class="dialog-actions"><button type="button" class="button subtle close-dialog">Cancel</button><button type="submit" class="button primary" id="save-collection">Save collection</button></div></form></dialog>
   <dialog id="reader-dialog" class="modal reader-modal" aria-labelledby="reader-title">
     <div class="dialog-heading reader-sticky-heading"><div class="reader-heading-row">
-      <span class="reader-heading-label"><span data-icon="book" aria-hidden="true"></span>Reader</span>
+      <span class="reader-heading-label"><span data-icon="bookmark" aria-hidden="true"></span>Bookmark</span>
       <div class="reader-actions">
         <a id="reader-original" class="button primary" target="_blank" rel="noopener noreferrer" hidden>Open original <span data-icon="external" aria-hidden="true"></span></a>
         <button id="reader-notebook-toggle" type="button" class="button subtle" aria-expanded="false" aria-controls="reader-notebook" disabled>Notes</button>
@@ -152,15 +152,26 @@
     </div></div>
     <p id="reader-error" class="form-error" role="alert"></p>
     <div class="reader-workspace">
-      <section id="reader-text-panel" class="reader-text-panel" aria-label="Saved article" tabindex="0">
+      <section id="reader-text-panel" class="reader-text-panel" aria-label="Bookmark and saved formats" tabindex="0">
         <header class="reader-article-header"><h2 id="reader-title"></h2><div class="reader-meta"><p id="reader-domain" class="reader-domain"></p><p id="reader-status" class="muted small" role="status"></p></div></header>
+        <section id="reader-formats" class="reader-formats" aria-labelledby="reader-formats-title" hidden>
+          <h3 id="reader-formats-title">Saved formats</h3>
+          <p class="small muted">Open a saved copy. The latest opens first; earlier copies stay available in the file selector.</p>
+          <div class="saved-format-list">
+            <button id="reader-format-html" class="saved-format" type="button" disabled><span data-icon="html" aria-hidden="true"></span><span class="saved-format-name">HTML<span class="saved-format-description">Saved page</span></span><span id="reader-format-html-status" class="saved-format-status">Checking…</span><span class="saved-format-open" aria-hidden="true" data-icon="arrow-right"></span></button>
+            <button id="reader-format-image" class="saved-format" type="button" disabled><span data-icon="image" aria-hidden="true"></span><span class="saved-format-name">Screenshot<span class="saved-format-description">Page captures and saved images</span></span><span id="reader-format-image-status" class="saved-format-status">Checking…</span><span class="saved-format-open" aria-hidden="true" data-icon="arrow-right"></span></button>
+            <button id="reader-format-pdf" class="saved-format" type="button" disabled><span data-icon="pdf" aria-hidden="true"></span><span class="saved-format-name">PDF<span class="saved-format-description">Saved document</span></span><span id="reader-format-pdf-status" class="saved-format-status">Checking…</span><span class="saved-format-open" aria-hidden="true" data-icon="arrow-right"></span></button>
+          </div>
+          <p id="reader-formats-error" class="form-error" role="alert" hidden></p><button id="reader-formats-retry" type="button" class="text-button" hidden>Retry saved formats</button>
+          <p class="small muted">Save HTML when adding or editing a bookmark. Capture screenshots and PDFs with the browser extension, or attach a file under Notes → Files.</p>
+        </section>
         <div id="reader-reading-bar" class="reader-reading-bar"><details id="reader-options" class="reader-options"><summary>Reading options</summary><div class="reader-options-content"><div class="reader-tools"><button id="reader-highlight" type="button" class="text-button" data-highlight-selection>Highlight selection</button><button id="reader-text-mode" class="button subtle" aria-pressed="true">Text &amp; highlights</button><button id="reader-layout-mode" class="button subtle" aria-pressed="false" aria-describedby="reader-mode-hint" disabled>Formatted page</button><label class="inline-check">Text size <select id="reader-size" aria-label="Reader text size"><option value="17">Normal</option><option value="20">Large</option><option value="24">Extra large</option></select></label></div><p id="reader-mode-hint" class="small muted" role="status"></p><div class="reader-actions"><a id="reader-archive" class="button subtle" hidden>Download snapshot</a><button id="reader-capture" class="button subtle">Refresh capture</button><button id="reader-edit" class="button subtle">Edit bookmark</button></div></div></details></div>
         <button id="reader-retry-open" type="button" class="button subtle" hidden>Try opening again</button><button id="reader-retry-capture" type="button" class="button subtle" hidden>Retry capture</button><button id="reader-recheck" type="button" class="text-button" hidden>Check capture status</button>
   <div id="reader-content" class="reader-content" tabindex="0"></div><iframe id="reader-layout" class="reader-layout" title="Saved page reader" sandbox="" hidden></iframe>
 
       </section>
       <aside id="reader-notebook" class="reader-notebook" aria-label="Notes and saved files" hidden>
-        <div class="reader-notebook-heading"><h3>Notebook</h3><button id="reader-notebook-close" type="button" class="text-button">Back to reading</button></div>
+        <div class="reader-notebook-heading"><h3>Notebook</h3><button id="reader-notebook-close" type="button" class="text-button">Back to bookmark</button></div>
         <nav id="reader-section-nav" class="reader-section-nav" aria-label="Notebook sections" role="tablist">
           <button type="button" class="reader-tab" id="reader-tab-notes" role="tab" aria-controls="reader-notes-form" aria-selected="true" tabindex="0" data-reader-section="reader-notes-form">Notes</button>
           <button type="button" class="reader-tab" id="reader-tab-highlights" role="tab" aria-controls="annotations-section" aria-selected="false" tabindex="-1" data-reader-section="annotations-section">Highlights</button>
@@ -271,7 +282,7 @@
         <details>
           <summary>Reading, highlights &amp; notes<span data-icon="chevron-right" aria-hidden="true"></span></summary>
           <div class="help-answer">
-            <p>Open a bookmark’s title to read its saved text. <strong>Reading options</strong> contains text size, formatted view, printing and capture controls.</p>
+            <p>Open a bookmark’s title to see its saved HTML, screenshots and PDFs. Choose a format to open the latest copy and use the file selector for earlier copies. To read extracted text, choose <strong>Reading options → Text &amp; highlights</strong>. Reading options also contains text size, formatted view and capture controls.</p>
             <ul><li>Select a passage, then choose <strong>Highlight</strong>.</li><li>Use <strong>Notes</strong> in the reader toolbar to write and save your notes.</li></ul>
           </div>
         </details>
