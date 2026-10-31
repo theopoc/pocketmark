@@ -63,7 +63,7 @@
     if (!wasSettings && restored.settingsSection) libraryReturnScroll = history.state?.pocketmarkLibraryScroll || 0;
     settingsSection = restored.settingsSection;
     if (wasSettings && !settingsSection) clearSettings();
-    renderSettings();
+    renderSettings(!initial);
     const scroll = history.state?.pocketmarkScroll || 0;
     const previous = workspace.routeSearch(route());
     Object.assign(state, { filter: restored.filter, collection: restored.collection, tag: restored.tag, query: restored.query, page: restored.page, sort: restored.sort, fuzzy: restored.fuzzy });
@@ -1512,8 +1512,9 @@
     document.querySelectorAll("[data-settings-back]").forEach(button => { button.disabled = mfaManagementBusy; });
     $("settings-section-picker").disabled = mfaManagementBusy || deferredLogin;
   }
-  function renderSettings() {
+  function renderSettings(animate = false) {
     const active = Boolean(settingsSection);
+    const entering = active && $("settings-page").hidden;
     $("settings-page").hidden = !active;
     $("library-content").hidden = active;
     $("library-navigation").hidden = active;
@@ -1529,6 +1530,13 @@
     });
     if (active) $("settings-section-picker").value = settingsSection;
     syncSettingsNavigation();
+    if (!active) {
+      [$("settings-page"), $("settings-navigation")].forEach(element => activeMotion.get(element)?.cancel());
+    } else if (animate && entering) {
+      // The rail changes context as the settings workspace settles beside it.
+      move($("settings-navigation"), [{ opacity: .75 }, { opacity: 1 }]);
+      move($("settings-page"), [{ opacity: .75, transform: "translateX(12px)" }, { opacity: 1, transform: "translateX(0)" }], 220);
+    }
   }
   function focusSettings() {
     const heading = document.querySelector(`[data-settings-panel="${settingsSection}"] h2`);
