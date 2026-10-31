@@ -760,6 +760,21 @@ body:has(dialog[open]) { overflow: hidden; }
 #help-topics summary:focus-visible { outline-offset: -2px; border-radius: 4px; }
 #help-topics summary .icon { width: 16px; height: 16px; color: var(--muted); }
 #help-topics details[open] summary .icon { transform: rotate(90deg); }
+@media (prefers-reduced-motion: no-preference) {
+  #help-topics summary .icon { transition: transform var(--motion-enter) var(--ease-ui); }
+  @supports (interpolate-size: allow-keywords) and selector(details::details-content) {
+    #help-topics > details { interpolate-size: allow-keywords; }
+    #help-topics > details::details-content {
+      block-size: 0;
+      overflow: clip;
+      transition: block-size var(--motion-exit) var(--ease-ui), content-visibility var(--motion-exit) allow-discrete;
+    }
+    #help-topics > details[open]::details-content {
+      block-size: auto;
+      transition-duration: var(--motion-enter);
+    }
+  }
+}
 .help-answer { padding: 0 24px 20px 0; font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
 .help-answer p, .help-answer ol, .help-answer ul { margin: 0 0 12px; }
 .help-answer > :last-child { margin-bottom: 0; }
