@@ -11,6 +11,8 @@
   let tagsPage = 1;
   let tagsRequest = 0;
   let showingTags = false;
+  let settingsSection = null;
+  let libraryReturnScroll = 0;
   const workspace = globalThis.PocketmarkWorkspace;
   const { editableBookmark: editable, bookmarkDraftKey: draftKey, safeURL, domain } = workspace;
   let draftStorage;
@@ -36,14 +38,14 @@
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
 
   function route() {
-    return { ...state, showingTags, tagsPage, tagsQuery: $("tags-search").value.trim() };
+    return { ...state, settingsSection, showingTags, tagsPage, tagsQuery: $("tags-search").value.trim() };
   }
   function rememberScroll() {
     clearTimeout(scrollTimer);
     history.replaceState({ ...history.state, pocketmarkScroll: window.scrollY }, "");
   }
-  function commitRoute(replace = false) {
-    const url = location.pathname + workspace.routeSearch(route());
+  function commitRoute(replace = false, destination = route()) {
+    const url = location.pathname + workspace.routeSearch(destination);
     if (url === location.pathname + location.search) return;
     routeRequest++;
     rememberScroll();
@@ -53,6 +55,15 @@
     const request = ++routeRequest;
     clearTimeout(searchTimer); clearTimeout(tagsTimer);
     const restored = workspace.readRoute(location.search);
+    if (settingsSection && (mfaManagementBusy || deferredLogin) && restored.settingsSection !== settingsSection) {
+      history.replaceState({ ...history.state }, "", location.pathname + workspace.routeSearch(route()));
+      return;
+    }
+    const wasSettings = Boolean(settingsSection);
+    if (!wasSettings && restored.settingsSection) libraryReturnScroll = history.state?.pocketmarkLibraryScroll || 0;
+    settingsSection = restored.settingsSection;
+    if (wasSettings && !settingsSection) clearSettings();
+    renderSettings();
     const scroll = history.state?.pocketmarkScroll || 0;
     const previous = workspace.routeSearch(route());
     Object.assign(state, { filter: restored.filter, collection: restored.collection, tag: restored.tag, query: restored.query, page: restored.page, sort: restored.sort, fuzzy: restored.fuzzy });
@@ -64,8 +75,14 @@
     reader.close();
     bulk.close();
     document.querySelectorAll("dialog[open]").forEach((dialog) => {
-      if (dialog.id !== "settings-dialog" || (!mfaManagementBusy && $("mfa-manage-codes").hidden)) dialog.close();
+      dialog.close();
     });
+    if (settingsSection) {
+      clearTimeout(state.timer); state.request++;
+      focusSettings();
+      if (!wasSettings) await loadSettings();
+      return;
+    }
     await refresh();
     if (request !== routeRequest) return;
     if (showingTags) await loadTagDirectory();
@@ -83,7 +100,7 @@
     $("main-content").focus();
   });
   window.addEventListener("beforeunload", (event) => {
-    if (drafts.size || mfaManagementBusy || ($("settings-dialog").open && !$("mfa-manage-codes").hidden)) { event.preventDefault(); event.returnValue = ""; }
+    if (drafts.size || mfaManagementBusy || (Boolean(settingsSection) && !$("mfa-manage-codes").hidden)) { event.preventDefault(); event.returnValue = ""; }
   });
 
   const compactLibrary = window.matchMedia("(max-width: 600px)");
@@ -278,11 +295,13 @@
     $("login-help").hidden = false;
   }
   function showLogin() {
-    if (mfaManagementBusy || ($("settings-dialog").open && !$("mfa-manage-codes").hidden)) {
+    if (mfaManagementBusy || (Boolean(settingsSection) && !$("mfa-manage-codes").hidden)) {
       deferredLogin = true;
-      syncSettingsNavigation();
+      settingsSection = "2fa";
+      history.replaceState({ ...history.state }, "", location.pathname + workspace.routeSearch(route()));
+      renderSettings();
       if (!mfaManagementBusy) {
-        document.querySelectorAll("#settings-dialog > section").forEach(section => { if (section.getAttribute("aria-labelledby") !== "mfa-settings-title") section.inert = true; });
+        document.querySelectorAll("#settings-page > section").forEach(section => { if (section.getAttribute("aria-labelledby") !== "mfa-settings-title") section.inert = true; });
         document.querySelectorAll("#mfa-manage-form button[type='submit'], #mfa-manage-verify button[type='submit']").forEach(button => { button.disabled = true; });
       }
       $("mfa-manage-feedback").textContent = mfaManagementBusy
@@ -291,6 +310,8 @@
       return;
     }
     deferredLogin = false;
+    clearSettings();
+    settingsSection = null; renderSettings();
     setMFAManagementBusy(false);
     clearTimeout(tagsTimer);
     tagsRequest++;
@@ -371,7 +392,7 @@
   function updateHeading() {
     const title = currentTitle();
     $("page-title").textContent = title;
-    $("breadcrumb-current").textContent = showingTags ? "All tags" : title;
+    $("breadcrumb-current").textContent = settingsSection ? "Settings" : showingTags ? "All tags" : title;
     $("tags-library-context").hidden = !state.query;
     $("tags-library-context").textContent = `Your bookmark search “${state.query}” will remain applied when you open a tag.`;
     $("all-tags").classList.toggle("active", showingTags);
@@ -828,7 +849,7 @@
   }
 
   async function refresh(quiet = false) {
-    if (!state.signedIn) return;
+    if (!state.signedIn || settingsSection) return;
     clearTimeout(state.timer);
     const request = ++state.request;
     const params = new URLSearchParams({ page: String(state.page), sort: state.sort });
@@ -1438,17 +1459,51 @@
   }
   function syncSettingsNavigation() {
     document.querySelectorAll("[data-settings-section]").forEach(button => {
-      button.disabled = (mfaManagementBusy || deferredLogin) && button.dataset.settingsSection !== "mfa-settings-title";
+      button.disabled = (mfaManagementBusy || deferredLogin) && button.dataset.settingsSection !== "2fa";
     });
+    document.querySelectorAll("[data-settings-back]").forEach(button => { button.disabled = mfaManagementBusy; });
+    $("settings-section-picker").disabled = mfaManagementBusy || deferredLogin;
   }
-  document.querySelectorAll("[data-settings-section]").forEach(button => button.addEventListener("click", () => {
-    const target = $(button.dataset.settingsSection);
-    if (target.closest("section").inert) return;
-    target.tabIndex = -1;
-    target.focus({ preventScroll: true });
-    target.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  function renderSettings() {
+    const active = Boolean(settingsSection);
+    $("settings-page").hidden = !active;
+    $("library-content").hidden = active;
+    $("library-navigation").hidden = active;
+    $("settings-navigation").hidden = !active;
+    $("sidebar").setAttribute("aria-label", active ? "Settings navigation" : "Library navigation");
+    $("app-view").classList.toggle("showing-settings", active);
+    $("breadcrumb-current").textContent = active ? "Settings" : showingTags ? "All tags" : currentTitle();
+    document.querySelectorAll("[data-settings-panel]").forEach(panel => { panel.hidden = panel.dataset.settingsPanel !== settingsSection; });
+    document.querySelectorAll("[data-settings-section]").forEach(button => {
+      const selected = button.dataset.settingsSection === settingsSection;
+      button.classList.toggle("active", selected);
+      if (selected) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
+    });
+    if (active) $("settings-section-picker").value = settingsSection;
+    syncSettingsNavigation();
+  }
+  function focusSettings() {
+    const heading = document.querySelector(`[data-settings-panel="${settingsSection}"] h2`);
+    heading.tabIndex = -1; heading.focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+  function navigateSettings(section) {
+    if (mfaManagementBusy || deferredLogin) return;
+    if (!settingsSection) libraryReturnScroll = window.scrollY;
+    commitRoute(false, { ...route(), settingsSection: section });
+    history.replaceState({ ...history.state, pocketmarkLibraryScroll: libraryReturnScroll }, "");
+    restoreRoute();
+  }
+  document.querySelectorAll("[data-settings-section]").forEach(button => button.addEventListener("click", () => navigateSettings(button.dataset.settingsSection)));
+  $("settings-section-picker").addEventListener("change", event => navigateSettings(event.target.value));
+  document.querySelectorAll("[data-settings-back]").forEach(button => button.addEventListener("click", () => {
+    if (mfaManagementBusy) return;
+    commitRoute(false, { ...route(), settingsSection: null });
+    history.replaceState({ ...history.state, pocketmarkScroll: libraryReturnScroll }, "");
+    if (deferredLogin) { clearSettings(); showLogin(); } else restoreRoute();
   }));
-  $("settings-button").addEventListener("click", async () => {
+  $("settings-button").addEventListener("click", () => navigateSettings("api-keys"));
+  async function loadSettings() {
     const session = ++settingsSession;
     $("settings-error").textContent = "";
     $("tokens-error").textContent = "";
@@ -1459,7 +1514,6 @@
     $("token-list").replaceChildren(el("li", "token-empty muted", "Loading API keys…"));
     clearNewToken();
     $("account-password").value = "";
-    $("settings-dialog").showModal();
     await Promise.all([
       security.loadSessions(),
       loadTokens(session).catch((error) => tokenLoadError(error, session)),
@@ -1469,7 +1523,7 @@
         $("account-status").textContent = account.passwordEnabled ? "Password sign-in is enabled." : "Password sign-in is not configured.";
       }).catch((error) => { if (session === settingsSession) $("settings-error").textContent = error.message; }),
     ]);
-  });
+  }
   $("account-form").addEventListener("submit", async (event) => {
     event.preventDefault(); event.submitter.disabled = true; $("settings-error").textContent = "";
     try {
@@ -1488,9 +1542,8 @@
   function setMFAManagementBusy(busy) {
     mfaManagementBusy = busy;
     syncSettingsNavigation();
-    $("settings-dialog").querySelector(".close-dialog").disabled = busy;
     $("mfa-manage-cancel").disabled = busy;
-    document.querySelectorAll("#settings-dialog > section").forEach(section => { if (section.getAttribute("aria-labelledby") !== "mfa-settings-title") section.inert = busy || deferredLogin; });
+    document.querySelectorAll("#settings-page > section").forEach(section => { if (section.getAttribute("aria-labelledby") !== "mfa-settings-title") section.inert = busy || deferredLogin; });
     document.querySelectorAll("#mfa-manage-form button[type='submit'], #mfa-manage-verify button[type='submit']").forEach(button => { button.disabled = busy || deferredLogin; });
     if (busy) $("mfa-manage-feedback").textContent = "Updating authentication. Keep settings open until this finishes.";
     else if ($("mfa-manage-feedback").textContent === "Updating authentication. Keep settings open until this finishes.") $("mfa-manage-feedback").textContent = "";
@@ -1618,11 +1671,10 @@
   });
   $("toggle-token").addEventListener("click", () => setTokenVisibility($("new-token-value").type === "password"));
   $("copy-token").addEventListener("click", async () => { try { await navigator.clipboard.writeText($("new-token-value").value); toast("Key copied."); } catch { setTokenVisibility(true); $("new-token-value").select(); toast("Select and copy the key."); } });
-  $("settings-dialog").addEventListener("cancel", event => { if (mfaManagementBusy) event.preventDefault(); });
-  $("settings-dialog").addEventListener("close", () => {
+  function clearSettings() {
+    security.clear();
     settingsSession++; editingTokenID = null; $("account-password").value = ""; clearNewToken(); clearMFAManagement();
-    if (deferredLogin) showLogin();
-  });
+  }
   $("export-button").addEventListener("click", () => $("export-dialog").showModal());
 
   function openSharedLink() {

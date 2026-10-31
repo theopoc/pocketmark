@@ -3,6 +3,7 @@
 // Shared, dependency-free state rules; draft contents stay in this tab's memory.
 ((root) => {
   const positive = (value, fallback = 1, max = 1000000) => /^\d+$/.test(String(value)) && Number.isSafeInteger(Number(value)) && Number(value) > 0 ? Math.min(Number(value), max) : fallback;
+  const settingsSections = ["api-keys", "2fa", "sessions", "backup", "password", "sync", "mobile"];
   function readRoute(search) {
     const params = new URLSearchParams(search);
     let filter = ["all", "inbox", "favorite", "unread", "collection"].includes(params.get("filter")) ? params.get("filter") : "all";
@@ -10,6 +11,7 @@
     if (filter === "collection" && !collection) filter = "all";
     const tag = (params.get("tag") || "").trim();
     return {
+      settingsSection: params.has("settings") ? (settingsSections.includes(params.get("settings")) ? params.get("settings") : "api-keys") : null,
       filter: tag ? "all" : filter, collection: !tag && filter === "collection" ? collection : null, tag,
       query: (params.get("q") || "").trim(), page: positive(params.get("page")),
       sort: ["newest", "oldest", "title", "title_desc", "updated"].includes(params.get("sort")) ? params.get("sort") : "newest",
@@ -19,6 +21,7 @@
   }
   function routeSearch(route) {
     const params = new URLSearchParams();
+    if (settingsSections.includes(route.settingsSection)) params.set("settings", route.settingsSection);
     if (route.filter !== "all") params.set("filter", route.filter);
     if (route.filter === "collection" && route.collection) params.set("collection", route.collection);
     if (route.tag) params.set("tag", route.tag);
