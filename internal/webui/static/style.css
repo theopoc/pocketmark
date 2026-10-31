@@ -888,3 +888,7 @@ body:has(dialog[open]) { overflow: hidden; }
   .results-bar:has(#bulk-open:not([hidden])) .capture-summary { display: none; }
   .bulk-toolbar { flex: 1; }
 }
+
+.button.danger { background: #b12e35; border-color: #b12e35; color: #fff; }
+.button.danger:is(:hover, :focus-visible) { background: #92242b; border-color: #92242b; }
+#delete-bookmark-name { overflow-wrap: anywhere; }

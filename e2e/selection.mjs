@@ -71,8 +71,8 @@ export async function selectionJourney(page, screenshots) {
     };
     window.restoreSelectionAnimate = () => { Element.prototype.animate = animate; };
   });
-  page.once('dialog', dialog => dialog.accept());
   await cards.nth(0).getByRole('button', { name: /^Delete bookmark:/ }).click();
+  await page.locator('#delete-bookmark-confirm').click();
   await page.locator('.bookmark-exit-layer').waitFor();
   assert.equal(await page.locator('.bookmark-exit-layer').getAttribute('aria-hidden'), 'true');
   assert.equal(await page.locator('.bookmark-exit-layer').evaluate(node => node.inert), true);

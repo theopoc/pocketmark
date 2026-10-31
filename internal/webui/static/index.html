@@ -208,6 +208,21 @@
       </div>
     </aside>
   </dialog>
+  <dialog id="delete-bookmark-dialog" class="modal compact-modal" role="alertdialog" aria-labelledby="delete-bookmark-title" aria-describedby="delete-bookmark-description">
+    <form id="delete-bookmark-form">
+      <div class="dialog-heading"><h2 id="delete-bookmark-title">Delete bookmark?</h2></div>
+      <p id="delete-bookmark-description">Delete <strong id="delete-bookmark-name"></strong> and its saved content? This cannot be undone.</p>
+      <p id="delete-bookmark-error" class="form-error" role="alert"></p>
+      <div class="dialog-actions"><button id="delete-bookmark-cancel" type="button" class="button subtle close-dialog" autofocus>Cancel</button><button id="delete-bookmark-confirm" type="submit" class="button danger">Delete bookmark</button></div>
+    </form>
+  </dialog>
+  <dialog id="delete-selection-dialog" class="modal compact-modal" role="alertdialog" aria-labelledby="delete-selection-title" aria-describedby="delete-selection-description">
+    <form method="dialog">
+      <div class="dialog-heading"><h2 id="delete-selection-title">Delete bookmarks?</h2></div>
+      <p id="delete-selection-description"></p>
+      <div class="dialog-actions"><button value="cancel" class="button subtle" autofocus>Cancel</button><button value="delete" class="button danger">Delete bookmarks</button></div>
+    </form>
+  </dialog>
   <dialog id="logout-dialog" class="modal compact-modal" role="alertdialog" aria-labelledby="logout-title" aria-describedby="logout-description">
     <form id="logout-form">
       <div class="dialog-heading"><h2 id="logout-title">Sign out of Pocketmark?</h2></div>
