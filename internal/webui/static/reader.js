@@ -528,7 +528,7 @@
       // The structural endpoint prefers HTML attachments, so only use it for
       // the basic archive when no HTML attachment exists. Its source download
       // remains available under Reading options even when attachments exist.
-      if (state.reading?.archiveAvailable && !assets.some(asset => asset.mediaType === "text/html")) assets.push({ id: 0, name: "Basic HTML capture", mediaType: "text/html", basicArchive: true });
+      if (assetsState === "ready" && state.reading?.archiveAvailable && !assets.some(asset => asset.mediaType === "text/html")) assets.push({ id: 0, name: "Basic HTML capture", mediaType: "text/html", basicArchive: true });
       return assets;
     }
     function renderFormats() {

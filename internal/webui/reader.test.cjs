@@ -667,9 +667,15 @@ test("format shortcuts open the newest copy and retain earlier copies of that fo
 });
 
 test("basic HTML archives remain available without attachments and use the sandboxed reader", async () => {
-  const env = setup();
+  const files = deferred();
+  const env = setup({ handler: (path, options, fallback) => path.endsWith("/assets") ? files.promise : fallback() });
   env.records.set(1, link(1, { archiveAvailable: true }));
-  await env.reader.open(1);
+  const opening = env.reader.open(1);
+  await tick();
+  assert.equal(env.get("reader-format-html-status").textContent, "Checking…");
+  assert.equal(env.get("reader-format-html").disabled, true, "wait for attachments before choosing the basic archive");
+  files.resolve([]);
+  await opening;
   assert.equal(env.get("reader-format-html-status").textContent, "Saved");
   env.get("reader-format-html").click();
   await tick();
