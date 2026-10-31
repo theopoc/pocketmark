@@ -1,5 +1,6 @@
 // Real HTTP/browser regression. Uses only the disposable instance's synthetic owner.
 import assert from 'node:assert/strict';
+import { selectSettings, settingsNavigationJourney } from './settings.mjs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -19,12 +20,15 @@ export async function securityJourney({ browser, page, base, username, password,
     assert.equal((await peer.request.post(url('/api/login'), { data: { username, password } })).status(), 200);
     assert.equal((await peer.request.post(url('/api/mfa/verify'), { data: { code: recoveryCode } })).status(), 200);
     await page.locator('#settings-button').click();
+    await settingsNavigationJourney(page);
+    await selectSettings(page, 'sessions');
     await page.locator('#sessions-list .token-row').nth(1).waitFor();
     await page.setViewportSize({ width: 320, height: 700 });
-    for (const selector of ['#settings-dialog .dialog-heading .icon-button', '#token-name', '#token-profile', '#sessions-refresh', '#settings-dialog a[href="/api/backup"]']) {
-      assert.ok(await page.locator(selector).evaluate(node => node.getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
+    for (const [section, selectors] of [['api-keys', ['#token-name', '#token-profile']], ['sessions', ['#sessions-refresh']], ['backup', ['#settings-page a[href="/api/backup"]']]]) {
+      await selectSettings(page, section);
+      for (const selector of selectors) assert.ok(await page.locator(selector).evaluate(node => node.getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
     }
-    assert.ok(await page.locator('#settings-dialog').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), 'mobile settings do not overflow');
+    assert.ok(await page.locator('#settings-page').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), 'mobile settings do not overflow');
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: 'Backup' }).click();
     assert.equal(await page.locator('#backup-title').evaluate(node => document.activeElement === node), true);
@@ -35,14 +39,16 @@ export async function securityJourney({ browser, page, base, username, password,
       for (const [name, width, height, theme] of [['desktop', 1280, 1000, 'dark'], ['mobile', 390, 844, 'dark'], ['mobile-light', 390, 844, 'light']]) {
         await page.setViewportSize({ width, height });
         await page.evaluate(theme => { if (document.documentElement.dataset.theme !== theme) document.querySelector('[data-theme-toggle]').click(); }, theme);
+        await selectSettings(page, '2fa');
         await page.locator('#mfa-settings-title').evaluate(node => node.scrollIntoView({ block: 'start' }));
-        assert.ok(await page.locator('#settings-dialog').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), `${name} MFA settings overflow`);
+        assert.ok(await page.locator('#settings-page').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), `${name} MFA settings overflow`);
         await settle();
         await page.screenshot({ path: join(process.env.E2E_SCREENSHOTS, `mfa-settings-${name}.png`), fullPage: false });
       }
       await page.setViewportSize({ width: 1280, height: 1000 });
       await page.evaluate(() => { if (document.documentElement.dataset.theme !== 'dark') document.querySelector('[data-theme-toggle]').click(); });
     }
+    await selectSettings(page, 'api-keys');
     assert.equal(await page.locator('#token-profile').inputValue(), 'read');
     assert.equal(await page.locator('#token-expiry').inputValue(), '30');
     await page.locator('#token-name').fill('Synthetic extension');
@@ -75,6 +81,7 @@ export async function securityJourney({ browser, page, base, username, password,
     await page.getByRole('button', { name: 'Disable Synthetic extension', exact: true }).waitFor();
 
     // The backup link always requests password confirmation, even after login.
+    await selectSettings(page, 'backup');
     await page.getByRole('link', { name: 'Download full backup', exact: true }).click();
     await page.locator('#reauth-dialog').waitFor({ state: 'visible' });
     assert.equal(await page.evaluate(() => document.activeElement.id), 'reauth-password');
@@ -93,6 +100,7 @@ export async function securityJourney({ browser, page, base, username, password,
     await page.waitForFunction(() => document.getElementById('reauth-password').value === '');
     assert.equal(await page.locator('#reauth-password').inputValue(), '');
 
+    await selectSettings(page, 'sessions');
     await page.locator('#session-idle').selectOption('60');
     await page.locator('#session-idle-form').getByRole('button', { name: 'Save timeout' }).click();
     await page.locator('#sessions-feedback').filter({ hasText: 'Inactivity timeout saved' }).waitFor();
@@ -101,8 +109,8 @@ export async function securityJourney({ browser, page, base, username, password,
     const expiresAt = Math.floor(Date.now() / 1000) + 2;
     assert.equal((await request.post(url('/api/tokens'), { data: { name: 'Synthetic expired key', profile: 'read', expiresAt } })).status(), 201);
     await page.waitForFunction(expiry => Date.now() >= expiry * 1000, expiresAt);
-    await page.locator('#settings-dialog').getByRole('button', { name: 'Close', exact: true }).click();
-    await page.locator('#settings-dialog').waitFor({ state: 'hidden' });
+    await page.locator('[data-settings-back]:visible').click();
+    await page.locator('#settings-page').waitFor({ state: 'hidden' });
     await page.locator('#settings-button').click();
     const expiredRow = page.locator('#token-list .token-row').filter({ hasText: 'Synthetic expired key' });
     await expiredRow.waitFor();
@@ -116,10 +124,12 @@ export async function securityJourney({ browser, page, base, username, password,
       for (const [name, width, height, theme] of [['desktop', 1280, 1000, 'dark'], ['mobile', 390, 844, 'dark'], ['mobile-light', 390, 844, 'light']]) {
         await page.setViewportSize({ width, height });
         await page.evaluate(theme => { if (document.documentElement.dataset.theme !== theme) document.querySelector('[data-theme-toggle]').click(); }, theme);
-        await page.locator('#settings-dialog').evaluate(dialog => { dialog.scrollTop = 0; });
-        assert.ok(await page.locator('#settings-dialog').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), `${name} settings overflow`);
+        await selectSettings(page, 'api-keys');
+        await page.evaluate(() => window.scrollTo(0, 0));
+        assert.ok(await page.locator('#settings-page').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), `${name} settings overflow`);
         await settle();
         await page.screenshot({ path: join(process.env.E2E_SCREENSHOTS, `${name}.png`), fullPage: false });
+        await selectSettings(page, 'sessions');
         await page.locator('#sessions-title').scrollIntoViewIfNeeded();
         await settle();
         await page.screenshot({ path: join(process.env.E2E_SCREENSHOTS, `${name}-sessions.png`), fullPage: false });
@@ -129,17 +139,19 @@ export async function securityJourney({ browser, page, base, username, password,
       }
       await page.setViewportSize({ width: 1280, height: 1000 });
     }
+    await selectSettings(page, 'sessions');
     await page.locator('#sessions-others').click();
     await page.locator('#sessions-feedback').filter({ hasText: 'All other browsers' }).waitFor();
     assert.equal((await peer.request.get(url('/api/session'))).status(), 401);
     assert.equal((await request.get(url('/api/session'))).status(), 200);
     // Cancel must not start a download or retain the entered password.
+    await selectSettings(page, 'backup');
     await page.getByRole('link', { name: 'Download full backup', exact: true }).click();
     await page.locator('#reauth-password').fill('not-submitted');
     await page.locator('#reauth-cancel').click();
     await page.waitForFunction(() => document.getElementById('reauth-password').value === '');
     assert.equal(await page.locator('#reauth-password').inputValue(), '');
-    await page.locator('#settings-dialog').getByRole('button', { name: 'Close', exact: true }).click();
+    await page.locator('[data-settings-back]:visible').click();
     await page.waitForFunction(() => document.getElementById('new-token-value').value === '');
     assert.equal(await page.locator('#new-token-value').inputValue(), '');
   } finally { await peer.close(); }

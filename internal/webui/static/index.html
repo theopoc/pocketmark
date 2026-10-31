@@ -59,10 +59,11 @@
     </div></div>
   </section>
   <div id="app-view" class="app-shell" hidden>
-    <a class="skip-link" href="#main-content">Skip to library</a>
+    <a class="skip-link" href="#main-content">Skip to content</a>
     <div id="sidebar-slot" class="sidebar-slot">
     <aside id="sidebar" class="sidebar" aria-label="Library navigation">
       <div class="sidebar-brand"><a class="brand" href="/" aria-label="Pocketmark home"><span class="brand-mark" data-icon="bookmark" aria-hidden="true"></span><span>Pocketmark</span></a><button id="close-navigation" class="icon-button mobile-only" aria-label="Close navigation"><span data-icon="close" aria-hidden="true"></span></button></div>
+      <div id="library-navigation">
       <div class="workspace-label"><span class="workspace-avatar" aria-hidden="true">P</span><div>Personal workspace<span>My library</span></div></div>
       <nav aria-label="Library">
         <button class="nav-item active" data-filter="all" aria-current="page"><span data-icon="library" aria-hidden="true"></span>All bookmarks <span id="total-count" class="nav-count">0</span></button>
@@ -80,11 +81,75 @@
         <a class="nav-item api-documentation-link" href="/api-docs/"><span data-icon="book" aria-hidden="true"></span>API documentation</a>
         <input id="import-file" type="file" accept="application/json,text/html,.json,.html,.htm" hidden>
       </div>
+      </div>
+      <div id="settings-navigation" hidden>
+        <button type="button" class="nav-item settings-back" data-settings-back><span data-icon="arrow-left" aria-hidden="true"></span>Back to library</button>
+        <nav aria-label="Settings sections">
+          <button type="button" class="nav-item" data-settings-section="api-keys"><span data-icon="lock" aria-hidden="true"></span>API keys</button>
+          <button type="button" class="nav-item" data-settings-section="2fa"><span data-icon="lock" aria-hidden="true"></span>2FA</button>
+          <button type="button" class="nav-item" data-settings-section="sessions"><span data-icon="clock" aria-hidden="true"></span>Sessions</button>
+          <button type="button" class="nav-item" data-settings-section="backup"><span data-icon="download" aria-hidden="true"></span>Backup</button>
+          <button type="button" class="nav-item" data-settings-section="password"><span data-icon="lock" aria-hidden="true"></span>Password sign-in</button>
+          <button type="button" class="nav-item" data-settings-section="sync"><span data-icon="refresh" aria-hidden="true"></span>Browser bookmark sync</button>
+          <button type="button" class="nav-item" data-settings-section="mobile"><span data-icon="book" aria-hidden="true"></span>Mobile &amp; browser</button>
+        </nav>
+      </div>
     </aside>
     </div>
     <main id="main-content" class="main-content" tabindex="-1">
       <header class="topbar"><div class="topbar-location"><button id="open-navigation" class="icon-button mobile-only" aria-label="Open navigation" aria-controls="navigation-dialog" aria-expanded="false"><span data-icon="menu" aria-hidden="true"></span></button><span class="breadcrumb"><span class="breadcrumb-root">Workspace</span><span data-icon="chevron-right" aria-hidden="true"></span><span id="breadcrumb-current">All bookmarks</span></span></div><div class="topbar-actions"><button class="button subtle theme-toggle" data-theme-toggle aria-label="Dark mode" aria-pressed="true" title="Switch to light mode"><span data-theme-icon aria-hidden="true"></span><span data-theme-label>Dark</span></button><span class="workspace-badge"><span data-icon="lock" aria-hidden="true"></span>Personal library</span></div></header>
-      <div class="library-content">
+      <section id="settings-page" class="settings-page" aria-labelledby="settings-title" hidden>
+        <button type="button" class="button subtle settings-mobile-back" data-settings-back><span data-icon="arrow-left" aria-hidden="true"></span>Back to library</button>
+        <h1 id="settings-title">Settings</h1>
+        <label class="settings-mobile-picker" for="settings-section-picker">Settings section<select id="settings-section-picker"><option value="api-keys">API keys</option><option value="2fa">2FA</option><option value="sessions">Sessions</option><option value="backup">Backup</option><option value="password">Password sign-in</option><option value="sync">Browser bookmark sync</option><option value="mobile">Mobile &amp; browser</option></select></label>
+        <section class="settings-section" data-settings-panel="api-keys" aria-labelledby="api-keys-title" hidden>
+    <div class="token-heading"><h2 id="api-keys-title">API keys</h2><span id="token-count" class="small muted"></span></div>
+    <form id="token-form">
+      <p id="token-help" class="small muted">Use a separate key for each app. Rename it, disable access temporarily, or delete it permanently.</p>
+      <label for="token-name">Key name</label>
+      <input id="token-name" required maxlength="100" placeholder="My browser extension" aria-describedby="token-help">
+      <label for="token-profile">Permissions</label>
+      <select id="token-profile" aria-describedby="token-permissions-help"><option value="read">Read only</option><option value="capture">Add, edit &amp; capture</option><option value="sync">Floccus sync</option><option value="full">Full library access</option></select>
+      <p id="token-permissions-help" class="small muted">Read only can read and export your library. No profile can manage your account, keys, sessions or full backups.</p>
+      <label for="token-expiry">Expires after</label><select id="token-expiry"><option value="30">30 days</option><option value="90">90 days</option><option value="365">1 year</option><option value="0">Never</option></select>
+      <button class="button subtle" type="submit">Create key</button>
+    </form>
+    <div id="new-token" hidden>
+      <label for="new-token-value">New API key</label>
+      <input id="new-token-value" type="password" readonly autocomplete="off" spellcheck="false" aria-describedby="new-token-help">
+      <p id="new-token-help" class="small muted">Copy this key now. You won’t be able to view it again after leaving Settings.</p>
+      <div class="token-actions">
+        <button id="toggle-token" class="button subtle" type="button" aria-label="Show API key" aria-controls="new-token-value">Show key</button>
+        <button id="copy-token" class="button subtle" type="button">Copy key</button>
+      </div>
+    </div>
+    <p id="token-activity-help" class="small muted">Last used includes connected apps and bookmark sync. Earlier activity may be unavailable.</p>
+    <ul id="token-list" aria-label="API keys" aria-describedby="token-activity-help"></ul>
+    <p id="tokens-feedback" class="small muted" role="status"></p>
+    <p id="tokens-error" class="form-error" role="alert"></p>
+  </section><section class="settings-section" data-settings-panel="2fa" aria-labelledby="mfa-settings-title" hidden>
+    <h2 id="mfa-settings-title">2FA</h2>
+    <p class="small muted">Use an authenticator app when signing in. Replacing it signs out your other browsers.</p>
+    <form id="mfa-manage-form">
+      <label for="mfa-manage-password">Current password</label><input id="mfa-manage-password" type="password" autocomplete="current-password" required maxlength="1024">
+      <label for="mfa-manage-code">Authentication or recovery code</label><input id="mfa-manage-code" autocomplete="one-time-code" spellcheck="false">
+      <p class="small muted">For five minutes after signing in with a recovery code, you can leave the code field empty when replacing your authenticator.</p>
+      <p id="mfa-codes-warning" class="small muted">Generating recovery codes invalidates all previous recovery codes.</p>
+      <div class="token-actions"><button class="button subtle" type="submit" value="replace">Replace authenticator</button><button class="button subtle" type="submit" value="codes" aria-describedby="mfa-codes-warning">Generate recovery codes</button></div>
+    </form>
+    <div id="mfa-manage-enrollment" hidden><p class="small muted">Scan the new QR code or enter the setup key in your authenticator.</p><img id="mfa-manage-qr" class="mfa-qr" alt="New authenticator setup QR code" width="220" height="220"><label for="mfa-manage-secret">Manual setup key</label><textarea id="mfa-manage-secret" class="mfa-secret" rows="2" readonly spellcheck="false"></textarea><button id="mfa-manage-secret-copy" type="button" class="button subtle">Copy setup key</button><form id="mfa-manage-verify"><label for="mfa-manage-new-code">Code from the new authenticator</label><input id="mfa-manage-new-code" autocomplete="one-time-code" inputmode="numeric" required><button class="button primary" type="submit">Confirm new authenticator</button><button id="mfa-manage-cancel" class="button subtle" type="button">Cancel replacement</button></form></div>
+    <div id="mfa-manage-codes" hidden><p class="small muted">Save these single-use codes now. Previous codes no longer work.</p><pre id="mfa-manage-codes-value" class="mfa-codes" tabindex="0"></pre><div class="token-actions"><button id="mfa-manage-copy" class="button subtle" type="button">Copy recovery codes</button><button id="mfa-manage-download" class="button subtle" type="button">Download recovery codes</button></div></div>
+    <p id="mfa-manage-feedback" class="small muted" role="status"></p><p id="mfa-manage-error" class="form-error" role="alert"></p>
+  </section><section class="settings-section" data-settings-panel="sessions" aria-labelledby="sessions-title" hidden>
+    <h2 id="sessions-title">Browser sessions</h2>
+    <p class="small muted">Review signed-in browsers and revoke access. All sessions expire after seven days. Browser details are reported by the device and may be unavailable or inaccurate.</p>
+    <div class="token-actions"><button id="sessions-refresh" type="button" class="button subtle">Refresh sessions</button><button id="sessions-others" type="button" class="button subtle">Sign out other browsers</button></div>
+    <ul id="sessions-list" aria-label="Browser sessions"></ul>
+    <form id="session-idle-form"><label for="session-idle">Sign out this browser after inactivity</label><select id="session-idle"><option value="15">15 minutes</option><option value="60">1 hour</option><option value="1440">24 hours</option><option value="0">Only at the seven-day expiry</option></select><p class="small muted">Requests from an open library count as activity. Changing this setting requires recent password confirmation.</p><button class="button subtle" type="submit">Save timeout</button></form>
+    <p id="sessions-feedback" class="small muted" role="status"></p><p id="sessions-error" class="form-error" role="alert"></p>
+  </section><section class="settings-section" data-settings-panel="backup" aria-labelledby="backup-title" hidden><h2 id="backup-title">Backup &amp; restore</h2><p class="small muted">A full backup keeps your bookmarks, captures, attachments, highlights and account settings together.</p><a class="button subtle" href="/api/backup">Download full backup</a><details class="help-details"><summary>How to restore a backup</summary><ol class="small muted"><li>Stop Pocketmark before restoring.</li><li>Unzip the backup and follow its RESTORE instructions. Use an empty data directory and keep your server-secret (or legacy access-token / POCKETMARK_TOKEN) separately.</li><li>Restore file ownership if needed, then restart Pocketmark.</li></ol><p class="small muted">JSON and browser HTML exports contain bookmark metadata, not captures or attached files.</p></details></section><section class="settings-section" data-settings-panel="password" aria-labelledby="password-title" hidden><h2 id="password-title">Password sign-in</h2><form id="account-form"><p id="account-status" class="small muted"></p><label for="account-username">Username</label><input id="account-username" autocomplete="username" required><label for="account-password">New password</label><input id="account-password" type="password" minlength="12" autocomplete="new-password" required><p class="small muted">At least 12 characters.</p><button class="button primary" type="submit">Save password</button></form><p id="settings-error" class="form-error" role="alert"></p></section><section class="settings-section" data-settings-panel="sync" aria-labelledby="sync-title" hidden><h2 id="sync-title">Browser bookmark sync</h2><p class="small muted">In Floccus, add a WebDAV account using this server’s address with <code>/dav/</code> appended and the file <code>bookmarks.xbel</code>. Use any username with a dedicated API key as the password. Choose the Floccus sync permissions when creating a key in API keys.</p><p class="small muted">Sync includes bookmarks and collection folders. Uploading a Floccus file replaces the synchronized bookmark tree; deletions in that file remove matching bookmarks.</p></section><section class="settings-section" data-settings-panel="mobile" aria-labelledby="mobile-title" hidden><h2 id="mobile-title">Mobile &amp; browser</h2><p class="small muted">Install this page from your browser’s menu to use Pocketmark as a mobile app. Share a link to it where your browser supports web share targets. The companion extension saves the current page, its rendered HTML, or a screenshot.</p></section>
+      </section>
+      <div id="library-content" class="library-content">
       <p id="import-progress" class="operation-progress" role="status" hidden>Importing bookmarks…</p>
       <p id="upload-progress" class="operation-progress" role="status" hidden>Uploading file…</p>
       <section id="tags-view" hidden aria-labelledby="tags-title">
@@ -207,52 +272,7 @@
   <p id="bulk-error" class="form-error" role="alert"></p><div class="dialog-actions"><button type="button" class="button subtle close-dialog">Cancel</button><button id="bulk-apply" class="button primary" type="submit" disabled>Choose an action</button></div>
 </form></dialog>
   <dialog id="annotation-dialog" class="modal compact-modal" aria-labelledby="annotation-title"><form id="annotation-form"><div class="dialog-heading"><h2 id="annotation-title">Annotation</h2><button type="button" class="icon-button close-dialog" aria-label="Close"><span data-icon="close" aria-hidden="true"></span></button></div><p id="annotation-draft-notice" class="draft-notice" hidden>Unsaved annotation restored from this tab.</p><blockquote id="annotation-quote"></blockquote><label for="annotation-note">Note</label><textarea id="annotation-note" rows="3"></textarea><label for="annotation-color">Highlight color</label><select id="annotation-color"><option value="yellow">Yellow</option><option value="green">Green</option><option value="blue">Blue</option><option value="pink">Pink</option></select><p id="annotation-error" class="form-error" role="alert"></p><div class="dialog-actions"><button type="button" class="button subtle close-dialog">Cancel</button><button class="button primary" type="submit">Save annotation</button></div></form></dialog>
-  <dialog id="settings-dialog" class="modal settings-modal" aria-labelledby="settings-title"><div class="settings-sticky-heading"><div class="dialog-heading"><h2 id="settings-title">Settings</h2><button type="button" class="icon-button close-dialog" aria-label="Close"><span data-icon="close" aria-hidden="true"></span></button></div><nav class="settings-section-nav" aria-label="Settings sections"><button type="button" class="text-button" data-settings-section="api-keys-title">API keys</button><button type="button" class="text-button" data-settings-section="mfa-settings-title">Two-step</button><button type="button" class="text-button" data-settings-section="sessions-title">Sessions</button><button type="button" class="text-button" data-settings-section="backup-title">Backup</button></nav></div><section class="settings-section" aria-labelledby="api-keys-title">
-    <div class="token-heading"><h3 id="api-keys-title">API keys</h3><span id="token-count" class="small muted"></span></div>
-    <form id="token-form">
-      <p id="token-help" class="small muted">Use a separate key for each app. Rename it, disable access temporarily, or delete it permanently.</p>
-      <label for="token-name">Key name</label>
-      <input id="token-name" required maxlength="100" placeholder="My browser extension" aria-describedby="token-help">
-      <label for="token-profile">Permissions</label>
-      <select id="token-profile" aria-describedby="token-permissions-help"><option value="read">Read only</option><option value="capture">Add, edit &amp; capture</option><option value="sync">Floccus sync</option><option value="full">Full library access</option></select>
-      <p id="token-permissions-help" class="small muted">Read only can read and export your library. No profile can manage your account, keys, sessions or full backups.</p>
-      <label for="token-expiry">Expires after</label><select id="token-expiry"><option value="30">30 days</option><option value="90">90 days</option><option value="365">1 year</option><option value="0">Never</option></select>
-      <button class="button subtle" type="submit">Create key</button>
-    </form>
-    <div id="new-token" hidden>
-      <label for="new-token-value">New API key</label>
-      <input id="new-token-value" type="password" readonly autocomplete="off" spellcheck="false" aria-describedby="new-token-help">
-      <p id="new-token-help" class="small muted">Copy this key now. You won’t be able to view it again after closing Settings.</p>
-      <div class="token-actions">
-        <button id="toggle-token" class="button subtle" type="button" aria-label="Show API key" aria-controls="new-token-value">Show key</button>
-        <button id="copy-token" class="button subtle" type="button">Copy key</button>
-      </div>
-    </div>
-    <p id="token-activity-help" class="small muted">Last used includes connected apps and bookmark sync. Earlier activity may be unavailable.</p>
-    <ul id="token-list" aria-label="API keys" aria-describedby="token-activity-help"></ul>
-    <p id="tokens-feedback" class="small muted" role="status"></p>
-    <p id="tokens-error" class="form-error" role="alert"></p>
-  </section><section class="settings-section" aria-labelledby="mfa-settings-title">
-    <h3 id="mfa-settings-title">Two-step verification</h3>
-    <p class="small muted">Use an authenticator app when signing in. Replacing it signs out your other browsers.</p>
-    <form id="mfa-manage-form">
-      <label for="mfa-manage-password">Current password</label><input id="mfa-manage-password" type="password" autocomplete="current-password" required maxlength="1024">
-      <label for="mfa-manage-code">Authentication or recovery code</label><input id="mfa-manage-code" autocomplete="one-time-code" spellcheck="false">
-      <p class="small muted">For five minutes after signing in with a recovery code, you can leave the code field empty when replacing your authenticator.</p>
-      <p id="mfa-codes-warning" class="small muted">Generating recovery codes invalidates all previous recovery codes.</p>
-      <div class="token-actions"><button class="button subtle" type="submit" value="replace">Replace authenticator</button><button class="button subtle" type="submit" value="codes" aria-describedby="mfa-codes-warning">Generate recovery codes</button></div>
-    </form>
-    <div id="mfa-manage-enrollment" hidden><p class="small muted">Scan the new QR code or enter the setup key in your authenticator.</p><img id="mfa-manage-qr" class="mfa-qr" alt="New authenticator setup QR code" width="220" height="220"><label for="mfa-manage-secret">Manual setup key</label><textarea id="mfa-manage-secret" class="mfa-secret" rows="2" readonly spellcheck="false"></textarea><button id="mfa-manage-secret-copy" type="button" class="button subtle">Copy setup key</button><form id="mfa-manage-verify"><label for="mfa-manage-new-code">Code from the new authenticator</label><input id="mfa-manage-new-code" autocomplete="one-time-code" inputmode="numeric" required><button class="button primary" type="submit">Confirm new authenticator</button><button id="mfa-manage-cancel" class="button subtle" type="button">Cancel replacement</button></form></div>
-    <div id="mfa-manage-codes" hidden><p class="small muted">Save these single-use codes now. Previous codes no longer work.</p><pre id="mfa-manage-codes-value" class="mfa-codes" tabindex="0"></pre><div class="token-actions"><button id="mfa-manage-copy" class="button subtle" type="button">Copy recovery codes</button><button id="mfa-manage-download" class="button subtle" type="button">Download recovery codes</button></div></div>
-    <p id="mfa-manage-feedback" class="small muted" role="status"></p><p id="mfa-manage-error" class="form-error" role="alert"></p>
-  </section><section class="settings-section" aria-labelledby="sessions-title">
-    <h3 id="sessions-title">Browser sessions</h3>
-    <p class="small muted">Review signed-in browsers and revoke access. All sessions expire after seven days. Browser details are reported by the device and may be unavailable or inaccurate.</p>
-    <div class="token-actions"><button id="sessions-refresh" type="button" class="button subtle">Refresh sessions</button><button id="sessions-others" type="button" class="button subtle">Sign out other browsers</button></div>
-    <ul id="sessions-list" aria-label="Browser sessions"></ul>
-    <form id="session-idle-form"><label for="session-idle">Sign out this browser after inactivity</label><select id="session-idle"><option value="15">15 minutes</option><option value="60">1 hour</option><option value="1440">24 hours</option><option value="0">Only at the seven-day expiry</option></select><p class="small muted">Requests from an open library count as activity. Changing this setting requires recent password confirmation.</p><button class="button subtle" type="submit">Save timeout</button></form>
-    <p id="sessions-feedback" class="small muted" role="status"></p><p id="sessions-error" class="form-error" role="alert"></p>
-  </section><section class="settings-section" aria-labelledby="backup-title"><h3 id="backup-title">Backup &amp; restore</h3><p class="small muted">A full backup keeps your bookmarks, captures, attachments, highlights and account settings together.</p><a class="button subtle" href="/api/backup">Download full backup</a><details class="help-details"><summary>How to restore a backup</summary><ol class="small muted"><li>Stop Pocketmark before restoring.</li><li>Unzip the backup and follow its RESTORE instructions. Use an empty data directory and keep your server-secret (or legacy access-token / POCKETMARK_TOKEN) separately.</li><li>Restore file ownership if needed, then restart Pocketmark.</li></ol><p class="small muted">JSON and browser HTML exports contain bookmark metadata, not captures or attached files.</p></details></section><section class="settings-section"><details class="help-details"><summary>Password sign-in</summary><form id="account-form"><p id="account-status" class="small muted"></p><label for="account-username">Username</label><input id="account-username" autocomplete="username" required><label for="account-password">New password</label><input id="account-password" type="password" minlength="12" autocomplete="new-password" required><p class="small muted">At least 12 characters.</p><button class="button primary" type="submit">Save password</button></form></details><p id="settings-error" class="form-error" role="alert"></p></section><section class="settings-section"><details class="help-details"><summary>Browser bookmark sync</summary><p class="small muted">In Floccus, add a WebDAV account using this server’s address with <code>/dav/</code> appended and the file <code>bookmarks.xbel</code>. Use any username with a dedicated API key as the password. Choose the Floccus sync permissions when creating that key above.</p><p class="small muted">Sync includes bookmarks and collection folders. Uploading a Floccus file replaces the synchronized bookmark tree; deletions in that file remove matching bookmarks.</p></details></section><section class="settings-section"><details class="help-details"><summary>Mobile &amp; browser</summary><p class="small muted">Install this page from your browser’s menu to use Pocketmark as a mobile app. Share a link to it where your browser supports web share targets. The companion extension saves the current page, its rendered HTML, or a screenshot.</p></details></section></dialog>
+
   <dialog id="reauth-dialog" class="modal compact-modal" aria-labelledby="reauth-title" aria-describedby="reauth-description"><form id="reauth-form"><h2 id="reauth-title">Confirm your password</h2><p id="reauth-description" class="muted">Protect your account before continuing. Confirmation lasts five minutes in this browser.</p><label for="reauth-password">Current password</label><input id="reauth-password" type="password" autocomplete="current-password" required maxlength="1024"><p id="reauth-error" class="form-error" role="alert"></p><div class="dialog-actions"><button id="reauth-cancel" type="button" class="button subtle">Cancel</button><button id="reauth-submit" type="submit" class="button primary">Confirm password</button></div></form></dialog>
   <dialog id="export-dialog" class="modal compact-modal" aria-labelledby="export-title"><div class="dialog-heading"><h2 id="export-title">Export bookmarks</h2><button type="button" class="icon-button close-dialog" aria-label="Close"><span data-icon="close" aria-hidden="true"></span></button></div><p class="muted">Choose a portable format. Saved files and captures are stored in your data directory and are not included in these metadata exports.</p><p class="small muted">To keep captures, files and account settings, <a href="/api/backup">download a full backup</a> instead. Restore instructions are included.</p><div class="reader-actions"><a class="button primary" href="/api/export">Pocketmark JSON</a><a class="button subtle" href="/api/export/html">Browser bookmarks HTML</a></div></dialog>
   <dialog id="help-dialog" class="modal help-modal" aria-labelledby="help-title">
