@@ -58,8 +58,15 @@ rendered markup. Larger files remain downloadable.
 
 Native attachment uploads, manual preservation, rich-reader generation and backup
 share one work slot; standalone uploads share the import slot.
-A competing operation on the same slot receives HTTP 409. Original downloads always use attachment disposition. The **View** action in
-**Reader → Files** opens an integrated viewer for raster images, PDFs and HTML,
+A competing operation on the same slot receives HTTP 409. Original downloads
+always use attachment disposition. Bookmarks open on **Saved formats**, with
+labeled HTML, Screenshot and PDF icons and explicit availability states. No article
+or description is displayed automatically. A shortcut opens the newest attachment
+of its format, with earlier copies available in the selector; Screenshot also
+includes saved raster images. When no HTML attachment exists, the basic archive
+opens as a simplified sandboxed page. Its source remains downloadable under
+Reading options when attachments exist. The **View** action in
+**Notes → Files** also opens the integrated viewer for raster images, PDFs and HTML,
 including standalone files. Its selector switches between saved attachments;
 **Download original** remains available. PDF display uses the browser's native
 viewer and may depend on browser settings.
