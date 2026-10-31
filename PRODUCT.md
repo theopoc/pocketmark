@@ -23,7 +23,7 @@ A self-hosted bookmark library built around one Go process, SQLite/FTS5 and an e
 - Use the web interface on desktop and mobile; installable mobile web and share-target support depend on the browser and OS.
 - Save and capture pages through the companion browser extension when browser rendering is needed.
 - Organize bookmarks in nested collections and tags, with an Inbox, favorites and read/unread status.
-- Search bookmark metadata and captured text. Open bookmarks on a choice of saved formats, showing only available HTML, Screenshot and PDF copies; never auto-open extracted text. Keep notes and existing highlights as optional secondary tools.
+- Search bookmark metadata and captured text. Open bookmarks on a choice of saved formats, showing only available HTML, Screenshot and PDF copies; never auto-open extracted text. Keep notes and existing highlights as optional secondary tools; manage attachments directly beside saved formats.
 - Import existing JSON or browser bookmark metadata; optionally synchronize with Floccus through WebDAV.
 - Run locally or self-host behind a configured reverse proxy. Full backups and portable metadata exports serve different purposes.
 

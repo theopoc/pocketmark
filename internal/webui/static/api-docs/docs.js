@@ -11,9 +11,10 @@
     themeButton.title = dark ? "Switch to light mode" : "Switch to dark mode";
   }
   setTheme(document.documentElement.dataset.theme);
+  const themeSwitch = globalThis.PocketmarkThemeSwitch.create({ initial: document.documentElement.dataset.theme, apply: setTheme });
   themeButton.addEventListener("click", () => {
-    const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-    setTheme(theme);
+    const theme = themeSwitch.requested === "dark" ? "light" : "dark";
+    themeSwitch.set(theme);
     try { localStorage.setItem("pocketmark-theme", theme); } catch { /* Storage is optional. */ }
   });
   document.getElementById("docs-retry").addEventListener("click", () => location.reload());
@@ -21,6 +22,7 @@
   const status = document.getElementById("docs-status");
   const reference = document.getElementById("swagger-ui");
   function labelControls() {
+    reference.querySelector("#servers")?.setAttribute("aria-label", "API server");
     reference.querySelector(".operation-filter-input")?.setAttribute("aria-label", "Filter API operations");
     reference.querySelector(".modal-ux-header .close-modal")?.setAttribute("aria-label", "Close authorizations");
   }

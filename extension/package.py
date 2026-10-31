@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 import zipfile
 
-FILES = ("manifest.json", "popup.html", "popup.js", "popup.css", "README.md",
+FILES = ("theme-switch.js", "ui-tokens.css", "name-limit.js", "ui-theme.js", "manifest.json", "popup.html", "popup.js", "popup.css", "README.md",
          "background.js", "common.js", "capture.js", "job-store.js")
 
 

@@ -11,7 +11,7 @@
 .docs-access p:last-child { margin-bottom: 0; }
 .docs-access a, .api-docs .error-banner a { color: var(--accent); }
 [data-theme="dark"] .docs-access a, [data-theme="dark"] .api-docs .error-banner a { color: var(--focus); }
-.docs-footer { padding-block: 24px; border-top: 1px solid var(--line); margin-top: 32px; font-size: 12px; }
+.docs-footer { padding-block: 24px; border-top: 1px solid var(--line); margin-top: 32px; font-size: var(--text-small); }
 #swagger-ui { outline: none; }
 .api-docs .swagger-ui { font-family: inherit; color: var(--ink); }
 .api-docs .swagger-ui .wrapper { padding: 0; }
@@ -25,7 +25,7 @@
 .api-docs .swagger-ui .opblock { box-shadow: none; border-radius: 6px; overflow: hidden; }
 .api-docs .swagger-ui .opblock-summary { padding: 8px; }
 .api-docs .swagger-ui .opblock-summary-path { overflow-wrap: anywhere; }
-.api-docs .swagger-ui .opblock-summary-description { font-size: 13px; }
+.api-docs .swagger-ui .opblock-summary-description { font-size: var(--text-body); }
 .api-docs .swagger-ui .btn { box-shadow: none; border-radius: 6px; }
 .api-docs .swagger-ui .btn.authorize { color: var(--ink); border-color: var(--control-line); }
 .api-docs .swagger-ui .btn.authorize svg { fill: var(--ink); }
@@ -65,11 +65,23 @@
   .docs-intro { align-items: flex-start; flex-direction: column; gap: 16px; }
   .api-docs .swagger-ui .opblock-summary { flex-wrap: wrap; gap: 4px; }
   .api-docs .swagger-ui .opblock-summary-description { flex-basis: 100%; }
-  .api-docs .swagger-ui .opblock-summary-path { max-width: calc(100% - 125px); font-size: 12px; }
-  .api-docs .swagger-ui .opblock-summary-method { min-width: 62px; font-size: 12px; }
+  .api-docs .swagger-ui .opblock-summary-path { max-width: calc(100% - 125px); font-size: var(--text-small); }
+  .api-docs .swagger-ui .opblock-summary-method { min-width: 62px; font-size: var(--text-small); }
   .api-docs .swagger-ui .opblock-body { overflow-x: auto; }
   .api-docs .swagger-ui .auth-container { padding: 16px 0; }
   .api-docs .swagger-ui .auth-container input { width: 100%; }
   .api-docs .swagger-ui .dialog-ux .modal-ux { width: calc(100% - 24px); }
   .api-docs .swagger-ui .btn, .api-docs .swagger-ui .opblock-tag { min-height: 44px; }
 }
+
+.api-docs .swagger-ui .opblock { background: var(--surface); border-color: var(--line); }
+.api-docs .swagger-ui .opblock .opblock-section-header { background: var(--panel); }
+.api-docs .swagger-ui .opblock-summary { min-height: 52px; gap: 12px; }
+.api-docs .swagger-ui .opblock-summary-description { line-height: 1.6; }
+.api-docs .swagger-ui :is(button, a, summary) { transition: background-color var(--motion-fast), color var(--motion-fast); }
+.api-docs .swagger-ui :is(button, a):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.api-docs .swagger-ui .btn { min-height: 38px; }
+.api-docs .swagger-ui .opblock-body pre { overflow: auto; }
+.docs-access { line-height: 1.7; }
+@media (max-width: 600px) { .api-docs .swagger-ui .btn, .docs-access summary { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) { .api-docs .swagger-ui :is(button, a, summary) { transition: none; } }

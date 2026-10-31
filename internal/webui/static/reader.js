@@ -18,6 +18,7 @@
     let retryReaderID = null;
     let activeSection = "reader-notes-form";
     let readingView = false;
+    let filesOpen = false;
     let assetsState = "loading";
     const formats = [
       { key: "html", name: "HTML", matches: asset => asset.mediaType === "text/html" },
@@ -49,10 +50,21 @@
       $("reader-notebook-toggle").focus({ preventScroll: true });
     });
 
+    function showFiles(open) {
+      filesOpen = open;
+      $("reader-files").hidden = !open;
+      $("reader-files-toggle").setAttribute("aria-expanded", String(open));
+      if (open) showNotebook(false);
+    }
+    $("reader-files-toggle").addEventListener("click", () => showFiles(!filesOpen));
+    $("reader-files-close").addEventListener("click", () => {
+      showFiles(false); $("reader-files-toggle").focus({ preventScroll: true });
+    });
+
     function emptyReaderText() {
       return safeURL(state.reading?.url)
         ? "No article text was saved. Open the original page to read it."
-        : "No article text was saved. Open a saved file under Notes & files → Files.";
+        : "No article text was saved. Open a saved file under Saved formats → Manage files.";
     }
 
     function closeViewer() {
@@ -101,7 +113,7 @@
       annotationSession++;
       state.annotationDraft = null;
       if ($("annotation-dialog").open) $("annotation-dialog").close();
-      if (!recheck) { readingView = false; $("reader-options").open = false; activeSection = "reader-notes-form"; showNotebook(false); }
+      if (!recheck) { readingView = false; showFiles(false); $("reader-options").open = false; activeSection = "reader-notes-form"; showNotebook(false); }
       $("reader-notebook-toggle").disabled = true;
       $("reader-text-panel").scrollTop = 0;
       $("reader-dialog").scrollTop = 0;
@@ -157,7 +169,8 @@
         $("reader-content").hidden = !readingView;
         $("reader-formats").hidden = false;
         renderFormats();
-        for (const id of ["reader-section-nav", "reader-reading-bar", "annotations-section", "reader-files"]) $(id).hidden = false;
+        for (const id of ["reader-section-nav", "reader-reading-bar", "annotations-section"]) $(id).hidden = false;
+        showFiles(filesOpen);
         $("reader-title").textContent = link.title || link.url;
         $("reader-domain").textContent = link.type === "file" ? "Saved file" : safeURL(link.url) || domain(link.url);
         $("reader-capture").hidden = link.type === "file";
@@ -517,6 +530,8 @@
         if (response.status === 401) { expireSession(); return; }
         if (!response.ok) throw new Error("Formatted view is unavailable. Read the text or retry after saving an HTML capture.");
         $("reader-layout").src = url; readerMode(true);
+        $("reader-layout").scrollIntoView({ block: "start", behavior: "instant" });
+        $("reader-layout").focus({ preventScroll: true });
         $("reader-mode-hint").textContent = "Formatted page · Text size and highlighting are available in Text & highlights.";
       } catch (error) {
         if (request !== layoutRequest || !isCurrent(readingRequest) || url !== readerLayoutURL) return;
@@ -544,7 +559,8 @@
         button.setAttribute("data-saved", String(!!copies.length));
         const status = copies.length ? (copies.length > 1 ? `Saved · ${copies.length} copies` : "Saved") : assetsState === "loading" ? "Checking…" : assetsState === "error" ? "Unknown" : "Not saved";
         $("reader-format-" + format.key + "-status").textContent = status;
-        button.setAttribute("aria-label", copies.length ? `Open saved ${format.name}` : `${format.name}: ${status}`);
+        button.removeAttribute("aria-label");
+        button.title = copies.length ? `Open latest saved ${format.name}` : `${format.name}: ${status}`;
       }
       $("reader-formats-summary").textContent = assetsState === "loading" ? "Checking saved copies…"
         : assetsState === "error" ? "Some saved copies could not be checked. Available copies are shown below."
@@ -657,7 +673,7 @@
         if (asset.mediaType === "text/html" && asset.size <= 2 * 1024 * 1024) {
           const read = el("button", "text-button", "Read");
           read.setAttribute("aria-label", `Read ${asset.name}`);
-          read.addEventListener("click", () => { showNotebook(false); $("reader-text-panel").focus({ preventScroll: true }); $("reader-text-panel").scrollTop = 0; readerLayoutURL = `/api/links/${id}/reader?asset=${asset.id}`; $("reader-layout-mode").disabled = false; $("reader-layout-mode").click(); });
+          read.addEventListener("click", () => { showFiles(false); showNotebook(false); $("reader-text-panel").focus({ preventScroll: true }); $("reader-text-panel").scrollTop = 0; readerLayoutURL = `/api/links/${id}/reader?asset=${asset.id}`; $("reader-layout-mode").disabled = false; $("reader-layout-mode").click(); });
 
           row.append(read);
         }
@@ -675,7 +691,7 @@
         row.append(remove); $("asset-list").append(row);
       }
       if (!assets?.length) $("asset-list").append(el("p", "reader-section-empty muted", state.reading.archiveAvailable
-        ? "No attached files. Your saved HTML copy is available under Saved formats."
+        ? "No attached files. The basic HTML capture is available above under Saved formats."
         : "No attached files yet. Attach a file to keep it with this bookmark."));
     }
 

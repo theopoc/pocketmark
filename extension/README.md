@@ -99,3 +99,9 @@ Run `make test-extension` for deterministic regressions. Actual browser observat
 are recorded separately in [docs/REAL_CLIENTS.md](../docs/REAL_CLIENTS.md).
 
 For a new API key, choose **Add, edit & capture — browser extension** in Settings. Read-only keys cannot save pages; Floccus keys only support WebDAV. After rotating a key, reconnect the extension with its new value.
+
+## Appearance and name limits
+
+The popup has local dark/light themes and uses the same semantic tokens as the web library. Its theme choice stays in this browser profile. Collection names display a character count and percentage of the server's name budget; accents and emoji consume more of that budget. Cancelling collection creation leaves the bookmark form usable.
+
+Maintainers: `python3 scripts/sync_ui_assets.py --write` refreshes the local shared assets from the embedded UI. `make check` rejects drift, and the package includes those assets without fetching anything at runtime.
