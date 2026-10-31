@@ -1,3 +1,4 @@
+import { clickNavigation, openNavigation } from './navigation.mjs';
 // Real HTTP/browser regression. Uses only the disposable instance's synthetic owner.
 import assert from 'node:assert/strict';
 import { selectSettings, settingsNavigationJourney } from './settings.mjs';
@@ -19,7 +20,7 @@ export async function securityJourney({ browser, page, base, username, password,
   try {
     assert.equal((await peer.request.post(url('/api/login'), { data: { username, password } })).status(), 200);
     assert.equal((await peer.request.post(url('/api/mfa/verify'), { data: { code: recoveryCode } })).status(), 200);
-    await page.locator('#settings-button').click();
+    await clickNavigation(page, '#settings-button');
     await settingsNavigationJourney(page);
     await selectSettings(page, 'sessions');
     await page.locator('#sessions-list .token-row').nth(1).waitFor();
@@ -30,8 +31,10 @@ export async function securityJourney({ browser, page, base, username, password,
     }
     assert.ok(await page.locator('#settings-page').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), 'mobile settings do not overflow');
     await page.setViewportSize({ width: 1280, height: 720 });
+    await openNavigation(page);
     await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: 'Backup' }).click();
     assert.equal(await page.locator('#backup-title').evaluate(node => document.activeElement === node), true);
+    await openNavigation(page);
     await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: 'API keys' }).click();
     assert.equal(await page.locator('#api-keys-title').evaluate(node => document.activeElement === node), true);
     if (process.env.E2E_SCREENSHOTS) {
@@ -111,7 +114,7 @@ export async function securityJourney({ browser, page, base, username, password,
     await page.waitForFunction(expiry => Date.now() >= expiry * 1000, expiresAt);
     await page.locator('[data-settings-back]:visible').click();
     await page.locator('#settings-page').waitFor({ state: 'hidden' });
-    await page.locator('#settings-button').click();
+    await clickNavigation(page, '#settings-button');
     const expiredRow = page.locator('#token-list .token-row').filter({ hasText: 'Synthetic expired key' });
     await expiredRow.waitFor();
     assert.equal(await page.locator('#token-count').textContent(), '1 active · 2 of 32 keys');
