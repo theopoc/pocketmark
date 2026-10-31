@@ -4,6 +4,13 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+    paths:
+      - '**'
+      - '!*.md'
+      - '!docs/**'
+      - '!.github/pull_request_template.md'
+      - 'CHANGELOG.md'
+      - 'docs/RELEASE_INSTALL.md'
   workflow_dispatch:
     inputs:
       tag:
@@ -54,6 +61,7 @@ jobs:
         run: |
           branch=$(gh pr view "$PR_NUMBER" --json headRefName --jq .headRefName)
           gh workflow run ci.yml --ref "$branch"
+          gh workflow run ci-required.yml --ref "$branch"
 
   validate:
     name: Validate release ref

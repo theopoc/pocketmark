@@ -1,0 +1,64 @@
+name: Extension CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'extension/**'
+      - 'Makefile'
+      - 'scripts/test_package_extension.py'
+      - '.github/workflows/ci.yml'
+      - '.goreleaser.yaml'
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+    paths:
+      - 'extension/**'
+      - 'Makefile'
+      - 'scripts/test_package_extension.py'
+      - '.github/workflows/ci.yml'
+      - '.goreleaser.yaml'
+  schedule:
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extension-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  extension:
+    name: Extension
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate the squash commit title
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/check_pr_title.py
+      - name: Scan the complete history for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: '8.30.1'
+          GITHUB_EVENT_NAME: workflow_dispatch
+          GITLEAKS_ENABLE_COMMENTS: 'false'
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
+          GITLEAKS_ENABLE_SUMMARY: 'false'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Validate extension syntax
+        run: |
+          for source in extension/*.js; do node --check "$source"; done
+          python3 -m py_compile extension/package.py
+      - run: make test-extension
+      - name: Validate the installable extension package
+        run: python3 -m unittest discover -s scripts -p 'test_package_extension.py' -v

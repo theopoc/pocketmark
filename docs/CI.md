@@ -1,32 +1,24 @@
 # CI and release
 
-GitHub Actions runs on pushes to `main`, pull requests targeting `main` (including title edits), manual dispatch, and every Monday at 05:23 UTC. The weekly run uses the complete suite to detect new vulnerability advisories and runner/tool drift without a source change; it never calls the release workflow. Scheduled runs start only after this configuration reaches the default branch; GitHub can delay them or disable them after 60 days of inactivity in a public repository. Release Please also runs on pushes to `main`, preparing a version PR or handing a merged version PR to the release pipeline. A release waits for the successful complete main CI at the tagged commit and reuses its native binaries. Docker images are built only for a published release. Every selected gate must pass; failed or cancelled jobs and unexpected skips fail the final `CI passed` check.
+Server CI uses native GitHub `paths-ignore` filters on pushes to `main` and pull requests targeting `main` (including title edits). Manual dispatch and the Monday 05:23 UTC schedule always run it. The weekly run uses the complete suite to detect new vulnerability advisories and runner/tool drift without a source change; it never calls the release workflow. Scheduled runs start only after this configuration reaches the default branch; GitHub can delay them or disable them after 60 days of inactivity in a public repository. Release Please runs on non-documentation pushes to `main`, preparing a version PR or handing a merged version PR to the release pipeline. A release waits for the successful complete main CI at the tagged commit and reuses its native binaries. Docker images are built only for a published release. A separate unfiltered PR workflow always reports `CI passed` and requires every triggered source check to pass; failures, skips, neutral results, cancellations and unfinished checks block it.
 
 | Phase | Checks and outputs |
 | --- | --- |
-| Selection and title | Inspect the complete Git change range and validate the Conventional Commit PR title. |
-| Quality | Formatting/vet, module checksums and tidy drift, syntax, actionlint and GoReleaser configuration, for complete runs. |
-| Security | Redacted full-history Gitleaks scan on every run; reachable Go vulnerabilities with the SQLite tags for complete runs. |
-| Tests, AMD64 and ARM64 | Native Go race tests with coverage, embedded UI regressions, release-tool tests and actual workflow expression regressions, for complete runs. |
-| Extension | JavaScript syntax, extension regressions and installable ZIP validation, once on AMD64 when extension or shared inputs change. |
+| Quality | Formatting/vet, module checksums and tidy drift, syntax, actionlint and GoReleaser configuration. |
+| Security | Redacted full-history Gitleaks scan and reachable Go vulnerabilities with the SQLite tags. |
+| Tests, AMD64 and ARM64 | Native Go race tests with coverage, embedded UI regressions, release-tool tests and actual workflow expression regressions. |
+| Extension | Separate native path-filtered workflow: syntax, extension regressions and installable ZIP validation. |
 | Build, AMD64 and ARM64 | Separate native musl builds produce static binaries and build metadata, retained for 90 days as release inputs. |
-| CI passed | Requires selection/title and security to succeed, plus every job selected for the change scope. |
+| CI passed | Always runs for PRs: validates the Conventional Commit title, then waits for all triggered server and extension checks. |
 | Docker release | Build native candidates by digest, test Compose and Chromium on both architectures, publish the tested version index, then qualify the published tag. Runs only for a published stable release. |
 
-## Checks by change scope
+The server workflow ignores all Markdown (`**/*.md`), `docs/` and `extension/`. Any change outside those exclusions triggers it, including new source directories and non-Markdown embedded API documentation. Release Please version PRs include `version.txt` and `.release-please-manifest.json`, so they still trigger complete main CI. The dedicated extension workflow uses native `paths` for `extension/`, its packaging test, Makefile, the server workflow and the release archive configuration. Mixed changes trigger both workflows. There is no custom diff selector or change-selection job.
 
-CI always starts so the required `CI passed` check can complete on documentation PRs. Skipping the entire workflow with `paths-ignore` would leave a required check pending ([GitHub path-filter semantics](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onpushpull_requestpull_request_targetpathspaths-ignore)). The dependency-free selector in `scripts/ci_changes.py` uses a full Git checkout, the PR merge-base diff or the complete push range, with NUL-delimited paths and rename detection disabled. It includes deletions and both sides of renames and has no API file-list limit. Missing/unavailable ranges and empty diffs select the complete suite.
+The extension workflow checks its PR title, scans secrets, validates JavaScript/Python syntax, runs extension regressions and verifies the installable ZIP, without Go. Non-PR server runs also run extension regressions once on AMD64 so a successful main CI retains complete release evidence at the exact source revision. Documentation-only and extension-only main revisions do not produce server binaries; release metadata still triggers complete main CI.
 
-| Changed files | Jobs selected, in addition to title/selection, secrets and `CI passed` |
-| --- | --- |
-| Root Markdown except `CHANGELOG.md`; Markdown, JSON and image evidence under `docs/` except `docs/RELEASE_INSTALL.md`; `.github/pull_request_template.md` | None: no Go toolchain, vulnerability scan, tests or builds. |
-| Only `extension/`, optionally alongside the documentation above | Dedicated Extension job; no Go toolchain, server tests or native builds. `extension/README.md` is packaged, so it also runs this job. |
-| Server, embedded UI/API documentation, dependencies, workflows, scripts, Makefile, release metadata, installation instructions, mixed server/extension changes or any unrecognized path | Complete suite, including Extension. |
-| Manual dispatch or weekly schedule | Complete suite regardless of changed files. |
+The unfiltered `ci-required.yml` workflow preserves the existing required check name and GitHub Actions source, so the **Protect main** ruleset remains unchanged. It uses [wechuli/allcheckspassed v2.6.0](https://github.com/wechuli/allcheckspassed/tree/1e77c91db5ec91faa94bf441f91b91327d269ab0), pinned to its full SHA. The action waits one minute for GitHub to register jobs, polls every minute for up to 20 attempts, and checks the PR head revision. Workflows excluded by native filters emit no jobs and need no successful placeholder. A documentation-only PR therefore runs only this small title/aggregate workflow; extension-only and mixed PRs require every Extension check to succeed as well as any server checks that ran.
 
-Extension checks remain a separate job in the same workflow, so one required aggregate can enforce both scopes without cross-workflow status coordination. They run once rather than once per server architecture. Shared inputs deliberately select all checks to cover server/extension compatibility. No product code, server memory use or release authorization changes.
-
-Documentation-only and extension-only main runs do not retain server binaries. Release Please version metadata always selects the complete suite, preserving tested native artifacts at the exact release revision. Publication still rejects incomplete main runs or missing artifacts; a manual dry run at a documentation-only revision cannot reuse binaries from another commit. Release Please continues to inspect main pushes so release history and pending changes remain coherent.
+Triggered checks reporting skipped or neutral are rejected, as are failures, timeouts, cancellations and checks still pending at the polling limit. Superseded runs on the same commit are ignored in favor of the latest run of each workflow. Only the metadata-only Dependabot `auto-merge` helper is excluded: its normal non-Dependabot skip is not a source gate. The aggregate has read-only contents/checks/actions permissions, no publication token, and never selects changed files itself. Its regressions execute the actual pinned action bundle against a local synthetic Checks API, covering documentation-only, extension-only, mixed failures, pending checks and superseded runs. Keep the action pin and the regression checkout ref aligned.
 
 Actions use full commit SHAs; tool modules, pre-commit hooks and the Gitleaks engine are version-pinned. PR/main CI has read-only permissions and never builds or publishes Docker images. Superseded branch runs are cancelled; main runs are retained because a release may need their binaries. Coverage, container evidence and release bundles are retained for seven days.
 
@@ -72,9 +64,9 @@ Dependabot checks Actions, Go modules and Docker base images weekly, with at mos
 
 Enable the repository's **Allow auto-merge** setting while retaining the active **Protect main** ruleset above. `dependabot-auto-merge.yml` handles PR creation, new commits, reopening and readiness for review. It only accepts non-draft PRs opened by `dependabot[bot]` from this repository. The SHA-pinned official `dependabot/fetch-metadata` action verifies Dependabot's signed commits; verification is never disabled. Its `update-type` is the highest semver change across the PR, so any major update in a group prevents automatic merge. Only explicit `version-update:semver-minor` and `version-update:semver-patch` metadata enable squash auto-merge; unknown or missing metadata fails closed. [Fetch Metadata documentation](https://github.com/dependabot/fetch-metadata/tree/v3.1.0).
 
-The workflow uses `gh pr merge --auto --squash --match-head-commit` with the event's head SHA. GitHub waits for the complete `CI passed` gate, an up-to-date branch and resolved review threads; it has no ruleset bypass. Failed, skipped, cancelled or pending CI cannot authorize merge. Keep `CI passed` required from the GitHub Actions app with strict branch updates and no bypass actors: the workflow relies on this server-side enforcement. Existing open PRs are evaluated on their next supported PR event after the workflow reaches `main`. As with other operations performed using `GITHUB_TOKEN`, the resulting merge does not trigger push-based CI or Release Please; subsequent eligible pushes to `main` pick up the dependency commits. The PR's complete CI still gates its merge. CI regression tests evaluate the actual eligibility and scope expressions, Git change ranges, and the aggregate gate's failure/skip/cancellation behavior.
+The workflow uses `gh pr merge --auto --squash --match-head-commit` with the event's head SHA. GitHub waits for the complete `CI passed` gate, an up-to-date branch and resolved review threads; it has no ruleset bypass. Failed, skipped, cancelled or pending CI cannot authorize merge. Keep `CI passed` required from the GitHub Actions app with strict branch updates and no bypass actors: the workflow relies on this server-side enforcement. Existing open PRs are evaluated on their next supported PR event after the workflow reaches `main`. As with other operations performed using `GITHUB_TOKEN`, the resulting merge does not trigger push-based CI or Release Please; subsequent eligible pushes to `main` pick up the dependency commits. The PR's complete CI still gates its merge. CI regression tests evaluate the actual eligibility expressions and execute the pinned aggregate action against a synthetic API to verify failure/skip/cancellation behavior.
 
-The title check uses PR-event metadata. Dispatch, push and scheduled CI runs validate source rather than a PR title; these runs cannot attest to PR metadata. Metadata edits rerun selection and validate the new title. The file scope still comes from the entire PR, so a code PR retains the complete suite even when only its title is edited. For a future busy repository, consider an independent required metadata check and `merge_group` support before enabling a merge queue.
+The title check uses PR-event metadata. Dispatch, push and scheduled CI runs validate source rather than a PR title; these runs cannot attest to PR metadata. Metadata edits always rerun the required title/aggregate workflow and rerun source workflows when their native path filters match. For a future busy repository, consider an independent required metadata check and `merge_group` support before enabling a merge queue.
 
 See [the sourced pipeline research](CI_RESEARCH.md) and [the scored audit](CI_AUDIT.md) for rationale, evidence and remaining limitations.
 
@@ -86,7 +78,9 @@ Requirements: Go as declared by `go.mod`, a C compiler, Node.js 24, Python 3, `m
 make check
 make test
 make test-extension
-python3 -m unittest discover -s scripts -p 'test_*.py' -v
+git clone --depth 1 --branch v2.6.0 https://github.com/wechuli/allcheckspassed.git /tmp/pocketmark-gate-action
+ALLCHECKSPASSED_PATH=/tmp/pocketmark-gate-action/dist/index.js \
+  python3 -m unittest discover -s scripts -p 'test_*.py' -v
 make build
 make release-check
 docker build -t pocketmark:ci .
@@ -97,7 +91,7 @@ python3 scripts/smoke_docker.py --image pocketmark:ci --browser
 
 The browser dependency is pinned and locked under `e2e/`; it is test tooling only and is not copied into the application image. The browser runs on the CI runner, outside the server's 128 MiB container limit. These Chromium desktop journeys are separate from extension regressions and do not qualify Firefox, Safari, native mobile clients or full accessibility.
 
-Extension regressions and package validation run in the dedicated Extension job for extension-only and complete runs. Container and Chromium journeys run during release; complete PR/main CI covers Go, embedded UI, extension and release-tool regressions without Docker.
+Extension regressions run in their dedicated path-filtered workflow. Non-PR server runs retain one extension test run for release validation. Container and Chromium journeys run during release; ordinary source CI does not build containers.
 
 The release expression regression checks use `@actions/expressions` only as a temporary CI/test tool; it is not an application or frontend dependency. They read the expression directly from the workflow and cover missing/empty PR outputs after a version PR is merged, ordinary opened PRs, and malformed output. Reproduce them locally with:
 
@@ -129,7 +123,7 @@ Review and squash-merge the version PR when ready to publish; keep its generated
 
 Only then does the write-enabled job recheck that bundle and require a missing release or an empty stable draft targeting the verified commit. It runs `.goreleaser-publish.yaml` to upload those same files and publish the release, retaining Release Please's notes. This separate configuration disables builds and checksums; `--skip=archive` also prevents repackaging. GitHub assets are not rebuilt during publication, tags are not moved and published releases are not overwritten. After GitHub publication succeeds, the workflow calls the container workflow below. An explicitly requested manual tag push still follows the same validation/publication path.
 
-Enable **Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create and approve pull requests** for Release Please to open its version PRs. The workflow never approves or merges PRs. The Release Please job explicitly dispatches read-only CI on the PR branch after creating/updating it. This avoids depending on automatic PR-event execution or an approval-required bot run; `workflow_dispatch` is an explicit exception to the usual `GITHUB_TOKEN` event restrictions ([GitHub documentation](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)). These checks run at the PR head revision and satisfy the normal CI requirement without a PAT.
+Enable **Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create and approve pull requests** for Release Please to open its version PRs. The workflow never approves or merges PRs. The Release Please job explicitly dispatches read-only server CI and the required title/aggregate workflow on the PR branch after creating/updating it. This avoids depending on automatic PR-event execution or an approval-required bot run; `workflow_dispatch` is an explicit exception to the usual `GITHUB_TOKEN` event restrictions ([GitHub documentation](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)). These checks run at the PR head revision and satisfy the normal CI requirement without a PAT.
 
 If verification fails, the release stays a draft and the container is not published. Rerun the failed jobs after resolving the failure. If the workflow itself needed a fix, use the corrected workflow to resume the existing immutable tag:
 
@@ -171,20 +165,19 @@ docker pull ghcr.io/theopoc/pocketmark:v0.3.0
 
 ```mermaid
 flowchart TD
-    PR["PR to main"] --> SCOPE["Select change scope · validate title"]
-    SCOPE --> Q["Quality · full scope"]
-    SCOPE --> S["Secrets · Go vulnerabilities for full scope"]
-    SCOPE --> T["Tests · AMD64 / ARM64 · full scope"]
-    SCOPE --> EXT["Extension · extension or full scope"]
-    SCOPE --> B["Build · AMD64 / ARM64 · full scope"]
-    SCOPE --> G["CI passed"]
+    PR["PR to main"] --> Q["Quality · native paths-ignore"]
+    PR --> EXT["Extension · native paths"]
+    PR --> G["CI passed · always present"]
     EXT --> G
+    PR --> S["Security"]
+    PR --> T["Tests · AMD64 / ARM64"]
+    PR --> B["Build · AMD64 / ARM64"]
     Q --> G
     S --> G
     T --> G
     B --> G
     G --> M["Review and squash merge"]
-    M --> CI["Main CI · native binaries for full scope"]
+    M --> CI["Main CI · native binaries when server CI runs"]
     M --> RP["Release Please version PR"]
     RP --> R["Review and merge version PR"]
     R --> TAG["Version tag and draft"]
