@@ -265,9 +265,15 @@
   }
   $("sidebar-mode").addEventListener("click", () => {
     sidebarFixed = !sidebarFixed;
+    if (!sidebarFixed) {
+      sidebarRail.classList.toggle("dismissed", sidebarRail.matches(":hover"));
+      sidebarRail.classList.remove("revealed");
+      $("open-navigation").focus({ preventScroll: true });
+    } else sidebarRail.classList.remove("dismissed");
     try { localStorage.setItem("pocketmark-sidebar", sidebarFixed ? "fixed" : "auto"); } catch { /* Storage is optional. */ }
     renderSidebarMode();
   });
+  sidebarRail.addEventListener("pointerleave", () => sidebarRail.classList.remove("dismissed"));
   sidebar.addEventListener("focusout", (event) => {
     if (!sidebar.contains(event.relatedTarget)) sidebarRail.classList.remove("revealed");
   });
