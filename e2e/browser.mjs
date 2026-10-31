@@ -478,6 +478,13 @@ try {
   assert.equal(await card(original).locator('.card-tags button').nth(5).evaluate(node => document.activeElement === node), true, 'refresh preserves the revealed tag and its focus');
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.locator('#view-grid').click();
+  assert.equal(await page.locator('.breadcrumb-root').textContent(), 'My library');
+  const gridHeader = card(original).locator('.card-top');
+  assert.equal(await gridHeader.locator('.card-domain').textContent(), '127.0.0.1');
+  assert.equal(await gridHeader.locator('.card-domain').getAttribute('title'), 'http://127.0.0.1/e2e-fixture');
+  assert.equal(await gridHeader.locator('.favorite-button').count(), 1, 'grid favorite is in the card header');
+  assert.equal(await card(original).locator('.card-footer .card-overflow-actions .card-action').count(), 4, 'grid retains its four footer actions');
+  assert.equal(await gridHeader.getByRole('button', { name: `Add to favorites: ${original}` }).getAttribute('aria-pressed'), 'false');
   await card(original).hover();
   await page.waitForFunction(title => {
     const card = [...document.querySelectorAll('.bookmark-card')].find(node => node.textContent.includes(title));
@@ -489,10 +496,18 @@ try {
     return card && getComputedStyle(card).transform === 'none';
   }, original);
   await page.locator('#view-list').click();
+  assert.equal(await card(original).locator('.card-title-row .favorite-button').count(), 1, 'list view restores its existing favorite position');
+  assert.equal(await card(original).locator('.card-body > .card-domain').count(), 1, 'list view restores its existing domain position');
   await page.locator('#add-bookmark').click();
   assert.ok(await page.locator('#bookmark-dialog').evaluate(node => getComputedStyle(node).transitionDuration.split(',').every(value => parseFloat(value) === 0)), 'reduced motion removes dialog transitions');
   await page.locator('#bookmark-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.setViewportSize({ width: 320, height: 700 });
+  await page.locator('#view-grid').click();
+  assert.ok(await card(original).locator('.card-top').evaluate(node => {
+    const header = node.getBoundingClientRect(), star = node.querySelector('.favorite-button').getBoundingClientRect();
+    return node.scrollWidth <= node.clientWidth + 1 && star.width >= 44 && star.height >= 44 && star.right <= header.right;
+  }), 'the grid header and favorite fit at narrow mobile widths');
+  await page.locator('#view-list').click();
   await page.locator('#add-bookmark').click();
   for (const selector of ['#bookmark-dialog .dialog-heading .icon-button', '#save-bookmark', '#bookmark-favorite', '#bookmark-read']) {
     assert.ok(await page.locator(selector).evaluate(node => (node.matches('input') ? node.closest('label') : node).getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
