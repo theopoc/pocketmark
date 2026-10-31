@@ -48,7 +48,7 @@ async function fire(node, type, extra = {}) {
   const event = { type, target: node, submitter: node.querySelector && type === "submit" ? node.querySelector("button[type=submit]") : undefined, preventDefault() {}, ...extra };
   await Promise.all((node.events.get(type) || []).map(fn => fn(event)));
 }
-function setup({ handler, head } = {}) {
+function setup({ handler, head, confirmAction = async () => true } = {}) {
   const elements = new Map(), sections = [];
   const html = fs.readFileSync(`${__dirname}/static/index.html`, "utf8");
   for (const match of html.matchAll(/<([a-z][a-z0-9]*)\b[^>]*\bid="([^"]+)"[^>]*>/g)) elements.set(match[2], new Element(match[1], match[2]));
@@ -80,7 +80,7 @@ function setup({ handler, head } = {}) {
     };
     return handler ? handler(path, options, fallback) : fallback();
   }
-  const reader = create({ api, drafts, toast: (...args) => notices.push(args), onEdit: value => edits.push(value), onChange: async () => changes.push(true), onSessionExpired: () => expired++ }, browser);
+  const reader = create({ api, drafts, toast: (...args) => notices.push(args), confirmAction, onEdit: value => edits.push(value), onChange: async () => changes.push(true), onSessionExpired: () => expired++ }, browser);
   return { reader, get, sections, document, browser, records, annotations, assets, calls, notices, edits, changes, headCalls, windows, drafts, expired: () => expired };
 }
 
@@ -477,6 +477,23 @@ test("annotation completion cannot close or overwrite another document's annotat
   assert.equal(env.get("annotation-note").value, "Draft for two");
   assert.equal(env.drafts.get("annotation:2:12").note, "Draft for two");
   assert.equal(env.get("annotation-form").querySelector("button[type=submit]").disabled, false);
+});
+
+test("cancelled or stale reader confirmations do not delete an annotation", async () => {
+  const pending = deferred();
+  let answer = async () => false;
+  const env = setup({ confirmAction: (...args) => answer(...args) });
+  env.annotations.set(1, [{ id: 11, quote: "Text", start: 0, end: 4, note: "", color: "yellow" }]);
+  await env.reader.open(1);
+  const remove = env.get("annotation-list").children[0].children.at(-1).children[1];
+  await fire(remove, "click");
+  assert.equal(env.calls.some(call => call.method === "DELETE"), false);
+  answer = () => pending.promise;
+  const deleting = fire(remove, "click");
+  await env.reader.open(2);
+  pending.resolve(true);
+  await deleting;
+  assert.equal(env.calls.some(call => call.method === "DELETE"), false);
 });
 
 for (const action of ["save", "delete"]) test(`${action} annotation remains successful when refreshing highlights fails`, async () => {

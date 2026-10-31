@@ -5,7 +5,7 @@
 
   // The reader owns its DOM events and session state. Callers only open/close it;
   // the browser adapter and application callbacks keep its implementation testable.
-  function create({ api: request, drafts, toast, onEdit, onChange, onSessionExpired }, browser = root) {
+  function create({ api: request, drafts, toast, confirmAction, onEdit, onChange, onSessionExpired }, browser = root) {
     const document = browser.document, window = browser;
     const $ = (id) => document.getElementById(id);
     const { editableBookmark: editable, bookmarkDraftKey: draftKey, safeURL, domain } = workspace;
@@ -253,8 +253,9 @@
       drafts.put(draftKey(state.reading), draft, editable(state.reading));
       $("reader-notes-draft").hidden = draft.notes === (state.reading.notes || "");
     });
-    $("discard-reader-notes").addEventListener("click", () => {
-      if (!state.reading || !browser.confirm("Discard these unsaved notes?")) return;
+    $("discard-reader-notes").addEventListener("click", async () => {
+      const request = state.readerRequest;
+      if (!state.reading || !await confirmAction("Discard notes?", "Discard these unsaved notes?", "Discard notes") || !isCurrent(request)) return;
       $("reader-notes").value = state.reading.notes || "";
       $("reader-notes").dispatchEvent(new browser.Event("input"));
     });
@@ -379,7 +380,7 @@
         const remove = el("button", "text-button", "Delete");
         remove.setAttribute("aria-label", `Delete annotation: ${passage}`);
         remove.addEventListener("click", async () => {
-          if (!browser.confirm("Delete this annotation?")) return;
+          if (!await confirmAction("Delete annotation?", "Delete this annotation?", "Delete annotation") || !isCurrent(request)) return;
           remove.disabled = true;
           try {
             await api(`/api/links/${id}/annotations/${annotation.id}`, { method: "DELETE" });
@@ -657,7 +658,7 @@
         const remove = el("button", "text-button", "Delete");
         remove.setAttribute("aria-label", `Delete ${asset.name}`);
         remove.addEventListener("click", async () => {
-          if (!browser.confirm(`Delete saved file “${asset.name}”?`)) return;
+          if (!await confirmAction("Delete saved file?", `Delete saved file “${asset.name}”?`, "Delete file") || !isCurrent(request)) return;
           remove.disabled = true;
           try {
             await api(`/api/assets/${asset.id}`, { method: "DELETE" });

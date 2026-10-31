@@ -457,7 +457,7 @@
   const security = globalThis.PocketmarkSecurity.create({ api, toast, onSessionExpired: showLogin });
 
   const reader = globalThis.PocketmarkReader.create({
-    api, drafts, toast, onEdit: openEditor, onChange: () => refresh(true), onSessionExpired: showLogin,
+    api, drafts, toast, confirmAction, onEdit: openEditor, onChange: () => refresh(true), onSessionExpired: showLogin,
   });
 
   const bulk = globalThis.PocketmarkBulk.create({
@@ -617,7 +617,7 @@
       remove.title = `Delete ${collection.name}`;
       remove.setAttribute("aria-label", remove.title);
       remove.addEventListener("click", async () => {
-        if (!confirm(`Delete “${collection.name}”? Bookmarks directly in it move to Inbox. Direct subcollections move to the library root.`)) return;
+        if (!await confirmAction("Delete collection?", `Delete “${collection.name}”? Bookmarks directly in it move to Inbox. Direct subcollections move to the library root.`, "Delete collection") || !remove.isConnected || !state.signedIn) return;
         remove.disabled = true;
         try {
           await api(`/api/collections/${collection.id}`, { method: "DELETE" });
@@ -1109,9 +1109,10 @@
     if (drafts.get(draftKey(state.editing))) toast("Bookmark draft kept in this tab.");
   });
   $("bookmark-form").addEventListener("change", () => $("bookmark-form").dispatchEvent(new Event("input")));
-  $("discard-bookmark-draft").addEventListener("click", () => {
-    if (!confirm("Discard this unsaved draft?")) return;
-    drafts.delete(draftKey(state.editing)); fillEditor(editorBaseline); $("bookmark-draft").hidden = true;
+  $("discard-bookmark-draft").addEventListener("click", async () => {
+    const session = editorSession, key = draftKey(state.editing);
+    if (!await confirmAction("Discard draft?", "Discard this unsaved draft?", "Discard draft") || session !== editorSession || !$("bookmark-dialog").open) return;
+    drafts.delete(key); fillEditor(editorBaseline); $("bookmark-draft").hidden = true;
   });
 
   function attachTagPicker(id) {
@@ -1205,6 +1206,20 @@
     finally { $("mfa-login-continue").disabled = false; }
   });
   $("mfa-back").addEventListener("click", () => { resetMFALogin(); configureLogin(); $("login-error").textContent = ""; $("login-username").focus(); });
+
+  function confirmAction(title, description, action) {
+    const dialog = $("confirm-action-dialog");
+    if (dialog.open) return Promise.resolve(false);
+    $("confirm-action-title").textContent = title;
+    $("confirm-action-description").textContent = description;
+    $("confirm-action-submit").textContent = action;
+    dialog.returnValue = "";
+    return new Promise((resolve) => {
+      dialog.addEventListener("close", () => resolve(dialog.returnValue === "confirm"), { once: true });
+      dialog.showModal();
+      $("confirm-action-cancel").focus();
+    });
+  }
 
   function confirmBulkDelete(count) {
     const dialog = $("delete-selection-dialog");
@@ -1683,7 +1698,7 @@
       });
       async function changeKey(remove) {
         if (tokensBusy || editingTokenID !== null) return;
-        if (remove && !confirm(`Delete API key “${token.name}” permanently? Apps using it will lose access. This cannot be undone. To pause access, cancel and disable the key instead.`)) return;
+        if (remove && (!await confirmAction("Delete API key?", `Delete API key “${token.name}” permanently? Apps using it will lose access. This cannot be undone. To pause access, cancel and disable the key instead.`, "Delete API key") || session !== settingsSession || tokensBusy || editingTokenID !== null)) return;
         $("tokens-error").textContent = ""; $("tokens-feedback").textContent = "";
         setTokensBusy(true);
         row.setAttribute("aria-busy", "true");
@@ -1710,7 +1725,7 @@
       rotate.setAttribute("aria-label", `Rotate ${token.name}`);
       rotate.hidden = !token.active || expired;
       rotate.addEventListener("click", async () => {
-        if (tokensBusy || !confirm(`Replace the key for “${token.name}”? The old key will stop working immediately. Update the connected app with the new key.`)) return;
+        if (tokensBusy || !await confirmAction("Replace API key?", `Replace the key for “${token.name}”? The old key will stop working immediately. Update the connected app with the new key.`, "Replace key") || session !== settingsSession || tokensBusy) return;
         setTokensBusy(true);
         try {
           const result = await api(`/api/tokens/${token.id}/rotate`, { method: "POST" });

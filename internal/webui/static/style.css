@@ -916,4 +916,4 @@ body:has(dialog[open]) { overflow: hidden; }
 
 .button.danger { background: #b12e35; border-color: #b12e35; color: #fff; }
 .button.danger:is(:hover, :focus-visible) { background: #92242b; border-color: #92242b; }
-#delete-bookmark-name { overflow-wrap: anywhere; }
+#delete-bookmark-name, #confirm-action-description { overflow-wrap: anywhere; }
