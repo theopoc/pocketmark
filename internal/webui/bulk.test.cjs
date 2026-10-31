@@ -4,6 +4,7 @@ const { create } = require("./static/bulk.js");
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 class Element {
   constructor() { Object.assign(this, { value: "", textContent: "", hidden: false, disabled: false, open: false, children: [], events: new Map(), options: [{}, {}] }); }
+  setAttribute(name, value) { this[name] = value; }
   addEventListener(type, fn) { if (!this.events.has(type)) this.events.set(type, []); this.events.get(type).push(fn); }
   replaceChildren(...children) { this.children = children; }
   focus() { this.focused = true; }
@@ -26,9 +27,10 @@ function setup(request = async () => {}, confirm = () => true) {
 test("selection spans pages and the review includes all selected labels", async () => {
   const env = setup(), { bulk, get, link } = env;
   bulk.render([link(1), link(2)]); bulk.select(link(1), true);
-  assert.equal(get("select-page").indeterminate, true);
+  assert.equal(get("select-page")["aria-pressed"], "mixed");
   bulk.render([link(3)]); bulk.select(link(3), true);
-  assert.equal(get("selected-count").textContent, "2 selected · 1 outside these results");
+  assert.equal(get("selected-count").textContent, "2 selected");
+  assert.equal(get("selected-outside").textContent, "1 outside these results");
   await env.open("move");
   assert.equal(get("bulk-review").open, true);
   assert.deepEqual(get("bulk-items").children.map(node => node.textContent), ["Page 1", "Page 3"]);
@@ -74,24 +76,24 @@ test("the reviewed scope is frozen and remove/reselect survives a submitted succ
 });
 test("select-page and individual selection enforce 500 while clear updates the toolbar", async () => {
   const env = setup(), links = Array.from({ length: 502 }, (_, i) => env.link(i + 1));
-  env.bulk.render(links); env.get("select-page").checked = true; await fire(env.get("select-page"), "change");
+  env.bulk.render(links); await fire(env.get("select-page"), "click");
   assert.equal(env.bulk.has(500), true); assert.equal(env.bulk.has(501), false);
   assert.match(env.notices[0][0], /500.*not selected/);
   assert.equal(env.bulk.select(links[501], true), false); assert.match(env.notices[1][0], /500/);
-  assert.equal(env.get("select-page").indeterminate, true);
+  assert.equal(env.get("select-page")["aria-pressed"], "mixed");
   await fire(env.get("clear-selection"), "click");
   assert.equal(env.bulk.has(1), false); assert.equal(env.get("bulk-open").hidden, true);
 });
 test("selecting exactly 500 bookmarks does not report a partial selection", async () => {
   const env = setup(), links = Array.from({ length: 500 }, (_, i) => env.link(i + 1));
-  env.bulk.render(links); env.get("select-page").checked = true; await fire(env.get("select-page"), "change");
-  assert.equal(env.get("select-page").checked, true); assert.equal(env.notices.length, 0);
+  env.bulk.render(links); await fire(env.get("select-page"), "click");
+  assert.equal(env.get("select-page")["aria-pressed"], "true"); assert.equal(env.notices.length, 0);
 });
 test("select page reflects an unchanged selection when the limit is already reached", async () => {
   const env = setup();
   for (let i = 1; i <= 500; i++) env.bulk.select(env.link(i), true);
-  env.bulk.render([env.link(501)]); env.get("select-page").checked = true; await fire(env.get("select-page"), "change");
-  assert.equal(env.bulk.has(501), false); assert.equal(env.get("select-page").checked, false);
+  env.bulk.render([env.link(501)]); await fire(env.get("select-page"), "click");
+  assert.equal(env.bulk.has(501), false); assert.equal(env.get("select-page")["aria-pressed"], "false");
   assert.match(env.notices[0][0], /500.*not selected/);
 });
 test("select page is unavailable when the current page has no bookmarks", () => {

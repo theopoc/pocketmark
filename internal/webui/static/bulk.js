@@ -13,13 +13,15 @@
     function render(links = visible) {
       visible = links;
       const count = visible.filter(link => selected.has(link.id)).length, outside = selected.size - count;
-      $("selected-count").textContent = `${selected.size} selected${outside ? ` · ${outside} outside these results` : ""}`;
+      $("selected-count").textContent = `${selected.size} selected`;
+      $("selected-outside").textContent = outside ? `${outside} outside these results` : "";
+      $("selected-outside").hidden = !outside;
       $("selected-count").hidden = !selected.size;
       $("bulk-open").hidden = !selected.size; $("bulk-open").disabled = !selected.size;
       $("clear-selection").hidden = !selected.size;
       $("select-page").disabled = visible.length === 0;
-      $("select-page").checked = visible.length > 0 && count === visible.length;
-      $("select-page").indeterminate = count > 0 && count < visible.length;
+      $("select-page").setAttribute("aria-pressed", count > 0 && count < visible.length ? "mixed" : String(visible.length > 0 && count === visible.length));
+      $("select-page").textContent = visible.length > 0 && count === visible.length ? "Deselect page" : "Select page";
     }
     function select(link, checked) {
       if (checked && !selected.has(link.id)) {
@@ -41,8 +43,8 @@
       $("bulk-apply").textContent = actions[action] ? `${actions[action]} ${count} bookmark${count === 1 ? "" : "s"}` : "Choose an action";
       $("bulk-apply").disabled = !actions[action] || !count || !!session?.pending;
     }
-    $("select-page").addEventListener("change", () => {
-      const checked = $("select-page").checked;
+    $("select-page").addEventListener("click", () => {
+      const checked = !visible.length || !visible.every(link => selected.has(link.id));
       for (const link of visible) {
         if (checked && !selected.has(link.id) && selected.size >= 500) {
           toast("Only 500 bookmarks can be selected at a time. Some bookmarks on this page were not selected.", true);

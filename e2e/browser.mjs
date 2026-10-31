@@ -5,6 +5,7 @@ import { createHmac } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
+import { selectionJourney } from './selection.mjs';
 import { securityJourney } from './security.mjs';
 import { openSettings, refreshSessionsBeforeMFA } from './settings.mjs';
 
@@ -151,6 +152,7 @@ try {
   assert.equal(page.url(), libraryURL, 'library shortcut does not add a history entry');
   await navigationJourney(page);
   await dialogDismissalJourney(page);
+  await selectionJourney(page);
   const oldSession = (await page.context().cookies()).find(cookie => cookie.name === 'pocketmark');
   await clickNavigation(page, '#logout-button');
   await page.locator('#logout-confirm').click();
@@ -515,7 +517,8 @@ try {
   }
   assert.ok(await page.locator('#bookmark-dialog').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), 'mobile bookmark form does not overflow');
   await page.locator('#bookmark-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
-  await card(original).getByRole('checkbox', { name: `Select ${original}` }).check();
+  await card(original).focus();
+  await page.keyboard.press("Space");
   for (const id of ['bulk-open', 'clear-selection']) {
     assert.ok(await page.locator(`#${id}`).evaluate(node => node.getBoundingClientRect().height >= 44), `${id} has a mobile touch target`);
   }
