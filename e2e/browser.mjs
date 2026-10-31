@@ -555,6 +555,19 @@ try {
   await (await chooser).setFiles([]);
   await page.getByRole('button', { name: 'Close reader', exact: true }).click();
   await page.setViewportSize({ width: 1280, height: 720 });
+  await card(original).getByRole('button', { name: original, exact: true }).click();
+  await page.locator('#reader-title').filter({ hasText: original }).waitFor();
+  const readerBounds = await page.locator('#reader-dialog').boundingBox();
+  await page.mouse.move(readerBounds.x + 50, readerBounds.y + 50);
+  await page.mouse.down();
+  await page.mouse.move(1, 1);
+  await page.mouse.up();
+  assert.equal(await page.locator('#reader-dialog').isVisible(), true, 'dragging out of the reader does not close it');
+  await page.mouse.click(1, 1);
+  await page.locator('#reader-dialog').waitFor({ state: 'hidden' });
+  await card(original).getByRole('button', { name: original, exact: true }).click();
+  await page.locator('#reader-title').filter({ hasText: original }).waitFor();
+  await page.getByRole('button', { name: 'Close reader', exact: true }).click();
   const pagedTags = route => {
     const pageNumber = Number(new URL(route.request().url()).searchParams.get('page'));
     const tags = Array.from({ length: pageNumber === 1 ? 40 : 1 }, (_, index) => ({ name: `tag-${String((pageNumber - 1) * 40 + index).padStart(2, '0')}`, count: 1, letter: 'T' }));
