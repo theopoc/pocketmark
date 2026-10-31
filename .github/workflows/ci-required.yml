@@ -1,0 +1,42 @@
+name: Required CI
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: read
+  actions: read
+
+concurrency:
+  group: required-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  required:
+    name: CI passed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate the squash commit title
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/check_pr_title.py
+      - name: Require all triggered checks to pass
+        uses: wechuli/allcheckspassed@1e77c91db5ec91faa94bf441f91b91327d269ab0 # v2.6.0
+        with:
+          # Dependabot's metadata-only merge helper is not a source gate.
+          checks_exclude: '^auto-merge$'
+          treat_skipped_as_passed: 'false'
+          treat_neutral_as_passed: 'false'
+          ignore_superseded_runs: 'true'
+          # Allow GitHub to register the independently triggered workflow jobs.
+          delay: '1'
+          polling_interval: '1'
+          retries: '20'

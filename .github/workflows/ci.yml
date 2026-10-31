@@ -3,9 +3,17 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'extension/**'
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, edited]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'extension/**'
   schedule:
     # Recheck advisories and runner/tool drift even when main has no new commits.
     - cron: '23 5 * * 1'
@@ -26,30 +34,8 @@ env:
   CGO_ENABLED: '1'
 
 jobs:
-  changes:
-    name: Select checks and validate PR title
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    outputs:
-      full: ${{ steps.changes.outputs.full }}
-      extension: ${{ steps.changes.outputs.extension }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Select checks from the complete change range
-        id: changes
-        run: python3 scripts/ci_changes.py
-      - name: Validate the squash commit title
-        if: github.event_name == 'pull_request'
-        run: python3 scripts/check_pr_title.py
-
   quality:
     name: Quality
-    needs: changes
-    if: needs.changes.outputs.full == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -57,6 +43,9 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Validate the squash commit title
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/check_pr_title.py
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -76,7 +65,6 @@ jobs:
 
   security:
     name: Secrets and reachable Go vulnerabilities
-    needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -86,7 +74,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        if: needs.changes.outputs.full == 'true'
         with:
           go-version-file: go.mod
       - name: Scan the complete history for secrets
@@ -100,13 +87,10 @@ jobs:
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
           GITLEAKS_ENABLE_SUMMARY: 'false'
       - name: Check reachable dependency vulnerabilities
-        if: needs.changes.outputs.full == 'true'
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 -tags=sqlite_fts5,sqlite_omit_load_extension ./...
 
   test:
     name: Tests (${{ matrix.arch }})
-    needs: changes
-    if: needs.changes.outputs.full == 'true'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     strategy:
@@ -130,7 +114,19 @@ jobs:
           node-version: '24'
       - name: Race tests and coverage
         run: make test TEST_FLAGS='-race -p 1 -count=1 -covermode=atomic -coverprofile=coverage.out'
+      # Main/manual runs retain complete release evidence at the exact revision.
+      - run: make test-extension
+        if: github.event_name != 'pull_request' && matrix.arch == 'amd64'
+      - name: Fetch the pinned gate action for regressions
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: wechuli/allcheckspassed
+          ref: 1e77c91db5ec91faa94bf441f91b91327d269ab0 # v2.6.0
+          path: .cache/allcheckspassed
+          persist-credentials: false
       - name: Test release packaging
+        env:
+          ALLCHECKSPASSED_PATH: ${{ github.workspace }}/.cache/allcheckspassed/dist/index.js
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
       - name: Test workflow expressions
         run: |
@@ -147,32 +143,8 @@ jobs:
           path: coverage.out
           retention-days: 7
 
-  extension:
-    name: Extension
-    needs: changes
-    if: needs.changes.outputs.extension == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
-      - name: Validate extension syntax
-        run: |
-          for source in extension/*.js; do node --check "$source"; done
-          python3 -m py_compile extension/package.py
-      - run: make test-extension
-      - name: Validate the installable extension package
-        run: python3 -m unittest discover -s scripts -p 'test_package_extension.py' -v
-
   build:
     name: Build (${{ matrix.arch }})
-    needs: changes
-    if: needs.changes.outputs.full == 'true'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     strategy:
@@ -213,39 +185,3 @@ jobs:
           path: artifacts/linux-${{ matrix.arch }}/*
           if-no-files-found: error
           retention-days: 90
-
-  required:
-    name: CI passed
-    if: always()
-    needs: [changes, quality, security, test, extension, build]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 2
-    steps:
-      - name: Require every gate
-        env:
-          RESULTS: ${{ toJSON(needs) }}
-        run: |
-          python3 - <<'PY'
-          import json, os
-          results = json.loads(os.environ['RESULTS'])
-          expected = {'changes', 'quality', 'security', 'test', 'extension', 'build'}
-          if set(results) != expected:
-              raise SystemExit('Missing or unexpected CI jobs')
-          selection = results['changes'].get('outputs', {})
-          full, extension = selection.get('full'), selection.get('extension')
-          if (full, extension) not in {('true', 'true'), ('false', 'true'), ('false', 'false')}:
-              raise SystemExit('Missing or invalid CI selection')
-          optional = {'quality', 'test', 'build'} if full == 'false' else set()
-          if extension == 'false':
-              optional.add('extension')
-          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-              summary.write('## CI gates\n\n| Job | Result |\n| --- | --- |\n')
-              for name, job in results.items():
-                  summary.write(f"| {name} | {job['result']} |\n")
-              if optional:
-                  summary.write('\nJobs outside the selected scope are intentionally omitted.\n')
-          failures = [name for name, job in results.items()
-                      if job['result'] != 'success' and not (name in optional and job['result'] == 'skipped')]
-          if failures:
-              raise SystemExit('Unsuccessful CI jobs: ' + ', '.join(failures))
-          PY
