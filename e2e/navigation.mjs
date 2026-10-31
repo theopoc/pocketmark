@@ -135,8 +135,8 @@ export async function navigationJourney(page) {
   await page.locator('#logout-cancel').click();
   await page.locator('#add-bookmark').click();
   assert.equal(await page.locator('#bookmark-title').inputValue(), 'Unsaved sign-out draft');
-  page.once('dialog', dialog => dialog.accept());
   await page.locator('#discard-bookmark-draft').click();
+  await page.locator('#confirm-action-submit').click();
   await page.locator('#bookmark-dialog .close-dialog').first().click();
   await clickNavigation(page, '#logout-button');
   let attempts = 0;

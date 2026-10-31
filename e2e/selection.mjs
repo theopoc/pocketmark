@@ -93,8 +93,8 @@ export async function selectionJourney(page, screenshots) {
   await page.locator('.selection-help summary').click();
   await page.locator('#bulk-open').click();
   await page.locator('#bulk-action').selectOption('delete');
-  page.once('dialog', dialog => dialog.accept());
   await page.locator('#bulk-apply').click();
+  await page.locator('#delete-selection-dialog button[value=delete]').click();
   await page.locator('#bulk-dialog').waitFor({ state: 'hidden' });
   await count(0);
   assert.equal(await page.locator('.bookmark-exit-layer').count(), 0, 'reduced motion omits exit layers');

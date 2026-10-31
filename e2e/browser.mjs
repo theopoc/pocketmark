@@ -644,11 +644,10 @@ try {
   await openNavigation(page);
   const collection = page.getByRole('button', { name: collectionName, exact: true });
   assert.ok(await collection.evaluate(node => node.getBoundingClientRect().height > 44), 'long collection names wrap on mobile');
-  const confirmation = page.waitForEvent('dialog');
-  const deleting = page.getByRole('button', { name: `Delete ${collectionName}`, exact: true }).click();
-  const prompt = await confirmation;
-  assert.match(prompt.message(), /Direct subcollections move to the library root/);
-  await prompt.dismiss(); await deleting;
+  await page.getByRole('button', { name: `Delete ${collectionName}`, exact: true }).click();
+  assert.match(await page.locator('#confirm-action-description').textContent(), /Direct subcollections move to the library root/);
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'confirm-action-cancel');
+  await page.keyboard.press('Escape');
   assert.equal(await collection.isVisible(), true);
   await page.locator('#close-navigation').click();
   await page.setViewportSize({ width: 1280, height: 720 });
