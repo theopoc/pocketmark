@@ -88,7 +88,7 @@ components:
 
 **Creative North Star: "The Personal Library Workspace"**
 
-A precise technology workspace for a strictly personal library. Cool white content, a slate-tinted navigation rail and indigo controls keep attention on saved material and practical actions. The interface uses the operating system’s sans serif, authored outline SVG icons and restrained borders.
+A precise technology workspace for a strictly personal library. Cool white content, a slate-tinted navigation drawer and indigo controls keep attention on saved material and practical actions. The interface uses the operating system’s sans serif, authored outline SVG icons and restrained borders.
 
 Density serves finding and organizing; reading deliberately opens into a larger type size and generous measure. The embedded HTML, CSS and JavaScript need no frontend runtime or remote fonts.
 
@@ -144,9 +144,9 @@ The hierarchy is compact: headline for library headings, title for bookmark name
 
 ## Layout
 
-Desktop uses a sticky full-height navigation rail (232px) and a flexible main column. The workspace header is (64px) tall; library content has (32px) horizontal padding and a maximum width of (1680px). Between (901px) and (1150px), the rail becomes (212px) and horizontal padding becomes (24px).
+The main column uses the full workspace width. Navigation opens from the header into a full-height native dialog drawer at every viewport width, up to (320px) wide. The workspace header is (64px) tall; library content has (32px) horizontal padding and a maximum width of (1680px). Between (901px) and (1150px), horizontal padding becomes (24px).
 
-At (900px) and below, navigation moves into a native dialog drawer, up to (320px) wide. At (600px) and below, search spans its own row, header actions expand, fields use (16px) text, forms become one column, and bookmark actions move beneath metadata. The reader becomes a full-height edge-to-edge dialog. The sign-in split layout stacks on phones.
+At (900px) and below, header and library padding become (20px). At (600px) and below, search spans its own row, header actions expand, fields use (16px) text, forms become one column, and bookmark actions move beneath metadata. The reader becomes a full-height edge-to-edge dialog. The sign-in split layout stacks on phones.
 
 List rows use leading selection/domain controls, flexible metadata and trailing state/actions. Grid uses auto-filled columns with a minimum target of (260px), a (16px) gap and one column on phones. Switching view retains the same bookmark structure and state. Reuse the compact spacing rhythm recorded in the frontmatter rather than introducing spacious promotional sections.
 
@@ -176,7 +176,7 @@ Motion preserves context: selected tags settle into their new positions over 180
 Manual light/dark changes crossfade the complete view over 240ms using native browser snapshots, keeping text and surfaces synchronized. The first render uses the saved theme immediately. Repeated toggles interrupt the fade and preserve the latest choice; reduced motion and browsers without View Transitions switch immediately. The snapshot overlay does not intercept pointer input.
 
 ### Chips
-Small rectangular tags use neutral fill, short padding and compact type. Hover or active filter states use the soft accent and indigo text. Long labels truncate rather than widening the navigation rail.
+Small rectangular tags use neutral fill, short padding and compact type. Hover or active filter states use the soft accent and indigo text. Long labels truncate rather than widening the navigation drawer.
 
 ### Cards / Containers
 Grid bookmark cards use the panel radius, white background and a line border; selection changes both fill and border. List mode removes individual card rounding, separates rows with dividers and retains the same selection, tags, capture labels and actions. Do not add permanent card shadows.
@@ -187,7 +187,7 @@ Field boundaries use control-line (#818896) in light mode and #747b92 in dark mo
 Authenticator setup pairs a QR code on white with a labeled, read-only manual key. Recovery codes use selectable, scrollable text in a bordered surface, with a copy action and a manual-selection fallback.
 
 ### Navigation
-The slate-tinted rail combines outline icons, sentence-case labels and compact counts. Active navigation uses pale indigo and stronger text. On smaller screens, the same navigation element moves into the native dialog drawer; its controls gain height rather than losing functions.
+The slate-tinted drawer combines outline icons, sentence-case labels and compact counts. Active navigation uses pale indigo and stronger text. The header menu opens it at every width; its close button, Escape, backdrop and destination choices dismiss it. The drawer slides from the left edge with the shared dialog timing and reduced-motion behavior. On smaller screens, its controls gain height rather than losing functions.
 
 ### Tag directory
 Tags has a primary navigation entry. Keep up to 12 most-used tags as quick filters at the bottom of the sidebar, including while browsing the directory. The directory groups names under letter headings in three columns on wide screens, two on medium screens and one on phones. Compact counts sit beside each name. A sticky vertical A–Z rail (plus `#` for other initials) jumps across the paginated directory, disables unavailable letters and moves keyboard focus to the selected heading. Search narrows both the index and available letters. Fetch at most 40 tag rows and 27 group totals per request.
@@ -197,7 +197,7 @@ Bookmark and bulk tag fields show each selected tag in a compact bordered chip w
 
 Library destination, search, sorting, pagination and tag-directory state are represented in the URL. Back/Forward and reload restore that context; browser history also records the page scroll position. Tag destinations consistently retain the bookmark search and show removable filter chips. Selection summaries disclose bookmarks outside the current results; bulk dialogs show the selected titles and require a fresh action choice each time.
 
-Bookmark, reader-note and annotation drafts stay in the current tab. A bounded sessionStorage cache restores them after reload; denied storage or quota failures fall back to memory without preventing edits. Reopening a form restores drafts, and reader notes carry into the bookmark editor. Notices name the tab lifetime, discard removes unsaved changes, and leaving/reloading warns while drafts remain. Signing out clears the cache. Drafts are not stored in localStorage, URLs or on the server. Saving notes retains unrelated unfinished editor changes.
+Bookmark, reader-note and annotation drafts stay in the current tab. A bounded sessionStorage cache restores them after reload; denied storage or quota failures fall back to memory without preventing edits. Reopening a form restores drafts, and reader notes carry into the bookmark editor. Notices name the tab lifetime, discard removes unsaved changes, and leaving/reloading warns while drafts remain. Signing out always opens a confirmation alertdialog, with Cancel focused first and an additional warning when this tab has unsaved drafts. Confirming sign-out clears the cache after the request succeeds; request errors remain in the dialog. Drafts are not stored in localStorage, URLs or on the server. Saving notes retains unrelated unfinished editor changes.
 
 Bookmark titles have a separate Favorite control immediately before the heading; the other four actions stay grouped at the right. Borderless action icons are 18px with 32px desktop targets, theme-matched hover/focus backgrounds and native title tooltips. Selected favorites retain a filled star, and Delete uses danger colors on hover/focus. Mobile bookmark actions retain a named Favorite control and disclose the other labeled commands under Actions. Quick favorite/read changes confirm with an Undo action; feedback appears inside any active native dialog so its message is visible and announced. Search-only excerpts highlight matches and display decoded tag names. Near-match scope is visible beside its checkbox: titles, URLs, descriptions and tags only. Task-based Help is searchable from the navigation.
 
@@ -205,7 +205,7 @@ Opening a bookmark shows its title, source URL and Saved formats before any arti
 
 ### Settings
 
-Settings is a workspace page. Its seven section destinations replace library navigation in the desktop rail: API keys, 2FA, Sessions, Backup, Password sign-in, Browser bookmark sync, and Mobile & browser. One section is visible at a time; a query parameter preserves the section across reload and browser history. Back to library restores its filters and scroll position. At 900px and below, an inline section selector and Back to library button replace the settings rail. Settings retains the workspace theme and compact form vocabulary. Authentication changes block departure while pending; displayed recovery codes survive session expiration until explicitly dismissed by returning to the library. Leaving Settings clears credentials held in the page.
+Settings is a workspace page. Its seven section destinations replace library navigation in the drawer: API keys, 2FA, Sessions, Backup, Password sign-in, Browser bookmark sync, and Mobile & browser. One section is visible at a time; a query parameter preserves the section across reload and browser history. Back to library restores its filters and scroll position. An inline section selector and Back to library button remain visible at every width, alongside access to the settings drawer. Settings retains the workspace theme and compact form vocabulary. Authentication changes block departure while pending; displayed recovery codes survive session expiration until explicitly dismissed by returning to the library. Leaving Settings clears credentials held in the page.
 
 Entering Settings settles the workspace 12px from the right over 220ms with a light fade, paired with a 180ms navigation fade. Initial loads and section changes remain still; leaving cancels the entrance. Focus and controls update immediately. Reduced motion skips both effects.
 

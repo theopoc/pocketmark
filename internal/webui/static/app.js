@@ -226,7 +226,6 @@
   $("view-grid").addEventListener("click", () => setLibraryView("grid"));
   setLibraryView(libraryView);
 
-  const mobileNavigation = matchMedia("(max-width: 900px)");
   const navigation = $("navigation-dialog");
   const workspaceButton = $("workspace-button");
   const workspacePopover = $("workspace-popover");
@@ -251,23 +250,21 @@
   $("sidebar").addEventListener("scroll", closeWorkspacePopover);
   function closeNavigation() {
     closeWorkspacePopover();
-    if (navigation.open) navigation.close();
+    if (!navigation.open) return;
+    navigation.close();
+    $("open-navigation").setAttribute("aria-expanded", "false");
+    $("open-navigation").focus({ preventScroll: true });
   }
-  function placeNavigation() {
-    closeNavigation();
-    (mobileNavigation.matches ? navigation : $("sidebar-slot")).append($("sidebar"));
-  }
-  mobileNavigation.addEventListener("change", placeNavigation);
-  placeNavigation();
   $("open-navigation").addEventListener("click", () => {
     navigation.showModal();
     $("open-navigation").setAttribute("aria-expanded", "true");
     $("close-navigation").focus();
   });
   $("close-navigation").addEventListener("click", closeNavigation);
+  navigation.addEventListener("cancel", (event) => { event.preventDefault(); closeNavigation(); });
   navigation.addEventListener("close", () => {
-    closeWorkspacePopover();
-    $("open-navigation").setAttribute("aria-expanded", "false");
+    if (!navigation.open) closeWorkspacePopover();
+    $("open-navigation").setAttribute("aria-expanded", String(navigation.open));
   });
   navigation.addEventListener("click", (event) => { if (event.target === navigation) closeNavigation(); });
   $("sidebar").addEventListener("click", (event) => {
@@ -1111,9 +1108,37 @@
   });
   $("mfa-back").addEventListener("click", () => { resetMFALogin(); configureLogin(); $("login-error").textContent = ""; $("login-username").focus(); });
 
-  $("logout-button").addEventListener("click", async () => {
-    if (drafts.size && !confirm("Sign out and discard the drafts kept in this tab?")) return;
-    try { await api("/api/logout", { method: "POST" }); drafts.clear(); showLogin(); } catch (error) { toast(error.message, true); }
+  const logoutDialog = $("logout-dialog");
+  let signingOut = false;
+  $("logout-button").addEventListener("click", () => {
+    $("logout-description").textContent = drafts.size
+      ? "Signing out will discard the unsaved drafts kept in this tab. You’ll need to sign in again to access your library."
+      : "You’ll need to sign in again to access your library.";
+    $("logout-error").textContent = "";
+    logoutDialog.showModal();
+    $("logout-cancel").focus();
+  });
+  logoutDialog.addEventListener("cancel", (event) => { if (signingOut) event.preventDefault(); });
+  logoutDialog.addEventListener("close", () => {
+    if (state.signedIn) $("open-navigation").focus({ preventScroll: true });
+  });
+  $("logout-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (signingOut) return;
+    signingOut = true;
+    $("logout-confirm").disabled = $("logout-cancel").disabled = true;
+    $("logout-confirm").textContent = "Signing out…";
+    $("logout-error").textContent = "";
+    try {
+      await api("/api/logout", { method: "POST" });
+      drafts.clear();
+      showLogin();
+    } catch (error) { $("logout-error").textContent = error.message; }
+    finally {
+      signingOut = false;
+      $("logout-confirm").disabled = $("logout-cancel").disabled = false;
+      $("logout-confirm").textContent = "Sign out";
+    }
   });
 
   document.querySelectorAll("[data-filter]").forEach((button) => button.addEventListener("click", () => selectFilter(button.dataset.filter)));

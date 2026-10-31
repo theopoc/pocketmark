@@ -1,3 +1,4 @@
+import { clickNavigation, openNavigation, navigationJourney } from './navigation.mjs';
 // Real Chromium, real HTTP and SQLite. Run only against the disposable smoke instance.
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
@@ -5,7 +6,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { securityJourney } from './security.mjs';
-import { openSettings, refreshSessionsBeforeMFA, openWorkspaceActions } from './settings.mjs';
+import { openSettings, refreshSessionsBeforeMFA } from './settings.mjs';
 
 const base = new URL(process.env.E2E_BASE_URL);
 assert.equal(base.hostname, '127.0.0.1', 'E2E requires a disposable loopback instance');
@@ -148,9 +149,10 @@ try {
   await page.keyboard.press('Enter');
   assert.equal(await page.evaluate(() => document.activeElement.id), 'main-content', 'library shortcut moves keyboard focus to the main content');
   assert.equal(page.url(), libraryURL, 'library shortcut does not add a history entry');
+  await navigationJourney(page);
   const oldSession = (await page.context().cookies()).find(cookie => cookie.name === 'pocketmark');
-  await openWorkspaceActions(page);
-  await page.locator('#logout-button').click();
+  await clickNavigation(page, '#logout-button');
+  await page.locator('#logout-confirm').click();
   await page.locator('#login-view').waitFor({ state: 'visible' });
   assert.equal(await page.locator('.skip-link').isVisible(), false, 'library shortcut is unavailable after sign-out');
   assert.equal(await page.locator('#login-password').getAttribute('aria-describedby'), 'login-help');
@@ -371,7 +373,7 @@ try {
     }
   } finally { await peer.close(); }
 
-  await page.locator('#add-collection').click();
+  await clickNavigation(page, '#add-collection');
   await page.locator('#collection-name').fill('é'.repeat(61));
   await page.locator('#save-collection').click();
   await page.locator('#collection-error').filter({ hasText: '120 UTF-8 bytes' }).waitFor();
@@ -382,11 +384,11 @@ try {
   // A late collection response must not close or overwrite a newly opened editor.
   for (const succeeds of [true, false]) {
     const held = succeeds ? await holdResponse(page, '/api/collections') : await holdUnauthorized(page, '/api/collections', 'Earlier collection failed', 503);
-    await page.locator('#add-collection').click();
+    await clickNavigation(page, '#add-collection');
     await page.locator('#collection-name').fill(succeeds ? 'Earlier collection' : 'Failed collection');
     await page.locator('#save-collection').click(); await held.ready;
     await page.locator('#collection-dialog').getByRole('button', { name: 'Cancel' }).click();
-    await page.locator('#add-collection').click();
+    await clickNavigation(page, '#add-collection');
     await page.locator('#collection-name').fill('New collection draft');
     assert.equal(await page.locator('#save-collection').isEnabled(), true);
     held.release();
@@ -398,7 +400,7 @@ try {
     await page.locator('#collection-dialog').getByRole('button', { name: 'Cancel' }).click();
   }
   const pendingCollection = await holdResponse(page, '/api/collections');
-  await page.locator('#add-collection').click();
+  await clickNavigation(page, '#add-collection');
   await page.locator('#collection-name').fill('Collection before save');
   await page.locator('#save-collection').click(); await pendingCollection.ready;
   await page.locator('#collection-name').fill('Collection after save');
@@ -408,8 +410,8 @@ try {
   assert.equal(await page.locator('#collection-name').inputValue(), 'Collection after save');
   await page.locator('#save-collection').click();
   await page.locator('#collection-dialog').waitFor({ state: 'hidden' });
-  await page.getByRole('button', { name: 'Collection after save', exact: true }).waitFor();
-  assert.equal(await page.getByRole('button', { name: 'Collection before save', exact: true }).count(), 0);
+  await page.getByRole('button', { name: 'Collection after save', exact: true, includeHidden: true }).waitFor({ state: 'attached' });
+  assert.equal(await page.getByRole('button', { name: 'Collection before save', exact: true, includeHidden: true }).count(), 0);
 
   const original = 'Browser integration bookmark';
   const revised = 'Browser revised bookmark';
@@ -452,7 +454,7 @@ try {
   assert.equal(await page.getByRole('menuitemradio', { name: 'Title Z–A', exact: true }).getAttribute('aria-checked'), 'true', 'descending title sort survives reload');
   await page.getByRole('menuitemradio', { name: 'Newest first', exact: true }).click();
   await page.waitForURL(url => !url.searchParams.has('sort'));
-  await page.locator('#help-button').click();
+  await clickNavigation(page, '#help-button');
   await page.locator('#help-search').fill('retry capture');
   const captureHelp = page.locator('#help-topics > details').filter({ hasText: 'Failed or missing captures' });
   assert.equal(await captureHelp.isVisible(), true);
@@ -584,7 +586,7 @@ try {
     return route.fulfill({ json: { tags, groups: [{ letter: 'T', count: 41 }], total: 41, page: pageNumber, pageSize: 40 } });
   };
   await page.route('**/api/tags/browse?*', pagedTags);
-  await page.locator('#all-tags').click();
+  await clickNavigation(page, '#all-tags');
   await page.locator('#tags-next').waitFor({ state: 'visible' });
   await page.locator('#tags-next').focus();
   await page.locator('#tags-next').press('Enter');
@@ -611,10 +613,11 @@ try {
   const collectionResponse = await page.request.post(new URL('/api/collections', base).href, { data: { name: collectionName, parentId: null } });
   assert.equal(collectionResponse.status(), 201);
   await page.locator('#refresh-button').click();
+  await openNavigation(page);
   await page.getByRole('button', { name: collectionName, exact: true }).waitFor();
   assert.ok(await page.getByRole('button', { name: collectionName, exact: true }).evaluate(node => node.getBoundingClientRect().height > 44), 'long collection names wrap on desktop');
   await page.setViewportSize({ width: 320, height: 700 });
-  await page.locator('#open-navigation').click();
+  await openNavigation(page);
   const collection = page.getByRole('button', { name: collectionName, exact: true });
   assert.ok(await collection.evaluate(node => node.getBoundingClientRect().height > 44), 'long collection names wrap on mobile');
   const confirmation = page.waitForEvent('dialog');
@@ -625,6 +628,7 @@ try {
   assert.equal(await collection.isVisible(), true);
   await page.locator('#close-navigation').click();
   await page.setViewportSize({ width: 1280, height: 720 });
+  await openNavigation(page);
   await collection.click();
   await page.locator('#empty-title').filter({ hasText: 'This collection is empty' }).waitFor();
   await page.locator('#empty-add').click();
@@ -650,7 +654,7 @@ try {
     await failLibrary(route);
   };
   await page.route('**/api/links?*', delayedFailure);
-  await page.locator('[data-filter="favorite"]').click();
+  await clickNavigation(page, '[data-filter="favorite"]');
   await requested;
   assert.equal(await card(original).isVisible(), false, 'old results are hidden while a different view loads');
   assert.equal(await page.locator('#empty-state').isVisible(), false);
@@ -791,8 +795,9 @@ try {
   await card(revised).waitFor({ state: 'detached' });
   await page.reload();
   await page.locator('#empty-title').filter({ hasText: 'No bookmarks found' }).waitFor();
-  await openWorkspaceActions(page);
-  await page.locator('#logout-button').click();
+  await clickNavigation(page, '#logout-button');
+  await page.locator('#logout-confirm').click();
+  await page.locator('#login-view').waitFor({ state: 'visible' });
   await page.reload();
   await page.locator('#login-view').waitFor({ state: 'visible' });
 

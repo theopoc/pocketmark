@@ -60,52 +60,8 @@
   </section>
   <div id="app-view" class="app-shell" hidden>
     <a class="skip-link" href="#main-content">Skip to content</a>
-    <div id="sidebar-slot" class="sidebar-slot">
-    <aside id="sidebar" class="sidebar" aria-label="Library navigation">
-      <div class="sidebar-brand"><a class="brand" href="/" aria-label="Pocketmark home"><span class="brand-mark" data-icon="bookmark" aria-hidden="true"></span><span>Pocketmark</span></a><button id="close-navigation" class="icon-button mobile-only" aria-label="Close navigation"><span data-icon="close" aria-hidden="true"></span></button></div>
-      <div id="library-navigation">
-      <button id="workspace-button" type="button" class="workspace-label" popovertarget="workspace-popover" aria-expanded="false" aria-controls="workspace-popover" data-keep-navigation><span class="workspace-avatar" aria-hidden="true">P</span><span class="workspace-name">Personal workspace<span class="workspace-subtitle">My library</span></span><span class="workspace-chevron" data-icon="chevron-right" aria-hidden="true"></span></button>
-      <div id="workspace-popover" class="workspace-popover" popover aria-label="Workspace actions">
-        <button id="import-button" type="button" class="nav-item" autofocus><span data-icon="download" aria-hidden="true"></span>Import</button>
-        <button id="export-button" type="button" class="nav-item"><span data-icon="upload" aria-hidden="true"></span>Export</button>
-        <hr>
-        <button id="settings-button" type="button" class="nav-item"><span data-icon="settings" aria-hidden="true"></span>Settings</button>
-        <hr>
-        <button id="logout-button" type="button" class="nav-item workspace-sign-out"><span data-icon="logout" aria-hidden="true"></span>Sign out</button>
-      </div>
-      <nav aria-label="Library">
-        <button class="nav-item active" data-filter="all" aria-current="page"><span data-icon="library" aria-hidden="true"></span>All bookmarks <span id="total-count" class="nav-count">0</span></button>
-        <button class="nav-item" data-filter="inbox"><span data-icon="inbox" aria-hidden="true"></span>Inbox</button>
-        <button class="nav-item" data-filter="favorite"><span data-icon="star" aria-hidden="true"></span>Favorites</button>
-        <button class="nav-item" data-filter="unread"><span data-icon="clock" aria-hidden="true"></span>To read</button>
-        <button id="all-tags" class="nav-item"><span data-icon="tag" aria-hidden="true"></span>Tags</button>
-      </nav>
-      <div class="sidebar-section-title"><h2>Collections</h2><button id="add-collection" class="icon-button" title="New collection" aria-label="New collection"><span data-icon="plus" aria-hidden="true"></span></button></div>
-      <div id="collections" class="collection-list"></div>
-      <div class="sidebar-bottom">
-        <div class="sidebar-section-title"><h2>Frequent tags</h2></div>
-        <div id="tags" class="tag-cloud"></div>
-        <div class="sidebar-tools"><button id="help-button" class="nav-item"><span data-icon="book" aria-hidden="true"></span>Help</button></div>
-        <a class="nav-item api-documentation-link" href="/api-docs/"><span data-icon="book" aria-hidden="true"></span>API documentation</a>
-        <input id="import-file" type="file" accept="application/json,text/html,.json,.html,.htm" hidden>
-      </div>
-      </div>
-      <div id="settings-navigation" hidden>
-        <button type="button" class="nav-item settings-back" data-settings-back><span data-icon="arrow-left" aria-hidden="true"></span>Back to library</button>
-        <nav aria-label="Settings sections">
-          <button type="button" class="nav-item" data-settings-section="api-keys"><span data-icon="lock" aria-hidden="true"></span>API keys</button>
-          <button type="button" class="nav-item" data-settings-section="2fa"><span data-icon="lock" aria-hidden="true"></span>2FA</button>
-          <button type="button" class="nav-item" data-settings-section="sessions"><span data-icon="clock" aria-hidden="true"></span>Sessions</button>
-          <button type="button" class="nav-item" data-settings-section="backup"><span data-icon="download" aria-hidden="true"></span>Backup</button>
-          <button type="button" class="nav-item" data-settings-section="password"><span data-icon="lock" aria-hidden="true"></span>Password sign-in</button>
-          <button type="button" class="nav-item" data-settings-section="sync"><span data-icon="refresh" aria-hidden="true"></span>Browser bookmark sync</button>
-          <button type="button" class="nav-item" data-settings-section="mobile"><span data-icon="book" aria-hidden="true"></span>Mobile &amp; browser</button>
-        </nav>
-      </div>
-    </aside>
-    </div>
     <main id="main-content" class="main-content" tabindex="-1">
-      <header class="topbar"><div class="topbar-location"><button id="open-navigation" class="icon-button mobile-only" aria-label="Open navigation" aria-controls="navigation-dialog" aria-expanded="false"><span data-icon="menu" aria-hidden="true"></span></button><span class="breadcrumb"><span class="breadcrumb-root">Workspace</span><span data-icon="chevron-right" aria-hidden="true"></span><span id="breadcrumb-current">All bookmarks</span></span></div><div class="topbar-actions"><button class="button subtle theme-toggle" data-theme-toggle aria-label="Dark mode" aria-pressed="true" title="Switch to light mode"><span data-theme-icon aria-hidden="true"></span><span data-theme-label>Dark</span></button><span class="workspace-badge"><span data-icon="lock" aria-hidden="true"></span>Personal library</span></div></header>
+      <header class="topbar"><div class="topbar-location"><button id="open-navigation" class="icon-button" aria-label="Open navigation" aria-controls="navigation-dialog" aria-expanded="false"><span data-icon="menu" aria-hidden="true"></span></button><span class="breadcrumb"><span class="breadcrumb-root">Workspace</span><span data-icon="chevron-right" aria-hidden="true"></span><span id="breadcrumb-current">All bookmarks</span></span></div><div class="topbar-actions"><button class="button subtle theme-toggle" data-theme-toggle aria-label="Dark mode" aria-pressed="true" title="Switch to light mode"><span data-theme-icon aria-hidden="true"></span><span data-theme-label>Dark</span></button><span class="workspace-badge"><span data-icon="lock" aria-hidden="true"></span>Personal library</span></div></header>
       <section id="settings-page" class="settings-page" aria-labelledby="settings-title" hidden>
         <button type="button" class="button subtle settings-mobile-back" data-settings-back><span data-icon="arrow-left" aria-hidden="true"></span>Back to library</button>
         <h1 id="settings-title">Settings</h1>
@@ -211,7 +167,58 @@
       </div>
     </main>
   </div>
-  <dialog id="navigation-dialog" class="navigation-dialog" aria-label="Library navigation"></dialog>
+  <dialog id="navigation-dialog" class="navigation-dialog" aria-label="Library navigation">
+    <aside id="sidebar" class="sidebar" aria-label="Library navigation">
+      <div class="sidebar-brand"><a class="brand" href="/" aria-label="Pocketmark home"><span class="brand-mark" data-icon="bookmark" aria-hidden="true"></span><span>Pocketmark</span></a><button id="close-navigation" class="icon-button" aria-label="Close navigation"><span data-icon="close" aria-hidden="true"></span></button></div>
+      <div id="library-navigation">
+      <button id="workspace-button" type="button" class="workspace-label" popovertarget="workspace-popover" aria-expanded="false" aria-controls="workspace-popover" data-keep-navigation><span class="workspace-avatar" aria-hidden="true">P</span><span class="workspace-name">Personal workspace<span class="workspace-subtitle">My library</span></span><span class="workspace-chevron" data-icon="chevron-right" aria-hidden="true"></span></button>
+      <div id="workspace-popover" class="workspace-popover" popover aria-label="Workspace actions">
+        <button id="import-button" type="button" class="nav-item" autofocus><span data-icon="download" aria-hidden="true"></span>Import</button>
+        <button id="export-button" type="button" class="nav-item"><span data-icon="upload" aria-hidden="true"></span>Export</button>
+        <hr>
+        <button id="settings-button" type="button" class="nav-item"><span data-icon="settings" aria-hidden="true"></span>Settings</button>
+        <hr>
+        <button id="logout-button" type="button" class="nav-item workspace-sign-out"><span data-icon="logout" aria-hidden="true"></span>Sign out</button>
+      </div>
+      <nav aria-label="Library">
+        <button class="nav-item active" data-filter="all" aria-current="page"><span data-icon="library" aria-hidden="true"></span>All bookmarks <span id="total-count" class="nav-count">0</span></button>
+        <button class="nav-item" data-filter="inbox"><span data-icon="inbox" aria-hidden="true"></span>Inbox</button>
+        <button class="nav-item" data-filter="favorite"><span data-icon="star" aria-hidden="true"></span>Favorites</button>
+        <button class="nav-item" data-filter="unread"><span data-icon="clock" aria-hidden="true"></span>To read</button>
+        <button id="all-tags" class="nav-item"><span data-icon="tag" aria-hidden="true"></span>Tags</button>
+      </nav>
+      <div class="sidebar-section-title"><h2>Collections</h2><button id="add-collection" class="icon-button" title="New collection" aria-label="New collection"><span data-icon="plus" aria-hidden="true"></span></button></div>
+      <div id="collections" class="collection-list"></div>
+      <div class="sidebar-bottom">
+        <div class="sidebar-section-title"><h2>Frequent tags</h2></div>
+        <div id="tags" class="tag-cloud"></div>
+        <div class="sidebar-tools"><button id="help-button" class="nav-item"><span data-icon="book" aria-hidden="true"></span>Help</button></div>
+        <a class="nav-item api-documentation-link" href="/api-docs/"><span data-icon="book" aria-hidden="true"></span>API documentation</a>
+        <input id="import-file" type="file" accept="application/json,text/html,.json,.html,.htm" hidden>
+      </div>
+      </div>
+      <div id="settings-navigation" hidden>
+        <button type="button" class="nav-item settings-back" data-settings-back><span data-icon="arrow-left" aria-hidden="true"></span>Back to library</button>
+        <nav aria-label="Settings sections">
+          <button type="button" class="nav-item" data-settings-section="api-keys"><span data-icon="lock" aria-hidden="true"></span>API keys</button>
+          <button type="button" class="nav-item" data-settings-section="2fa"><span data-icon="lock" aria-hidden="true"></span>2FA</button>
+          <button type="button" class="nav-item" data-settings-section="sessions"><span data-icon="clock" aria-hidden="true"></span>Sessions</button>
+          <button type="button" class="nav-item" data-settings-section="backup"><span data-icon="download" aria-hidden="true"></span>Backup</button>
+          <button type="button" class="nav-item" data-settings-section="password"><span data-icon="lock" aria-hidden="true"></span>Password sign-in</button>
+          <button type="button" class="nav-item" data-settings-section="sync"><span data-icon="refresh" aria-hidden="true"></span>Browser bookmark sync</button>
+          <button type="button" class="nav-item" data-settings-section="mobile"><span data-icon="book" aria-hidden="true"></span>Mobile &amp; browser</button>
+        </nav>
+      </div>
+    </aside>
+  </dialog>
+  <dialog id="logout-dialog" class="modal compact-modal" role="alertdialog" aria-labelledby="logout-title" aria-describedby="logout-description">
+    <form id="logout-form">
+      <div class="dialog-heading"><h2 id="logout-title">Sign out of Pocketmark?</h2></div>
+      <p id="logout-description" class="muted">You’ll need to sign in again to access your library.</p>
+      <p id="logout-error" class="form-error" role="alert"></p>
+      <div class="dialog-actions"><button id="logout-cancel" type="button" class="button subtle close-dialog" autofocus>Cancel</button><button id="logout-confirm" type="submit" class="button primary">Sign out</button></div>
+    </form>
+  </dialog>
   <dialog id="bookmark-dialog" class="modal" aria-labelledby="bookmark-dialog-title">
     <form id="bookmark-form">
       <div class="dialog-heading"><div><h2 id="bookmark-dialog-title">Add bookmark</h2></div><button type="button" class="icon-button close-dialog" aria-label="Close"><span data-icon="close" aria-hidden="true"></span></button></div>
