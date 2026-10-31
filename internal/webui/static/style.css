@@ -152,6 +152,9 @@ input[type=checkbox] { width: 15px; height: 15px; padding: 0; flex-shrink: 0; ac
 .domain-avatar { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 32px; flex-shrink: 0; border: 1px solid #e3e5ed; background: var(--surface); border-radius: 7px; color: #727b92; }
 .domain-avatar .icon { width: 15px; height: 16px; }
 .card-body { padding: 12px 16px 16px; flex: 1; min-width: 0; }
+.card-title-row { display: flex; align-items: flex-start; gap: 6px; }
+.card-title-row .favorite-button { flex-shrink: 0; margin-top: -5px; }
+.card-title-row .card-title { min-width: 0; flex: 1; }
 .card-title { margin: 0 0 3px; font-size: 14px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; text-wrap: initial; }
 .card-title button { border: 0; padding: 0; background: transparent; font: inherit; color: var(--ink); text-align: left; }
 .card-title button:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
@@ -168,10 +171,10 @@ input[type=checkbox] { width: 15px; height: 15px; padding: 0; flex-shrink: 0; ac
 .card-state.failed { color: var(--danger); }
 .card-state.pending, .card-state.processing { color: #8c5818; }
 .card-actions { display: flex; align-items: center; gap: 1px; }
-.card-action { display: inline-flex; justify-content: center; align-items: center; border: 0; background: transparent; color: #737b8c; width: 27px; height: 28px; padding: 5px; border-radius: 4px; text-decoration: none; }
-.card-action .icon { width: 15px; height: 15px; }
-.card-action:hover { color: var(--accent); background: var(--accent-soft); }
-.card-action[title="Delete bookmark"]:hover { color: var(--danger); background: #ffebed; }
+.card-action { display: inline-flex; justify-content: center; align-items: center; border: 0; background: transparent; color: #737b8c; width: 32px; height: 32px; flex-shrink: 0; padding: 7px; border-radius: 4px; text-decoration: none; }
+.card-action .icon { width: 18px; height: 18px; flex-shrink: 0; }
+.card-action:is(:hover, :focus-visible) { color: var(--accent); background: var(--accent-soft); }
+.card-action[title="Delete bookmark"]:is(:hover, :focus-visible) { color: var(--danger); background: #ffebed; }
 .bookmark-select-target { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 24px; min-height: 28px; margin: -6px -4px; cursor: pointer; }
 .search-excerpt { margin: 7px 0 0; font-size: 12px; line-height: 1.65; color: var(--muted); overflow-wrap: anywhere; }
 .search-match-label { font-weight: 600; }
@@ -192,7 +195,7 @@ input[type=checkbox] { width: 15px; height: 15px; padding: 0; flex-shrink: 0; ac
 .view-list .card-description { margin-top: 5px; -webkit-line-clamp: 1; }
 .view-list .card-tags { display: inline-flex; margin: 5px 0 0 8px; gap: 4px; }
 .view-list .card-footer { border: 0; padding: 0 0 0 8px; flex-direction: column; align-items: flex-end; gap: 11px; }
-.view-list .card-action { width: 28px; height: 28px; }
+.view-list .card-action { width: 32px; height: 32px; }
 /* Feedback and page controls */
 .empty-state { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 72px 24px 88px; }
 .empty-state .reader-actions { justify-content: center; }
@@ -473,13 +476,13 @@ body:has(dialog[open]) { overflow: hidden; }
 [data-theme="dark"] #selected-count { color: #bfb6ff; }
 [data-theme="dark"] .card-footer { border-color: #30323e; }
 [data-theme="dark"] .card-action { color: #a4aabd; }
-[data-theme="dark"] .card-action:hover { color: #d0caff; background: var(--accent-soft); }
+[data-theme="dark"] .card-action:is(:hover, :focus-visible) { color: #d0caff; background: var(--accent-soft); }
 [data-theme="dark"] .card-state.ready, [data-theme="dark"] .card-action.read { color: var(--success); }
 [data-theme="dark"] .card-state.failed { color: var(--danger); }
 [data-theme="dark"] .capture-summary, [data-theme="dark"] .card-state.pending, [data-theme="dark"] .card-state.processing { color: #d9b87c; }
 [data-theme="dark"] .favorite-button.is-favorite { color: #e2c17b; }
 [data-theme="dark"] .favorite-button.is-favorite .icon { fill: #604b24; }
-[data-theme="dark"] .card-action[aria-label="Delete bookmark"]:hover { color: var(--danger); background: #422631; }
+[data-theme="dark"] .card-action[title="Delete bookmark"]:is(:hover, :focus-visible) { color: var(--danger); background: #422631; }
 [data-theme="dark"] .error-banner { background: #39212b; border-color: #713b49; }
 [data-theme="dark"] .main-footer { color: var(--muted); }
 [data-theme="dark"] .reader-content { color: #d7dae5; }
@@ -786,6 +789,7 @@ body:has(dialog[open]) { overflow: hidden; }
   .card-actions-toggle { display: inline-flex; min-height: 44px; }
   .mobile-action-label { display: inline; }
   .card-actions { flex: 1; justify-content: flex-start; }
+  .card-title-row .favorite-button { margin-top: 0; }
   .card-action.favorite-button { width: auto; min-width: 44px; gap: 7px; padding-inline: 8px; font-size: 12px; }
   .card-action.favorite-button[aria-pressed=true] { background: var(--accent-soft); }
   .card-overflow-actions { display: none; flex-basis: 100%; width: 100%; }
