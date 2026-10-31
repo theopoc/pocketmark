@@ -13,6 +13,7 @@
   <script src="/workspace.js" defer></script>
   <script src="/reader.js" defer></script>
   <script src="/bulk.js" defer></script>
+  <script src="/selection.js" defer></script>
   <script src="/tag-picker.js" defer></script>
   <script src="/security.js" defer></script>
   <script src="/app.js" defer></script>
@@ -153,7 +154,7 @@
         </div>
       </div>
       <div id="active-filters" class="active-filters" aria-label="Active filters" hidden></div>
-      <div class="results-bar"><div class="bulk-toolbar"><label class="inline-check"><input id="select-page" type="checkbox"><span>Select page</span></label><span id="results-label" aria-live="polite">Loading your library…</span><span id="selected-count" aria-live="polite" hidden>0 selected</span><button id="bulk-open" class="button subtle" hidden disabled>Actions</button><button id="clear-selection" class="text-button" hidden>Clear</button></div><span id="capture-label" class="capture-summary"></span></div>
+      <div class="results-bar"><div class="bulk-toolbar"><span id="results-label" aria-live="polite">Loading your library…</span><span id="selected-count" role="status" hidden>0 selected</span><span id="selected-outside" hidden></span><button id="select-page" class="text-button" type="button" aria-pressed="false">Select page</button><button id="bulk-open" class="button primary" hidden disabled>Actions</button><button id="clear-selection" class="text-button" hidden>Clear<span class="selection-escape" aria-hidden="true"> Esc</span></button></div><div class="selection-guidance"><span class="selection-hint">Click or drag to select</span><details class="selection-help"><summary aria-label="Selection help"><span data-icon="info" aria-hidden="true"></span></summary><div id="selection-help" class="selection-help-panel"><strong>Select bookmarks</strong><p>Click an empty area of a bookmark to select it. Drag across bookmarks to select several.</p><p><kbd>Shift</kbd> + click selects a range. <kbd>Ctrl</kbd> / <kbd>⌘</kbd> + drag adds to your selection.</p><p>On the keyboard, focus a bookmark and press <kbd>Space</kbd>. Press <kbd>Esc</kbd> to clear.</p><p>On touch screens, tap an empty area of a bookmark. Titles open the reader; action buttons work as usual.</p></div></details><span id="capture-label" class="capture-summary"></span></div></div>
       <div id="library-error" class="error-banner" role="alert" hidden></div>
       <section id="bookmark-grid" class="bookmark-grid view-list" aria-label="Bookmarks" aria-busy="true"></section>
       <section id="empty-state" class="empty-state" aria-labelledby="empty-title" hidden><div id="empty-art" class="empty-art" data-icon="bookmark" aria-hidden="true"></div><h2 id="empty-title">Your library starts here</h2><p id="empty-message" class="muted">Save your first bookmark, or bring your existing bookmarks with you.</p><div class="reader-actions"><button id="empty-add" class="button primary"><span data-icon="plus" aria-hidden="true"></span>Add bookmark</button><button id="empty-import" class="button subtle" type="button">Import bookmarks</button><button id="empty-reset" class="button subtle" hidden>Clear filters</button></div></section>

@@ -20,11 +20,13 @@ check: fmt-check
 	node --check internal/webui/static/reader.js
 	node --check internal/webui/static/asset-preview.js
 	node --check internal/webui/static/bulk.js
+	node --check internal/webui/static/selection.js
 	node --check internal/webui/static/tag-picker.js
 	node --check internal/webui/static/app.js
 	node --check internal/webui/static/security.js
 	node --check internal/webui/static/sw.js
 	node --check internal/webui/static/api-docs/docs.js
+	node --check e2e/selection.mjs
 	node --check e2e/navigation.mjs
 	node --check e2e/browser.mjs
 	node --check e2e/security.mjs

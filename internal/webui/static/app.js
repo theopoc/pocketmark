@@ -124,6 +124,7 @@
 
   // Small, authored SVG icons keep the embedded UI independent of icon libraries.
   const iconPaths = {
+    info: ["M12 11v6M12 7h.01", "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"],
     sun: ["M12 3v1M12 20v1M3 12h1M20 12h1M5.6 5.6l.7.7M17.7 17.7l.7.7M5.6 18.4l.7-.7M17.7 6.3l.7-.7", "M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0"],
     moon: ["M20.5 14.5A9 9 0 0 1 9.5 3.5a9 9 0 1 0 11 11Z"],
     bookmark: ["M6 3h12v18l-6-4-6 4V3Z"],
@@ -454,9 +455,47 @@
   });
 
   const bulk = globalThis.PocketmarkBulk.create({
-    api, toast, onChange: () => refresh(true), onSelectionChange: renderLinks, fillCollections,
+    api, toast, onChange: () => refresh(true), onSelectionChange: syncBookmarkSelection, fillCollections,
     defaultCollection: () => state.filter === "collection" ? state.collection : null, onSessionExpired: showLogin,
   });
+
+  const selection = globalThis.PocketmarkSelection.create({ grid: $("bookmark-grid"), bulk, links: () => libraryLoading || libraryUnavailable ? [] : state.links, onChange: syncBookmarkSelection });
+  function syncBookmarkSelection() {
+    for (const card of $("bookmark-grid").querySelectorAll(".bookmark-card")) {
+      const selected = bulk.has(Number(card.dataset.id));
+      card.classList.toggle("is-selected", selected);
+      card.setAttribute("aria-label", `${card.dataset.label}${selected ? ", selected" : ""}`);
+    }
+  }
+
+  // Snapshot only visible cards; exits are inert and siblings retain their positions.
+  function bookmarkPositions() {
+    const grid = $("bookmark-grid");
+    if (grid.hidden || reducedMotion.matches || document.hidden) return [];
+    return [...grid.children].map(node => ({ node, id: node.dataset.id, rect: node.getBoundingClientRect() }));
+  }
+  function transitionBookmarks(previous) {
+    const grid = $("bookmark-grid"), current = new Map([...grid.children].map(node => [node.dataset.id, node]));
+    if (reducedMotion.matches || !previous.some(entry => !current.has(entry.id))) return;
+    for (const { node, id, rect } of previous) {
+      const next = current.get(id);
+      if (next) {
+        const target = next.getBoundingClientRect();
+        move(next, [{ transform: `translate(${rect.left - target.left}px, ${rect.top - target.top}px)` }, { transform: "none" }], 200);
+      } else if (node.animate) {
+        const layer = el("div", `bookmark-exit-layer bookmark-grid${grid.classList.contains("view-list") ? " view-list" : ""}`);
+        layer.inert = true; layer.setAttribute("aria-hidden", "true");
+        // Detached cards must not duplicate IDs or load archive thumbnails again.
+        node.querySelectorAll("[id]").forEach(child => child.removeAttribute("id"));
+        layer.append(node);
+        Object.assign(layer.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` });
+        document.body.append(layer);
+        move(layer, [{ opacity: 1, transform: "scale(1)" }, { opacity: 0, transform: "scale(.98)" }], 140);
+        const animation = activeMotion.get(layer);
+        if (animation) animation.finished.catch(() => {}).then(() => layer.remove()); else layer.remove();
+      }
+    }
+  }
 
   function collectionLabel(id) {
     return state.collections.find((collection) => String(collection.id) === String(id))?.name || "Collection";
@@ -767,6 +806,8 @@
   function renderLinks() {
     const grid = $("bookmark-grid");
     const key = focusedKey(grid);
+    selection.cancel();
+    const previous = bookmarkPositions();
     grid.replaceChildren();
     for (const link of state.links) {
       const card = el("article", "bookmark-card");
@@ -780,19 +821,13 @@
       favorite.dataset.focusKey = `link:${link.id}:action:0`;
       favorite.append(el("span", "mobile-action-label", "Favorite"));
       favorite.addEventListener("click", () => updateLink(link, { favorite: !link.favorite }, favorite));
-      const select = el("input", "bookmark-select");
-      select.type = "checkbox";
-      select.checked = bulk.has(link.id);
-      select.dataset.focusKey = `link:${link.id}:select`;
-      select.setAttribute("aria-label", `Select ${link.title || link.url}`);
-      select.addEventListener("change", () => {
-        select.checked = bulk.select(link, select.checked);
-        card.classList.toggle("is-selected", select.checked);
-      });
-      card.classList.toggle("is-selected", select.checked);
-      const selectTarget = el("label", "bookmark-select-target");
-      selectTarget.append(select);
-      top.append(selectTarget);
+      card.dataset.id = String(link.id);
+      card.dataset.label = link.title || link.url;
+      card.dataset.focusKey = `link:${link.id}:select`;
+      card.tabIndex = 0;
+      card.setAttribute("role", "group");
+      card.setAttribute("aria-keyshortcuts", "Space Shift+Space");
+      card.setAttribute("aria-description", "Press Space to toggle selection. Shift+Space selects a range.");
       const body = el("div", "card-body");
       const heading = el("h2", "card-title");
       const open = el("button", "", link.title || link.url);
@@ -940,6 +975,8 @@
     $("previous-page").disabled = state.page <= 1;
     $("next-page").disabled = state.page >= pages;
     $("results-label").textContent = libraryLoading ? "Loading your library…" : libraryUnavailable ? "Could not load this view" : `${state.total} bookmark${state.total === 1 ? "" : "s"}${state.query ? ` matching “${state.query}”` : " in this view"}`;
+    syncBookmarkSelection();
+    transitionBookmarks(previous);
     restoreFocus(grid, key);
   }
 
