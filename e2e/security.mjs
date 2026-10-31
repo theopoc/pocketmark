@@ -1,6 +1,6 @@
 // Real HTTP/browser regression. Uses only the disposable instance's synthetic owner.
 import assert from 'node:assert/strict';
-import { selectSettings, settingsNavigationJourney } from './settings.mjs';
+import { selectSettings, settingsNavigationJourney, openWorkspaceActions } from './settings.mjs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -19,6 +19,7 @@ export async function securityJourney({ browser, page, base, username, password,
   try {
     assert.equal((await peer.request.post(url('/api/login'), { data: { username, password } })).status(), 200);
     assert.equal((await peer.request.post(url('/api/mfa/verify'), { data: { code: recoveryCode } })).status(), 200);
+    await openWorkspaceActions(page);
     await page.locator('#settings-button').click();
     await settingsNavigationJourney(page);
     await selectSettings(page, 'sessions');
@@ -111,6 +112,7 @@ export async function securityJourney({ browser, page, base, username, password,
     await page.waitForFunction(expiry => Date.now() >= expiry * 1000, expiresAt);
     await page.locator('[data-settings-back]:visible').click();
     await page.locator('#settings-page').waitFor({ state: 'hidden' });
+    await openWorkspaceActions(page);
     await page.locator('#settings-button').click();
     const expiredRow = page.locator('#token-list .token-row').filter({ hasText: 'Synthetic expired key' });
     await expiredRow.waitFor();

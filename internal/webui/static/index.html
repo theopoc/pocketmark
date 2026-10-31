@@ -64,20 +64,28 @@
     <aside id="sidebar" class="sidebar" aria-label="Library navigation">
       <div class="sidebar-brand"><a class="brand" href="/" aria-label="Pocketmark home"><span class="brand-mark" data-icon="bookmark" aria-hidden="true"></span><span>Pocketmark</span></a><button id="close-navigation" class="icon-button mobile-only" aria-label="Close navigation"><span data-icon="close" aria-hidden="true"></span></button></div>
       <div id="library-navigation">
-      <div class="workspace-label"><span class="workspace-avatar" aria-hidden="true">P</span><div>Personal workspace<span>My library</span></div></div>
+      <button id="workspace-button" type="button" class="workspace-label" popovertarget="workspace-popover" aria-expanded="false" aria-controls="workspace-popover" data-keep-navigation><span class="workspace-avatar" aria-hidden="true">P</span><span class="workspace-name">Personal workspace<span class="workspace-subtitle">My library</span></span><span class="workspace-chevron" data-icon="chevron-right" aria-hidden="true"></span></button>
+      <div id="workspace-popover" class="workspace-popover" popover aria-label="Workspace actions">
+        <button id="import-button" type="button" class="nav-item" autofocus><span data-icon="download" aria-hidden="true"></span>Import</button>
+        <button id="export-button" type="button" class="nav-item"><span data-icon="upload" aria-hidden="true"></span>Export</button>
+        <hr>
+        <button id="settings-button" type="button" class="nav-item"><span data-icon="settings" aria-hidden="true"></span>Settings</button>
+        <hr>
+        <button id="logout-button" type="button" class="nav-item workspace-sign-out"><span data-icon="logout" aria-hidden="true"></span>Sign out</button>
+      </div>
       <nav aria-label="Library">
         <button class="nav-item active" data-filter="all" aria-current="page"><span data-icon="library" aria-hidden="true"></span>All bookmarks <span id="total-count" class="nav-count">0</span></button>
         <button class="nav-item" data-filter="inbox"><span data-icon="inbox" aria-hidden="true"></span>Inbox</button>
         <button class="nav-item" data-filter="favorite"><span data-icon="star" aria-hidden="true"></span>Favorites</button>
         <button class="nav-item" data-filter="unread"><span data-icon="clock" aria-hidden="true"></span>To read</button>
-        <button id="all-tags" class="nav-item"><span data-icon="tag" aria-hidden="true"></span>All tags</button>
+        <button id="all-tags" class="nav-item"><span data-icon="tag" aria-hidden="true"></span>Tags</button>
       </nav>
       <div class="sidebar-section-title"><h2>Collections</h2><button id="add-collection" class="icon-button" title="New collection" aria-label="New collection"><span data-icon="plus" aria-hidden="true"></span></button></div>
       <div id="collections" class="collection-list"></div>
       <div class="sidebar-bottom">
         <div class="sidebar-section-title"><h2>Frequent tags</h2></div>
         <div id="tags" class="tag-cloud"></div>
-        <div class="sidebar-tools"><button id="import-button" class="nav-item"><span data-icon="download" aria-hidden="true"></span>Import</button><button id="export-button" class="nav-item"><span data-icon="upload" aria-hidden="true"></span>Export</button><button id="help-button" class="nav-item"><span data-icon="book" aria-hidden="true"></span>Help</button><button id="settings-button" class="nav-item"><span data-icon="settings" aria-hidden="true"></span>Settings</button><button id="logout-button" class="nav-item"><span data-icon="logout" aria-hidden="true"></span>Sign out</button></div>
+        <div class="sidebar-tools"><button id="help-button" class="nav-item"><span data-icon="book" aria-hidden="true"></span>Help</button></div>
         <a class="nav-item api-documentation-link" href="/api-docs/"><span data-icon="book" aria-hidden="true"></span>API documentation</a>
         <input id="import-file" type="file" accept="application/json,text/html,.json,.html,.htm" hidden>
       </div>
@@ -153,16 +161,16 @@
       <p id="import-progress" class="operation-progress" role="status" hidden>Importing bookmarks…</p>
       <p id="upload-progress" class="operation-progress" role="status" hidden>Uploading file…</p>
       <section id="tags-view" hidden aria-labelledby="tags-title">
-        <div class="library-header"><div><h1 id="tags-title" tabindex="-1">All tags</h1><p class="muted">Browse your tags. Select one to see its bookmarks.</p></div><button id="tags-back" class="button subtle"><span data-icon="arrow-left" aria-hidden="true"></span>Back to library</button></div>
+        <div class="library-header"><div><h1 id="tags-title" tabindex="-1">Tags</h1><p class="muted">Browse your tags. Select one to see its bookmarks.</p></div><button id="tags-back" class="button subtle"><span data-icon="arrow-left" aria-hidden="true"></span>Back to library</button></div>
         <label class="search-box"><span data-icon="search" aria-hidden="true"></span><span class="sr-only">Search tags</span><input id="tags-search" type="search" placeholder="Search tags…" autocomplete="off" maxlength="512"></label>
         <p id="tags-library-context" class="small muted" hidden></p><div class="tags-summary"><span id="tags-results" aria-live="polite"></span><button id="tags-retry" class="text-button">Refresh tags</button></div>
-        <label class="tags-letter-picker">Jump to letter <select id="tags-letter-picker"><option value="">Choose a letter</option></select></label>
+        <label id="tags-letter-control" class="tags-letter-picker">Jump to letter <select id="tags-letter-picker"><option value="">Choose a letter</option></select></label>
         <div id="tags-error" class="error-banner" role="alert" hidden></div>
-        <div class="tags-index-layout">
-          <div id="tags-list" class="tags-directory" aria-label="All tags" aria-busy="false"></div>
+        <div id="tags-index-layout" class="tags-index-layout">
+          <div id="tags-list" class="tags-directory" aria-label="Tags" aria-busy="false"></div>
           <nav id="tags-alphabet" class="tags-alphabet" aria-label="Jump to tag letter"></nav>
         </div>
-        <div id="tags-empty-state" class="empty-state" hidden><p id="tags-empty" class="muted"></p><button id="tags-clear-search" class="button subtle" type="button" hidden>Clear tag search</button></div>
+        <section id="tags-empty-state" class="empty-state" aria-labelledby="tags-empty-title" hidden><div id="tags-empty-art" class="empty-art" data-icon="tag" aria-hidden="true"></div><h2 id="tags-empty-title">No tags yet</h2><p id="tags-empty" class="muted">Add tags when saving or editing a bookmark to group related ideas across collections.</p><div class="reader-actions"><button id="tags-browse-bookmarks" class="button primary" type="button">View all bookmarks</button><button id="tags-clear-search" class="button primary" type="button" hidden>Clear tag search</button></div></section>
         <nav id="tags-pagination" class="pagination" aria-label="Tag pages" hidden><button id="tags-previous" class="button subtle">Previous</button><span id="tags-page-label"></span><button id="tags-next" class="button subtle">Next</button></nav>
       </section>
       <div id="library-view">
@@ -196,7 +204,7 @@
       <div class="results-bar"><div class="bulk-toolbar"><label class="inline-check"><input id="select-page" type="checkbox"><span>Select page</span></label><span id="results-label" aria-live="polite">Loading your library…</span><span id="selected-count" aria-live="polite" hidden>0 selected</span><button id="bulk-open" class="button subtle" hidden disabled>Actions</button><button id="clear-selection" class="text-button" hidden>Clear</button></div><span id="capture-label" class="capture-summary"></span></div>
       <div id="library-error" class="error-banner" role="alert" hidden></div>
       <section id="bookmark-grid" class="bookmark-grid view-list" aria-label="Bookmarks" aria-busy="true"></section>
-      <section id="empty-state" class="empty-state" hidden><div class="empty-art" data-icon="bookmark" aria-hidden="true"></div><h2 id="empty-title">Your library starts here</h2><p id="empty-message" class="muted">Save your first bookmark, or bring your existing bookmarks with you.</p><div class="reader-actions"><button id="empty-add" class="button primary"><span data-icon="plus" aria-hidden="true"></span>Add bookmark</button><button id="empty-import" class="button subtle" type="button">Import bookmarks</button><button id="empty-near-matches" class="button subtle" type="button" hidden>Try near matches</button><button id="empty-reset" class="button subtle" hidden>Clear filters</button></div></section>
+      <section id="empty-state" class="empty-state" aria-labelledby="empty-title" hidden><div id="empty-art" class="empty-art" data-icon="bookmark" aria-hidden="true"></div><h2 id="empty-title">Your library starts here</h2><p id="empty-message" class="muted">Save your first bookmark, or bring your existing bookmarks with you.</p><div class="reader-actions"><button id="empty-add" class="button primary"><span data-icon="plus" aria-hidden="true"></span>Add bookmark</button><button id="empty-import" class="button subtle" type="button">Import bookmarks</button><button id="empty-near-matches" class="button subtle" type="button" hidden>Try near matches</button><button id="empty-reset" class="button subtle" hidden>Clear filters</button></div></section>
       <nav id="pagination" class="pagination" aria-label="Results pages" hidden><button id="previous-page" class="button subtle"><span data-icon="arrow-left" aria-hidden="true"></span>Previous</button><span id="page-label"></span><button id="next-page" class="button subtle">Next<span data-icon="arrow-right" aria-hidden="true"></span></button></nav>
       </div>
       <footer class="main-footer"><span>Pocketmark</span><span><kbd>/</kbd> Search <span class="shortcut-divider">·</span> <kbd>N</kbd> New bookmark</span></footer>
@@ -303,7 +311,7 @@
           <summary>Bookmarks, collections &amp; tags<span data-icon="chevron-right" aria-hidden="true"></span></summary>
           <div class="help-answer">
             <ol><li>Choose <strong>Add bookmark</strong> and paste a URL.</li><li>Pick a collection, or leave it in <strong>Inbox</strong>.</li><li>In <strong>Tags</strong>, choose an existing tag or type a new name and press <kbd>Enter</kbd>.</li></ol>
-            <p>Browse your full index in <strong>All tags</strong>. To edit several bookmarks at once, select their checkboxes, then choose <strong>Actions</strong>.</p>
+            <p>Browse your full index in <strong>Tags</strong>. To edit several bookmarks at once, select their checkboxes, then choose <strong>Actions</strong>.</p>
           </div>
         </details>
         <details>

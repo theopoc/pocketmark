@@ -228,7 +228,31 @@
 
   const mobileNavigation = matchMedia("(max-width: 900px)");
   const navigation = $("navigation-dialog");
-  function closeNavigation() { if (navigation.open) navigation.close(); }
+  const workspaceButton = $("workspace-button");
+  const workspacePopover = $("workspace-popover");
+  function closeWorkspacePopover() {
+    if (workspacePopover.matches(":popover-open")) workspacePopover.hidePopover();
+  }
+  function positionWorkspacePopover() {
+    const anchor = workspaceButton.getBoundingClientRect();
+    const width = Math.min(224, window.innerWidth - 16);
+    workspacePopover.style.left = `${Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8))}px`;
+    workspacePopover.style.top = `${Math.max(8, anchor.bottom + 4)}px`;
+    workspacePopover.style.maxHeight = `${Math.max(44, window.innerHeight - anchor.bottom - 12)}px`;
+  }
+  workspacePopover.addEventListener("beforetoggle", (event) => {
+    workspaceButton.setAttribute("aria-expanded", String(event.newState === "open"));
+    if (event.newState === "open") positionWorkspacePopover();
+  });
+  workspacePopover.addEventListener("click", (event) => {
+    if (event.target.closest("button")) closeWorkspacePopover();
+  }, true);
+  window.addEventListener("resize", closeWorkspacePopover);
+  $("sidebar").addEventListener("scroll", closeWorkspacePopover);
+  function closeNavigation() {
+    closeWorkspacePopover();
+    if (navigation.open) navigation.close();
+  }
   function placeNavigation() {
     closeNavigation();
     (mobileNavigation.matches ? navigation : $("sidebar-slot")).append($("sidebar"));
@@ -241,7 +265,10 @@
     $("close-navigation").focus();
   });
   $("close-navigation").addEventListener("click", closeNavigation);
-  navigation.addEventListener("close", () => $("open-navigation").setAttribute("aria-expanded", "false"));
+  navigation.addEventListener("close", () => {
+    closeWorkspacePopover();
+    $("open-navigation").setAttribute("aria-expanded", "false");
+  });
   navigation.addEventListener("click", (event) => { if (event.target === navigation) closeNavigation(); });
   $("sidebar").addEventListener("click", (event) => {
     const button = event.target.closest("button");
@@ -299,6 +326,7 @@
     $("login-help").hidden = false;
   }
   function showLogin() {
+    closeNavigation();
     if (mfaManagementBusy || (Boolean(settingsSection) && !$("mfa-manage-codes").hidden)) {
       deferredLogin = true;
       settingsSection = "2fa";
@@ -396,7 +424,7 @@
   function updateHeading() {
     const title = currentTitle();
     $("page-title").textContent = title;
-    $("breadcrumb-current").textContent = settingsSection ? "Settings" : showingTags ? "All tags" : title;
+    $("breadcrumb-current").textContent = settingsSection ? "Settings" : showingTags ? "Tags" : title;
     $("tags-library-context").hidden = !state.query;
     $("tags-library-context").textContent = `Your bookmark search “${state.query}” will remain applied when you open a tag.`;
     $("all-tags").classList.toggle("active", showingTags);
@@ -565,6 +593,8 @@
     $("tags-results").textContent = "Loading tags…";
     $("tags-error").hidden = true;
     $("tags-empty-state").hidden = true;
+    $("tags-index-layout").hidden = true;
+    $("tags-letter-control").hidden = true;
     $("tags-list").replaceChildren();
     disableTagAlphabet();
     $("tags-pagination").hidden = true;
@@ -606,8 +636,13 @@
       renderTagAlphabet(result.groups, jump || result.tags[0]?.letter);
       $("tags-results").textContent = `${result.total} tag${result.total === 1 ? "" : "s"}${query ? ` matching “${query}”` : " in your library"}`;
       $("tags-empty-state").hidden = result.total > 0;
+      $("tags-index-layout").hidden = result.total === 0;
+      $("tags-letter-control").hidden = result.total === 0;
       $("tags-clear-search").hidden = !query;
-      $("tags-empty").textContent = query ? "No tags match your search. Try a different name." : "No tags yet. Add tags when saving or editing a bookmark.";
+      $("tags-browse-bookmarks").hidden = !!query;
+      $("tags-empty-art").replaceChildren(icon(query ? "search" : "tag"));
+      $("tags-empty-title").textContent = query ? "No tags found" : "No tags yet";
+      $("tags-empty").textContent = query ? "Try a different name or clear your search to see all tags." : "Add tags when saving or editing a bookmark to group related ideas across collections.";
       $("tags-pagination").hidden = pages <= 1;
       $("tags-page-label").textContent = `Page ${tagsPage} of ${pages}`;
       $("tags-previous").disabled = tagsPage <= 1;
@@ -825,12 +860,13 @@
     $("empty-title").textContent = filtered ? "No bookmarks found" : "Your library starts here";
     const offerNearMatches = !!state.query && !state.fuzzy;
     $("empty-message").textContent = offerNearMatches ? "Try a different search, or look for near matches in titles, URLs, descriptions and tags." : filtered ? "Try a different search or clear your filters to see all bookmarks." : "Save your first bookmark, or bring your existing bookmarks with you.";
-    const emptyView = !state.query && (state.tag ? ["No bookmarks with this tag", "Choose another tag or return to all bookmarks.", false] : {
-      collection: ["This collection is empty", "Add a bookmark to start this collection.", true],
-      inbox: ["Your inbox is empty", "Bookmarks without a collection appear here.", true],
-      favorite: ["No favorites yet", "Select the star on a bookmark to keep it here.", false],
-      unread: ["Nothing left to read", "Mark a bookmark as unread to see it here.", false],
+    const emptyView = !state.query && (state.tag ? ["No bookmarks with this tag", "Choose another tag or return to all bookmarks.", false, "tag"] : {
+      collection: ["This collection is empty", "Add a bookmark to start this collection.", true, "folder"],
+      inbox: ["Your inbox is empty", "Save a bookmark without a collection to keep it here until you’re ready to organize it.", true, "inbox"],
+      favorite: ["No favorites yet", "Select the star on any bookmark to keep your go-to pages close at hand.", false, "star"],
+      unread: ["Nothing left to read", "You’re all caught up. Mark a bookmark as unread to save it for later.", false, "clock"],
     }[state.filter]);
+    $("empty-art").replaceChildren(icon(state.query ? "search" : emptyView?.[3] || "bookmark"));
     if (emptyView) {
       $("empty-title").textContent = emptyView[0];
       $("empty-message").textContent = emptyView[1];
@@ -1091,11 +1127,13 @@
     $("search").focus(); $("empty-near-matches").hidden = true;
     $("fuzzy-search").checked = true; $("fuzzy-search").dispatchEvent(new Event("change"));
   });
-  $("empty-reset").addEventListener("click", () => {
+  function resetLibraryFilters() {
     clearTimeout(searchTimer); state.query = ""; $("search").value = "";
     state.fuzzy = false; $("fuzzy-search").checked = false;
     selectFilter("all"); $("search").focus();
-  });
+  }
+  $("empty-reset").addEventListener("click", resetLibraryFilters);
+  $("tags-browse-bookmarks").addEventListener("click", resetLibraryFilters);
   $("refresh-button").addEventListener("click", () => refresh());
   $("search").addEventListener("input", () => {
     clearTimeout(searchTimer);
@@ -1524,7 +1562,7 @@
     $("settings-navigation").hidden = !active;
     $("sidebar").setAttribute("aria-label", active ? "Settings navigation" : "Library navigation");
     $("app-view").classList.toggle("showing-settings", active);
-    $("breadcrumb-current").textContent = active ? "Settings" : showingTags ? "All tags" : currentTitle();
+    $("breadcrumb-current").textContent = active ? "Settings" : showingTags ? "Tags" : currentTitle();
     document.querySelectorAll("[data-settings-panel]").forEach(panel => { panel.hidden = panel.dataset.settingsPanel !== settingsSection; });
     document.querySelectorAll("[data-settings-section]").forEach(button => {
       const selected = button.dataset.settingsSection === settingsSection;
