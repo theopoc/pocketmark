@@ -5,7 +5,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { securityJourney } from './security.mjs';
-import { openSettings, refreshSessionsBeforeMFA } from './settings.mjs';
+import { openSettings, refreshSessionsBeforeMFA, openWorkspaceActions } from './settings.mjs';
 
 const base = new URL(process.env.E2E_BASE_URL);
 assert.equal(base.hostname, '127.0.0.1', 'E2E requires a disposable loopback instance');
@@ -149,6 +149,7 @@ try {
   assert.equal(await page.evaluate(() => document.activeElement.id), 'main-content', 'library shortcut moves keyboard focus to the main content');
   assert.equal(page.url(), libraryURL, 'library shortcut does not add a history entry');
   const oldSession = (await page.context().cookies()).find(cookie => cookie.name === 'pocketmark');
+  await openWorkspaceActions(page);
   await page.locator('#logout-button').click();
   await page.locator('#login-view').waitFor({ state: 'visible' });
   assert.equal(await page.locator('.skip-link').isVisible(), false, 'library shortcut is unavailable after sign-out');
@@ -442,12 +443,14 @@ try {
     if (await toggle.isVisible()) await toggle.click();
   };
   await card(original).waitFor();
-  await page.locator('#sort-order').selectOption('title_desc');
+  await page.getByRole('button', { name: 'Sort bookmarks: Newest first', exact: true }).click();
+  await page.getByRole('menuitemradio', { name: 'Title Z–A', exact: true }).click();
   await page.waitForURL(url => url.searchParams.get('sort') === 'title_desc');
   await page.reload();
   await card(original).waitFor();
-  assert.equal(await page.locator('#sort-order').inputValue(), 'title_desc', 'descending title sort survives reload');
-  await page.locator('#sort-order').selectOption('newest');
+  await page.getByRole('button', { name: 'Sort bookmarks: Title Z–A', exact: true }).click();
+  assert.equal(await page.getByRole('menuitemradio', { name: 'Title Z–A', exact: true }).getAttribute('aria-checked'), 'true', 'descending title sort survives reload');
+  await page.getByRole('menuitemradio', { name: 'Newest first', exact: true }).click();
   await page.waitForURL(url => !url.searchParams.has('sort'));
   await page.locator('#help-button').click();
   await page.locator('#help-search').fill('retry capture');
@@ -788,6 +791,7 @@ try {
   await card(revised).waitFor({ state: 'detached' });
   await page.reload();
   await page.locator('#empty-title').filter({ hasText: 'No bookmarks found' }).waitFor();
+  await openWorkspaceActions(page);
   await page.locator('#logout-button').click();
   await page.reload();
   await page.locator('#login-view').waitFor({ state: 'visible' });

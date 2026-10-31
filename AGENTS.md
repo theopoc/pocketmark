@@ -25,4 +25,5 @@ Keep commits focused and use Conventional Commits. [CI and release instructions]
 3. Commit with a Conventional Commit message and push the branch to the remote.
 4. Create a pull request targeting `main` (or update the existing PR for the branch). Describe the resulting behavior and validation performed.
 5. Monitor CI for the latest pushed commit. Fix failures, rerun the relevant local checks, and push corrections until every required check, including `CI passed`, is green. Pending, failed, cancelled or skipped required checks do not satisfy this gate.
-6. Before reporting completion, verify that the PR head matches the validated commit and provide the PR link and CI result. If CI cannot complete, report the blocker explicitly. Merge only when requested.
+6. Once every required check passes, verify that the PR head matches the validated commit and squash-merge the development PR automatically without asking for confirmation. Preserve the validated PR title and respect branch protection; if the head changes, repeat the CI gate for the new commit. Release Please version PRs still require an explicit publication request before merging.
+7. Before reporting completion, verify that the PR is merged and provide the PR link and CI result. If CI or merging is blocked, report the blocker explicitly.
