@@ -18,6 +18,17 @@ import (
 
 const testToken = "test-only-token-with-enough-entropy"
 
+// Precomputed only for route fixtures that install a session directly. Keep the
+// real production KDF in authentication tests; each fixture still has its own DB.
+const routeFixtureSalt = "route-fixture-salt-not-a-secret"
+const routeFixtureHash = "c6b86128dd256dc343cd9d40759ece8b0ef4f8e1204138b3fbd4a53072e9c104"
+
+func TestRouteFixturePasswordHash(t *testing.T) {
+	if passwordHash("fixture-password", routeFixtureSalt) != routeFixtureHash {
+		t.Fatal("route fixture must use the production password derivation")
+	}
+}
+
 func newTestServer(t *testing.T, origin string, secure bool) *Server {
 	t.Helper()
 	s, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
@@ -71,8 +82,7 @@ func fixtureOwnerCookie(a *Server) *http.Cookie {
 	ctx := context.Background()
 	account, err := a.Store.Account(ctx)
 	if err != nil {
-		salt := randomSecret()
-		account = store.Account{Username: "fixture", Salt: salt, Hash: passwordHash("fixture-password", salt)}
+		account = store.Account{Username: "fixture", Salt: routeFixtureSalt, Hash: routeFixtureHash}
 		if err = a.Store.SaveAccount(ctx, account); err != nil {
 			panic(err)
 		}

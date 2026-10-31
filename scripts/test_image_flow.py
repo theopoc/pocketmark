@@ -26,7 +26,7 @@ class ImageFlowTests(unittest.TestCase):
     def test_source_tests_and_builds_are_separate(self):
         tests, build = job(CI, "test"), job(CI, "build")
         self.assertIn("make test TEST_FLAGS=", tests)
-        self.assertIn("make test-extension", tests)
+        self.assertIn("make test-extension", job(CI, "extension"))
         self.assertIn("python3 -m unittest", tests)
         self.assertNotIn("make build", tests)
         self.assertIn("make build", build)
@@ -48,3 +48,21 @@ class ImageFlowTests(unittest.TestCase):
         self.assertIn("scripts/validated_ci.py", release)
         self.assertIn("run-id: ${{ needs.verify.outputs.run_id }}", release)
         self.assertNotIn("uses: ./.github/workflows/ci.yml", release)
+
+    def test_container_packages_exact_validated_artifact_without_recompiling(self):
+        build = job(CONTAINER, "build")
+        self.assertIn("run-id: ${{ needs.prepare.outputs.run_id }}", build)
+        self.assertIn("digest-mismatch: error", build)
+        self.assertIn("name: linux-${{ matrix.arch }}", build)
+        self.assertIn("scripts/prepare_image.py", build)
+        self.assertIn("context: release-image", build)
+        self.assertNotIn("context: release-source", build)
+        recipe = (ROOT / "Dockerfile.release").read_text()
+        self.assertNotIn("go build", recipe)
+        self.assertNotIn("golang:", recipe)
+        self.assertIn("COPY --chmod=0755 pocketmark", recipe)
+        source = (ROOT / "Dockerfile").read_text()
+        baseline = re.search(r"^go (\S+)", (ROOT / "go.mod").read_text(), re.M)[1]
+        self.assertIn(f"golang:{baseline}-alpine", source)
+        # Runtime behavior must remain identical for source and artifact builds.
+        self.assertEqual(source.split("USER 10001:10001", 1)[1], recipe.split("USER 10001:10001", 1)[1])

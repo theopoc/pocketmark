@@ -28,7 +28,7 @@ class ContainerReleaseTests(unittest.TestCase):
             RELEASE.prepare("v0.1.0")
             wait.assert_called_once_with(REVISION)
             emit.assert_called_once_with(tag="v0.1.0", revision=REVISION,
-                                         image="ghcr.io/example/pocketmark")
+                                         image="ghcr.io/example/pocketmark", run_id="123")
 
     def test_only_published_stable_releases_can_start_docker(self):
         release = {"tag_name": "v0.1.0", "draft": False, "prerelease": False, "published_at": "synthetic"}
