@@ -63,13 +63,13 @@
     if (!wasSettings && restored.settingsSection) libraryReturnScroll = history.state?.pocketmarkLibraryScroll || 0;
     settingsSection = restored.settingsSection;
     if (wasSettings && !settingsSection) clearSettings();
-    renderSettings();
+    renderSettings(!initial);
     const scroll = history.state?.pocketmarkScroll || 0;
     const previous = workspace.routeSearch(route());
     Object.assign(state, { filter: restored.filter, collection: restored.collection, tag: restored.tag, query: restored.query, page: restored.page, sort: restored.sort, fuzzy: restored.fuzzy });
     showingTags = restored.showingTags; tagsPage = restored.tagsPage;
     $("search").value = state.query; $("tags-search").value = restored.tagsQuery;
-    $("sort-order").value = state.sort; $("fuzzy-search").checked = state.fuzzy;
+    syncSortMenu(); closeSortMenu(); $("fuzzy-search").checked = state.fuzzy;
     $("tags-view").hidden = !showingTags; $("library-view").hidden = showingTags;
     if (!initial && previous !== workspace.routeSearch(route())) bulk.clear();
     reader.close();
@@ -145,6 +145,7 @@
     plus: ["M12 5v14M5 12h14"], close: ["m6 6 12 12M6 18 18 6"],
     search: ["M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0", "m15 15 6 6"],
     refresh: ["M20 7a9 9 0 1 0 1 9", "M20 2v6h-6"],
+    sort: ["M3 5h10M3 10h7M3 15h4", "M17 4v16m-4-4 4 4 4-4"],
     grid: ["M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"],
     list: ["M9 5h12M9 12h12M9 19h12M3 5h.01M3 12h.01M3 19h.01"],
     folder: ["M3 7V4h6l2 3h10v13H3V7Z"],
@@ -1220,7 +1221,51 @@
     $("collection-name").focus();
   }
 
-  $("sort-order").addEventListener("change", () => { state.sort = $("sort-order").value; state.page = 1; commitRoute(); refresh(); });
+  const sortOptions = [...$("sort-menu").querySelectorAll("[data-sort]")];
+  function syncSortMenu() {
+    for (const option of sortOptions) option.setAttribute("aria-checked", String(option.dataset.sort === state.sort));
+    const label = `Sort bookmarks: ${sortOptions.find((option) => option.dataset.sort === state.sort).textContent.trim()}`;
+    $("sort-toggle").setAttribute("aria-label", label);
+    $("sort-toggle").title = label;
+  }
+  function closeSortMenu(focus = false) {
+    $("sort-menu").hidden = true;
+    $("sort-toggle").setAttribute("aria-expanded", "false");
+    if (focus) $("sort-toggle").focus();
+  }
+  function openSortMenu() {
+    $("sort-menu").hidden = false;
+    $("sort-toggle").setAttribute("aria-expanded", "true");
+    sortOptions.find((option) => option.dataset.sort === state.sort).focus();
+  }
+  $("sort-toggle").addEventListener("click", () => { if ($("sort-menu").hidden) openSortMenu(); else closeSortMenu(); });
+  $("sort-toggle").addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); openSortMenu(); }
+  });
+  $("sort-menu").addEventListener("click", (event) => {
+    const option = event.target.closest("[data-sort]");
+    if (!option) return;
+    closeSortMenu(true);
+    if (state.sort === option.dataset.sort) return;
+    state.sort = option.dataset.sort; state.page = 1; syncSortMenu(); commitRoute(); refresh();
+  });
+  $("sort-menu").addEventListener("keydown", (event) => {
+    const index = sortOptions.indexOf(document.activeElement);
+    let next;
+    if (event.key === "ArrowDown") next = (index + 1) % sortOptions.length;
+    if (event.key === "ArrowUp") next = (index - 1 + sortOptions.length) % sortOptions.length;
+    if (event.key === "Home") next = 0;
+    if (event.key === "End") next = sortOptions.length - 1;
+    if (next !== undefined) { event.preventDefault(); sortOptions[next].focus(); }
+    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeSortMenu(true); }
+    if (event.key === "Tab") { closeSortMenu(true); if (event.shiftKey) event.preventDefault(); }
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (!$("sort-menu").hidden && !$("sort-menu").contains(event.target) && !$("sort-toggle").contains(event.target)) closeSortMenu();
+  });
+  document.addEventListener("focusin", (event) => {
+    if (!$("sort-menu").hidden && !$("sort-menu").contains(event.target) && event.target !== $("sort-toggle")) closeSortMenu();
+  });
   $("fuzzy-search").addEventListener("change", () => { state.fuzzy = $("fuzzy-search").checked; state.page = 1; commitRoute(); refresh(); });
   $("upload-file-button").addEventListener("click", () => $("library-file").click());
   $("library-file").addEventListener("change", async () => {
@@ -1467,8 +1512,9 @@
     document.querySelectorAll("[data-settings-back]").forEach(button => { button.disabled = mfaManagementBusy; });
     $("settings-section-picker").disabled = mfaManagementBusy || deferredLogin;
   }
-  function renderSettings() {
+  function renderSettings(animate = false) {
     const active = Boolean(settingsSection);
+    const entering = active && $("settings-page").hidden;
     $("settings-page").hidden = !active;
     $("library-content").hidden = active;
     $("library-navigation").hidden = active;
@@ -1484,6 +1530,13 @@
     });
     if (active) $("settings-section-picker").value = settingsSection;
     syncSettingsNavigation();
+    if (!active) {
+      [$("settings-page"), $("settings-navigation")].forEach(element => activeMotion.get(element)?.cancel());
+    } else if (animate && entering) {
+      // The rail changes context as the settings workspace settles beside it.
+      move($("settings-navigation"), [{ opacity: .75 }, { opacity: 1 }]);
+      move($("settings-page"), [{ opacity: .75, transform: "translateX(12px)" }, { opacity: 1, transform: "translateX(0)" }], 220);
+    }
   }
   function focusSettings() {
     const heading = document.querySelector(`[data-settings-panel="${settingsSection}"] h2`);

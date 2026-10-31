@@ -207,6 +207,8 @@ Opening a bookmark shows its title, source URL and Saved formats before any arti
 
 Settings is a workspace page. Its seven section destinations replace library navigation in the desktop rail: API keys, 2FA, Sessions, Backup, Password sign-in, Browser bookmark sync, and Mobile & browser. One section is visible at a time; a query parameter preserves the section across reload and browser history. Back to library restores its filters and scroll position. At 900px and below, an inline section selector and Back to library button replace the settings rail. Settings retains the workspace theme and compact form vocabulary. Authentication changes block departure while pending; displayed recovery codes survive session expiration until explicitly dismissed by returning to the library. Leaving Settings clears credentials held in the page.
 
+Entering Settings settles the workspace 12px from the right over 220ms with a light fade, paired with a 180ms navigation fade. Initial loads and section changes remain still; leaving cancels the entrance. Focus and controls update immediately. Reduced motion skips both effects.
+
 ### Reader and dialogs
 
 The bookmark editor offers an unchecked **Save an HTML copy** option for website bookmarks. Capture starts after metadata is saved, reports partial failure without undoing the bookmark, and offers a capture-only retry. Standalone files hide this option. Saved files in the reader focus on attachments and previews; PDF capture stays in the Chrome extension.
