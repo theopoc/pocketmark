@@ -1,7 +1,7 @@
 "use strict";
 
 ((root) => {
-  function create({ api, toast, onChange, onSelectionChange, fillCollections, defaultCollection, onSessionExpired }, browser = root) {
+  function create({ api, toast, onChange, onSelectionChange, fillCollections, defaultCollection, onSessionExpired, confirmDelete }, browser = root) {
     const document = browser.document, $ = id => document.getElementById(id);
     // Entries carry identity, so a remove/reselect is newer than an in-flight action.
     const selected = new Map();
@@ -75,11 +75,11 @@
       const current = session, action = $("bulk-action").value;
       if (!dialog.open || !current || current.pending || !actions[action] || !current.entries.length) return;
       const ids = current.entries.map(([id]) => id);
-      if (action === "delete" && !browser.confirm(`Delete ${ids.length} selected bookmarks and their saved content?`)) return;
       const body = { ids, action, collectionId: $("bulk-collection").value ? Number($("bulk-collection").value) : null, tags: [...new Set($("bulk-tags").value.split(",").map(tag => tag.trim()).filter(Boolean))], value: $("bulk-value").value === "true" };
       current.pending = true; updateAction(); $("bulk-error").textContent = "";
       const active = () => session === current && dialog.open;
       try {
+        if (action === "delete" && (!await confirmDelete(ids.length) || !active())) return;
         await api("/api/links/bulk", { method: "POST", body: JSON.stringify(body) });
         // Only the dialog that submitted this operation may consume its selection.
         if (active()) {
