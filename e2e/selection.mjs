@@ -79,7 +79,6 @@ export async function selectionJourney(page, screenshots) {
     };
     window.restoreSelectionAnimate = () => { Element.prototype.animate = animate; };
   });
-  await cards.nth(0).getByRole('button', { name: /^Actions for / }).click();
   await cards.nth(0).getByRole('button', { name: /^Delete bookmark:/ }).click();
   await page.locator('#delete-bookmark-confirm').click();
   await page.locator('.bookmark-exit-layer').waitFor();

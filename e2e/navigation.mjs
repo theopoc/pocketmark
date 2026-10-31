@@ -40,9 +40,7 @@ export async function dialogDismissalJourney(page) {
       await dialog.evaluate(async node => { await Promise.all(node.getAnimations().map(animation => animation.finished.catch(() => {}))); });
       const bounds = await dialog.boundingBox();
       assert.ok(bounds, `${id}: dialog is visible at ${width}px`);
-      // The root may reserve a scrollbar gutter, which receives no backdrop events.
-      const usableRight = await page.locator('body').evaluate(node => node.getBoundingClientRect().right);
-      const outside = bounds.x > 1 ? { x: 0, y: 0 } : bounds.x + bounds.width < usableRight - 1 ? { x: bounds.x + bounds.width + (usableRight - bounds.x - bounds.width) / 2, y: 0 } : null;
+      const outside = bounds.x > 1 ? { x: 0, y: 0 } : bounds.x + bounds.width < width - 1 ? { x: width - 1, y: 0 } : null;
       if (!outside) {
         await dialog.evaluate(node => new Promise(resolve => { node.addEventListener('close', resolve, { once: true }); node.close(); }));
         continue;
@@ -131,11 +129,7 @@ export async function navigationJourney(page) {
     assert.equal(await page.locator('#open-navigation').getAttribute('aria-expanded'), 'false');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'open-navigation');
     await openNavigation(page);
-    // Aim within the backdrop, away from the reserved scrollbar gutter.
-    await page.locator('#navigation-dialog').evaluate(async node => { await Promise.all(node.getAnimations().map(a => a.finished.catch(() => {}))); });
-    const drawer = await page.locator('#navigation-dialog').boundingBox();
-    const usableRight = await page.locator('body').evaluate(node => node.getBoundingClientRect().right);
-    await page.mouse.click((drawer.x + drawer.width + usableRight) / 2, 400);
+    await page.mouse.click(width - 5, 400);
     await page.locator('#navigation-dialog').waitFor({ state: 'hidden' });
     await openWorkspaceActions(page);
     await page.keyboard.press('Escape');
