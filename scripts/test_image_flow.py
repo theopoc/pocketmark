@@ -26,7 +26,12 @@ class ImageFlowTests(unittest.TestCase):
     def test_source_tests_and_builds_are_separate(self):
         tests, build = job(CI, "test"), job(CI, "build")
         self.assertIn("make test TEST_FLAGS=", tests)
-        self.assertIn("make test-extension", tests)
+        self.assertNotIn("make test-extension", tests)
+        extension = job(CI, "extension")
+        self.assertIn("make test-extension", extension)
+        self.assertIn("test_package_extension.py", extension)
+        self.assertNotIn("actions/setup-go", extension)
+        self.assertNotIn("matrix:", extension)
         self.assertIn("python3 -m unittest", tests)
         self.assertNotIn("make build", tests)
         self.assertIn("make build", build)
