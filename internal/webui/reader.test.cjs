@@ -101,6 +101,8 @@ test("opening a later bookmark ignores reversed document and section responses",
   assert.equal(other.get("reader-title").textContent, "Page 2");
   assert.doesNotMatch(other.get("annotation-list").textContent, /Old/);
   assert.doesNotMatch(other.get("asset-list").textContent, /old.html/);
+  assert.equal(other.get("reader-format-html-status").textContent, "Not saved");
+  assert.equal(other.get("reader-format-html").disabled, true);
 });
 
 test("closing before a response and queued close events cannot repopulate a new reader", async () => {
@@ -338,7 +340,7 @@ test("capture completion cannot overwrite a different reader's status", async ()
   const pending = fire(env.get("reader-capture"), "click");
   await env.reader.open(2);
   capture.resolve({ ok: true }); await pending;
-  assert.equal(env.get("reader-status").textContent, "Captured text");
+  assert.equal(env.get("reader-status").textContent, "");
   assert.equal(env.get("reader-recheck").hidden, true);
   assert.equal(env.get("reader-capture").disabled, false);
 });
@@ -581,12 +583,22 @@ test("the shipped script order and worker cache include the reader without priva
 });
 
 
-test("the article opens directly; optional notebook navigation preserves reading and notes", async () => {
+test("saved formats open first; optional notebook navigation preserves reading and notes", async () => {
   const env = setup();
   await env.reader.open(1);
   assert.equal(env.get("reader-notebook").hidden, true);
   assert.equal(env.get("reader-original").href, "https://example.com/1");
   assert.equal(env.get("reader-original").hidden, false);
+  assert.equal(env.get("reader-formats").hidden, false);
+  assert.equal(env.get("reader-content").hidden, true);
+  assert.equal(env.get("reader-layout").hidden, true);
+  assert.equal(env.headCalls.length, 0, "opening a bookmark must not load a preview automatically");
+  for (const format of ["html", "image", "pdf"]) {
+    assert.equal(env.get(`reader-format-${format}`).disabled, true);
+    assert.equal(env.get(`reader-format-${format}-status`).textContent, "Not saved");
+  }
+  env.get("reader-text-mode").click();
+  assert.equal(env.get("reader-content").hidden, false);
   env.get("reader-text-panel").scrollTop = 350;
   env.get("reader-notebook-toggle").click();
   assert.equal(env.get("reader-notebook").hidden, false);
@@ -620,7 +632,77 @@ test("the article opens directly; optional notebook navigation preserves reading
   assert.equal(env.get("reader-text-panel").scrollTop, 350);
   await env.reader.open(2);
   assert.equal(env.get("reader-notebook").hidden, true);
+  assert.equal(env.get("reader-content").hidden, true);
   selected(0);
+});
+
+test("format shortcuts open the newest copy and retain earlier copies of that format", async () => {
+  const env = setup();
+  env.records.set(1, link(1, { status: "failed", archiveAvailable: true }));
+  env.assets.set(1, [
+    { id: 8, name: "old.html", mediaType: "text/html", size: 100 },
+    { id: 11, name: "new.html", mediaType: "text/html", size: 3 * 1024 * 1024 },
+    { id: 9, name: "page.png", mediaType: "image/png", size: 100 },
+    { id: 10, name: "page.pdf", mediaType: "application/pdf", size: 100 },
+  ]);
+  await env.reader.open(1);
+  assert.equal(env.get("reader-content").hidden, true);
+  assert.equal(env.get("reader-format-html-status").textContent, "Saved · 2 copies");
+  assert.equal(env.get("reader-archive").href, "/api/links/1/archive");
+  for (const [format, latest, copies, source] of [["html", "11", 2, "/asset-preview.html"], ["image", "9", 1, "/api/assets/9/view"], ["pdf", "10", 1, "/api/assets/10/view"]]) {
+    assert.equal(env.get(`reader-format-${format}`).disabled, false, "failed page capture must not hide successful files");
+    env.get(`reader-format-${format}`).click();
+    await tick();
+    assert.equal(env.get("asset-viewer-select").value, latest);
+    assert.equal(env.get("asset-viewer-select").children.length, copies);
+    assert.equal(env.get("asset-viewer-content").children[0].src, source);
+    if (format === "html") {
+      env.get("asset-viewer-select").value = "8";
+      await fire(env.get("asset-viewer-select"), "change");
+      assert.equal(env.get("asset-viewer-download").href, "/api/assets/8");
+    }
+    env.get("asset-viewer-close").click();
+    await tick();
+  }
+});
+
+test("basic HTML archives remain available without attachments and use the sandboxed reader", async () => {
+  const env = setup();
+  env.records.set(1, link(1, { archiveAvailable: true }));
+  await env.reader.open(1);
+  assert.equal(env.get("reader-format-html-status").textContent, "Saved");
+  env.get("reader-format-html").click();
+  await tick();
+  const frame = env.get("asset-viewer-content").children[0];
+  assert.equal(frame.src, "/api/links/1/reader");
+  assert.equal(frame.attributes.sandbox, "");
+  assert.equal(env.get("asset-viewer-download").href, "/api/links/1/archive");
+  assert.match(env.get("asset-viewer-hint").textContent, /simplified/);
+});
+
+test("format states distinguish loading and failed checks from absent files, with a direct retry", async () => {
+  const files = deferred();
+  let failing = true;
+  const env = setup({ handler: (path, options, fallback) => path.endsWith("/assets") && failing ? files.promise : fallback() });
+  const opening = env.reader.open(1);
+  await tick();
+  assert.equal(env.get("reader-format-pdf-status").textContent, "Checking…");
+  files.reject(Error("Files unavailable"));
+  await opening;
+  assert.equal(env.get("reader-format-pdf-status").textContent, "Unknown");
+  assert.equal(env.get("reader-formats-error").hidden, false);
+  assert.equal(env.get("reader-formats-retry").hidden, false);
+  failing = false;
+  env.assets.set(1, [{ id: 8, name: "document.pdf", mediaType: "application/pdf", size: 100 }]);
+  env.get("reader-formats-retry").click();
+  await tick();
+  assert.equal(env.get("reader-format-pdf-status").textContent, "Saved");
+  assert.equal(env.get("reader-format-html-status").textContent, "Not saved");
+  assert.equal(env.get("reader-formats-error").hidden, true);
+  assert.equal(env.get("reader-formats-retry").hidden, true);
+  await env.reader.open(2);
+  assert.equal(env.get("reader-format-pdf-status").textContent, "Not saved");
+  assert.equal(env.get("reader-format-pdf").disabled, true);
 });
 
 test("reading a saved HTML file closes the notebook and focuses the article", async () => {

@@ -17,6 +17,13 @@
     let viewerRequest = 0;
     let retryReaderID = null;
     let activeSection = "reader-notes-form";
+    let readingView = false;
+    let assetsState = "loading";
+    const formats = [
+      { key: "html", name: "HTML", matches: asset => asset.mediaType === "text/html" },
+      { key: "image", name: "Screenshot", matches: asset => ["image/png", "image/jpeg", "image/gif", "image/webp"].includes(asset.mediaType) },
+      { key: "pdf", name: "PDF", matches: asset => asset.mediaType === "application/pdf" },
+    ];
     const highlightAnchors = new Map();
     const sectionButtons = [...document.querySelectorAll("[data-reader-section]")];
     function selectSection(section) {
@@ -93,7 +100,7 @@
       annotationSession++;
       state.annotationDraft = null;
       if ($("annotation-dialog").open) $("annotation-dialog").close();
-      if (!recheck) { $("reader-options").open = false; activeSection = "reader-notes-form"; showNotebook(false); }
+      if (!recheck) { readingView = false; $("reader-options").open = false; activeSection = "reader-notes-form"; showNotebook(false); }
       $("reader-notebook-toggle").disabled = true;
       $("reader-text-panel").scrollTop = 0;
       $("reader-dialog").scrollTop = 0;
@@ -102,6 +109,11 @@
       layoutRequest++;
       state.reading = null;
       readerAssets = []; readerLayoutURL = "";
+      assetsState = "loading";
+      $("reader-formats").hidden = true;
+      $("reader-formats-error").hidden = true;
+      $("reader-formats-retry").hidden = true;
+      $("reader-formats-retry").disabled = false;
       state.readerSelection = null;
       $("reader-title").textContent = "Opening your bookmark…";
       $("reader-domain").textContent = "";
@@ -141,10 +153,12 @@
         const link = await api(`/api/links/${id}`);
         if (!isCurrent(request)) return;
         state.reading = link;
-        $("reader-content").hidden = false;
+        $("reader-content").hidden = !readingView;
+        $("reader-formats").hidden = false;
+        renderFormats();
         for (const id of ["reader-section-nav", "reader-reading-bar", "annotations-section", "reader-files"]) $(id).hidden = false;
         $("reader-title").textContent = link.title || link.url;
-        $("reader-domain").textContent = link.type === "file" ? "Saved file" : domain(link.url);
+        $("reader-domain").textContent = link.type === "file" ? "Saved file" : safeURL(link.url) || domain(link.url);
         $("reader-capture").hidden = link.type === "file";
         const url = safeURL(link.url);
         $("reader-original").hidden = !url;
@@ -153,7 +167,7 @@
         $("reader-archive").href = `/api/links/${id}/archive`;
         $("reader-archive").setAttribute("download", "");
         $("reader-content").textContent = link.content || emptyReaderText();
-        $("reader-status").textContent = { ready: link.content ? "Captured text" : "No readable capture", failed: `Capture failed. ${workspace.captureFailure(link.error)} Retry the capture, or attach a snapshot under Files.`, pending: "Capture queued. You can check its status here.", processing: "Capture in progress. You can check its status here." }[link.status] || "";
+        $("reader-status").textContent = { failed: `Page capture failed. ${workspace.captureFailure(link.error)} Saved files remain available.`, pending: "Capture queued. You can check its status here.", processing: "Capture in progress. You can check its status here." }[link.status] || "";
         $("reader-retry-capture").hidden = link.status !== "failed" || link.type === "file";
         $("reader-recheck").hidden = !["pending", "processing"].includes(link.status);
         const draft = drafts.get(draftKey(link));
@@ -190,6 +204,11 @@
       $(section + "-error").textContent = `Could not load ${section === "assets" ? "saved files" : "highlights"}. ${error.message}`;
       $(section + "-error").hidden = false; $(section + "-retry").hidden = false;
       if (section === "assets") {
+        assetsState = "error";
+        renderFormats();
+        $("reader-formats-error").textContent = "Could not check saved formats. Retry to see which copies are available.";
+        $("reader-formats-error").hidden = false;
+        $("reader-formats-retry").hidden = false;
         $("reader-mode-hint").textContent = "Could not check saved HTML. Retry saved files below; text view remains available.";
       }
     }
@@ -197,10 +216,12 @@
       if (!state.reading) return;
       const id = state.reading.id, request = state.readerRequest;
       $(section + "-retry").disabled = true;
+      if (section === "assets") $("reader-formats-retry").disabled = true;
       try { await (section === "assets" ? loadAssets(id, request) : loadAnnotations(id, request)); if (isCurrent(request)) { $(section + "-error").hidden = true; $(section + "-retry").hidden = true; } }
       catch (error) { if (isCurrent(request)) readerSectionError(section, error); }
-      finally { if (isCurrent(request)) $(section + "-retry").disabled = false; }
+      finally { if (isCurrent(request)) { $(section + "-retry").disabled = false; if (section === "assets") $("reader-formats-retry").disabled = false; } }
     });
+    $("reader-formats-retry").addEventListener("click", () => $("assets-retry").click());
     $("reader-recheck").addEventListener("click", () => {
       if (!state.reading) return;
       $("reader-title").tabIndex = -1;
@@ -467,6 +488,7 @@
     });
     $("reader-size").addEventListener("change", () => { $("reader-content").style.fontSize = `${$("reader-size").value}px`; });
     function readerMode(layout) {
+      readingView = true;
       state.readerSelection = null;
       $("reader-layout").hidden = !layout; $("reader-content").hidden = layout;
       if (!layout) $("reader-layout").removeAttribute("src");
@@ -480,7 +502,7 @@
       readerLayoutURL = snapshot.url;
       $("reader-layout-mode").disabled = !snapshot.url;
       $("reader-mode-hint").textContent = snapshot.message;
-      if (!snapshot.url) readerMode(false);
+      if (!snapshot.url && readingView) readerMode(false);
     }
     $("reader-layout-mode").addEventListener("click", async () => {
       if (!readerLayoutURL) return;
@@ -501,28 +523,52 @@
     });
     $("reader-text-mode").addEventListener("click", () => { layoutRequest++; readerMode(false); readerAvailability(); });
     const previewable = (asset) => ["text/html", "application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp"].includes(asset.mediaType);
+    function previewAssets() {
+      const assets = readerAssets.filter(previewable).sort((a, b) => b.id - a.id);
+      // The structural endpoint prefers HTML attachments, so only use it for
+      // the basic archive when no HTML attachment exists. Its source download
+      // remains available under Reading options even when attachments exist.
+      if (state.reading?.archiveAvailable && !assets.some(asset => asset.mediaType === "text/html")) assets.push({ id: 0, name: "Basic HTML capture", mediaType: "text/html", basicArchive: true });
+      return assets;
+    }
+    function renderFormats() {
+      for (const format of formats) {
+        const copies = previewAssets().filter(format.matches);
+        const button = $("reader-format-" + format.key);
+        button.disabled = !copies.length;
+        button.setAttribute("data-saved", String(!!copies.length));
+        const status = copies.length ? (copies.length > 1 ? `Saved · ${copies.length} copies` : "Saved") : assetsState === "loading" ? "Checking…" : assetsState === "error" ? "Unknown" : "Not saved";
+        $("reader-format-" + format.key + "-status").textContent = status;
+        button.setAttribute("aria-label", copies.length ? `Open saved ${format.name}` : `${format.name}: ${status}`);
+      }
+    }
+    for (const format of formats) $("reader-format-" + format.key).addEventListener("click", () => {
+      const copies = previewAssets().filter(format.matches);
+      if (copies.length) openAsset(copies[0], copies);
+    });
     $("asset-viewer-close").addEventListener("click", closeViewer);
     $("asset-viewer").addEventListener("close", () => { if (!$("asset-viewer").open) closeViewer(); });
     $("asset-viewer-select").addEventListener("change", () => showAsset(Number($("asset-viewer-select").value)));
     $("asset-viewer-retry").addEventListener("click", () => showAsset(Number($("asset-viewer-select").value)));
 
     async function showAsset(assetID) {
-      const asset = readerAssets.find((item) => item.id === assetID);
+      const asset = previewAssets().find((item) => item.id === assetID);
       if (!asset || !previewable(asset)) return;
       const request = ++viewerRequest, readingRequest = state.readerRequest;
       const current = () => request === viewerRequest && isCurrent(readingRequest) && $("asset-viewer").open;
-      const url = `/api/assets/${asset.id}/view`;
+      const url = asset.basicArchive ? `/api/links/${state.reading.id}/reader` : `/api/assets/${asset.id}/view`;
       $("asset-viewer-content").replaceChildren();
       $("asset-viewer-select").value = String(asset.id);
-      $("asset-viewer-download").href = `/api/assets/${asset.id}`;
+      $("asset-viewer-download").href = asset.basicArchive ? `/api/links/${state.reading.id}/archive` : `/api/assets/${asset.id}`;
       $("asset-viewer-status").textContent = "Opening saved file…";
       $("asset-viewer-retry").hidden = true;
-      $("asset-viewer-hint").textContent = asset.mediaType === "text/html"
+      $("asset-viewer-hint").textContent = asset.basicArchive ? "Basic HTML capture shown as a simplified page. Download the original HTML to keep the saved source."
+        : asset.mediaType === "text/html"
         ? "Saved appearance with embedded styles, images and fonts. Scripts, external resources and navigation are blocked; missing resources stay missing."
         : asset.mediaType === "application/pdf" ? "PDF preview uses your browser’s built-in viewer. If unavailable, download the file to open it." : "Scroll to explore the saved image.";
       const failed = (message) => { if (current()) { $("asset-viewer-status").textContent = message; $("asset-viewer-retry").hidden = false; } };
       try {
-        const html = asset.mediaType === "text/html";
+        const html = asset.mediaType === "text/html" && !asset.basicArchive;
         // Read the actual HTML response so preparation/busy/auth errors cannot
         // be mistaken for a successful iframe load. Rendering stays client-side.
         const response = await browser.fetch(url, { method: html ? "GET" : "HEAD", credentials: "same-origin" });
@@ -536,6 +582,7 @@
         if (image) content.alt = asset.name;
         else {
           content.title = asset.name;
+          if (asset.basicArchive) content.setAttribute("sandbox", "");
           // HTML is placed in the trusted shell's nested opaque sandbox. The
           // shell's blob-only frame policy also prevents self-navigation to HTTP.
         }
@@ -554,11 +601,11 @@
     browser.addEventListener("message", (event) => {
       const frame = $("asset-viewer-content").children[0];
       if (event.origin !== browser.location.origin || event.source !== frame?.contentWindow || event.data?.type !== "pocketmark-preview-ready" || !$("asset-viewer").open) return;
-      const asset = readerAssets.find((item) => String(item.id) === $("asset-viewer-select").value);
+      const asset = previewAssets().find((item) => String(item.id) === $("asset-viewer-select").value);
       if (asset) $("asset-viewer-status").textContent = asset.name;
     });
-    function openAsset(asset) {
-      $("asset-viewer-select").replaceChildren(...readerAssets.filter(previewable).map((item) => {
+    function openAsset(asset, copies = previewAssets()) {
+      $("asset-viewer-select").replaceChildren(...copies.map((item) => {
         const option = el("option", "", item.name); option.value = String(item.id); return option;
       }));
       if (!$("asset-viewer").open) $("asset-viewer").showModal();
@@ -583,6 +630,10 @@
       const assets = await api(`/api/links/${id}/assets`);
       if (!isCurrent(request) || state.reading?.id !== id) return;
       readerAssets = assets || [];
+      assetsState = "ready";
+      renderFormats();
+      $("reader-formats-error").hidden = true;
+      $("reader-formats-retry").hidden = true;
       readerAvailability();
       $("asset-list").replaceChildren();
       for (const asset of assets || []) {
