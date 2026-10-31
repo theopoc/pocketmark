@@ -79,7 +79,7 @@ Hooks run on staged files before each commit. The first run creates isolated hoo
 | Gofmt and JavaScript syntax | Fast checks for the Go server, embedded UI and extension, without new frontend dependencies. |
 | Gitleaks | Scan the staged diff for secrets with redacted output before they enter history. |
 
-Full Go vet/race tests, extension tests, builds, actionlint and container tests stay in CI to keep commits fast and avoid requiring Docker or release tools for every edit. Hooks complement those gates and do not replace them. Run `pre-commit autoupdate` deliberately and review version changes.
+Full Go vet/race tests, extension tests, builds, actionlint and container tests stay outside the hooks to keep commits fast and avoid requiring Docker or release tools for every edit. Run the applicable local checks required by [AGENTS.md](../AGENTS.md#verification-and-delivery); hooks complement local validation and CI rather than replacing them. Run `pre-commit autoupdate` deliberately and review version changes.
 
 CI uses the [official Gitleaks action](https://github.com/gitleaks/gitleaks-action), pinned to a full commit SHA, with engine version 8.30.1. It selects the action's `workflow_dispatch` scan mode explicitly for every caller, scanning the complete checked-out history at the selected ref rather than the event's PR/push range. Comments, SARIF uploads and summaries are disabled; output remains redacted and repository permissions remain read-only. Personal-account repositories do not require a Gitleaks action license; organization-owned repositories require `GITLEAKS_LICENSE`.
 
@@ -89,7 +89,13 @@ Use short-lived branches from current `main`, one focused PR per change, and a C
 
 The repository settings observed on 2026-10-23 allow only squash merges and delete merged branches. This audit set `squash_merge_commit_title` to `PR_TITLE`, so GitHub proposes the validated PR title even for a one-commit PR; the maintainer can still edit it at merge time. The active **Protect main** ruleset requires a PR, resolved review threads, linear history, and `CI passed` from the GitHub Actions app (integration ID 15368), with the branch up to date. It blocks deletion and force pushes, with no bypass actors. Zero required human approvals is intentional for personal maintenance; review the diff and evidence before merging. A repository setting, rather than workflow YAML, enforces this policy. Do not merge on an earlier commit's green checks. [GitHub required-check semantics](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks).
 
-Merging remains an explicit maintainer action except for eligible Dependabot minor and patch PRs described below. The PR template records resulting behavior, compatibility impact, checks and secret scanning. For a normal PR, merging updates `main` and may update a Release Please PR. Merging the generated version PR authorizes publication: review its version and notes before doing so. Release tags matching `v*` cannot be updated or deleted under the separate active tag ruleset.
+Follow the [development workflow in AGENTS.md](../AGENTS.md#development-workflow) for every development task, including documentation changes. Before delivery, launch a code-review subagent on the complete task diff from its merge-base with refreshed `origin/main`, including uncommitted changes and newly added files. Apply its recommendations, rerun affected checks and have the corrections reviewed until no actionable findings remain. Record the review outcome, any rejected recommendation with its concrete rationale, resulting behavior, compatibility impact, checks and secret scanning in the PR.
+
+Keep the branch up to date with `origin/main` and resolve merge conflicts autonomously, reading both sides to preserve intended behavior and unrelated changes. Verify that no conflict markers remain. Conflict resolutions and subsequent development changes require renewed subagent review and applicable local checks before pushing, followed by CI on the latest pushed commit. Fix CI failures and repeat these gates for corrections.
+
+Once subagent review is complete and every required check, including `CI passed`, succeeds, the development agent verifies that the PR is conflict-free, up to date and still at the validated head, then squash-merges it automatically without asking for confirmation. Preserve the validated PR title and respect branch protection; a changed head requires renewed review, local validation and CI. Pending, failed, cancelled or skipped required checks do not authorize merge. Before reporting completion, verify the merged state and provide the PR link, review outcome and CI result; report any blocker explicitly. This is an agent delivery responsibility, not a new GitHub Actions merge workflow; eligible Dependabot PRs use the separate automation below.
+
+For a normal PR, merging updates `main` and may update a Release Please PR. Release Please version PRs still require an explicit publication request before merging: merging one authorizes publication, so review its version and notes first. Release tags matching `v*` cannot be updated or deleted under the separate active tag ruleset.
 
 Dependabot checks Actions, Go modules and Docker base images weekly, with at most two open **version-update** PRs per ecosystem (security-update limits are separate). Each ecosystem groups minor and patch updates; major updates remain separate and require manual merge. Keep Actions pinned to full SHAs. Align changes to the Go directive and Docker compiler tag manually, and review the pinned tool versions embedded in `go run`, action inputs and download URLs: these are not all covered by Dependabot. A Docker update passing syntax checks alone is insufficient. [Dependabot options](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference).
 
@@ -214,7 +220,10 @@ docker pull ghcr.io/theopoc/pocketmark:v0.3.0
 
 ```mermaid
 flowchart TD
-    PR["PR to main"] --> PLAN["Select checks + validate title"]
+    DEV["Development task"] --> REVIEW["Subagent review · apply recommendations and re-review"]
+    REVIEW --> LOCAL["Applicable local checks + redacted secret scan"]
+    LOCAL --> PR["Push and create/update PR to main"]
+    PR --> PLAN["Select checks + validate title"]
     PLAN --> Q["Quality"]
     PLAN --> EXT["Extension when selected"]
     PLAN --> G["CI passed · explicit dependency results"]
@@ -226,10 +235,13 @@ flowchart TD
     S --> G
     T --> G
     B --> G
-    G --> M["Review and squash merge"]
+    G --> HEAD{"Reviewed head current and conflict-free?"}
+    HEAD -->|Yes| M["Agent automatically squash-merges development PR"]
+    HEAD -->|No| UPDATE["Update branch · resolve conflicts"]
+    UPDATE --> REVIEW
     M --> CI["Main CI · complete native binaries"]
     M --> RP["Release Please version PR"]
-    RP --> R["Review and merge version PR"]
+    RP --> R["Explicit publication request · review and merge version PR"]
     R --> TAG["Version tag and draft"]
     TAG --> WAIT["Require complete main CI at tagged SHA"]
     CI --> WAIT
