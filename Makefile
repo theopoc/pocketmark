@@ -14,7 +14,10 @@ test-extension:
 fmt-check:
 	@test -z "$$(gofmt -l cmd internal)" || { gofmt -l cmd internal; exit 1; }
 check: fmt-check
+	python3 scripts/sync_ui_assets.py
 	go vet -tags '$(GO_TAGS)' ./...
+	node --check internal/webui/static/name-limit.js
+	node --check internal/webui/static/theme-switch.js
 	node --check internal/webui/static/theme.js
 	node --check internal/webui/static/workspace.js
 	node --check internal/webui/static/reader.js
@@ -28,6 +31,8 @@ check: fmt-check
 	node --check internal/webui/static/api-docs/docs.js
 	node --check e2e/selection.mjs
 	node --check e2e/navigation.mjs
+	node --check e2e/fidelity.mjs
+	node --check e2e/polish.mjs
 	node --check e2e/browser.mjs
 	node --check e2e/security.mjs
 	node --check e2e/settings.mjs

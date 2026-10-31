@@ -29,6 +29,7 @@ async function loadDocs({ responseOK = true, invalidJSON = false, bundle = true 
   const SwaggerUIBundle = bundle ? Object.assign(options => { config = options; options.onComplete(); }, { presets: { apis: {} } }) : undefined;
   vm.runInNewContext(source, {
     document,
+    PocketmarkThemeSwitch: { create: options => require("./static/theme-switch.js").create(options, { document }) },
     window: { SwaggerUIBundle },
     MutationObserver: class { constructor(callback) { this.callback = callback; } observe() { this.callback(); } disconnect() {} },
     localStorage: { setItem() { throw new Error('storage denied'); } },

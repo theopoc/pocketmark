@@ -9,7 +9,7 @@ import tarfile
 import zipfile
 
 ARCHES = {"amd64": 62, "arm64": 183}
-EXTENSION_FILES = {"manifest.json", "popup.html", "popup.js", "popup.css", "README.md", "background.js", "common.js", "capture.js", "job-store.js"}
+EXTENSION_FILES = {"theme-switch.js", "ui-theme.js", "name-limit.js", "manifest.json", "popup.html", "popup.js", "popup.css", "README.md", "background.js", "common.js", "capture.js", "job-store.js"}
 ASSETS = {f"pocketmark-linux-{arch}{suffix}" for arch in ARCHES for suffix in (".tar.gz", ".buildinfo.txt")}
 ASSETS |= {"pocketmark-extension.zip"}
 

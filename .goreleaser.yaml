@@ -37,6 +37,9 @@ archives:
       - {src: extension/popup.html, dst: popup.html}
       - {src: extension/popup.js, dst: popup.js}
       - {src: extension/popup.css, dst: popup.css}
+      - {src: extension/theme-switch.js, dst: theme-switch.js}
+      - {src: extension/ui-theme.js, dst: ui-theme.js}
+      - {src: extension/name-limit.js, dst: name-limit.js}
       - {src: extension/README.md, dst: README.md}
       - {src: extension/background.js, dst: background.js}
       - {src: extension/common.js, dst: common.js}

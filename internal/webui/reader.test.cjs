@@ -621,7 +621,7 @@ test("saved formats open first; optional notebook navigation preserves reading a
   env.get("reader-text-panel").scrollTop = 350;
   env.get("reader-notebook-toggle").click();
   assert.equal(env.get("reader-notebook").hidden, false);
-  const panels = ["reader-notes-form", "annotations-section", "reader-files"];
+  const panels = ["reader-notes-form", "annotations-section"];
   function selected(index) {
     assert.equal(env.get("reader-text-panel").hidden, false);
     assert.equal(env.get("reader-original").hidden, false);
@@ -634,10 +634,10 @@ test("saved formats open first; optional notebook navigation preserves reading a
   selected(0);
   env.get("reader-notes").value = "Unfinished thought";
   await fire(env.get("reader-notes"), "input");
-  await fire(env.sections[0], "keydown", { key: "End" }); selected(2);
-  await fire(env.sections[2], "keydown", { key: "ArrowRight" }); selected(0);
-  await fire(env.sections[0], "keydown", { key: "ArrowLeft" }); selected(2);
-  await fire(env.sections[2], "keydown", { key: "Home" }); selected(0);
+  await fire(env.sections[0], "keydown", { key: "End" }); selected(1);
+  await fire(env.sections[1], "keydown", { key: "ArrowRight" }); selected(0);
+  await fire(env.sections[0], "keydown", { key: "ArrowLeft" }); selected(1);
+  await fire(env.sections[1], "keydown", { key: "Home" }); selected(0);
   await fire(env.sections[0], "keydown", { key: "ArrowRight" }); selected(1);
   env.get("reader-notebook-close").click();
   assert.equal(env.get("reader-notebook").hidden, true);
@@ -735,7 +735,7 @@ test("reading a saved HTML file closes the notebook and focuses the article", as
   const env = setup();
   env.assets.set(1, [{ id: 8, name: "saved.html", mediaType: "text/html", size: 120 }]);
   await env.reader.open(1);
-  env.sections[2].click();
+  env.get("reader-files-toggle").click();
   const read = env.get("asset-list").children[0].children.find(node => node.textContent === "Read");
   read.click();
   await tick();
@@ -744,6 +744,9 @@ test("reading a saved HTML file closes the notebook and focuses the article", as
   assert.equal(env.get("reader-text-panel").focused, true);
   assert.equal(env.get("reader-layout").hidden, false);
   assert.equal(env.get("reader-layout").src, "/api/links/1/reader?asset=8");
+  assert.equal(env.get("reader-files").hidden, true);
+  assert.equal(env.get("reader-layout").scrollOptions.block, "start");
+  assert.equal(env.get("reader-layout").focused, true);
 });
 
 

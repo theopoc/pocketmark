@@ -21,7 +21,6 @@
   const tagPickers = new Map();
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
   const activeMotion = new Map();
-  let themeTransition = null;
   let renderedLibraryRoute = null;
   let libraryUnavailable = false;
   let libraryLoading = false;
@@ -119,7 +118,7 @@
     animation.finished.catch(() => {}).then(() => { if (activeMotion.get(element) === animation) activeMotion.delete(element); });
   }
   reducedMotion.addEventListener("change", () => {
-    if (reducedMotion.matches) { activeMotion.forEach((animation) => animation.cancel()); activeMotion.clear(); themeTransition?.skipTransition(); }
+    if (reducedMotion.matches) { activeMotion.forEach((animation) => animation.cancel()); activeMotion.clear(); }
   });
 
   // Small, authored SVG icons keep the embedded UI independent of icon libraries.
@@ -175,33 +174,17 @@
     document.querySelector('meta[name="theme-color"]').content = dark ? "#15161b" : "#ffffff";
     document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
       button.setAttribute("aria-pressed", String(dark));
+      button.setAttribute("aria-label", dark ? "Dark mode" : "Light mode");
       button.title = dark ? "Switch to light mode" : "Switch to dark mode";
       button.querySelector("[data-theme-icon]").replaceChildren(icon(dark ? "moon" : "sun"));
       button.querySelector("[data-theme-label]").textContent = dark ? "Dark" : "Light";
     });
   }
-  let requestedTheme = document.documentElement.dataset.theme === "light" ? "light" : "dark";
-  applyTheme(requestedTheme);
-  function changeTheme(theme) {
-    requestedTheme = theme;
-    // Repeated clicks always apply the latest choice, even before a snapshot is ready.
-    if (themeTransition) { themeTransition.skipTransition(); applyTheme(theme); return; }
-    if (reducedMotion.matches || document.hidden || !document.startViewTransition) { applyTheme(theme); return; }
-    document.documentElement.classList.add("theme-transition");
-    try {
-      const transition = document.startViewTransition(() => applyTheme(requestedTheme));
-      themeTransition = transition;
-      transition.ready.catch(() => {}); // Skipped or unsupported snapshots still apply the theme.
-      transition.finished.catch(() => applyTheme(requestedTheme)).then(() => {
-        if (themeTransition === transition) { themeTransition = null; document.documentElement.classList.remove("theme-transition"); }
-      });
-    } catch {
-      document.documentElement.classList.remove("theme-transition"); applyTheme(theme);
-    }
-  }
+  const themeSwitch = globalThis.PocketmarkThemeSwitch.create({ initial: document.documentElement.dataset.theme === "light" ? "light" : "dark", apply: applyTheme });
+  applyTheme(themeSwitch.requested);
   document.querySelectorAll("[data-theme-toggle]").forEach((button) => button.addEventListener("click", () => {
-    const theme = requestedTheme === "dark" ? "light" : "dark";
-    changeTheme(theme);
+    const theme = themeSwitch.requested === "dark" ? "light" : "dark";
+    themeSwitch.set(theme);
     try { localStorage.setItem("pocketmark-theme", theme); } catch { /* Keep the session choice when storage is unavailable. */ }
   }));
 
@@ -1390,6 +1373,7 @@
     openCollectionEditor();
   });
   let collectionEditorSession = 0;
+  const collectionNameLimit = globalThis.PocketmarkNameLimit.create($("collection-name"), $("collection-name-hint"));
   $("collection-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const button = event.submitter, session = collectionEditorSession, editing = state.editingCollection;
@@ -1475,6 +1459,7 @@
     $("collection-error").textContent = "";
     $("collection-dialog-title").textContent = collection ? "Rename or move collection" : "New collection";
     $("collection-name").value = collection?.name || "";
+    collectionNameLimit.update();
     fillCollections($("collection-parent"), collection?.parentId, "None — top level");
     if (collection) {
       const excluded = new Set([collection.id]);

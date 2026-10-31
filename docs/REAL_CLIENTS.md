@@ -5,6 +5,16 @@
 > Floccus Linkwarden API backend have been removed. The older dated observations
 > remain historical evidence; the new worker is qualified separately below.
 
+## Approved interface checks — 1 November 2026
+
+[The approved UI ledger](UI_APPROVED.md) records bounded Chromium, Firefox and
+WebKit checks and exact screenshot comparisons preserving the library actions
+and sort design. Both themes, keyboard focus and emulated phone layouts are
+covered. Extension screenshots use a bounded Chrome API adapter; they do not
+qualify a new native-popup/capture-worker run, physical phones, Safari or spoken
+screen-reader behavior. The dated real-client observations below retain their
+original scope.
+
 ## Extension collection and tag check — 29 October 2026
 
 Chrome for Testing 156.0.8078.4 loaded a disposable copy of the extension and
