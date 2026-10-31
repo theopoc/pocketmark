@@ -112,7 +112,7 @@ export async function securityJourney({ browser, page, base, username, password,
     const expiresAt = Math.floor(Date.now() / 1000) + 2;
     assert.equal((await request.post(url('/api/tokens'), { data: { name: 'Synthetic expired key', profile: 'read', expiresAt } })).status(), 201);
     await page.waitForFunction(expiry => Date.now() >= expiry * 1000, expiresAt);
-    await page.locator('[data-settings-back]:visible').click();
+    await page.locator('#settings-page [data-settings-back]').click();
     await page.locator('#settings-page').waitFor({ state: 'hidden' });
     await clickNavigation(page, '#settings-button');
     const expiredRow = page.locator('#token-list .token-row').filter({ hasText: 'Synthetic expired key' });
@@ -154,7 +154,7 @@ export async function securityJourney({ browser, page, base, username, password,
     await page.locator('#reauth-cancel').click();
     await page.waitForFunction(() => document.getElementById('reauth-password').value === '');
     assert.equal(await page.locator('#reauth-password').inputValue(), '');
-    await page.locator('[data-settings-back]:visible').click();
+    await page.locator('#settings-page [data-settings-back]').click();
     await page.waitForFunction(() => document.getElementById('new-token-value').value === '');
     assert.equal(await page.locator('#new-token-value').inputValue(), '');
   } finally { await peer.close(); }
