@@ -112,10 +112,20 @@
     <p id="token-activity-help" class="small muted">Last used includes connected apps and bookmark sync. Earlier activity may be unavailable.</p>
     <ul id="token-list" aria-label="API keys" aria-describedby="token-activity-help"></ul>
     <p id="tokens-feedback" class="small muted" role="status"></p>
-  </section><section class="settings-section" data-settings-panel="backup" aria-labelledby="backup-title" hidden><h2 id="backup-title">Backup &amp; restore</h2><p class="small muted">A full backup keeps your bookmarks, captures, attachments, highlights and account settings together.</p><a class="button subtle" href="/api/backup">Download full backup</a><details class="help-details"><summary>How to restore a backup</summary><ol class="small muted"><li>Stop Pocketmark before restoring.</li><li>Unzip the backup and follow its RESTORE instructions. Use an empty data directory and keep your server-secret (or legacy access-token / POCKETMARK_TOKEN) separately.</li><li>Restore file ownership if needed, then restart Pocketmark.</li></ol><p class="small muted">JSON and browser HTML exports contain bookmark metadata, not captures or attached files.</p></details></section><section class="settings-section" data-settings-panel="sync" aria-labelledby="sync-title" hidden><h2 id="sync-title">Browser bookmark sync</h2><p class="small muted">In Floccus, add a WebDAV account using this server’s address with <code>/dav/</code> appended and the file <code>bookmarks.xbel</code>. Use any username with a dedicated API key as the password. Choose the Floccus sync permissions when creating a key in API keys.</p><p class="small muted">Sync includes bookmarks and collection folders. Uploading a Floccus file replaces the synchronized bookmark tree; deletions in that file remove matching bookmarks.</p></section><section class="settings-section" data-settings-panel="mobile" aria-labelledby="mobile-title" hidden><h2 id="mobile-title">Mobile &amp; browser</h2><p class="small muted">Install this page from your browser’s menu to use Pocketmark as a mobile app. Share a link to it where your browser supports web share targets. The companion extension saves the current page, its rendered HTML, or a screenshot.</p></section>
+  </section><section class="settings-section" data-settings-panel="backup" aria-labelledby="backup-title" hidden><h2 id="backup-title">Backup &amp; restore</h2><p class="small muted">A full backup keeps your bookmarks, captures, attachments, highlights and account settings together.</p><a class="button subtle" href="/api/backup">Download full backup</a><details class="help-details"><summary>How to restore a backup</summary><ol class="small muted"><li>Stop Pocketmark before restoring.</li><li>Unzip the backup and follow its RESTORE instructions. Use an empty data directory and keep your server-secret (or legacy access-token / POCKETMARK_TOKEN) separately.</li><li>Restore file ownership if needed, then restart Pocketmark.</li></ol><p class="small muted">JSON and browser HTML exports contain bookmark metadata, not captures or attached files.</p></details></section><section class="settings-section" data-settings-panel="sync" aria-labelledby="sync-title" hidden>
+    <h2 id="sync-title">Browser bookmark sync</h2><p class="small muted">Use a dedicated Floccus API key to sync bookmarks and collection folders.</p>
+    <ol class="setup-steps"><li><a href="/?settings=api-keys">Create an API key</a> with <strong>Floccus sync</strong> permissions.</li><li>In Floccus, add a <strong>WebDAV</strong> account.<label for="sync-address">Server address</label><div class="copy-field"><input id="sync-address" readonly><button id="sync-copy" type="button" class="button subtle">Copy address</button></div></li><li>Use <code>bookmarks.xbel</code> as the file name, any username, and your dedicated API key as the password.</li></ol>
+    <p class="small muted">Uploading a Floccus file replaces the synchronized bookmark tree. Deletions in that file remove matching bookmarks.</p>
+  </section><section class="settings-section" data-settings-panel="mobile" aria-labelledby="mobile-title" hidden>
+    <h2 id="mobile-title">Mobile &amp; browser</h2>
+    <h3>Install on your phone</h3><p class="small muted">Open Pocketmark in your phone’s browser, then choose its install or Add to Home Screen command. Availability depends on your browser and operating system.</p><p class="small muted">Where supported, share a link from another app to Pocketmark to save it.</p>
+    <h3>Save from Chrome</h3><p class="small muted">The companion extension can save a link, rendered HTML, screenshots or a PDF. Connect it to this server with a dedicated API key using <strong>Add, edit &amp; capture</strong> permissions.</p><a class="button subtle" href="/?settings=api-keys">Manage API keys</a>
+    <h3>Keyboard shortcuts</h3><label class="inline-check"><input id="keyboard-shortcuts" type="checkbox" checked> Enable single-key shortcuts</label><p class="small muted">Use <kbd>N</kbd> to add a bookmark and <kbd>/</kbd> to search while browsing your library. Turn these off when using dictation or if they interrupt your work. This preference stays in this browser.</p>
+  </section>
       </section>
       <div id="library-content" class="library-content">
       <p id="import-progress" class="operation-progress" role="status" hidden>Importing bookmarks…</p>
+      <p id="import-result" class="operation-result" role="status" hidden></p>
       <p id="upload-progress" class="operation-progress" role="status" hidden>Uploading file…</p>
       <section id="tags-view" hidden aria-labelledby="tags-title">
         <div class="library-header"><div><h1 id="tags-title" tabindex="-1">Tags</h1><p class="muted">Browse your tags. Select one to see its bookmarks.</p></div><button id="tags-back" class="button subtle"><span data-icon="arrow-left" aria-hidden="true"></span>Back to library</button></div>
@@ -133,16 +143,16 @@
       <div id="library-view">
       <section class="library-header" aria-labelledby="page-title">
         <div><h1 id="page-title" tabindex="-1">All bookmarks</h1><p id="page-subtitle" class="muted">Everything you save, in one place.</p></div>
-        <div class="reader-actions"><input id="library-file" type="file" accept="application/pdf,image/png,image/jpeg,image/gif,image/webp,text/html,.html,.htm" hidden><button id="add-bookmark" class="button primary"><span data-icon="plus" aria-hidden="true"></span>Add bookmark<kbd>N</kbd></button><button id="upload-file-button" class="button subtle"><span data-icon="upload" aria-hidden="true"></span>Upload file</button></div>
+        <div class="reader-actions"><input id="library-file" type="file" accept="application/pdf,image/png,image/jpeg,image/gif,image/webp,text/html,.html,.htm" hidden><button id="add-bookmark" class="button primary"><span data-icon="plus" aria-hidden="true"></span>Add bookmark<kbd data-shortcut-hint>N</kbd></button><button id="upload-file-button" class="button subtle"><span data-icon="upload" aria-hidden="true"></span>Upload file</button></div>
       </section>
       <div class="library-toolbar">
-        <label class="search-box"><span data-icon="search" aria-hidden="true"></span><span class="sr-only">Search bookmarks</span><input id="search" type="search" placeholder="Search bookmarks, tags, and content…" autocomplete="off"><kbd aria-hidden="true">/</kbd></label>
+        <label class="search-box"><span data-icon="search" aria-hidden="true"></span><span class="sr-only">Search bookmarks</span><input id="search" type="search" placeholder="Search bookmarks, tags, and content…" autocomplete="off"><kbd aria-hidden="true" data-shortcut-hint>/</kbd></label>
       </div>
       <div id="active-filters" class="active-filters" aria-label="Active filters" hidden></div>
       <div class="results-bar"><div class="bulk-toolbar"><span id="results-label" aria-live="polite">Loading your library…</span><span id="selected-count" role="status" hidden>0 selected</span><span id="selected-outside" hidden></span><button id="select-page" class="text-button" type="button" aria-pressed="false">Select page</button><button id="bulk-open" class="button primary" hidden disabled>Actions</button><button id="clear-selection" class="text-button" hidden>Clear<span class="selection-escape" aria-hidden="true"> Esc</span></button></div><div class="results-tools"><span id="capture-label" class="capture-summary"></span><div class="selection-guidance"><span class="selection-hint">Click or drag to select</span><details class="selection-help"><summary aria-label="Selection help"><span data-icon="info" aria-hidden="true"></span></summary><div id="selection-help" class="selection-help-panel"><strong>Select bookmarks</strong><p>Click an empty area of a bookmark to select it. Drag across bookmarks to select several.</p><p><kbd>Shift</kbd> + click selects a range. <kbd>Ctrl</kbd> / <kbd>⌘</kbd> + drag adds to your selection.</p><p>On the keyboard, focus a bookmark and press <kbd>Space</kbd>. Press <kbd>Esc</kbd> to clear.</p><p>On touch screens, tap an empty area of a bookmark. Titles open the reader; action buttons work as usual.</p></div></details></div>
         <div class="library-view-controls">
           <button id="refresh-button" class="button subtle icon-only" title="Refresh library" aria-label="Refresh library"><span data-icon="refresh" aria-hidden="true"></span></button>
-          <button id="sort-toggle" class="button subtle icon-only" type="button" aria-label="Sort bookmarks: Newest first" title="Sort bookmarks: Newest first" aria-haspopup="menu" aria-controls="sort-menu" aria-expanded="false"><span data-icon="sort" aria-hidden="true"></span></button>
+          <button id="sort-toggle" class="button subtle" type="button" aria-label="Sort bookmarks: Newest first" title="Sort bookmarks: Newest first" aria-haspopup="menu" aria-controls="sort-menu" aria-expanded="false"><span data-icon="sort" aria-hidden="true"></span><span id="sort-label">Newest first</span></button>
           <div id="sort-menu" class="sort-menu" role="menu" aria-labelledby="sort-menu-title" hidden>
             <p id="sort-menu-title" class="sort-menu-title">Sort bookmarks</p>
             <button type="button" role="menuitemradio" aria-checked="true" data-sort="newest" tabindex="-1"><span data-icon="check" aria-hidden="true"></span>Newest first</button>
@@ -158,7 +168,7 @@
       <section id="empty-state" class="empty-state" aria-labelledby="empty-title" hidden><div id="empty-art" class="empty-art" data-icon="bookmark" aria-hidden="true"></div><h2 id="empty-title">Your library starts here</h2><p id="empty-message" class="muted">Save your first bookmark, or bring your existing bookmarks with you.</p><div class="reader-actions"><button id="empty-add" class="button primary"><span data-icon="plus" aria-hidden="true"></span>Add bookmark</button><button id="empty-import" class="button subtle" type="button">Import bookmarks</button><button id="empty-reset" class="button subtle" hidden>Clear filters</button></div></section>
       <nav id="pagination" class="pagination" aria-label="Results pages" hidden><button id="previous-page" class="button subtle"><span data-icon="arrow-left" aria-hidden="true"></span>Previous</button><span id="page-label"></span><button id="next-page" class="button subtle">Next<span data-icon="arrow-right" aria-hidden="true"></span></button></nav>
       </div>
-      <footer class="main-footer"><span>Pocketmark</span><span><kbd>/</kbd> Search <span class="shortcut-divider">·</span> <kbd>N</kbd> New bookmark</span></footer>
+      <footer class="main-footer"><span>Pocketmark</span><span data-shortcut-hint><kbd>/</kbd> Search <span class="shortcut-divider">·</span> <kbd>N</kbd> New bookmark</span></footer>
       </div>
     </main>
   </div>
@@ -166,12 +176,10 @@
     <aside id="sidebar" class="sidebar" aria-label="Library navigation">
       <div class="sidebar-brand"><a class="brand" href="/" aria-label="Pocketmark home"><span class="brand-mark" aria-hidden="true">p.</span><span>Pocketmark</span></a><button id="sidebar-mode" type="button" class="icon-button" aria-pressed="false" aria-label="Keep navigation open" title="Keep navigation open"><span id="sidebar-mode-icon" aria-hidden="true"></span></button><button id="close-navigation" class="icon-button" aria-label="Close navigation"><span data-icon="close" aria-hidden="true"></span></button></div>
       <div id="library-navigation">
-      <button id="workspace-button" type="button" class="workspace-label" popovertarget="workspace-popover" aria-expanded="false" aria-controls="workspace-popover" data-keep-navigation><span class="workspace-avatar" aria-hidden="true">P</span><span class="workspace-name">Personal workspace<span class="workspace-subtitle">My library</span></span><span class="workspace-chevron" data-icon="chevron-right" aria-hidden="true"></span></button>
+      <button id="workspace-button" type="button" class="workspace-label" popovertarget="workspace-popover" aria-expanded="false" aria-controls="workspace-popover" data-keep-navigation><span class="workspace-avatar" aria-hidden="true">P</span><span class="workspace-name">Library tools<span class="workspace-subtitle">Import, export &amp; sign out</span></span><span class="workspace-chevron" data-icon="chevron-right" aria-hidden="true"></span></button>
       <div id="workspace-popover" class="workspace-popover" popover aria-label="Workspace actions">
         <button id="import-button" type="button" class="nav-item" autofocus><span data-icon="download" aria-hidden="true"></span>Import</button>
         <button id="export-button" type="button" class="nav-item"><span data-icon="upload" aria-hidden="true"></span>Export</button>
-        <hr>
-        <button id="settings-button" type="button" class="nav-item"><span data-icon="settings" aria-hidden="true"></span>Settings</button>
         <hr>
         <button id="logout-button" type="button" class="nav-item workspace-sign-out"><span data-icon="logout" aria-hidden="true"></span>Sign out</button>
       </div>
@@ -182,12 +190,12 @@
         <button class="nav-item" data-filter="unread"><span data-icon="clock" aria-hidden="true"></span>To read</button>
         <button id="all-tags" class="nav-item"><span data-icon="tag" aria-hidden="true"></span>Tags</button>
       </nav>
-      <div class="sidebar-section-title"><h2>Collections</h2><button id="add-collection" class="icon-button" title="New collection" aria-label="New collection"><span data-icon="plus" aria-hidden="true"></span></button></div>
+      <div class="sidebar-section-title"><h2>Collections</h2><button id="add-collection" class="icon-button" data-keep-navigation title="New collection" aria-label="New collection"><span data-icon="plus" aria-hidden="true"></span></button></div>
       <div id="collections" class="collection-list"></div>
       <div class="sidebar-bottom">
-        <div class="sidebar-section-title"><h2>Frequent tags</h2></div>
+        <div id="frequent-tags-heading" class="sidebar-section-title" hidden><h2>Frequent tags</h2></div>
         <div id="tags" class="tag-cloud"></div>
-        <div class="sidebar-tools"><button id="help-button" class="nav-item"><span data-icon="help" aria-hidden="true"></span>Help</button>
+        <div class="sidebar-tools"><button id="settings-button" type="button" class="nav-item"><span data-icon="settings" aria-hidden="true"></span>Settings</button><button id="help-button" class="nav-item"><span data-icon="help" aria-hidden="true"></span>Help</button>
         <a class="nav-item api-documentation-link" href="/api-docs/"><span data-icon="book" aria-hidden="true"></span>API documentation</a></div>
         <input id="import-file" type="file" accept="application/json,text/html,.json,.html,.htm" hidden>
       </div>
@@ -237,26 +245,30 @@
   <dialog id="bookmark-dialog" class="modal" aria-labelledby="bookmark-dialog-title">
     <form id="bookmark-form">
       <div class="dialog-heading"><div><h2 id="bookmark-dialog-title">Add bookmark</h2></div><button type="button" class="icon-button close-dialog" aria-label="Close"><span data-icon="close" aria-hidden="true"></span></button></div>
+      <div class="bookmark-form-body">
       <label for="bookmark-url">URL <span class="required">*</span></label><input id="bookmark-url" type="url" placeholder="https://example.com/article" required>
       <label for="bookmark-title">Title</label><input id="bookmark-title" placeholder="Page title" maxlength="1000">
-      <label for="bookmark-description">Description</label><textarea id="bookmark-description" rows="2" placeholder="What makes this worth saving?"></textarea>
       <div class="form-columns bookmark-organization"><div><label for="bookmark-collection">Collection</label><select id="bookmark-collection"></select></div><div><label for="bookmark-tags">Tags</label><input id="bookmark-tags" placeholder="Choose or create tags" autocomplete="off" spellcheck="false"><p id="bookmark-tags-hint" class="field-hint">Choose a tag or type a new one, then press Enter. Use commas to add several.</p></div></div>
+      <details id="bookmark-details" class="editor-details"><summary>Description &amp; personal notes</summary>
+      <label for="bookmark-description">Description</label><textarea id="bookmark-description" rows="2" placeholder="What makes this worth saving?"></textarea>
       <label for="bookmark-notes">Personal notes</label><textarea id="bookmark-notes" rows="3" placeholder="Your thoughts, in your words…"></textarea>
+      </details>
       <div class="checkbox-row"><label><input id="bookmark-favorite" type="checkbox"> Favorite</label><label><input id="bookmark-read" type="checkbox"> Already read</label></div>
       <div id="bookmark-capture-option" class="bookmark-capture-option"><label><input id="bookmark-save-html" type="checkbox" aria-describedby="bookmark-html-hint"><span>Save an HTML copy</span></label><p id="bookmark-html-hint" class="field-hint">Keep an offline copy with images and styles when available. Interactive content is not saved.</p></div>
       <p id="bookmark-save-status" class="small muted" role="status" hidden></p>
       <div id="bookmark-draft" class="draft-notice" hidden><span>Draft kept in this tab. Save it before closing the tab.</span><button id="discard-bookmark-draft" type="button" class="text-button">Discard draft</button></div>
       <p id="bookmark-error" class="form-error" role="alert"></p>
+      </div>
       <div class="dialog-actions"><button type="button" class="button subtle close-dialog">Cancel</button><button type="submit" class="button primary" id="save-bookmark">Save</button></div>
     </form>
   </dialog>
-  <dialog id="collection-dialog" class="modal compact-modal" aria-labelledby="collection-dialog-title"><form id="collection-form"><div class="dialog-heading"><h2 id="collection-dialog-title">New collection</h2><button type="button" class="icon-button close-dialog" aria-label="Close"><span data-icon="close" aria-hidden="true"></span></button></div><label for="collection-name">Name</label><input id="collection-name" required maxlength="120" placeholder="Collection name" aria-describedby="collection-name-hint"><p id="collection-name-hint" class="field-hint">Up to 120 UTF-8 bytes; accented characters and emoji may use more than one byte.</p><label for="collection-parent">Parent collection</label><select id="collection-parent"></select><p id="collection-error" class="form-error" role="alert"></p><div class="dialog-actions"><button type="button" class="button subtle close-dialog">Cancel</button><button type="submit" class="button primary" id="save-collection">Save collection</button></div></form></dialog>
+  <dialog id="collection-dialog" class="modal compact-modal" aria-labelledby="collection-dialog-title"><form id="collection-form"><div class="dialog-heading"><h2 id="collection-dialog-title">New collection</h2><button type="button" class="icon-button close-dialog" aria-label="Close"><span data-icon="close" aria-hidden="true"></span></button></div><label for="collection-name">Name</label><input id="collection-name" required maxlength="120" placeholder="Collection name" aria-describedby="collection-name-hint"><p id="collection-name-hint" class="field-hint">Keep the name short. Names with accents or emoji may reach the limit sooner.</p><label for="collection-parent">Parent collection</label><select id="collection-parent"></select><p id="collection-error" class="form-error" role="alert"></p><div class="dialog-actions"><button type="button" class="button subtle close-dialog">Cancel</button><button type="submit" class="button primary" id="save-collection">Save collection</button></div></form></dialog>
   <dialog id="reader-dialog" class="modal reader-modal" aria-labelledby="reader-title">
     <div class="dialog-heading reader-sticky-heading"><div class="reader-heading-row">
       <span class="reader-heading-label"><span data-icon="bookmark" aria-hidden="true"></span>Bookmark</span>
       <div class="reader-actions">
         <a id="reader-original" class="button primary" target="_blank" rel="noopener noreferrer" hidden>Open original <span data-icon="external" aria-hidden="true"></span></a>
-        <button id="reader-notebook-toggle" type="button" class="button subtle" aria-expanded="false" aria-controls="reader-notebook" disabled>Notes</button>
+        <button id="reader-notebook-toggle" type="button" class="button subtle" aria-expanded="false" aria-controls="reader-notebook" disabled>Notes &amp; files</button>
         <button type="button" class="icon-button close-dialog" aria-label="Close reader"><span data-icon="close" aria-hidden="true"></span></button>
       </div>
     </div></div>
@@ -266,16 +278,16 @@
         <header class="reader-article-header"><h2 id="reader-title"></h2><div class="reader-meta"><p id="reader-domain" class="reader-domain"></p><p id="reader-status" class="muted small" role="status"></p></div></header>
         <section id="reader-formats" class="reader-formats" aria-labelledby="reader-formats-title" hidden>
           <h3 id="reader-formats-title">Saved formats</h3>
-          <p class="small muted">Open a saved copy. The latest opens first; earlier copies stay available in the file selector.</p>
+          <p class="small muted">Choose a saved copy. The latest opens first; earlier copies stay available in the file selector.</p><p id="reader-formats-summary" class="small muted" role="status"></p>
           <div class="saved-format-list">
             <button id="reader-format-html" class="saved-format" type="button" disabled><span data-icon="html" aria-hidden="true"></span><span class="saved-format-name">HTML<span class="saved-format-description">Saved page</span></span><span id="reader-format-html-status" class="saved-format-status">Checking…</span><span class="saved-format-open" aria-hidden="true" data-icon="arrow-right"></span></button>
             <button id="reader-format-image" class="saved-format" type="button" disabled><span data-icon="image" aria-hidden="true"></span><span class="saved-format-name">Screenshot<span class="saved-format-description">Page captures and saved images</span></span><span id="reader-format-image-status" class="saved-format-status">Checking…</span><span class="saved-format-open" aria-hidden="true" data-icon="arrow-right"></span></button>
             <button id="reader-format-pdf" class="saved-format" type="button" disabled><span data-icon="pdf" aria-hidden="true"></span><span class="saved-format-name">PDF<span class="saved-format-description">Saved document</span></span><span id="reader-format-pdf-status" class="saved-format-status">Checking…</span><span class="saved-format-open" aria-hidden="true" data-icon="arrow-right"></span></button>
           </div>
           <p id="reader-formats-error" class="form-error" role="alert" hidden></p><button id="reader-formats-retry" type="button" class="text-button" hidden>Retry saved formats</button>
-          <p class="small muted">Save HTML when adding or editing a bookmark. Capture screenshots and PDFs with the browser extension, or attach a file under Notes → Files.</p>
+          <p class="small muted">Save HTML when adding or editing a bookmark. Capture screenshots and PDFs with the browser extension, or attach a file under Notes &amp; files → Files.</p>
         </section>
-        <div id="reader-reading-bar" class="reader-reading-bar"><details id="reader-options" class="reader-options"><summary>Reading options</summary><div class="reader-options-content"><div class="reader-tools"><button id="reader-highlight" type="button" class="text-button" data-highlight-selection>Highlight selection</button><button id="reader-text-mode" class="button subtle" aria-pressed="true">Text &amp; highlights</button><button id="reader-layout-mode" class="button subtle" aria-pressed="false" aria-describedby="reader-mode-hint" disabled>Formatted page</button><label class="inline-check">Text size <select id="reader-size" aria-label="Reader text size"><option value="17">Normal</option><option value="20">Large</option><option value="24">Extra large</option></select></label></div><p id="reader-mode-hint" class="small muted" role="status"></p><div class="reader-actions"><a id="reader-archive" class="button subtle" hidden>Download snapshot</a><button id="reader-capture" class="button subtle">Refresh capture</button><button id="reader-edit" class="button subtle">Edit bookmark</button></div></div></details></div>
+        <div id="reader-reading-bar" class="reader-reading-bar"><details id="reader-options" class="reader-options"><summary>Reading options</summary><div class="reader-options-content"><div class="reader-tools"><button id="reader-highlight" type="button" class="text-button" data-highlight-selection>Highlight selection</button><button id="reader-text-mode" class="button subtle" aria-pressed="false">Text &amp; highlights</button><button id="reader-layout-mode" class="button subtle" aria-pressed="false" aria-describedby="reader-mode-hint" disabled>Formatted page</button><label class="inline-check">Text size <select id="reader-size" aria-label="Reader text size"><option value="17">Normal</option><option value="20">Large</option><option value="24">Extra large</option></select></label></div><p id="reader-mode-hint" class="small muted" role="status"></p><div class="reader-actions"><a id="reader-archive" class="button subtle" hidden>Download snapshot</a><button id="reader-capture" class="button subtle">Refresh capture</button><button id="reader-edit" class="button subtle">Edit bookmark</button></div></div></details></div>
         <button id="reader-retry-open" type="button" class="button subtle" hidden>Try opening again</button><button id="reader-retry-capture" type="button" class="button subtle" hidden>Retry capture</button><button id="reader-recheck" type="button" class="text-button" hidden>Check capture status</button>
   <div id="reader-content" class="reader-content" tabindex="0"></div><iframe id="reader-layout" class="reader-layout" title="Saved page reader" sandbox="" hidden></iframe>
 
@@ -319,6 +331,11 @@
   <dialog id="annotation-dialog" class="modal compact-modal" aria-labelledby="annotation-title"><form id="annotation-form"><div class="dialog-heading"><h2 id="annotation-title">Annotation</h2><button type="button" class="icon-button close-dialog" aria-label="Close"><span data-icon="close" aria-hidden="true"></span></button></div><p id="annotation-draft-notice" class="draft-notice" hidden>Unsaved annotation restored from this tab.</p><blockquote id="annotation-quote"></blockquote><label for="annotation-note">Note</label><textarea id="annotation-note" rows="3"></textarea><label for="annotation-color">Highlight color</label><select id="annotation-color"><option value="yellow">Yellow</option><option value="green">Green</option><option value="blue">Blue</option><option value="pink">Pink</option></select><p id="annotation-error" class="form-error" role="alert"></p><div class="dialog-actions"><button type="button" class="button subtle close-dialog">Cancel</button><button class="button primary" type="submit">Save annotation</button></div></form></dialog>
 
   <dialog id="reauth-dialog" class="modal compact-modal" aria-labelledby="reauth-title" aria-describedby="reauth-description"><form id="reauth-form"><h2 id="reauth-title">Confirm your password</h2><p id="reauth-description" class="muted">Protect your account before continuing. Confirmation lasts five minutes in this browser.</p><label for="reauth-password">Current password</label><input id="reauth-password" type="password" autocomplete="current-password" required maxlength="1024"><p id="reauth-error" class="form-error" role="alert"></p><div class="dialog-actions"><button id="reauth-cancel" type="button" class="button subtle">Cancel</button><button id="reauth-submit" type="submit" class="button primary">Confirm password</button></div></form></dialog>
+  <dialog id="import-dialog" class="modal compact-modal" aria-labelledby="import-title">
+    <div class="dialog-heading"><h2 id="import-title">Import bookmarks</h2><button type="button" class="icon-button close-dialog" aria-label="Close import"><span data-icon="close" aria-hidden="true"></span></button></div>
+    <p>Choose a Pocketmark JSON export or a browser bookmarks HTML file, up to 8 MiB.</p><p class="small muted">Import adds bookmark metadata to your library. Saved captures and attached files are not included. A full backup must be restored using its RESTORE instructions.</p>
+    <div class="dialog-actions"><button type="button" class="button subtle close-dialog">Cancel</button><button id="import-choose" type="button" class="button primary">Choose file to import</button></div>
+  </dialog>
   <dialog id="export-dialog" class="modal compact-modal" aria-labelledby="export-title"><div class="dialog-heading"><h2 id="export-title">Export bookmarks</h2><button type="button" class="icon-button close-dialog" aria-label="Close"><span data-icon="close" aria-hidden="true"></span></button></div><p class="muted">Choose a portable format. Saved files and captures are stored in your data directory and are not included in these metadata exports.</p><p class="small muted">To keep captures, files and account settings, <a href="/api/backup">download a full backup</a> instead. Restore instructions are included.</p><div class="reader-actions"><a class="button primary" href="/api/export">Pocketmark JSON</a><a class="button subtle" href="/api/export/html">Browser bookmarks HTML</a></div></dialog>
   <dialog id="help-dialog" class="modal help-modal" aria-labelledby="help-title">
     <header class="help-header">
@@ -333,7 +350,7 @@
           <summary>Bookmarks, collections &amp; tags<span data-icon="chevron-right" aria-hidden="true"></span></summary>
           <div class="help-answer">
             <ol><li>Choose <strong>Add bookmark</strong> and paste a URL.</li><li>Pick a collection, or leave it in <strong>Inbox</strong>.</li><li>In <strong>Tags</strong>, choose an existing tag or type a new name and press <kbd>Enter</kbd>.</li></ol>
-            <p>Browse your full index in <strong>Tags</strong>. To edit several bookmarks at once, select their checkboxes, then choose <strong>Actions</strong>.</p>
+            <p>Browse your full index in <strong>Tags</strong>. To edit several bookmarks at once, click or tap an empty area of each bookmark, then choose <strong>Actions</strong>. You can also focus a bookmark and press <kbd>Space</kbd>.</p>
           </div>
         </details>
         <details>
@@ -348,7 +365,7 @@
           <summary>Reading, highlights &amp; notes<span data-icon="chevron-right" aria-hidden="true"></span></summary>
           <div class="help-answer">
             <p>Open a bookmark’s title to see its saved HTML, screenshots and PDFs. Choose a format to open the latest copy and use the file selector for earlier copies. To read extracted text, choose <strong>Reading options → Text &amp; highlights</strong>. Reading options also contains text size, formatted view and capture controls.</p>
-            <ul><li>Select a passage, then choose <strong>Highlight</strong>.</li><li>Use <strong>Notes</strong> in the reader toolbar to write and save your notes.</li></ul>
+            <ul><li>Select a passage, then choose <strong>Highlight</strong>.</li><li>Use <strong>Notes &amp; files</strong> in the reader toolbar to write and save your notes.</li></ul>
           </div>
         </details>
         <details>
@@ -376,7 +393,7 @@
         <details>
           <summary>Extensions &amp; browser sync<span data-icon="chevron-right" aria-hidden="true"></span></summary>
           <div class="help-answer">
-            <p>Create a dedicated key under <strong>Settings → Account &amp; security → API keys</strong> for each extension or sync app. Choose <strong>Add, edit &amp; capture</strong> for the Pocketmark extension, or <strong>Floccus sync</strong> for Floccus. Browser sign-in uses your password and an authentication or recovery code.</p>
+            <p>Create a dedicated key under <strong>Settings → API keys</strong> for each extension or sync app. Choose <strong>Add, edit &amp; capture</strong> for the Pocketmark extension, or <strong>Floccus sync</strong> for Floccus. Browser sign-in uses your password and an authentication or recovery code.</p>
             <p><strong>Settings</strong> contains Floccus WebDAV instructions and mobile installation guidance.</p>
             <p>Floccus uploads replace the synchronized bookmark tree. Review sync settings before uploading.</p>
           </div>

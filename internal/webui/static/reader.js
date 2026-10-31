@@ -52,7 +52,7 @@
     function emptyReaderText() {
       return safeURL(state.reading?.url)
         ? "No article text was saved. Open the original page to read it."
-        : "No article text was saved. Open a saved file under Notes → Files.";
+        : "No article text was saved. Open a saved file under Notes & files → Files.";
     }
 
     function closeViewer() {
@@ -127,7 +127,7 @@
       $("reader-layout-mode").disabled = true;
       $("reader-size").disabled = false;
       document.querySelectorAll("[data-highlight-selection]").forEach((button) => { button.disabled = true; });
-      $("reader-text-mode").setAttribute("aria-pressed", "true");
+      $("reader-text-mode").setAttribute("aria-pressed", String(readingView));
       $("annotation-list").replaceChildren();
       $("asset-list").replaceChildren();
       state.annotations = [];
@@ -534,15 +534,21 @@
       return assets;
     }
     function renderFormats() {
+      let available = 0;
       for (const format of formats) {
         const copies = previewAssets().filter(format.matches);
         const button = $("reader-format-" + format.key);
         button.disabled = !copies.length;
+        button.hidden = !copies.length;
+        if (copies.length) available++;
         button.setAttribute("data-saved", String(!!copies.length));
         const status = copies.length ? (copies.length > 1 ? `Saved · ${copies.length} copies` : "Saved") : assetsState === "loading" ? "Checking…" : assetsState === "error" ? "Unknown" : "Not saved";
         $("reader-format-" + format.key + "-status").textContent = status;
         button.setAttribute("aria-label", copies.length ? `Open saved ${format.name}` : `${format.name}: ${status}`);
       }
+      $("reader-formats-summary").textContent = assetsState === "loading" ? "Checking saved copies…"
+        : assetsState === "error" ? "Some saved copies could not be checked. Available copies are shown below."
+        : available ? "" : "No saved copies yet. Save HTML, attach a file, or open the original page.";
     }
     for (const format of formats) $("reader-format-" + format.key).addEventListener("click", () => {
       const copies = previewAssets().filter(format.matches);
@@ -668,7 +674,9 @@
         });
         row.append(remove); $("asset-list").append(row);
       }
-      if (!assets?.length) $("asset-list").append(el("p", "reader-section-empty muted", state.reading.type === "file" ? "No saved files yet. Attach a file to keep it with this bookmark." : "No saved files yet. Attach a file or choose an HTML copy when adding or editing this bookmark."));
+      if (!assets?.length) $("asset-list").append(el("p", "reader-section-empty muted", state.reading.archiveAvailable
+        ? "No attached files. Your saved HTML copy is available under Saved formats."
+        : "No attached files yet. Attach a file to keep it with this bookmark."));
     }
 
     $("asset-upload-button").addEventListener("click", () => { if (!$("asset-file").disabled) $("asset-file").click(); });

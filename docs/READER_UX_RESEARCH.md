@@ -4,6 +4,8 @@ Documentary research, 30 October 2026. Scope: a personal saved-page reader on de
 
 **Owner's governing priority:** “pouvoir lire l'article directement ou si c'est trop compliqué, avoir le raccourci pour ouvrir directement l'URL originale.” Open the article directly when available; keep a prominent, always-visible “Open original” shortcut for web bookmarks. Annotation tools are optional companions, not the center of the reader.
 
+**Product decision, 31 October 2026:** the owner subsequently chose saved formats first. The direct-reading recommendation below is historical research, not the current implementation brief. Only available saved formats lead the bookmark view; extracted text and annotations stay optional secondary tools. See [PRODUCT.md](../PRODUCT.md#saved-format-journey).
+
 ## Documented examples
 
 | Product | Documented behavior | Relevant distinction |

@@ -396,6 +396,7 @@
       return;
     }
     deferredLogin = false;
+    $("import-result").hidden = true;
     clearSettings();
     settingsSection = null; renderSettings();
     setMFAManagementBusy(false);
@@ -629,6 +630,7 @@
       });
       const edit = el("button", "icon-button delete-collection"); edit.append(icon("edit"));
       edit.dataset.focusKey = `edit-collection:${collection.id}`;
+      edit.setAttribute("data-keep-navigation", "");
       edit.title = `Rename or move ${collection.name}`;
       edit.setAttribute("aria-label", edit.title);
       edit.addEventListener("click", () => openCollectionEditor(collection));
@@ -639,6 +641,7 @@
   }
 
   function renderTags(tags) {
+    $("frequent-tags-heading").hidden = !tags.length;
     const key = focusedKey($("tags"));
     $("tags").replaceChildren();
     for (const tag of tags.slice(0, 12)) {
@@ -1075,6 +1078,7 @@
     editorBaseline = editorValues();
     const draft = drafts.get(draftKey(link));
     if (draft) fillEditor(draft);
+    else $("bookmark-details").open = !!(link?.description || link?.notes);
     $("bookmark-draft").hidden = !draft;
     validateBookmarkFields();
     $("bookmark-dialog").showModal();
@@ -1086,12 +1090,14 @@
   }
   function validateBookmarkFields() {
     const issues = workspace.bookmarkIssues({ ...editorValues(), type: state.editing?.type });
+    if (issues.description || issues.notes) $("bookmark-details").open = true;
     for (const field of ["url", "title", "description", "notes", "tags"]) {
       $("bookmark-" + field + (field === "tags" ? "-query" : "")).setCustomValidity(issues[field] || "");
     }
     return issues;
   }
   function fillEditor(value) {
+    $("bookmark-details").open = !!(value.description || value.notes);
     $("bookmark-save-html").checked = !!value.saveHTML;
     for (const field of ["url", "title", "description", "notes"]) $("bookmark-" + field).value = value[field] || "";
     tagPickers.get("bookmark-tags").set(value.tags || []);
@@ -1317,7 +1323,7 @@
   document.querySelectorAll(".close-dialog").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
   $("add-bookmark").addEventListener("click", () => openEditor());
   $("empty-add").addEventListener("click", () => openEditor());
-  $("empty-import").addEventListener("click", () => $("import-file").click());
+  $("empty-import").addEventListener("click", openImport);
   function resetLibraryFilters() {
     clearTimeout(searchTimer); state.query = ""; $("search").value = "";
     selectFilter("all"); $("search").focus();
@@ -1392,7 +1398,7 @@
     try {
       const name = $("collection-name").value.trim();
       if (!name) throw new Error("Give your collection a name.");
-      if (new TextEncoder().encode(name).length > 120) throw new Error("Collection names can use up to 120 UTF-8 bytes. Accented characters and emoji may use more than one byte.");
+      if (new TextEncoder().encode(name).length > 120) throw new Error("This name is too long. Shorten it, especially if it contains accents or emoji.");
       const parentId = $("collection-parent").value ? Number($("collection-parent").value) : null;
       const saved = await api(editing ? `/api/collections/${editing.id}` : "/api/collections", { method: editing ? "PUT" : "POST", body: JSON.stringify({ name, parentId }) });
       const active = session === collectionEditorSession && $("collection-dialog").open;
@@ -1404,10 +1410,17 @@
     } catch (error) { if (session === collectionEditorSession && $("collection-dialog").open) $("collection-error").textContent = error.message; else toast(error.message, true); } finally { if (session === collectionEditorSession) button.disabled = false; }
   });
 
-  $("import-button").addEventListener("click", () => $("import-file").click());
+  function openImport() {
+    $("import-dialog").showModal();
+  }
+  $("import-button").addEventListener("click", openImport);
+  $("import-choose").addEventListener("click", () => $("import-file").click());
   $("import-file").addEventListener("change", async () => {
     const file = $("import-file").files[0];
     if (!file) return;
+    $("import-dialog").close();
+    $("import-result").hidden = true;
+    $("import-choose").disabled = true;
     $("import-button").disabled = true;
     $("empty-import").disabled = true;
     $("import-progress").hidden = false;
@@ -1417,13 +1430,34 @@
       const html = /\.html?$/i.test(file.name) || file.type === "text/html";
       if (!html) { try { JSON.parse(body); } catch { throw new Error("Choose a JSON export or a browser bookmarks HTML file."); } }
       const result = await api(html ? "/api/import/html" : "/api/import", { method: "POST", headers: { "Content-Type": html ? "text/html" : "application/json" }, body });
-      toast(`Imported ${result.imported} bookmarks. ${result.skipped || 0} skipped.`);
+      const message = `Imported ${result.imported} bookmarks. ${result.skipped || 0} skipped.`;
+      $("import-result").textContent = message;
+      $("import-result").className = "operation-result";
+      $("import-result").hidden = false;
+      toast(message);
       await refresh();
-    } catch (error) { toast(error.message, true); } finally { $("import-progress").hidden = true; $("import-button").disabled = false; $("empty-import").disabled = false; $("import-file").value = ""; }
+    } catch (error) {
+      $("import-result").textContent = `Import could not finish. ${error.message}`;
+      $("import-result").className = "error-banner";
+      $("import-result").hidden = false;
+      toast(error.message, true);
+    } finally { $("import-choose").disabled = false; $("import-progress").hidden = true; $("import-button").disabled = false; $("empty-import").disabled = false; $("import-file").value = ""; }
   });
 
+  let shortcutsEnabled = true;
+  try { shortcutsEnabled = localStorage.getItem("pocketmark-shortcuts") !== "off"; } catch { /* Optional preference storage. */ }
+  function syncShortcuts() {
+    $("keyboard-shortcuts").checked = shortcutsEnabled;
+    document.querySelectorAll("[data-shortcut-hint]").forEach(node => { node.hidden = !shortcutsEnabled; });
+  }
+  syncShortcuts();
+  $("keyboard-shortcuts").addEventListener("change", () => {
+    shortcutsEnabled = $("keyboard-shortcuts").checked;
+    try { localStorage.setItem("pocketmark-shortcuts", shortcutsEnabled ? "on" : "off"); } catch { /* Keep this session's choice. */ }
+    syncShortcuts();
+  });
   document.addEventListener("keydown", (event) => {
-    if (!state.signedIn || event.ctrlKey || event.metaKey || event.altKey || document.querySelector("dialog[open]") || document.activeElement.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
+    if (!shortcutsEnabled || settingsSection || event.repeat || event.isComposing || !state.signedIn || event.ctrlKey || event.metaKey || event.altKey || document.querySelector("dialog[open]") || document.activeElement.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
     if (event.key === "/") { event.preventDefault(); $(showingTags ? "tags-search" : "search").focus(); }
     if (event.key.toLowerCase() === "n") { event.preventDefault(); openEditor(); }
   });
@@ -1455,7 +1489,9 @@
   const sortOptions = [...$("sort-menu").querySelectorAll("[data-sort]")];
   function syncSortMenu() {
     for (const option of sortOptions) option.setAttribute("aria-checked", String(option.dataset.sort === state.sort));
-    const label = `Sort bookmarks: ${sortOptions.find((option) => option.dataset.sort === state.sort).textContent.trim()}`;
+    const name = sortOptions.find((option) => option.dataset.sort === state.sort).textContent.trim();
+    $("sort-label").textContent = name;
+    const label = `Sort bookmarks: ${name}`;
     $("sort-toggle").setAttribute("aria-label", label);
     $("sort-toggle").title = label;
   }
@@ -1793,6 +1829,14 @@
     if (deferredLogin) { clearSettings(); showLogin(); } else restoreRoute();
   }));
   $("settings-button").addEventListener("click", () => navigateSettings("api-keys"));
+  document.querySelectorAll('#settings-page a[href="/?settings=api-keys"]').forEach(link => link.addEventListener("click", event => {
+    event.preventDefault(); navigateSettings("api-keys");
+  }));
+  $("sync-address").value = new URL("/dav/", location.origin).href;
+  $("sync-copy").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText($("sync-address").value); toast("WebDAV address copied."); }
+    catch { $("sync-address").focus(); $("sync-address").select(); toast("Select and copy the WebDAV address."); }
+  });
   async function loadSettings() {
     const session = ++settingsSession;
     $("settings-error").textContent = "";

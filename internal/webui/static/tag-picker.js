@@ -83,10 +83,13 @@
     function position() {
       if (panel.hidden) return;
       const bounds = field.getBoundingClientRect(), dialog = input.closest("dialog").getBoundingClientRect();
-      const below = dialog.bottom - bounds.bottom - 12, above = bounds.top - dialog.top - 12;
+      const scroller = input.closest(".bookmark-form-body")?.getBoundingClientRect() || dialog;
+      const below = Math.min(dialog.bottom, scroller.bottom) - bounds.bottom - 12;
+      const above = bounds.top - Math.max(dialog.top, scroller.top) - 12;
       const upward = below < 240 && above > below;
-      panel.dataset.side = Math.max(above, below) < 120 ? "inline" : upward ? "above" : "below";
-      list.style.maxHeight = `${Math.max(44, Math.min(216, (upward ? above : below) - status.offsetHeight - 28))}px`;
+      const chrome = status.offsetHeight + 28 + (retry.hidden ? 0 : retry.offsetHeight + 8);
+      panel.dataset.side = Math.max(above, below) < Math.max(120, chrome + 44) ? "inline" : upward ? "above" : "below";
+      list.style.maxHeight = `${Math.max(44, Math.min(216, (upward ? above : below) - chrome))}px`;
     }
     function close() {
       clearTimeout(timer); generation++; panel.hidden = true; options = []; active = -1;
@@ -173,7 +176,7 @@
     retry.addEventListener("click", () => { input.focus(); schedule(0); });
     input.form.addEventListener("reset", () => picker.set([]));
     input.closest("dialog").addEventListener("close", () => { if (!input.closest("dialog").open) close(); });
-    input.closest("dialog").addEventListener("scroll", position, { passive: true });
+    input.closest("dialog").addEventListener("scroll", position, { passive: true, capture: true });
     window.addEventListener("resize", position);
     return picker;
   }

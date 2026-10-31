@@ -55,7 +55,7 @@
       render();
       onSelectionChange();
     });
-    $("clear-selection").addEventListener("click", () => { clear(); onSelectionChange(); });
+    $("clear-selection").addEventListener("click", () => { clear(); onSelectionChange(); $("select-page").focus(); });
     $("bulk-open").addEventListener("click", () => {
       if (!selected.size) return;
       session = { entries: [...selected], pending: false };

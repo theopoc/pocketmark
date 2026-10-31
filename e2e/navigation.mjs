@@ -19,7 +19,7 @@ export async function openWorkspaceActions(page) {
 }
 
 export async function clickNavigation(page, selector) {
-  if (['#import-button', '#export-button', '#settings-button', '#logout-button'].includes(selector)) {
+  if (['#import-button', '#export-button', '#logout-button'].includes(selector)) {
     await openWorkspaceActions(page);
   } else await openNavigation(page);
   await page.locator(selector).click();

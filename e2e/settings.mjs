@@ -29,6 +29,22 @@ export async function settingsNavigationJourney(page) {
     assert.equal(new URL(page.url()).searchParams.get('settings'), ['2fa', 'sessions'].includes(section) ? 'password' : section);
     assert.equal(await page.locator('[data-settings-panel]:visible').count(), ['2fa', 'sessions', 'password'].includes(section) ? 3 : 1);
   }
+  // Optional character shortcuts must stay off in settings and persist per browser.
+  await page.locator('#api-keys-title').focus();
+  await page.keyboard.press('n');
+  assert.equal(await page.locator('#bookmark-dialog').isVisible(), false);
+  await selectSettings(page, 'mobile');
+  await page.locator('#keyboard-shortcuts').uncheck();
+  await page.reload();
+  await page.locator('#keyboard-shortcuts').waitFor();
+  assert.equal(await page.locator('#keyboard-shortcuts').isChecked(), false);
+  await clickNavigation(page, '#settings-navigation [data-settings-back]');
+  await page.locator('#page-title').focus();
+  await page.keyboard.press('n');
+  assert.equal(await page.locator('#bookmark-dialog').isVisible(), false);
+  assert.equal(await page.locator('#add-bookmark [data-shortcut-hint]').isVisible(), false);
+  await openSettings(page, 'mobile');
+  await page.locator('#keyboard-shortcuts').check();
   const legacy = new URL(page.url());
   legacy.searchParams.set('settings', '2fa');
   await page.goto(legacy.href);

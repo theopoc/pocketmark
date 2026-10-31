@@ -10,7 +10,7 @@
 </head>
 <body>
   <header class="popup-header">
-    <div class="brand"><svg class="brand-mark" viewBox="0 0 24 28" aria-hidden="true"><path d="M5 2h14a2 2 0 0 1 2 2v21l-9-5-9 5V4a2 2 0 0 1 2-2Z"/><path d="M8 8h8M8 12h5"/></svg><div><h1>Pocketmark</h1><p id="page-title">Your current page</p></div></div>
+    <div class="brand"><span class="brand-mark" aria-hidden="true">p.</span><div><h1>Pocketmark</h1><p id="page-title">Your current page</p></div></div>
     <button id="connection-toggle" type="button" class="text-button connection-toggle" aria-controls="settings" aria-expanded="false" hidden>Connection</button>
   </header>
   <main id="content">
@@ -27,7 +27,7 @@
           <div class="field-heading"><label for="collection">Collection</label><button id="new-collection" type="button" class="text-button" aria-expanded="false" aria-controls="collection-create">New collection</button></div>
           <select id="collection"><option value="">Inbox</option></select>
           <div id="collection-create" class="collection-create" hidden>
-            <label for="collection-name">New collection name</label><input id="collection-name" maxlength="120" aria-describedby="collection-name-hint"><p id="collection-name-hint" class="hint">Up to 120 UTF-8 bytes; accented characters and emoji may use more than one byte.</p>
+            <label for="collection-name">New collection name</label><input id="collection-name" maxlength="120" aria-describedby="collection-name-hint"><p id="collection-name-hint" class="hint">Keep the name short. Names with accents or emoji may reach the limit sooner.</p>
             <label for="collection-parent">Inside</label><select id="collection-parent"><option value="">Library root</option></select>
             <div class="actions"><button id="create-collection" type="button" class="secondary">Create collection</button><button id="cancel-collection" type="button" class="text-button">Cancel</button></div>
           </div>
@@ -53,7 +53,7 @@
       <h2 id="settings-heading">Connect to Pocketmark</h2><p class="intro">Your bookmarks, on your own server.</p>
       <form id="settings-form">
         <div class="field"><label for="server">Server address</label><input id="server" type="url" placeholder="https://bookmarks.example.com" aria-describedby="server-hint" spellcheck="false" required><p id="server-hint" class="hint">Use your instance address, without a path.</p></div>
-        <div class="field"><label for="token">Dedicated API key</label><input id="token" type="password" autocomplete="off" aria-describedby="key-hint" required><p id="key-hint" class="hint">In Pocketmark, open <strong>Settings → Account &amp; security → API keys</strong> and create a key with <strong>Add, edit &amp; capture</strong> permissions.</p></div>
+        <div class="field"><label for="token">Dedicated API key</label><input id="token" type="password" autocomplete="off" aria-describedby="key-hint" required><p id="key-hint" class="hint">In Pocketmark, open <strong>Settings → API keys</strong> and create a key with <strong>Add, edit &amp; capture</strong> permissions.</p></div>
         <p class="privacy-note">The key stays in this Chrome profile and is never synced. Use HTTP only on a trusted local network.</p>
       </form>
     </section>
