@@ -6,7 +6,7 @@ This implementation retains Go + SQLite and no resident browser/database/search 
 | --- | --- |
 | Collection management | Create, rename, move, delete; optional 8 KiB description, stable creation date and cycle prevention. Deleting a collection retains bookmarks in Inbox. |
 | Bulk operations | Up to 500 selected IDs per atomic request: move, replace tags, read/unread, favorite/unfavorite, recapture, delete. |
-| Search and sorting | FTS5 full text; newest/oldest/title/updated sorting. Optional typo matching scans bounded metadata per row, rather than keeping a second search index in RAM. It is slower on a large library and does not fuzzy-scan archive bodies. |
+| Search and sorting | FTS5 full text; newest/oldest/title/updated sorting. The web UI includes typo matches automatically alongside full-text results. Typo matching scans bounded metadata per row, rather than keeping a second search index in RAM. It is slower on a large library and does not fuzzy-scan archive bodies. |
 | Highlights | Selected quote, Unicode position, color and note. A digest identifies stale anchors after recapture; stale quotes are retained without painting the wrong text. |
 | Reader | Plain text with highlights; separate sandboxed structural HTML reader with tables/headings/code. No script execution or remote resources. |
 | Browser import | Streaming Netscape HTML import/export, nested folders, transactional validation and duplicate URL skipping. |

@@ -2,7 +2,7 @@
 
 (() => {
   const $ = (id) => document.getElementById(id);
-  const state = { filter: "all", collection: null, tag: "", query: "", page: 1, pageSize: 40, total: 0, links: [], collections: [], editing: null, request: 0, timer: null, signedIn: false, sort: "newest", fuzzy: false, editingCollection: null };
+  const state = { filter: "all", collection: null, tag: "", query: "", page: 1, pageSize: 40, total: 0, links: [], collections: [], editing: null, request: 0, timer: null, signedIn: false, sort: "newest", editingCollection: null };
   let toastTimer, toastActionPending = false;
   let expandedBookmarkActions = null;
   const expandedBookmarkTags = new Set();
@@ -66,10 +66,10 @@
     renderSettings(!initial);
     const scroll = history.state?.pocketmarkScroll || 0;
     const previous = workspace.routeSearch(route());
-    Object.assign(state, { filter: restored.filter, collection: restored.collection, tag: restored.tag, query: restored.query, page: restored.page, sort: restored.sort, fuzzy: restored.fuzzy });
+    Object.assign(state, { filter: restored.filter, collection: restored.collection, tag: restored.tag, query: restored.query, page: restored.page, sort: restored.sort });
     showingTags = restored.showingTags; tagsPage = restored.tagsPage;
     $("search").value = state.query; $("tags-search").value = restored.tagsQuery;
-    syncSortMenu(); closeSortMenu(); $("fuzzy-search").checked = state.fuzzy;
+    syncSortMenu(); closeSortMenu();
     $("tags-view").hidden = !showingTags; $("library-view").hidden = showingTags;
     if (!initial && previous !== workspace.routeSearch(route())) bulk.clear();
     reader.close();
@@ -102,17 +102,6 @@
   window.addEventListener("beforeunload", (event) => {
     if (drafts.size || mfaManagementBusy || (Boolean(settingsSection) && !$("mfa-manage-codes").hidden)) { event.preventDefault(); event.returnValue = ""; }
   });
-
-  const compactLibrary = window.matchMedia("(max-width: 600px)");
-  let viewOptionsOpen = false;
-  function syncViewOptions() {
-    const visible = !compactLibrary.matches || viewOptionsOpen;
-    $("library-view-options").hidden = !visible;
-    $("view-options-toggle").setAttribute("aria-expanded", String(visible));
-  }
-  $("view-options-toggle").addEventListener("click", () => { viewOptionsOpen = !viewOptionsOpen; syncViewOptions(); });
-  compactLibrary.addEventListener("change", syncViewOptions);
-  syncViewOptions();
 
   function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -507,7 +496,6 @@
       root.append(button);
     };
     if (state.query) add(`Search: ${state.query}`, () => { clearTimeout(searchTimer); state.query = ""; $("search").value = ""; });
-    if (state.fuzzy) add("Near matches", () => { state.fuzzy = false; $("fuzzy-search").checked = false; });
     root.hidden = !root.childElementCount;
     restoreFocus(root, key);
   }
@@ -927,8 +915,7 @@
     $("empty-state").hidden = libraryUnavailable || libraryLoading || state.links.length > 0;
     const filtered = !!state.query || state.filter !== "all" || !!state.tag;
     $("empty-title").textContent = filtered ? "No bookmarks found" : "Your library starts here";
-    const offerNearMatches = !!state.query && !state.fuzzy;
-    $("empty-message").textContent = offerNearMatches ? "Try a different search, or look for near matches in titles, URLs, descriptions and tags." : filtered ? "Try a different search or clear your filters to see all bookmarks." : "Save your first bookmark, or bring your existing bookmarks with you.";
+    $("empty-message").textContent = filtered ? "Try a different search or clear your filters to see all bookmarks." : "Save your first bookmark, or bring your existing bookmarks with you.";
     const emptyView = !state.query && (state.tag ? ["No bookmarks with this tag", "Choose another tag or return to all bookmarks.", false, "tag"] : {
       collection: ["This collection is empty", "Add a bookmark to start this collection.", true, "folder"],
       inbox: ["Your inbox is empty", "Save a bookmark without a collection to keep it here until you’re ready to organize it.", true, "inbox"],
@@ -940,7 +927,6 @@
       $("empty-title").textContent = emptyView[0];
       $("empty-message").textContent = emptyView[1];
     }
-    $("empty-near-matches").hidden = !offerNearMatches;
     $("empty-import").hidden = filtered;
     $("empty-reset").hidden = !filtered;
     $("empty-reset").textContent = emptyView ? "View all bookmarks" : "Clear filters";
@@ -965,7 +951,7 @@
     clearTimeout(state.timer);
     const request = ++state.request;
     const params = new URLSearchParams({ page: String(state.page), sort: state.sort });
-    if (state.fuzzy) params.set("fuzzy", "1");
+    if (state.query) params.set("fuzzy", "1");
     if (state.query) params.set("q", state.query);
     if (state.tag) params.set("tag", state.tag);
     if (state.filter === "favorite") params.set("favorite", "1");
@@ -1236,15 +1222,8 @@
   $("add-bookmark").addEventListener("click", () => openEditor());
   $("empty-add").addEventListener("click", () => openEditor());
   $("empty-import").addEventListener("click", () => $("import-file").click());
-  $("empty-near-matches").addEventListener("click", () => {
-    clearTimeout(searchTimer); state.query = $("search").value.trim();
-    if (!state.query) { $("search").focus(); return; }
-    $("search").focus(); $("empty-near-matches").hidden = true;
-    $("fuzzy-search").checked = true; $("fuzzy-search").dispatchEvent(new Event("change"));
-  });
   function resetLibraryFilters() {
     clearTimeout(searchTimer); state.query = ""; $("search").value = "";
-    state.fuzzy = false; $("fuzzy-search").checked = false;
     selectFilter("all"); $("search").focus();
   }
   $("empty-reset").addEventListener("click", resetLibraryFilters);
@@ -1422,7 +1401,6 @@
   document.addEventListener("focusin", (event) => {
     if (!$("sort-menu").hidden && !$("sort-menu").contains(event.target) && event.target !== $("sort-toggle")) closeSortMenu();
   });
-  $("fuzzy-search").addEventListener("change", () => { state.fuzzy = $("fuzzy-search").checked; state.page = 1; commitRoute(); refresh(); });
   $("upload-file-button").addEventListener("click", () => $("library-file").click());
   $("library-file").addEventListener("change", async () => {
     const file = $("library-file").files[0];

@@ -691,15 +691,18 @@ try {
   assert.equal(await page.locator('#empty-add').isVisible(), false);
   await page.locator('#empty-reset').click();
   await card(original).waitFor();
+  const nearMatchResponse = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return url.pathname === '/api/links' && url.searchParams.get('q') === 'browzer' && url.searchParams.get('fuzzy') === '1' && response.ok();
+  });
   await page.locator('#search').fill('browzer');
-  await page.locator('#empty-near-matches').waitFor({ state: 'visible' });
-  await page.locator('#empty-near-matches').click();
+  await nearMatchResponse;
   await card(original).waitFor();
-  assert.equal(await page.locator('#fuzzy-search').isChecked(), true);
+  assert.equal(await page.locator('#fuzzy-search').count(), 0, 'near matches are automatic with no toggle');
   await page.locator('#search').fill('absent-e2e-bookmark-42');
   await page.locator('#empty-title').filter({ hasText: 'No bookmarks found' }).waitFor();
   await page.locator('#empty-reset').click();
-  assert.equal(await page.locator('#fuzzy-search').isChecked(), false);
+
   assert.equal(await page.locator('#search').inputValue(), '');
   await page.locator('#search').fill('Browser integration');
   await card(original).waitFor();

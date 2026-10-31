@@ -15,7 +15,7 @@
       filter: tag ? "all" : filter, collection: !tag && filter === "collection" ? collection : null, tag,
       query: (params.get("q") || "").trim(), page: positive(params.get("page")),
       sort: ["newest", "oldest", "title", "title_desc", "updated"].includes(params.get("sort")) ? params.get("sort") : "newest",
-      fuzzy: params.get("fuzzy") === "1", showingTags: params.get("view") === "tags",
+      showingTags: params.get("view") === "tags",
       tagsQuery: (params.get("tagQuery") || "").slice(0, 512), tagsPage: positive(params.get("tagPage")),
     };
   }
@@ -28,7 +28,6 @@
     if (route.query) params.set("q", route.query);
     if (route.page > 1) params.set("page", route.page);
     if (route.sort !== "newest") params.set("sort", route.sort);
-    if (route.fuzzy) params.set("fuzzy", "1");
     if (route.showingTags) params.set("view", "tags");
     if (route.tagsQuery) params.set("tagQuery", route.tagsQuery);
     if (route.tagsPage > 1) params.set("tagPage", route.tagsPage);
