@@ -5,6 +5,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { securityJourney } from './security.mjs';
+import { openSettings, refreshSessionsBeforeMFA } from './settings.mjs';
 
 const base = new URL(process.env.E2E_BASE_URL);
 assert.equal(base.hostname, '127.0.0.1', 'E2E requires a disposable loopback instance');
@@ -49,7 +50,7 @@ async function captureMFA(page, name) {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${name}-${suffix} overflows`);
     if (name === 'mfa-manage-replacement') {
       await page.locator('#mfa-manage-enrollment').evaluate(node => node.scrollIntoView({ block: 'start' }));
-      assert.ok(await page.locator('#settings-dialog').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), `${name}-${suffix} dialog overflows`);
+      assert.ok(await page.locator('#settings-page').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), `${name}-${suffix} dialog overflows`);
     }
     if (name === 'mfa-enrollment' || name === 'mfa-manage-replacement') {
       const key = name === 'mfa-enrollment' ? '#mfa-secret' : '#mfa-manage-secret';
@@ -176,16 +177,16 @@ try {
   try {
     assert.equal((await peer.request.post(new URL('/api/login', base).href, { data: { username, password } })).status(), 200);
     assert.equal((await peer.request.post(new URL('/api/mfa/verify', base).href, { data: { code: recoveryCodes[2] } })).status(), 200);
-    await page.locator('#settings-button').click();
+    await openSettings(page, '2fa');
     assert.equal(await page.getByText('Generating recovery codes invalidates all previous recovery codes.').isVisible(), true);
     assert.equal(await page.locator('#mfa-manage-form button[value="codes"]').getAttribute('aria-describedby'), 'mfa-codes-warning');
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-form button[value="replace"]').click();
     await page.locator('#mfa-manage-enrollment').waitFor({ state: 'visible' });
     // Closing settings must not spend the recovery grant before confirmation.
-    await page.locator('#settings-dialog').getByRole('button', { name: 'Close', exact: true }).click();
-    await page.locator('#settings-dialog').waitFor({ state: 'hidden' });
-    await page.locator('#settings-button').click();
+    await page.locator('[data-settings-back]:visible').click();
+    await page.locator('#settings-page').waitFor({ state: 'hidden' });
+    await openSettings(page, '2fa');
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-form button[value="replace"]').click();
     await page.locator('#mfa-manage-enrollment').waitFor({ state: 'visible' });
@@ -197,9 +198,9 @@ try {
     const heldReplacement = await holdResponse(page, '/api/mfa/verify');
     await page.locator('#mfa-manage-verify button[type="submit"]').click();
     await heldReplacement.ready;
-    assert.equal(await page.locator('#settings-dialog').getByRole('button', { name: 'Close', exact: true }).isDisabled(), true);
+    assert.equal(await page.locator('[data-settings-back]:visible').isDisabled(), true);
     await page.keyboard.press('Escape');
-    assert.equal(await page.locator('#settings-dialog').isVisible(), true);
+    assert.equal(await page.locator('#settings-page').isVisible(), true);
     heldReplacement.release();
     await page.locator('#mfa-manage-codes').waitFor({ state: 'visible' });
     await heldReplacement.remove();
@@ -263,7 +264,7 @@ try {
       await page.locator('#mfa-manage-password').fill(password);
       await page.locator('#mfa-manage-code').fill(replacementCodes[4]);
       const expired = await holdUnauthorized(page, '/api/sessions');
-      await page.locator('#sessions-refresh').click();
+      await refreshSessionsBeforeMFA(page);
       await expired.ready;
       const limited = await holdUnauthorized(page, '/api/mfa/replace', 'Synthetic challenge limit', 429);
       await page.locator('#mfa-manage-form button[value="replace"]').click();
@@ -283,33 +284,33 @@ try {
       await expired.remove();
       await page.reload();
       await page.locator('#app-view').waitFor({ state: 'visible' });
-      await page.locator('#settings-button').click();
+      await openSettings(page, '2fa');
     }
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-code').fill(replacementCodes[4]);
     // A concurrent expired-session response must not hide codes already committed.
     const heldSession = await holdUnauthorized(page, '/api/sessions');
-    await page.locator('#sessions-refresh').click();
+    await refreshSessionsBeforeMFA(page);
     await heldSession.ready;
     const heldCodes = await holdResponse(page, '/api/mfa/recovery-codes');
     await page.locator('#mfa-manage-form button[value="codes"]').click();
     await heldCodes.ready;
-    assert.equal(await page.locator('#settings-dialog').getByRole('button', { name: 'Close', exact: true }).isDisabled(), true);
-    assert.equal(await page.locator('[data-settings-section="backup-title"]').isDisabled(), true);
-    assert.equal(await page.locator('[data-settings-section="mfa-settings-title"]').isEnabled(), true);
+    assert.equal(await page.locator('[data-settings-back]:visible').isDisabled(), true);
+    assert.equal(await page.locator('[data-settings-section="backup"]').isDisabled(), true);
+    assert.equal(await page.locator('[data-settings-section="2fa"]').isEnabled(), true);
     await page.keyboard.press('Escape');
-    assert.equal(await page.locator('#settings-dialog').isVisible(), true);
+    assert.equal(await page.locator('#settings-page').isVisible(), true);
     await page.evaluate(() => history.pushState({}, '', '?test=mfa-pending'));
     await page.goBack();
-    assert.equal(await page.locator('#settings-dialog').isVisible(), true);
+    assert.equal(await page.locator('#settings-page').isVisible(), true);
     const leaving = page.waitForEvent('dialog', { predicate: dialog => dialog.type() === 'beforeunload' });
     const navigation = page.goto(new URL('/?test=leave', base).href).catch(() => {});
     await (await leaving).dismiss();
     await navigation;
-    assert.equal(await page.locator('#settings-dialog').isVisible(), true);
+    assert.equal(await page.locator('#settings-page').isVisible(), true);
     heldSession.release();
     await page.locator('#mfa-manage-feedback').filter({ hasText: 'Your session expired' }).waitFor();
-    assert.equal(await page.locator('#settings-dialog').isVisible(), true);
+    assert.equal(await page.locator('#settings-page').isVisible(), true);
     heldCodes.release();
     await page.waitForFunction(() => document.getElementById('mfa-manage-codes-value').textContent.trim().split('\n').length === 10);
     await heldCodes.remove();
@@ -317,7 +318,7 @@ try {
     freshRecoveryCodes = (await page.locator('#mfa-manage-codes-value').textContent()).trim().split('\n');
     assert.equal(freshRecoveryCodes.length, 10);
     await page.locator('#mfa-manage-feedback').filter({ hasText: 'These recovery codes may have changed' }).waitFor();
-    await page.locator('#settings-dialog').getByRole('button', { name: 'Close', exact: true }).click();
+    await page.locator('[data-settings-back]:visible').click();
     await page.waitForFunction(() => document.getElementById('mfa-manage-codes-value').textContent === '');
     assert.equal(await page.locator('#mfa-manage-codes-value').textContent(), '');
     assert.equal(await page.locator('#mfa-manage-secret').inputValue(), '');
@@ -329,7 +330,7 @@ try {
     // An invalid TOTP and another expired-session response can arrive in
     // either order. Previously displayed codes may no longer be valid.
     for (const sessionFirst of [true, false]) {
-      await page.locator('#settings-button').click();
+      await openSettings(page, '2fa');
       await page.route(codesURL, route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ recoveryCodes: replacementCodes.slice(4) }) }));
       await page.locator('#mfa-manage-password').fill(password);
       await page.locator('#mfa-manage-code').fill('123456');
@@ -343,7 +344,7 @@ try {
       await page.locator('#mfa-manage-enrollment').waitFor({ state: 'visible' });
       await page.unroute(replaceURL);
       const expired = await holdUnauthorized(page, '/api/sessions');
-      await page.locator('#sessions-refresh').click();
+      await refreshSessionsBeforeMFA(page);
       await expired.ready;
       const invalid = await holdUnauthorized(page, '/api/mfa/verify', 'invalid authentication code');
       await page.locator('#mfa-manage-new-code').fill('000000');
@@ -362,7 +363,7 @@ try {
       assert.equal((await page.locator('#mfa-manage-codes-value').textContent()).trim(), replacementCodes.slice(4).join('\n'));
       await invalid.remove();
       await expired.remove();
-      await page.locator('#settings-dialog').getByRole('button', { name: 'Close', exact: true }).click();
+      await page.locator('[data-settings-back]:visible').click();
       await page.locator('#login-view').waitFor({ state: 'visible' });
       await page.reload();
       await page.locator('#app-view').waitFor({ state: 'visible' });
@@ -804,9 +805,9 @@ try {
       await page.reload();
       await page.locator('#app-view').waitFor({ state: 'visible' });
     }
-    await page.locator('#settings-button').click();
+    await openSettings(page, '2fa');
     const expiredRequest = await holdUnauthorized(page, '/api/sessions');
-    await page.locator('#sessions-refresh').click();
+    await refreshSessionsBeforeMFA(page);
     await expiredRequest.ready;
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-code').fill(sessionFirst ? freshRecoveryCodes[1] : authenticatorCode(currentSecret, 30));

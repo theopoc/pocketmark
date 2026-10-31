@@ -190,3 +190,15 @@ test('a failed bookmark save never starts a capture and standalone files never r
   await saveBookmark(async path => { calls.push(path); return { id: 4, type: 'file' }; }, { id: 4 }, {}, true);
   assert.deepEqual(calls, ['/api/links', '/api/links/4']);
 });
+
+test('settings section links retain library context and reject unknown sections', () => {
+  for (const section of ['api-keys', '2fa', 'sessions', 'backup', 'password', 'sync', 'mobile']) {
+    const route = readRoute(`?settings=${section}&filter=favorite&q=reading&page=3&view=tags&tagQuery=go`);
+    assert.equal(route.settingsSection, section);
+    assert.deepEqual(readRoute(routeSearch(route)), route);
+    assert.equal(route.filter, 'favorite');
+    assert.equal(route.page, 3);
+  }
+  assert.equal(readRoute('?settings=unknown').settingsSection, 'api-keys');
+  assert.equal(readRoute('').settingsSection, null);
+});

@@ -39,7 +39,7 @@ globalThis.PocketmarkSecurity = {
       $("sessions-list").replaceChildren(node("li", "Loading sessions…", "muted"));
       try {
         const sessions = await api("/api/sessions");
-        if (attempt !== generation || !$("settings-dialog").open) return;
+        if (attempt !== generation || $("settings-page").hidden) return;
         $("sessions-list").replaceChildren();
         const current = sessions.find(session => session.current);
         $("session-idle").value = String(current?.idleTimeoutMinutes ?? 1440);
@@ -85,7 +85,7 @@ globalThis.PocketmarkSecurity = {
       try { await confirmPassword(); window.location.assign("/api/backup"); }
       catch (error) { toast(error.message, true); }
     }));
-    $("settings-dialog").addEventListener("close", () => { generation++; $("sessions-feedback").textContent = ""; });
-    return { confirm: confirmPassword, loadSessions };
+    function clear() { generation++; clearSessionMessages(); }
+    return { confirm: confirmPassword, loadSessions, clear };
   },
 };
