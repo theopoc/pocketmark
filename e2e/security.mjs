@@ -71,8 +71,8 @@ export async function securityJourney({ browser, page, base, username, password,
     const key = keys.find(key => key.name === 'Synthetic extension');
     assert.equal(key.profile, 'capture'); assert.ok(key.expiresAt > Date.now() / 1000);
     assert.equal((await request.delete(url('/api/links/99999'), { headers: { Authorization: `Bearer ${original}` } })).status(), 403);
-    page.once('dialog', dialog => dialog.accept());
     await page.getByRole('button', { name: 'Rotate Synthetic extension', exact: true }).click();
+    await page.locator('#confirm-action-submit').click();
     await page.waitForFunction(old => document.getElementById('new-token-value').value !== old, original);
     const rotated = await page.locator('#new-token-value').inputValue();
     assert.equal((await request.get(url('/api/session'), { headers: { Authorization: `Bearer ${original}` } })).status(), 401);
