@@ -608,10 +608,12 @@ test("saved formats open first; optional notebook navigation preserves reading a
   assert.equal(env.get("reader-original").hidden, false);
   assert.equal(env.get("reader-formats").hidden, false);
   assert.equal(env.get("reader-content").hidden, true);
+  assert.equal(env.get("reader-text-mode").attributes["aria-pressed"], "false");
   assert.equal(env.get("reader-layout").hidden, true);
   assert.equal(env.headCalls.length, 0, "opening a bookmark must not load a preview automatically");
   for (const format of ["html", "image", "pdf"]) {
     assert.equal(env.get(`reader-format-${format}`).disabled, true);
+    assert.equal(env.get(`reader-format-${format}`).hidden, true);
     assert.equal(env.get(`reader-format-${format}-status`).textContent, "Not saved");
   }
   env.get("reader-text-mode").click();
@@ -665,6 +667,7 @@ test("format shortcuts open the newest copy and retain earlier copies of that fo
   await env.reader.open(1);
   assert.equal(env.get("reader-content").hidden, true);
   assert.equal(env.get("reader-format-html-status").textContent, "Saved · 2 copies");
+  assert.equal(env.get("reader-format-html").hidden, false);
   assert.equal(env.get("reader-archive").href, "/api/links/1/archive");
   for (const [format, latest, copies, source] of [["html", "11", 2, "/asset-preview.html"], ["image", "9", 1, "/api/assets/9/view"], ["pdf", "10", 1, "/api/assets/10/view"]]) {
     assert.equal(env.get(`reader-format-${format}`).disabled, false, "failed page capture must not hide successful files");

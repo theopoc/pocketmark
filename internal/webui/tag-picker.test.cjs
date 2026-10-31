@@ -19,7 +19,7 @@ class Element {
   addEventListener(type, fn) { if (!this.events.has(type)) this.events.set(type, []); this.events.get(type).push(fn); }
   dispatchEvent(event) { if (!event.target) event.target = this; for (const fn of this.events.get(event.type) || []) fn(event); if (event.bubbles && !event.stopped) this.parentNode?.dispatchEvent(event); return !event.defaultPrevented; }
   setAttribute(key, value) { this.attributes[key] = String(value); } removeAttribute(key) { delete this.attributes[key]; }
-  closest(tag) { for (let node = this; node; node = node.parentNode) if (node.tagName === tag.toUpperCase()) return node; return null; }
+  closest(tag) { for (let node = this; node; node = node.parentNode) if (tag.startsWith(".") ? node.className.split(" ").includes(tag.slice(1)) : node.tagName === tag.toUpperCase()) return node; return null; }
   contains(node) { for (; node; node = node.parentNode) if (node === this) return true; return false; }
   querySelectorAll(selector) { assert.ok(selector.startsWith('.')); const name = selector.slice(1), result = []; for (const child of this.children) { if (child.className.split(' ').includes(name)) result.push(child); result.push(...child.querySelectorAll(selector)); } return result; }
   focus() { if (this.document.activeElement === this) return; const previous = this.document.activeElement; this.document.activeElement = this; previous?.dispatchEvent(new Event('focusout', { bubbles: true, relatedTarget: this })); this.dispatchEvent(new Event('focus')); }
@@ -117,4 +117,23 @@ test('the shipped shell loads and caches the selector before app without private
   assert.ok(scripts.includes('/tag-picker.js')); assert.ok(scripts.indexOf('/tag-picker.js') < scripts.indexOf('/app.js'));
   const context = vm.createContext({ self: { addEventListener() {} } }); vm.runInContext(fs.readFileSync(`${__dirname}/static/sw.js`, 'utf8'), context);
   assert.equal(vm.runInContext('ASSETS.includes("/tag-picker.js")', context), true); assert.equal(vm.runInContext('ASSETS.some(path => path === "/" || path.startsWith("/api/"))', context), false);
+});
+
+test('suggestions use the scrolling form body rather than the larger dialog bounds', async () => {
+  const env = setup(), { host } = env;
+  const scroller = new Element('div', env.document); scroller.className = 'bookmark-form-body';
+  const picker = host.field.parentNode; host.form.append(scroller); scroller.append(picker);
+  host.dialog.getBoundingClientRect = () => ({ top: 0, bottom: 900 });
+  scroller.getBoundingClientRect = () => ({ top: 200, bottom: 500 });
+  host.field.getBoundingClientRect = () => ({ top: 220, bottom: 264 });
+  host.input.focus(); await env.flush();
+  assert.equal(host.panel.dataset.side, 'below');
+  assert.equal(host.list.style.maxHeight, '176px');
+  host.field.getBoundingClientRect = () => ({ top: 380, bottom: 424 });
+  env.fire(host.dialog, 'scroll');
+  assert.equal(host.panel.dataset.side, 'above');
+  assert.equal(host.list.style.maxHeight, '120px');
+  scroller.getBoundingClientRect = () => ({ top: 350, bottom: 460 });
+  env.fire(host.dialog, 'scroll');
+  assert.equal(host.panel.dataset.side, 'inline');
 });

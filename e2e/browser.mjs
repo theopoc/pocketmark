@@ -379,7 +379,7 @@ try {
   await clickNavigation(page, '#add-collection');
   await page.locator('#collection-name').fill('é'.repeat(61));
   await page.locator('#save-collection').click();
-  await page.locator('#collection-error').filter({ hasText: '120 UTF-8 bytes' }).waitFor();
+  await page.locator('#collection-error').filter({ hasText: 'This name is too long' }).waitFor();
   assert.equal(await page.locator('#collection-name').inputValue(), 'é'.repeat(61));
   assert.equal(await page.locator('#save-collection').isEnabled(), true);
   await page.locator('#collection-dialog').getByRole('button', { name: 'Cancel' }).click();
@@ -422,6 +422,7 @@ try {
   // A private destination is deliberately rejected by the capture worker: no public network.
   await page.locator('#bookmark-url').fill('http://127.0.0.1/e2e-fixture');
   await page.locator('#bookmark-title').fill(original);
+  await page.locator('#bookmark-details').evaluate(node => { node.open = true; });
   await page.locator('#bookmark-notes').fill('Persisted browser notes');
   const tagSuggestionsFailure = route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
   await page.route('**/api/tags/browse?*', tagSuggestionsFailure);
@@ -516,6 +517,18 @@ try {
     assert.ok(await page.locator(selector).evaluate(node => (node.matches('input') ? node.closest('label') : node).getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
   }
   assert.ok(await page.locator('#bookmark-dialog').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), 'mobile bookmark form does not overflow');
+  for (const [width, height] of [[844, 390], [390, 844], [1280, 1000]]) {
+    await page.setViewportSize({ width, height });
+    await page.locator('#bookmark-tags-query').click();
+    await page.locator('#bookmark-tags-options [role="option"]').first().waitFor();
+    assert.ok(await page.locator('#bookmark-dialog .tag-picker-panel').evaluate(panel => {
+      if (panel.dataset.side === 'inline') return true; // In-flow suggestions remain reachable by scrolling.
+      const bounds = panel.getBoundingClientRect(), body = panel.closest('.bookmark-form-body').getBoundingClientRect();
+      return bounds.top >= body.top - 1 && bounds.bottom <= body.bottom + 1;
+    }), `tag suggestions fit the scrolling form at ${width}x${height}`);
+    await page.locator('#bookmark-tags-query').press('Escape');
+  }
+  await page.setViewportSize({ width: 320, height: 700 });
   await page.locator('#bookmark-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   await card(original).focus();
   await page.keyboard.press("Space");
@@ -571,8 +584,9 @@ try {
   assert.equal(await page.locator('#reader-formats').isVisible(), true);
   assert.equal(await page.locator('#reader-content').isVisible(), false);
   for (const format of ['html', 'image', 'pdf']) {
-    assert.equal(await page.locator(`#reader-format-${format}`).isVisible(), true);
-    assert.ok(await page.locator(`#reader-format-${format}`).evaluate(node => node.getBoundingClientRect().height >= 44));
+    const saved = await page.locator(`#reader-format-${format}`).getAttribute('data-saved') === 'true';
+    assert.equal(await page.locator(`#reader-format-${format}`).isVisible(), saved);
+    if (saved) assert.ok(await page.locator(`#reader-format-${format}`).evaluate(node => node.getBoundingClientRect().height >= 44));
   }
   await page.locator('#reader-options summary').click();
   for (const selector of ['#reader-original', '#reader-notebook-toggle', '#reader-text-mode', '#reader-size']) {

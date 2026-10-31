@@ -7,6 +7,11 @@
   --surface: #f8f9fb;
   --line: #e3e5eb;
   --control-line: #818896;
+  --control-bg: #fff;
+  --control-ink: #4b5263;
+  --control-border: #dcdfe7;
+  --control-hover: #f1f2f7;
+  --control-hover-border: #c5cad7;
   --accent: #4f46e5;
   --accent-hover: #4038c5;
   --accent-soft: #eeedff;
@@ -55,7 +60,7 @@ kbd { font-size: 11px; line-height: 1.4; font-family: inherit; display: inline-f
 .brand { display: inline-flex; align-items: center; gap: 9px; text-decoration: none; font-size: 19px; font-weight: 700; letter-spacing: -.6px; }
 .brand-mark { display: inline-flex; align-items: center; justify-content: center; width: 29px; height: 32px; border-radius: 8px; color: white; background: var(--accent); }
 .brand-mark .icon { width: 18px; height: 20px; stroke-width: 2; }
-.sidebar-brand .brand-mark { background: #345f50; font: 700 23px/1 Georgia, serif; letter-spacing: -1px; }
+.sidebar-brand .brand-mark { background: var(--accent); font: 700 23px/1 Georgia, serif; letter-spacing: -1px; }
 .workspace-label { display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 10px; margin: 0 0 20px; border: 1px solid transparent; border-radius: 8px; background: transparent; text-align: left; font-size: 12px; font-weight: 600; }
 .workspace-label:hover, .workspace-label[aria-expanded="true"] { background: var(--surface); border-color: var(--line); }
 .workspace-name { flex: 1; min-width: 0; }
@@ -84,7 +89,7 @@ kbd { font-size: 11px; line-height: 1.4; font-family: inherit; display: inline-f
 .collection-name { min-width: 0; overflow-wrap: anywhere; }
 .collection-row .delete-collection { min-width: 25px; width: 25px; padding: 5px; }
 .collection-row .delete-collection .icon { width: 13px; height: 13px; }
-@media (hover: hover) and (pointer: fine) {
+@media (min-width: 901px) and (hover: hover) and (pointer: fine) {
   .collection-row .delete-collection { opacity: 0; pointer-events: none; transition: opacity 160ms ease-out; }
   .collection-row:hover .delete-collection, .collection-row:focus-within .delete-collection { opacity: 1; pointer-events: auto; }
 }
@@ -119,8 +124,8 @@ h1 { font-size: 26px; line-height: 1.3; font-weight: 650; letter-spacing: -.7px;
 .primary { background: var(--accent); color: #fff; }
 .primary:hover { background: var(--accent-hover); }
 .primary kbd { background: #ffffff1a; border-color: #ffffff30; color: white; height: 19px; min-width: 18px; font-size: 11px; margin-left: 6px; }
-.subtle { background: #fff; border-color: #dcdfe7; color: #4b5263; }
-.subtle:hover { background: #f1f2f7; border-color: #c5cad7; }
+.subtle { background: var(--control-bg); border-color: var(--control-border); color: var(--control-ink); }
+.subtle:hover { background: var(--control-hover); border-color: var(--control-hover-border); }
 .icon-only { width: 36px; padding: 8px; }
 .text-button { border: 0; background: transparent; color: #5146c8; font-size: 12px; padding: 4px 0; }
 .text-button:hover { text-decoration: underline; text-underline-offset: 3px; }
@@ -473,6 +478,11 @@ body:has(dialog[open]) { overflow: hidden; }
   --surface: #1e2029;
   --line: #30323e;
   --control-line: #747b92;
+  --control-bg: #1b1d25;
+  --control-ink: #d0d3df;
+  --control-border: #3a3d4b;
+  --control-hover: #292b38;
+  --control-hover-border: #62667b;
   --accent: #6359ed;
   --accent-hover: #5a50df;
   --accent-soft: #2b2750;
@@ -492,9 +502,8 @@ body:has(dialog[open]) { overflow: hidden; }
 [data-theme="dark"] .tag-button { border-color: #383b49; color: #afb4c5; }
 [data-theme="dark"] .tag-button:hover, [data-theme="dark"] .tag-button.active { background: var(--accent-soft); border-color: #686095; color: #d0caff; }
 [data-theme="dark"] #breadcrumb-current { color: #c1c4d1; }
-[data-theme="dark"] .subtle, [data-theme="dark"] input, [data-theme="dark"] textarea, [data-theme="dark"] select,
+[data-theme="dark"] input, [data-theme="dark"] textarea, [data-theme="dark"] select,
 [data-theme="dark"] .search-box { background: #1b1d25; border-color: #3a3d4b; color: #d0d3df; }
-[data-theme="dark"] .subtle:hover { background: #292b38; border-color: #62667b; }
 [data-theme="dark"] .search-box input { background: transparent; }
 [data-theme="dark"] input::placeholder, [data-theme="dark"] textarea::placeholder { color: #9b9fb0; }
 [data-theme="dark"] input[readonly] { background: var(--surface); }
@@ -917,3 +926,39 @@ body:has(dialog[open]) { overflow: hidden; }
 .button.danger { background: #b12e35; border-color: #b12e35; color: #fff; }
 .button.danger:is(:hover, :focus-visible) { background: #92242b; border-color: #92242b; }
 #delete-bookmark-name, #confirm-action-description { overflow-wrap: anywhere; }
+
+/* Forms keep their actions visible while secondary fields scroll. */
+#bookmark-dialog { padding: 0; overflow: hidden; }
+#bookmark-form { display: flex; flex-direction: column; max-height: min(90dvh, 900px); }
+#bookmark-form > .dialog-heading { margin: 0; padding: 24px 24px 16px; flex: none; }
+.bookmark-form-body { padding: 0 24px 20px; overflow-y: auto; min-height: 0; scrollbar-color: var(--control-line) var(--control-bg); scrollbar-width: thin; }
+#bookmark-form > .dialog-actions { flex: none; margin: 0; padding: 16px 24px; border-top: 1px solid var(--line); background: var(--control-bg); }
+.editor-details { margin-top: 18px; border-block: 1px solid var(--line); padding-block: 4px; }
+.editor-details summary { cursor: pointer; min-height: 44px; padding-block: 12px; font-weight: 550; font-size: 13px; }
+.editor-details[open] { padding-bottom: 12px; }
+.setup-steps { padding-left: 22px; line-height: 1.7; }
+.setup-steps li + li { margin-top: 20px; }
+.setup-steps label { display: block; margin-top: 12px; }
+.copy-field { display: flex; gap: 8px; align-items: center; }
+.copy-field input { min-width: 0; flex: 1; margin: 0; }
+.operation-result { padding: 12px 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.session-times { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 16px; font-size: 12px; margin: 12px 0; }
+.session-times dt { color: var(--muted); }
+.session-times dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.session-technical summary { cursor: pointer; min-height: 32px; padding-block: 6px; }
+.session-device { overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  #bookmark-form { max-height: 94dvh; }
+  #bookmark-form > .dialog-heading { padding: 20px 18px 12px; }
+  .bookmark-form-body { padding-inline: 18px; }
+  #bookmark-form > .dialog-actions { padding: 12px 18px; }
+  .settings-page summary, .settings-page .inline-check { min-height: 44px; }
+  .settings-page .inline-check { display: flex; align-items: center; }
+  .copy-field { flex-wrap: wrap; }
+  .copy-field input { flex-basis: 100%; }
+  #sort-toggle { font-size: 12px; }
+}
+
+@media (max-width: 900px) {
+  .collection-row .delete-collection { min-width: 44px; width: 44px; min-height: 44px; flex: none; }
+}

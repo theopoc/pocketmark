@@ -49,8 +49,18 @@ globalThis.PocketmarkSecurity = {
           const row = node("li", "", "token-row");
           const details = node("div", "", "token-details");
           details.append(node("strong", session.current ? "This browser" : "Other browser"));
-          details.append(node("p", session.device || "Browser details unavailable", "small muted session-device"));
-          details.append(node("p", `Signed in: ${date(session.createdAt)} · Last active: ${date(session.lastUsedAt)} · Expires: ${date(session.expiresAt)}`, "small muted"));
+          const device = session.device || "";
+          const browserName = /Edg\//.test(device) ? "Edge" : /Firefox\//.test(device) ? "Firefox" : /Chrome\//.test(device) ? "Chrome" : /Safari\//.test(device) ? "Safari" : "Browser";
+          const platform = /Android/.test(device) ? "Android" : /iPhone|iPad/.test(device) ? "iOS" : /Windows/.test(device) ? "Windows" : /Macintosh/.test(device) ? "macOS" : /Linux/.test(device) ? "Linux" : "";
+          details.append(node("p", device ? `${browserName}${platform ? ` on ${platform}` : ""}` : "Browser details unavailable", "small muted"));
+          const times = node("dl", "", "session-times");
+          for (const [label, value] of [["Signed in", session.createdAt], ["Last active", session.lastUsedAt], ["Expires", session.expiresAt]]) times.append(node("dt", label), node("dd", date(value)));
+          details.append(times);
+          if (device) {
+            const technical = node("details", "", "session-technical");
+            technical.append(node("summary", "Technical details"), node("p", device, "small muted session-device"));
+            details.append(technical);
+          }
           const button = node("button", session.current ? "Sign out" : "Revoke session", "button subtle");
           button.type = "button";
           button.setAttribute("aria-label", session.current ? "Sign out this browser" : `Revoke session ${session.id}`);
