@@ -442,12 +442,14 @@ try {
     if (await toggle.isVisible()) await toggle.click();
   };
   await card(original).waitFor();
-  await page.locator('#sort-order').selectOption('title_desc');
+  await page.getByRole('button', { name: 'Sort bookmarks: Newest first', exact: true }).click();
+  await page.getByRole('menuitemradio', { name: 'Title Z–A', exact: true }).click();
   await page.waitForURL(url => url.searchParams.get('sort') === 'title_desc');
   await page.reload();
   await card(original).waitFor();
-  assert.equal(await page.locator('#sort-order').inputValue(), 'title_desc', 'descending title sort survives reload');
-  await page.locator('#sort-order').selectOption('newest');
+  await page.getByRole('button', { name: 'Sort bookmarks: Title Z–A', exact: true }).click();
+  assert.equal(await page.getByRole('menuitemradio', { name: 'Title Z–A', exact: true }).getAttribute('aria-checked'), 'true', 'descending title sort survives reload');
+  await page.getByRole('menuitemradio', { name: 'Newest first', exact: true }).click();
   await page.waitForURL(url => !url.searchParams.has('sort'));
   await page.locator('#help-button').click();
   await page.locator('#help-search').fill('retry capture');
