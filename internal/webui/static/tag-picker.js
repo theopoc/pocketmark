@@ -166,7 +166,7 @@
         else if (query) choose(query);
       } else if (event.key === "Backspace" && !input.value && selected.length) {
         event.preventDefault(); close(); field.querySelectorAll(".tag-picker-remove")[selected.length - 1].focus();
-      } else if (event.key === "Tab") { commitTyped(); close(); }
+      } else if (event.key === "Tab" && (event.shiftKey || panel.hidden || retry.hidden)) { commitTyped(); close(); }
     });
     field.addEventListener("click", (event) => { if (event.target === field) input.focus(); });
     host.addEventListener("focusout", (event) => { if (!rendering && !host.contains(event.relatedTarget)) { commitTyped(); close(); } });

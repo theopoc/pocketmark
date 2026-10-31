@@ -81,7 +81,7 @@ function setup({ handler, head } = {}) {
     return handler ? handler(path, options, fallback) : fallback();
   }
   const reader = create({ api, drafts, toast: (...args) => notices.push(args), onEdit: value => edits.push(value), onChange: async () => changes.push(true), onSessionExpired: () => expired++ }, browser);
-  return { reader, get, document, browser, records, annotations, assets, calls, notices, edits, changes, headCalls, windows, drafts, expired: () => expired };
+  return { reader, get, sections, document, browser, records, annotations, assets, calls, notices, edits, changes, headCalls, windows, drafts, expired: () => expired };
 }
 
 test("opening a later bookmark ignores reversed document and section responses", async () => {
@@ -101,6 +101,8 @@ test("opening a later bookmark ignores reversed document and section responses",
   assert.equal(other.get("reader-title").textContent, "Page 2");
   assert.doesNotMatch(other.get("annotation-list").textContent, /Old/);
   assert.doesNotMatch(other.get("asset-list").textContent, /old.html/);
+  assert.equal(other.get("reader-format-html-status").textContent, "Not saved");
+  assert.equal(other.get("reader-format-html").disabled, true);
 });
 
 test("closing before a response and queued close events cannot repopulate a new reader", async () => {
@@ -113,6 +115,36 @@ test("closing before a response and queued close events cannot repopulate a new 
   assert.equal(env.get("reader-dialog").open, true);
   assert.equal(env.get("reader-title").textContent, "Page 2");
   assert.equal(env.get("reader-layout").src, "");
+});
+
+test("a failed reader opening can retry the same bookmark", async () => {
+  let failing = true;
+  const env = setup({ handler: (path, options, fallback) => {
+    if (path === "/api/links/1" && failing) throw Error("Temporarily unavailable");
+    return fallback();
+  } });
+  await env.reader.open(1);
+  assert.equal(env.get("reader-retry-open").hidden, false);
+  assert.match(env.get("reader-status").textContent, /Temporarily unavailable/);
+  for (const id of ["reader-section-nav", "reader-reading-bar", "annotations-section", "reader-files"]) assert.equal(env.get(id).hidden, true);
+  failing = false;
+  await fire(env.get("reader-retry-open"), "click");
+  await tick();
+  assert.equal(env.get("reader-title").textContent, "Page 1");
+  assert.equal(env.get("reader-retry-open").hidden, true);
+  for (const id of ["reader-section-nav", "reader-reading-bar", "reader-text-panel"]) assert.equal(env.get(id).hidden, false);
+  for (const id of ["annotations-section", "reader-files", "reader-notebook"]) assert.equal(env.get(id).hidden, true);
+  assert.equal(env.calls.filter(call => call.path === "/api/links/1").length, 2);
+});
+
+test("checking capture status keeps a keyboard focus target", async () => {
+  const env = setup();
+  env.records.set(1, link(1, { status: "pending" }));
+  await env.reader.open(1);
+  await fire(env.get("reader-recheck"), "click");
+  await tick();
+  assert.equal(env.get("reader-title").focused, true);
+  assert.equal(env.get("reader-recheck").hidden, false);
 });
 
 test("partial section errors leave text usable and retry only the failed section", async () => {
@@ -129,6 +161,38 @@ test("partial section errors leave text usable and retry only the failed section
   await fire(env.get("assets-retry"), "click");
   assert.equal(env.get("assets-error").hidden, true);
   assert.equal(env.calls.filter(call => call.path.endsWith("/annotations")).length, 1);
+});
+
+test("failed capture offers a direct retry and prevents duplicate requests", async () => {
+  const pending = deferred();
+  const env = setup({ handler: (path, options, fallback) => path.endsWith("/capture") ? pending.promise : fallback() });
+  env.records.set(1, link(1, { status: "failed", error: "page not found" }));
+  await env.reader.open(1);
+  assert.equal(env.get("reader-retry-capture").hidden, false);
+  env.document.activeElement = env.get("reader-retry-capture");
+  const retry = fire(env.get("reader-retry-capture"), "click");
+  assert.equal(env.get("reader-capture").disabled, true);
+  assert.equal(env.get("reader-retry-capture").attributes["aria-disabled"], "true");
+  await fire(env.get("reader-retry-capture"), "click");
+  await fire(env.get("reader-capture"), "click");
+  assert.equal(env.calls.filter(call => call.path.endsWith("/capture")).length, 1);
+  pending.resolve({ ok: true }); await retry;
+  assert.equal(env.get("reader-retry-capture").hidden, true);
+  assert.equal(env.get("reader-recheck").hidden, false);
+  assert.equal(env.get("reader-recheck").focused, true);
+  assert.match(env.get("reader-status").textContent, /queued/i);
+  await env.reader.open(2);
+  assert.equal(env.get("reader-retry-capture").hidden, true);
+});
+
+test("a rejected direct capture retry remains available with a visible error", async () => {
+  const env = setup({ handler: (path, options, fallback) => { if (path.endsWith("/capture")) throw Error("Try again later"); return fallback(); } });
+  env.records.set(1, link(1, { status: "failed" }));
+  await env.reader.open(1);
+  await fire(env.get("reader-retry-capture"), "click");
+  assert.equal(env.get("reader-retry-capture").hidden, false);
+  assert.equal(env.get("reader-retry-capture").attributes["aria-disabled"], undefined);
+  assert.match(env.get("reader-status").textContent, /Try again later/);
 });
 
 test("notes saved while typing preserve newer notes and unrelated editor drafts", async () => {
@@ -201,6 +265,7 @@ test("saved files open images, PDF and sandboxed original HTML in the integrated
   ]);
   await env.reader.open(1);
   const row = env.get("asset-list").children[0];
+  assert.equal(row.children.find(node => node.textContent === "Delete").attributes["aria-label"], "Delete Full page.png");
   await fire(row.children.find(node => node.textContent === "View"), "click");
   await tick();
   assert.equal(env.get("asset-viewer").open, true);
@@ -275,7 +340,7 @@ test("capture completion cannot overwrite a different reader's status", async ()
   const pending = fire(env.get("reader-capture"), "click");
   await env.reader.open(2);
   capture.resolve({ ok: true }); await pending;
-  assert.equal(env.get("reader-status").textContent, "Captured text");
+  assert.equal(env.get("reader-status").textContent, "");
   assert.equal(env.get("reader-recheck").hidden, true);
   assert.equal(env.get("reader-capture").disabled, false);
 });
@@ -286,7 +351,6 @@ test("reader edits return the selected record and standalone files hide network 
   await env.reader.open(1);
   assert.equal(env.get("reader-original").hidden, true);
   assert.equal(env.get("reader-capture").hidden, true);
-  assert.equal(env.get("preserve-page").hidden, true);
   await fire(env.get("reader-edit"), "click");
   assert.equal(env.edits[0].id, 1);
   assert.equal(env.get("reader-dialog").open, false);
@@ -342,6 +406,60 @@ test("highlights use Unicode offsets and preserve edits made during annotation s
   assert.equal(root.textContent, content);
 });
 
+test("a highlighted passage opens its annotation with keyboard activation", async () => {
+  const env = setup();
+  env.annotations.set(1, [{ id: 11, quote: "Text", start: 0, end: 4, note: "Remember this", color: "yellow" }]);
+  await env.reader.open(1);
+  const mark = env.get("reader-content").children[0];
+  assert.equal(mark.attributes.role, "button");
+  assert.equal(mark.attributes.tabindex, "0");
+  assert.match(mark.attributes["aria-label"], /Edit highlight: Text/);
+  let prevented = false;
+  await fire(mark, "keydown", { key: "Enter", preventDefault: () => { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(env.get("annotation-dialog").open, true);
+  assert.equal(env.get("annotation-note").value, "Remember this");
+  env.get("annotation-dialog").close(); await tick();
+  await fire(mark, "keydown", { key: " ", preventDefault: () => { prevented = true; } });
+  assert.equal(env.get("annotation-dialog").open, true);
+});
+
+test("the accessible highlighted passage retains its complete text", async () => {
+  const env = setup(), quote = "A".repeat(120) + " ending";
+  env.records.set(1, link(1, { content: quote }));
+  env.annotations.set(1, [{ id: 11, quote, start: 0, end: quote.length, color: "yellow" }]);
+  await env.reader.open(1);
+  assert.equal(env.get("reader-content").children[0].attributes["aria-label"], `Edit highlight: ${quote}`);
+});
+
+test("refreshing highlights preserves focus or returns it to the text when removed", async () => {
+  const env = setup();
+  env.annotations.set(1, [{ id: 11, quote: "Text", start: 0, end: 4, note: "Remember this", color: "yellow" }]);
+  await env.reader.open(1);
+  const root = env.get("reader-content");
+  env.document.activeElement = root.children[0];
+  await fire(env.get("annotations-retry"), "click");
+  assert.equal(root.children[0].focused, true);
+  env.document.activeElement = root.children[0];
+  env.annotations.set(1, []);
+  await fire(env.get("annotations-retry"), "click");
+  assert.equal(root.focused, true);
+});
+
+test("refreshing the annotation list preserves the focused edit action", async () => {
+  const env = setup();
+  env.annotations.set(1, [{ id: 11, quote: "Text", start: 0, end: 4, note: "Remember this", color: "yellow" }]);
+  await env.reader.open(1);
+  const edit = () => env.get("annotation-list").children[0].children.at(-1).children[0];
+  env.document.activeElement = edit();
+  await fire(env.get("annotations-retry"), "click");
+  assert.equal(edit().focused, true);
+  env.document.activeElement = edit();
+  env.annotations.set(1, []);
+  await fire(env.get("annotations-retry"), "click");
+  assert.equal(env.get("annotations-section").focused, true);
+});
+
 test("annotation completion cannot close or overwrite another document's annotation", async () => {
   const save = deferred();
   const env = setup({ handler: (path, options, fallback) => options.method === "PUT" ? save.promise : fallback() });
@@ -361,6 +479,36 @@ test("annotation completion cannot close or overwrite another document's annotat
   assert.equal(env.get("annotation-form").querySelector("button[type=submit]").disabled, false);
 });
 
+for (const action of ["save", "delete"]) test(`${action} annotation remains successful when refreshing highlights fails`, async () => {
+  let failRefresh = false;
+  const env = setup({ handler: (path, options, fallback) => {
+    if (path === "/api/links/1/annotations" && failRefresh) throw Error("Highlights unavailable");
+    if (["PUT", "DELETE"].includes(options.method)) { failRefresh = true; return { id: 11 }; }
+    return fallback();
+  } });
+  env.annotations.set(1, [{ id: 11, quote: "Text", start: 0, end: 4, note: "Old note", color: "yellow" }]);
+  await env.reader.open(1);
+  const actions = env.get("annotation-list").children[0].children.at(-1);
+  assert.equal(actions.children[0].attributes["aria-label"], "Edit annotation: Text");
+  assert.equal(actions.children[1].attributes["aria-label"], "Delete annotation: Text");
+  if (action === "save") {
+    await fire(actions.children[0], "click");
+    env.get("annotation-note").value = "Updated note";
+    await fire(env.get("annotation-form"), "submit");
+    assert.equal(env.get("annotation-dialog").open, false);
+  } else await fire(actions.children[1], "click");
+  assert.match(env.notices.at(-1)[0], action === "save" ? /Annotation saved/ : /Annotation deleted/);
+  assert.notEqual(env.notices.at(-1)[1], true);
+  assert.equal(env.get("annotation-list").children.length, 0);
+  assert.equal(env.get("annotations-retry").hidden, false);
+  assert.match(env.get("annotations-error").textContent, /Highlights unavailable/);
+  failRefresh = false;
+  await fire(env.get("annotations-retry"), "click");
+  assert.equal(env.get("annotations-error").hidden, true);
+  assert.equal(env.get("annotations-retry").hidden, true);
+  assert.match(env.get("annotation-list").textContent, /Old note/);
+});
+
 test("an old file upload cannot release another document's active upload control", async () => {
   const first = deferred(), second = deferred();
   const env = setup({ handler: (path, options, fallback) => options.method === "POST" && path.includes("/assets?") ? (path.includes("/1/") ? first.promise : second.promise) : fallback() });
@@ -372,10 +520,48 @@ test("an old file upload cannot release another document's active upload control
   const newer = fire(env.get("asset-file"), "change");
   first.resolve({ id: 18 }); await uploading;
   assert.equal(env.get("asset-file").disabled, true);
+  assert.equal(env.get("asset-upload-button").attributes["aria-disabled"], "true");
+  assert.equal(env.get("asset-upload-button").textContent, "Uploading file…");
+  let chooserRequests = 0;
+  env.get("asset-file").addEventListener("click", () => { chooserRequests++; });
+  await fire(env.get("asset-upload-button"), "click");
+  assert.equal(chooserRequests, 0);
   assert.equal(env.get("reader-title").textContent, "Page 2");
   second.resolve({ id: 19 }); await newer;
   assert.equal(env.get("asset-file").disabled, false);
+  assert.equal(env.get("asset-upload-button").attributes["aria-disabled"], undefined);
+  assert.equal(env.get("asset-upload-button").textContent, "Attach a saved file");
+  await fire(env.get("asset-upload-button"), "click");
+  assert.equal(chooserRequests, 1);
   assert.equal(env.calls.filter(call => call.path === "/api/links/1/assets").length, 1);
+});
+
+for (const action of ["upload", "delete"]) test(`${action} remains successful when refreshing saved files fails`, async () => {
+  let failRefresh = false;
+  const env = setup({ handler: (path, options, fallback) => {
+    if (path === "/api/links/1/assets" && failRefresh) throw Error("Files unavailable");
+    if (options.method === "POST" || options.method === "DELETE") {
+      failRefresh = true;
+      return { id: 8 };
+    }
+    return fallback();
+  } });
+  env.assets.set(1, [{ id: 8, name: "old.pdf", mediaType: "application/pdf", size: 100 }]);
+  await env.reader.open(1);
+  if (action === "upload") {
+    env.get("asset-file").files = [{ name: "new.pdf", size: 32, type: "application/pdf" }];
+    await fire(env.get("asset-file"), "change");
+  } else await fire(env.get("asset-list").children[0].children.find(node => node.textContent === "Delete"), "click");
+  assert.match(env.notices.at(-1)[0], action === "delete" ? /File deleted/ : /File saved/);
+  assert.notEqual(env.notices.at(-1)[1], true);
+  assert.equal(env.get("asset-list").children.length, 0);
+  assert.equal(env.get("assets-retry").hidden, false);
+  assert.match(env.get("assets-error").textContent, /Files unavailable/);
+  failRefresh = false;
+  await fire(env.get("assets-retry"), "click");
+  assert.equal(env.get("assets-error").hidden, true);
+  assert.equal(env.get("assets-retry").hidden, true);
+  assert.match(env.get("asset-list").textContent, /old.pdf/);
 });
 
 test("the shipped script order and worker cache include the reader without private data", () => {
@@ -394,4 +580,179 @@ test("the shipped script order and worker cache include the reader without priva
     handlers.get("fetch")({ request: { method: "GET", url: `https://pocketmark.test${pathname}` }, respondWith() { intercepted = true; } });
     assert.equal(intercepted, false);
   }
+});
+
+
+test("saved formats open first; optional notebook navigation preserves reading and notes", async () => {
+  const env = setup();
+  await env.reader.open(1);
+  assert.equal(env.get("reader-notebook").hidden, true);
+  assert.equal(env.get("reader-original").href, "https://example.com/1");
+  assert.equal(env.get("reader-original").hidden, false);
+  assert.equal(env.get("reader-formats").hidden, false);
+  assert.equal(env.get("reader-content").hidden, true);
+  assert.equal(env.get("reader-layout").hidden, true);
+  assert.equal(env.headCalls.length, 0, "opening a bookmark must not load a preview automatically");
+  for (const format of ["html", "image", "pdf"]) {
+    assert.equal(env.get(`reader-format-${format}`).disabled, true);
+    assert.equal(env.get(`reader-format-${format}-status`).textContent, "Not saved");
+  }
+  env.get("reader-text-mode").click();
+  assert.equal(env.get("reader-content").hidden, false);
+  env.get("reader-text-panel").scrollTop = 350;
+  env.get("reader-notebook-toggle").click();
+  assert.equal(env.get("reader-notebook").hidden, false);
+  const panels = ["reader-notes-form", "annotations-section", "reader-files"];
+  function selected(index) {
+    assert.equal(env.get("reader-text-panel").hidden, false);
+    assert.equal(env.get("reader-original").hidden, false);
+    panels.forEach((id, i) => assert.equal(env.get(id).hidden, i !== index));
+    env.sections.forEach((tab, i) => {
+      assert.equal(tab.attributes["aria-selected"], String(i === index));
+      assert.equal(tab.tabIndex, i === index ? 0 : -1);
+    });
+  }
+  selected(0);
+  env.get("reader-notes").value = "Unfinished thought";
+  await fire(env.get("reader-notes"), "input");
+  await fire(env.sections[0], "keydown", { key: "End" }); selected(2);
+  await fire(env.sections[2], "keydown", { key: "ArrowRight" }); selected(0);
+  await fire(env.sections[0], "keydown", { key: "ArrowLeft" }); selected(2);
+  await fire(env.sections[2], "keydown", { key: "Home" }); selected(0);
+  await fire(env.sections[0], "keydown", { key: "ArrowRight" }); selected(1);
+  env.get("reader-notebook-close").click();
+  assert.equal(env.get("reader-notebook").hidden, true);
+  assert.equal(env.get("reader-text-panel").scrollTop, 350);
+  assert.equal(env.get("reader-notes").value, "Unfinished thought");
+  assert.equal(env.get("reader-notebook-toggle").focused, true);
+  env.get("reader-notebook-toggle").click();
+  await env.reader.open(1, true);
+  assert.equal(env.get("reader-notebook").hidden, false);
+  selected(1);
+  assert.equal(env.get("reader-text-panel").scrollTop, 350);
+  await env.reader.open(2);
+  assert.equal(env.get("reader-notebook").hidden, true);
+  assert.equal(env.get("reader-content").hidden, true);
+  selected(0);
+});
+
+test("format shortcuts open the newest copy and retain earlier copies of that format", async () => {
+  const env = setup();
+  env.records.set(1, link(1, { status: "failed", archiveAvailable: true }));
+  env.assets.set(1, [
+    { id: 8, name: "old.html", mediaType: "text/html", size: 100 },
+    { id: 11, name: "new.html", mediaType: "text/html", size: 3 * 1024 * 1024 },
+    { id: 9, name: "page.png", mediaType: "image/png", size: 100 },
+    { id: 10, name: "page.pdf", mediaType: "application/pdf", size: 100 },
+  ]);
+  await env.reader.open(1);
+  assert.equal(env.get("reader-content").hidden, true);
+  assert.equal(env.get("reader-format-html-status").textContent, "Saved · 2 copies");
+  assert.equal(env.get("reader-archive").href, "/api/links/1/archive");
+  for (const [format, latest, copies, source] of [["html", "11", 2, "/asset-preview.html"], ["image", "9", 1, "/api/assets/9/view"], ["pdf", "10", 1, "/api/assets/10/view"]]) {
+    assert.equal(env.get(`reader-format-${format}`).disabled, false, "failed page capture must not hide successful files");
+    env.get(`reader-format-${format}`).click();
+    await tick();
+    assert.equal(env.get("asset-viewer-select").value, latest);
+    assert.equal(env.get("asset-viewer-select").children.length, copies);
+    assert.equal(env.get("asset-viewer-content").children[0].src, source);
+    if (format === "html") {
+      env.get("asset-viewer-select").value = "8";
+      await fire(env.get("asset-viewer-select"), "change");
+      assert.equal(env.get("asset-viewer-download").href, "/api/assets/8");
+    }
+    env.get("asset-viewer-close").click();
+    await tick();
+  }
+});
+
+test("basic HTML archives remain available without attachments and use the sandboxed reader", async () => {
+  const files = deferred();
+  const env = setup({ handler: (path, options, fallback) => path.endsWith("/assets") ? files.promise : fallback() });
+  env.records.set(1, link(1, { archiveAvailable: true }));
+  const opening = env.reader.open(1);
+  await tick();
+  assert.equal(env.get("reader-format-html-status").textContent, "Checking…");
+  assert.equal(env.get("reader-format-html").disabled, true, "wait for attachments before choosing the basic archive");
+  files.resolve([]);
+  await opening;
+  assert.equal(env.get("reader-format-html-status").textContent, "Saved");
+  env.get("reader-format-html").click();
+  await tick();
+  const frame = env.get("asset-viewer-content").children[0];
+  assert.equal(frame.src, "/api/links/1/reader");
+  assert.equal(frame.attributes.sandbox, "");
+  assert.equal(env.get("asset-viewer-download").href, "/api/links/1/archive");
+  assert.match(env.get("asset-viewer-hint").textContent, /simplified/);
+});
+
+test("format states distinguish loading and failed checks from absent files, with a direct retry", async () => {
+  const files = deferred();
+  let failing = true;
+  const env = setup({ handler: (path, options, fallback) => path.endsWith("/assets") && failing ? files.promise : fallback() });
+  const opening = env.reader.open(1);
+  await tick();
+  assert.equal(env.get("reader-format-pdf-status").textContent, "Checking…");
+  files.reject(Error("Files unavailable"));
+  await opening;
+  assert.equal(env.get("reader-format-pdf-status").textContent, "Unknown");
+  assert.equal(env.get("reader-formats-error").hidden, false);
+  assert.equal(env.get("reader-formats-retry").hidden, false);
+  failing = false;
+  env.assets.set(1, [{ id: 8, name: "document.pdf", mediaType: "application/pdf", size: 100 }]);
+  env.get("reader-formats-retry").click();
+  await tick();
+  assert.equal(env.get("reader-format-pdf-status").textContent, "Saved");
+  assert.equal(env.get("reader-format-html-status").textContent, "Not saved");
+  assert.equal(env.get("reader-formats-error").hidden, true);
+  assert.equal(env.get("reader-formats-retry").hidden, true);
+  await env.reader.open(2);
+  assert.equal(env.get("reader-format-pdf-status").textContent, "Not saved");
+  assert.equal(env.get("reader-format-pdf").disabled, true);
+});
+
+test("reading a saved HTML file closes the notebook and focuses the article", async () => {
+  const env = setup();
+  env.assets.set(1, [{ id: 8, name: "saved.html", mediaType: "text/html", size: 120 }]);
+  await env.reader.open(1);
+  env.sections[2].click();
+  const read = env.get("asset-list").children[0].children.find(node => node.textContent === "Read");
+  read.click();
+  await tick();
+  assert.equal(env.get("reader-text-panel").hidden, false);
+  assert.equal(env.get("reader-notebook").hidden, true);
+  assert.equal(env.get("reader-text-panel").focused, true);
+  assert.equal(env.get("reader-layout").hidden, false);
+  assert.equal(env.get("reader-layout").src, "/api/links/1/reader?asset=8");
+});
+
+
+test("an empty or failed capture keeps a direct original link and distinguishes absent article text", async () => {
+  const env = setup();
+  env.records.set(1, link(1, { content: "", description: "Only a bookmark summary", status: "failed" }));
+  await env.reader.open(1);
+  assert.match(env.get("reader-content").textContent, /No article text was saved/);
+  assert.doesNotMatch(env.get("reader-content").textContent, /Only a bookmark summary/);
+  assert.equal(env.get("reader-original").href, "https://example.com/1");
+  assert.equal(env.get("reader-original").hidden, false);
+  assert.equal(env.get("reader-notebook").hidden, true);
+});
+
+test("show in text restores an anchored passage without losing the article position in a notebook switch", async () => {
+  const env = setup();
+  env.annotations.set(1, [
+    { id: 11, quote: "Text", start: 0, end: 4, note: "Remember this", color: "yellow" },
+    { id: 12, quote: "Old", start: 0, end: 3, color: "blue", stale: true },
+  ]);
+  await env.reader.open(1);
+  env.sections[1].click();
+  const rows = env.get("annotation-list").children;
+  const show = rows[0].children.at(-1).children.find(node => node.textContent === "Show in text");
+  assert.ok(show);
+  assert.equal(rows[1].children.at(-1).children.some(node => node.textContent === "Show in text"), false);
+  show.click();
+  const mark = env.get("reader-content").children[0];
+  assert.equal(mark.focused, true);
+  assert.equal(mark.scrollOptions.block, "center");
+  assert.equal(env.get("reader-notebook").hidden, true);
 });

@@ -1,19 +1,23 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -23,6 +27,78 @@ import (
 	"pocketmark/internal/server"
 	"pocketmark/internal/store"
 )
+
+func loadServerSecret(dir, configured string, allowNewForExisting bool) (string, error) {
+	token := strings.TrimSpace(configured)
+	if token == "" {
+		path := filepath.Join(dir, "server-secret")
+		raw, e := os.ReadFile(path)
+		if errors.Is(e, os.ErrNotExist) {
+			// Existing installations need the original key to decrypt their TOTP
+			// secret and retain session digests. It is no longer an API credential.
+			legacy, legacyErr := os.ReadFile(filepath.Join(dir, "access-token"))
+			if legacyErr == nil {
+				token = strings.TrimSpace(string(legacy))
+			} else if !errors.Is(legacyErr, os.ErrNotExist) {
+				return "", legacyErr
+			} else {
+				if !allowNewForExisting {
+					if _, err := os.Stat(filepath.Join(dir, "pocketmark.db")); err == nil {
+						return "", errors.New("server secret missing for existing database; restore it or use -reset-mfa")
+					} else if !errors.Is(err, os.ErrNotExist) {
+						return "", err
+					}
+				}
+				buf := make([]byte, 32)
+				if _, e = rand.Read(buf); e != nil {
+					return "", e
+				}
+				token = hex.EncodeToString(buf)
+				f, e := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+				if e != nil {
+					return "", e
+				}
+				_, e = f.WriteString(token + "\n")
+				closeErr := f.Close()
+				if e != nil {
+					return "", e
+				}
+				if closeErr != nil {
+					return "", closeErr
+				}
+			}
+		} else if e != nil {
+			return "", e
+		} else {
+			token = strings.TrimSpace(string(raw))
+		}
+	}
+	if len(token) < 24 {
+		return "", errors.New("server secret must contain at least 24 characters")
+	}
+	return token, nil
+}
+
+func resetAccountFromInput(s *store.Store, input io.Reader) error {
+	var credentials struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	data, err := io.ReadAll(io.LimitReader(input, 4097))
+	if err != nil || len(data) > 4096 {
+		return errors.New("account JSON exceeds 4096 bytes or cannot be read")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&credentials); err != nil {
+		return errors.New("invalid account JSON")
+	}
+	var extra any
+	if decoder.Decode(&extra) != io.EOF {
+		return errors.New("expected a single account JSON document")
+	}
+	return server.ResetLocalAccount(context.Background(), s, credentials.Username, credentials.Password)
+}
 
 func main() {
 	if err := observability.ConfigureLogging(os.Stderr, os.Getenv("POCKETMARK_LOG_LEVEL")); err != nil {
@@ -39,7 +115,20 @@ func run() error {
 	addr := flag.String("listen", env("POCKETMARK_LISTEN", "127.0.0.1:8090"), "HTTP listen address")
 	data := flag.String("data", env("POCKETMARK_DATA", "./data"), "data directory")
 	noCapture := flag.Bool("no-capture", os.Getenv("POCKETMARK_CAPTURE") == "false", "disable background page capture")
+	resetMFA := flag.Bool("reset-mfa", false, "reset MFA locally while the server is stopped")
+	resetAccount := flag.Bool("reset-account", false, "read account credentials as JSON from stdin while the server is stopped")
 	flag.Parse()
+	if *resetMFA && *resetAccount {
+		return errors.New("choose only one recovery command")
+	}
+	rate, err := strconv.Atoi(env("POCKETMARK_RATE_LIMIT", "10"))
+	if err != nil {
+		return errors.New("POCKETMARK_RATE_LIMIT must be an integer")
+	}
+	burst, err := strconv.Atoi(env("POCKETMARK_RATE_BURST", "100"))
+	if err != nil {
+		return errors.New("POCKETMARK_RATE_BURST must be an integer")
+	}
 	traceConfig, err := observability.TraceConfigFromEnv()
 	if err != nil {
 		slog.Error("telemetry_configuration_failed", "error", err.Error())
@@ -57,36 +146,9 @@ func run() error {
 	if e = os.MkdirAll(dir, 0700); e != nil {
 		return e
 	}
-	token := strings.TrimSpace(os.Getenv("POCKETMARK_TOKEN"))
-	if token == "" {
-		path := filepath.Join(dir, "access-token")
-		raw, e := os.ReadFile(path)
-		if errors.Is(e, os.ErrNotExist) {
-			buf := make([]byte, 32)
-			if _, e = rand.Read(buf); e != nil {
-				return e
-			}
-			token = hex.EncodeToString(buf)
-			f, e := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-			if e != nil {
-				return e
-			}
-			_, e = f.WriteString(token + "\n")
-			closeErr := f.Close()
-			if e != nil {
-				return e
-			}
-			if closeErr != nil {
-				return closeErr
-			}
-		} else if e != nil {
-			return e
-		} else {
-			token = strings.TrimSpace(string(raw))
-		}
-	}
-	if len(token) < 24 {
-		return errors.New("access token must contain at least 24 characters")
+	token, e := loadServerSecret(dir, os.Getenv("POCKETMARK_TOKEN"), *resetMFA)
+	if e != nil {
+		return e
 	}
 	origin := os.Getenv("POCKETMARK_ORIGIN")
 	if e = server.ValidateOrigin(origin); e != nil {
@@ -97,6 +159,20 @@ func run() error {
 		return e
 	}
 	defer s.Close()
+	if *resetAccount {
+		if err := resetAccountFromInput(s, os.Stdin); err != nil {
+			return err
+		}
+		fmt.Fprintln(os.Stdout, "Account updated. Sign in with your password and authenticator.")
+		return nil
+	}
+	if *resetMFA {
+		if err := s.ResetMFA(context.Background()); err != nil {
+			return err
+		}
+		fmt.Fprintln(os.Stdout, "MFA reset. Sign in with your password to enroll a new authenticator.")
+		return nil
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	observer := observability.New(slog.Default(), nil)
@@ -118,6 +194,12 @@ func run() error {
 		close(done)
 	}
 	handler := server.New(s, token, origin, os.Getenv("POCKETMARK_SECURE_COOKIE") == "true" || strings.HasPrefix(origin, "https://"), observer)
+	if e = handler.SetRateLimit(rate, burst); e != nil {
+		return e
+	}
+	if e = handler.SetTrustedProxies(os.Getenv("POCKETMARK_TRUSTED_PROXIES")); e != nil {
+		return e
+	}
 	srv := &http.Server{Addr: *addr, Handler: handler, ErrorLog: observability.HTTPErrorLog(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 * 1024}
 	errCh := make(chan error, 1)
 	go func() {

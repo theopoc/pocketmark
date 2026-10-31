@@ -29,9 +29,8 @@ func openAPIDocument(t *testing.T) map[string]any {
 
 // Route coverage fails when a native endpoint is added/removed without updating
 // the reference. Scan route registrations, not a second hand-maintained list.
-func TestOpenAPICoversNativeRoutes(t *testing.T) {
-	doc := openAPIDocument(t)
-	paths := doc["paths"].(map[string]any)
+func nativeAPIRoutes(t *testing.T) map[string]bool {
+	t.Helper()
 	routes := map[string]bool{}
 	files, err := filepath.Glob("*.go")
 	if err != nil {
@@ -63,7 +62,7 @@ func TestOpenAPICoversNativeRoutes(t *testing.T) {
 				t.Fatal(err)
 			}
 			method, path, ok := strings.Cut(pattern, " ")
-			if !ok || path == "/api/" || !(strings.HasPrefix(path, "/api/") || path == "/healthz") {
+			if !ok || path == "/api/" || !(strings.HasPrefix(path, "/api/") || path == "/metrics" || (path == "/healthz" || path == "/livez")) {
 				return true
 			}
 			routes[strings.ToLower(method)+" "+path] = true
@@ -73,8 +72,18 @@ func TestOpenAPICoversNativeRoutes(t *testing.T) {
 	if len(routes) == 0 {
 		t.Fatal("no route registrations found")
 	}
+	return routes
+}
+
+func TestOpenAPICoversNativeRoutes(t *testing.T) {
+	doc := openAPIDocument(t)
+	paths := doc["paths"].(map[string]any)
+	routes := nativeAPIRoutes(t)
 	ids := map[string]bool{}
 	for path, value := range paths {
+		if strings.HasPrefix(path, "/dav/") {
+			continue
+		}
 		item := value.(map[string]any)
 		for method, value := range item {
 			if method == "parameters" {
@@ -92,16 +101,40 @@ func TestOpenAPICoversNativeRoutes(t *testing.T) {
 			}
 			ids[id] = true
 			responses := op["responses"].(map[string]any)
-			public := path == "/api/setup" || path == "/api/login" || path == "/healthz"
+			if path != "/healthz" && path != "/livez" && responses["429"] == nil {
+				t.Errorf("rate-limited operation must document 429: %s", pattern)
+			}
+			public := publicAuthPath(path) || (path == "/healthz" || path == "/livez")
 			security, override := op["security"]
 			if public {
 				if !override || len(security.([]any)) != 0 {
 					t.Errorf("public operation must explicitly allow anonymous access: %s", pattern)
 				}
+			} else if op["x-owner-only"] == true {
+				if !override || len(security.([]any)) != 1 || security.([]any)[0].(map[string]any)["ownerSession"] == nil || responses["401"] == nil {
+					t.Errorf("owner route must require a session: %s", pattern)
+				}
 			} else if override || responses["401"] == nil {
 				t.Errorf("protected operation must inherit authentication and document 401: %s", pattern)
 			}
-			owner := path == "/api/account" || path == "/api/tokens" || path == "/api/tokens/{id}" || path == "/api/backup"
+			policy, known := apiAccess[strings.ToUpper(method)+" "+path]
+			owner := policy.owner
+			if !public && !known {
+				t.Errorf("missing route policy: %s", pattern)
+			}
+			if policy.confirm && op["x-reauthentication-required"] != true {
+				t.Errorf("missing reauthentication: %s", pattern)
+			}
+			if known && !owner {
+				profiles, _ := op["x-api-key-profiles"].([]any)
+				got := []string{}
+				for _, profile := range profiles {
+					got = append(got, profile.(string))
+				}
+				if strings.Join(got, " ") != policy.profiles {
+					t.Errorf("profile documentation mismatch: %s", pattern)
+				}
+			}
 			if owner && (op["x-owner-only"] != true || responses["403"] == nil) {
 				t.Errorf("owner-only operation must document its restriction: %s", pattern)
 			}

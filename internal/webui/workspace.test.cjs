@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { readRoute, routeSearch, createDrafts, readerSnapshot, tagValues, searchExcerpt, captureFailure, bookmarkIssues, requestFailure } = require('./static/workspace.js');
+const { saveBookmark, readRoute, routeSearch, createDrafts, readerSnapshot, tagValues, searchExcerpt, captureFailure, bookmarkIssues, requestFailure } = require('./static/workspace.js');
 
 test('search excerpts preserve untrusted HTML as literal text and truncated matches', () => {
   assert.deepEqual(searchExcerpt('<img src=x> before \x1ecafé\x1f after'), [
@@ -17,6 +17,9 @@ test('collection/search/sort/page survive a reload and a history round trip', ()
   assert.deepEqual(readRoute(routeSearch(first)), first);
   assert.equal(second.collection, 42);
   assert.equal(second.page, 3);
+  const descending = readRoute('?sort=title_desc');
+  assert.equal(descending.sort, 'title_desc');
+  assert.deepEqual(readRoute(routeSearch(descending)), descending);
 });
 
 test('tags directory retains its query and the library context it returns to', () => {
@@ -149,4 +152,53 @@ test('request failures offer specific recovery while preserving useful validatio
   assert.match(requestFailure(500), /server.*try again.*Unsaved changes/);
   assert.equal(requestFailure(400, 'Choose up to 32 tags.'), 'Choose up to 32 tags.');
   assert.equal(requestFailure(429, 'Retry in one minute.'), 'Retry in one minute.');
+});
+
+
+test('HTML copies are opt-in and attach to the bookmark returned by the save', async () => {
+  const calls = [], fields = { url: 'https://example.org', title: 'Page' };
+  const api = async (path, options) => {
+    calls.push({ path, ...options });
+    return path.endsWith('/preserve') ? { asset: { id: 9 }, omitted: 2 } : { id: 42, ...fields };
+  };
+  const plain = await saveBookmark(api, null, fields);
+  assert.equal(calls.length, 1);
+  assert.equal(plain.capture, null);
+  assert.deepEqual(JSON.parse(calls[0].body), fields);
+  const captured = await saveBookmark(api, null, fields, true);
+  assert.deepEqual(calls.slice(1).map(call => [call.path, call.method]), [['/api/links', 'POST'], ['/api/links/42/preserve', 'POST']]);
+  assert.equal(captured.capture.omitted, 2);
+  assert.equal(captured.captureError, null);
+});
+
+test('HTML capture failure preserves the confirmed bookmark and does not repeat its save', async () => {
+  const calls = [], failure = new Error('Capture unavailable');
+  const result = await saveBookmark(async (path, options) => {
+    calls.push([path, options.method]);
+    if (path.endsWith('/preserve')) throw failure;
+    return { id: 7, url: 'https://example.org' };
+  }, { id: 7 }, { title: 'Edited page' }, true);
+  assert.equal(result.link.id, 7);
+  assert.equal(result.captureError, failure);
+  assert.deepEqual(calls, [['/api/links/7', 'PUT'], ['/api/links/7/preserve', 'POST']]);
+});
+
+test('a failed bookmark save never starts a capture and standalone files never request one', async () => {
+  const calls = [];
+  await assert.rejects(saveBookmark(async path => { calls.push(path); throw Error('Save failed'); }, null, {}, true), /Save failed/);
+  assert.deepEqual(calls, ['/api/links']);
+  await saveBookmark(async path => { calls.push(path); return { id: 4, type: 'file' }; }, { id: 4 }, {}, true);
+  assert.deepEqual(calls, ['/api/links', '/api/links/4']);
+});
+
+test('settings section links retain library context and reject unknown sections', () => {
+  for (const section of ['api-keys', '2fa', 'sessions', 'backup', 'password', 'sync', 'mobile']) {
+    const route = readRoute(`?settings=${section}&filter=favorite&q=reading&page=3&view=tags&tagQuery=go`);
+    assert.equal(route.settingsSection, section);
+    assert.deepEqual(readRoute(routeSearch(route)), route);
+    assert.equal(route.filter, 'favorite');
+    assert.equal(route.page, 3);
+  }
+  assert.equal(readRoute('?settings=unknown').settingsSection, 'api-keys');
+  assert.equal(readRoute('').settingsSection, null);
 });

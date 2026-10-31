@@ -3,6 +3,7 @@
 // Shared, dependency-free state rules; draft contents stay in this tab's memory.
 ((root) => {
   const positive = (value, fallback = 1, max = 1000000) => /^\d+$/.test(String(value)) && Number.isSafeInteger(Number(value)) && Number(value) > 0 ? Math.min(Number(value), max) : fallback;
+  const settingsSections = ["api-keys", "2fa", "sessions", "backup", "password", "sync", "mobile"];
   function readRoute(search) {
     const params = new URLSearchParams(search);
     let filter = ["all", "inbox", "favorite", "unread", "collection"].includes(params.get("filter")) ? params.get("filter") : "all";
@@ -10,15 +11,17 @@
     if (filter === "collection" && !collection) filter = "all";
     const tag = (params.get("tag") || "").trim();
     return {
+      settingsSection: params.has("settings") ? (settingsSections.includes(params.get("settings")) ? params.get("settings") : "api-keys") : null,
       filter: tag ? "all" : filter, collection: !tag && filter === "collection" ? collection : null, tag,
       query: (params.get("q") || "").trim(), page: positive(params.get("page")),
-      sort: ["newest", "oldest", "title", "updated"].includes(params.get("sort")) ? params.get("sort") : "newest",
+      sort: ["newest", "oldest", "title", "title_desc", "updated"].includes(params.get("sort")) ? params.get("sort") : "newest",
       fuzzy: params.get("fuzzy") === "1", showingTags: params.get("view") === "tags",
       tagsQuery: (params.get("tagQuery") || "").slice(0, 512), tagsPage: positive(params.get("tagPage")),
     };
   }
   function routeSearch(route) {
     const params = new URLSearchParams();
+    if (settingsSections.includes(route.settingsSection)) params.set("settings", route.settingsSection);
     if (route.filter !== "all") params.set("filter", route.filter);
     if (route.filter === "collection" && route.collection) params.set("collection", route.collection);
     if (route.tag) params.set("tag", route.tag);
@@ -146,8 +149,18 @@
     return { url: link.url, title: link.title || "", description: link.description || "", notes: link.notes || "", collectionId: link.collectionId ?? null, tags: link.tags || [], favorite: !!link.favorite, read: !!link.read };
   }
 
+  async function saveBookmark(api, editing, fields, saveHTML = false) {
+    const link = await api(editing ? `/api/links/${editing.id}` : "/api/links", { method: editing ? "PUT" : "POST", body: JSON.stringify(fields) });
+    let capture = null, captureError = null;
+    if (saveHTML && link.type !== "file") {
+      try { capture = await api(`/api/links/${link.id}/preserve`, { method: "POST" }); }
+      catch (error) { captureError = error; }
+    }
+    return { link, capture, captureError };
+  }
+
   function bookmarkDraftKey(link) { return `bookmark:${link?.id || "new"}`; }
-  const workspace = { editableBookmark, bookmarkDraftKey, safeURL, domain, readRoute, routeSearch, createDrafts, readerSnapshot, tagValues, searchExcerpt, captureFailure, bookmarkIssues, requestFailure };
+  const workspace = { saveBookmark, editableBookmark, bookmarkDraftKey, safeURL, domain, readRoute, routeSearch, createDrafts, readerSnapshot, tagValues, searchExcerpt, captureFailure, bookmarkIssues, requestFailure };
   if (typeof module !== "undefined" && module.exports) module.exports = workspace;
   else root.PocketmarkWorkspace = workspace;
 })(globalThis);

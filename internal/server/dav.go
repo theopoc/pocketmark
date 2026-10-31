@@ -19,15 +19,6 @@ func (a *Server) registerDAV(mux *http.ServeMux) {
 		mux.HandleFunc(method+" /dav/", a.dav)
 	}
 }
-func (a *Server) davAuthenticated(r *http.Request) bool {
-	if _, p, ok := r.BasicAuth(); ok {
-		return secretEqual(p, a.token) || a.validAPIKey(r, p)
-	}
-	if auth := r.Header.Get("Authorization"); auth != "" && !strings.HasPrefix(auth, "Bearer ") {
-		return false
-	}
-	return a.authenticated(r)
-}
 func davPrincipal(r *http.Request) string {
 	value := r.Header.Get("Authorization")
 	if value == "" {

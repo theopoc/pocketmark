@@ -35,7 +35,7 @@ cd pocketmark
 docker compose up -d
 ```
 
-Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account. On later visits, sign in with your username and password. Data persists in a Docker volume. Compose sets a 128 MiB memory limit; see [measured RAM usage](docs/BENCHMARK.md) for workload results.
+Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account before exposing the instance to untrusted networks. Register an authenticator app and save the single-use recovery codes. On later visits, sign in with your password and an authentication or recovery code. Data persists in a Docker volume. Compose sets a 128 MiB memory limit; see [measured RAM usage](docs/BENCHMARK.md) for workload results.
 
 For HTTPS access, set `POCKETMARK_ORIGIN` to your public URL. See the [guide](docs/GUIDE.md#configuration) for configuration.
 
@@ -82,8 +82,6 @@ Build and run locally:
 ```sh
 make build
 ./bin/pocketmark
-# In another terminal:
-cat ./data/access-token
 ```
 
 Run the checks before contributing:
@@ -93,6 +91,8 @@ make check
 make test
 make test-extension
 ```
+
+During development, enable auto-merge for the pull request so it merges into `main` once all required CI checks, including `CI passed`, have succeeded.
 
 ## Documentation
 

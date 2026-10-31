@@ -3,13 +3,16 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const state = { filter: "all", collection: null, tag: "", query: "", page: 1, pageSize: 40, total: 0, links: [], collections: [], editing: null, request: 0, timer: null, signedIn: false, sort: "newest", fuzzy: false, editingCollection: null };
-  let toastTimer;
+  let toastTimer, toastActionPending = false;
   let expandedBookmarkActions = null;
+  const expandedBookmarkTags = new Set();
   let searchTimer;
   let tagsTimer;
   let tagsPage = 1;
   let tagsRequest = 0;
   let showingTags = false;
+  let settingsSection = null;
+  let libraryReturnScroll = 0;
   const workspace = globalThis.PocketmarkWorkspace;
   const { editableBookmark: editable, bookmarkDraftKey: draftKey, safeURL, domain } = workspace;
   let draftStorage;
@@ -20,24 +23,29 @@
   const activeMotion = new Map();
   let themeTransition = null;
   let renderedLibraryRoute = null;
+  let libraryUnavailable = false;
+  let libraryLoading = false;
   const sharedParams = new URLSearchParams(location.search);
   let editorBaseline = null;
   let editorSession = 0;
   let routeRequest = 0;
+  let mfaManagementBusy = false;
+  let deferredLogin = false;
+  let deferredLoginNotice = "";
   let scrollTimer;
   let searchSession = false;
   let tagsSearchSession = false;
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
 
   function route() {
-    return { ...state, showingTags, tagsPage, tagsQuery: $("tags-search").value.trim() };
+    return { ...state, settingsSection, showingTags, tagsPage, tagsQuery: $("tags-search").value.trim() };
   }
   function rememberScroll() {
     clearTimeout(scrollTimer);
     history.replaceState({ ...history.state, pocketmarkScroll: window.scrollY }, "");
   }
-  function commitRoute(replace = false) {
-    const url = location.pathname + workspace.routeSearch(route());
+  function commitRoute(replace = false, destination = route()) {
+    const url = location.pathname + workspace.routeSearch(destination);
     if (url === location.pathname + location.search) return;
     routeRequest++;
     rememberScroll();
@@ -47,17 +55,34 @@
     const request = ++routeRequest;
     clearTimeout(searchTimer); clearTimeout(tagsTimer);
     const restored = workspace.readRoute(location.search);
+    if (settingsSection && (mfaManagementBusy || deferredLogin) && restored.settingsSection !== settingsSection) {
+      history.replaceState({ ...history.state }, "", location.pathname + workspace.routeSearch(route()));
+      return;
+    }
+    const wasSettings = Boolean(settingsSection);
+    if (!wasSettings && restored.settingsSection) libraryReturnScroll = history.state?.pocketmarkLibraryScroll || 0;
+    settingsSection = restored.settingsSection;
+    if (wasSettings && !settingsSection) clearSettings();
+    renderSettings(!initial);
     const scroll = history.state?.pocketmarkScroll || 0;
     const previous = workspace.routeSearch(route());
     Object.assign(state, { filter: restored.filter, collection: restored.collection, tag: restored.tag, query: restored.query, page: restored.page, sort: restored.sort, fuzzy: restored.fuzzy });
     showingTags = restored.showingTags; tagsPage = restored.tagsPage;
     $("search").value = state.query; $("tags-search").value = restored.tagsQuery;
-    $("sort-order").value = state.sort; $("fuzzy-search").checked = state.fuzzy;
+    syncSortMenu(); closeSortMenu(); $("fuzzy-search").checked = state.fuzzy;
     $("tags-view").hidden = !showingTags; $("library-view").hidden = showingTags;
     if (!initial && previous !== workspace.routeSearch(route())) bulk.clear();
     reader.close();
     bulk.close();
-    document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
+    document.querySelectorAll("dialog[open]").forEach((dialog) => {
+      dialog.close();
+    });
+    if (settingsSection) {
+      clearTimeout(state.timer); state.request++;
+      focusSettings();
+      if (!wasSettings) await loadSettings();
+      return;
+    }
     await refresh();
     if (request !== routeRequest) return;
     if (showingTags) await loadTagDirectory();
@@ -70,8 +95,12 @@
     scrollTimer = setTimeout(rememberScroll, 150);
   }, { passive: true });
   window.addEventListener("popstate", () => { if (state.signedIn) restoreRoute(); });
+  document.querySelector(".skip-link").addEventListener("click", (event) => {
+    event.preventDefault();
+    $("main-content").focus();
+  });
   window.addEventListener("beforeunload", (event) => {
-    if (drafts.size) { event.preventDefault(); event.returnValue = ""; }
+    if (drafts.size || mfaManagementBusy || (Boolean(settingsSection) && !$("mfa-manage-codes").hidden)) { event.preventDefault(); event.returnValue = ""; }
   });
 
   const compactLibrary = window.matchMedia("(max-width: 600px)");
@@ -116,6 +145,7 @@
     plus: ["M12 5v14M5 12h14"], close: ["m6 6 12 12M6 18 18 6"],
     search: ["M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0", "m15 15 6 6"],
     refresh: ["M20 7a9 9 0 1 0 1 9", "M20 2v6h-6"],
+    sort: ["M3 5h10M3 10h7M3 15h4", "M17 4v16m-4-4 4 4 4-4"],
     grid: ["M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"],
     list: ["M9 5h12M9 12h12M9 19h12M3 5h.01M3 12h.01M3 19h.01"],
     folder: ["M3 7V4h6l2 3h10v13H3V7Z"],
@@ -132,6 +162,9 @@
     "chevron-right": ["m9 5 7 7-7 7"], "arrow-right": ["M4 12h16m-6-6 6 6-6 6"],
     "arrow-left": ["M20 12H4m6-6-6 6 6 6"],
     book: ["M12 5C8 2 4 3 2 4v16c3-2 7-2 10 0 3-2 7-2 10 0V4c-2-1-6-2-10 1ZM12 5v15"],
+    html: ["M4 3h16v18H4Z", "M4 8h16M7 5.5h.01M10 5.5h.01", "m9 12-3 3 3 3m6-6 3 3-3 3"],
+    image: ["M3 3h18v18H3Z", "m3 17 6-6 5 5 3-3 4 4", "M17 7h.01"],
+    pdf: ["M5 3h9l5 5v13H5Z", "M14 3v5h5M8 12h8M8 16h5"],
   };
   function icon(name) {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -195,7 +228,31 @@
 
   const mobileNavigation = matchMedia("(max-width: 900px)");
   const navigation = $("navigation-dialog");
-  function closeNavigation() { if (navigation.open) navigation.close(); }
+  const workspaceButton = $("workspace-button");
+  const workspacePopover = $("workspace-popover");
+  function closeWorkspacePopover() {
+    if (workspacePopover.matches(":popover-open")) workspacePopover.hidePopover();
+  }
+  function positionWorkspacePopover() {
+    const anchor = workspaceButton.getBoundingClientRect();
+    const width = Math.min(224, window.innerWidth - 16);
+    workspacePopover.style.left = `${Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8))}px`;
+    workspacePopover.style.top = `${Math.max(8, anchor.bottom + 4)}px`;
+    workspacePopover.style.maxHeight = `${Math.max(44, window.innerHeight - anchor.bottom - 12)}px`;
+  }
+  workspacePopover.addEventListener("beforetoggle", (event) => {
+    workspaceButton.setAttribute("aria-expanded", String(event.newState === "open"));
+    if (event.newState === "open") positionWorkspacePopover();
+  });
+  workspacePopover.addEventListener("click", (event) => {
+    if (event.target.closest("button")) closeWorkspacePopover();
+  }, true);
+  window.addEventListener("resize", closeWorkspacePopover);
+  $("sidebar").addEventListener("scroll", closeWorkspacePopover);
+  function closeNavigation() {
+    closeWorkspacePopover();
+    if (navigation.open) navigation.close();
+  }
   function placeNavigation() {
     closeNavigation();
     (mobileNavigation.matches ? navigation : $("sidebar-slot")).append($("sidebar"));
@@ -208,14 +265,19 @@
     $("close-navigation").focus();
   });
   $("close-navigation").addEventListener("click", closeNavigation);
-  navigation.addEventListener("close", () => $("open-navigation").setAttribute("aria-expanded", "false"));
+  navigation.addEventListener("close", () => {
+    closeWorkspacePopover();
+    $("open-navigation").setAttribute("aria-expanded", "false");
+  });
   navigation.addEventListener("click", (event) => { if (event.target === navigation) closeNavigation(); });
   $("sidebar").addEventListener("click", (event) => {
-    if (event.target.closest("button") && event.target.closest("button").id !== "close-navigation") closeNavigation();
+    const button = event.target.closest("button");
+    if (button && button.id !== "close-navigation" && !button.hasAttribute("data-keep-navigation")) closeNavigation();
   }, true);
 
   function toast(message, error = false, action = null) {
     clearTimeout(toastTimer);
+    toastActionPending = true;
     const notice = $("toast");
     // Native dialogs live in the top layer. Feedback must be in that same
     // layer to be visible and exposed to assistive technology.
@@ -229,14 +291,23 @@
       button.type = "button";
       button.addEventListener("click", async () => {
         clearTimeout(toastTimer);
+        toastActionPending = true;
         button.disabled = true;
         try { await action.run(); } catch (error) { toast(error.message, true); }
       });
       notice.append(button);
     }
     notice.hidden = false;
+    toastActionPending = false;
     toastTimer = setTimeout(() => { notice.hidden = true; }, action || error ? 12000 : 5000);
   }
+  $("toast").addEventListener("focusin", () => clearTimeout(toastTimer));
+  $("toast").addEventListener("focusout", (event) => {
+    const notice = $("toast");
+    if (!notice.hidden && !toastActionPending && !notice.contains(event.relatedTarget)) {
+      toastTimer = setTimeout(() => { notice.hidden = true; }, 12000);
+    }
+  });
   document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("close", () => {
     if (dialog.contains($("toast"))) {
       clearTimeout(toastTimer);
@@ -246,10 +317,41 @@
   }));
 
   let setupRequired = false;
+  function resetMFALogin() {
+    ["mfa-enrollment", "mfa-code-form", "mfa-login-codes", "mfa-back"].forEach(id => { $(id).hidden = true; });
+    $("login-form").hidden = false;
+    $("mfa-code").value = $("mfa-secret").value = "";
+    $("mfa-login-codes-value").textContent = "";
+    $("mfa-qr").removeAttribute("src");
+    $("login-help").hidden = false;
+  }
   function showLogin() {
+    closeNavigation();
+    if (mfaManagementBusy || (Boolean(settingsSection) && !$("mfa-manage-codes").hidden)) {
+      deferredLogin = true;
+      settingsSection = "2fa";
+      history.replaceState({ ...history.state }, "", location.pathname + workspace.routeSearch(route()));
+      renderSettings();
+      if (!mfaManagementBusy) {
+        document.querySelectorAll("#settings-page > section").forEach(section => { if (section.getAttribute("aria-labelledby") !== "mfa-settings-title") section.inert = true; });
+        document.querySelectorAll("#mfa-manage-form button[type='submit'], #mfa-manage-verify button[type='submit']").forEach(button => { button.disabled = true; });
+      }
+      $("mfa-manage-feedback").textContent = mfaManagementBusy
+        ? "Your session expired. Waiting for the authentication change to finish."
+        : "Your session expired. These recovery codes may have changed. Save them, then sign in and generate new codes.";
+      return;
+    }
+    deferredLogin = false;
+    clearSettings();
+    settingsSection = null; renderSettings();
+    setMFAManagementBusy(false);
     clearTimeout(tagsTimer);
     tagsRequest++;
     state.signedIn = false;
+    renderedLibraryRoute = null;
+    libraryUnavailable = true;
+    expandedBookmarkTags.clear();
+    state.links = [];
     bulk.clear();
     state.request++;
     clearTimeout(state.timer);
@@ -258,10 +360,12 @@
     document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
     $("app-view").hidden = true;
     $("login-view").hidden = false;
+    resetMFALogin();
+    if (deferredLoginNotice) { $("login-error").textContent = deferredLoginNotice; deferredLoginNotice = ""; }
     $("login-username").focus();
   }
 
-  async function api(path, options = {}) {
+  async function api(path, options = {}, retried = false) {
     const headers = new Headers(options.headers || {});
     if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
     let response;
@@ -277,18 +381,26 @@
       }
     }
     if (!response.ok) {
-      if (response.status === 401 && path !== "/api/login" && path !== "/api/setup") {
-        const expired = state.signedIn;
-        showLogin();
-        if (expired) $("login-error").textContent = workspace.requestFailure(401);
+      if (body?.code === "reauth_required" && !retried) {
+        await security.confirm();
+        return api(path, options, true);
       }
-      const message = response.status === 401 && ["/api/login", "/api/setup"].includes(path) ? (body?.error || "Check your username and password, then try again.") : workspace.requestFailure(response.status, body?.error);
+      const loginPath = ["/api/login", "/api/setup", "/api/mfa/enroll", "/api/mfa/verify"].includes(path);
+      if (response.status === 401 && !loginPath) {
+        const expired = state.signedIn;
+        const recoveryNotice = deferredLoginNotice;
+        showLogin();
+        if (expired && !recoveryNotice) $("login-error").textContent = workspace.requestFailure(401);
+      }
+      const message = response.status === 401 && loginPath ? (body?.error || "Check your credentials, then try again.") : workspace.requestFailure(response.status, body?.error);
       const error = new Error(message);
       error.status = response.status;
       throw error;
     }
     return body;
   }
+
+  const security = globalThis.PocketmarkSecurity.create({ api, toast, onSessionExpired: showLogin });
 
   const reader = globalThis.PocketmarkReader.create({
     api, drafts, toast, onEdit: openEditor, onChange: () => refresh(true), onSessionExpired: showLogin,
@@ -312,7 +424,7 @@
   function updateHeading() {
     const title = currentTitle();
     $("page-title").textContent = title;
-    $("breadcrumb-current").textContent = showingTags ? "All tags" : title;
+    $("breadcrumb-current").textContent = settingsSection ? "Settings" : showingTags ? "All tags" : title;
     $("tags-library-context").hidden = !state.query;
     $("tags-library-context").textContent = `Your bookmark search “${state.query}” will remain applied when you open a tag.`;
     $("all-tags").classList.toggle("active", showingTags);
@@ -411,10 +523,11 @@
       button.addEventListener("click", () => selectFilter("collection", collection.id));
       const remove = el("button", "icon-button delete-collection"); remove.append(icon("trash"));
       remove.dataset.focusKey = `delete-collection:${collection.id}`;
+      remove.setAttribute("data-keep-navigation", "");
       remove.title = `Delete ${collection.name}`;
       remove.setAttribute("aria-label", remove.title);
       remove.addEventListener("click", async () => {
-        if (!confirm(`Delete “${collection.name}”? Its bookmarks will move to Inbox.`)) return;
+        if (!confirm(`Delete “${collection.name}”? Bookmarks directly in it move to Inbox. Direct subcollections move to the library root.`)) return;
         remove.disabled = true;
         try {
           await api(`/api/collections/${collection.id}`, { method: "DELETE" });
@@ -479,7 +592,7 @@
     $("tags-list").setAttribute("aria-busy", "true");
     $("tags-results").textContent = "Loading tags…";
     $("tags-error").hidden = true;
-    $("tags-empty").hidden = true;
+    $("tags-empty-state").hidden = true;
     $("tags-list").replaceChildren();
     disableTagAlphabet();
     $("tags-pagination").hidden = true;
@@ -520,7 +633,8 @@
       }
       renderTagAlphabet(result.groups, jump || result.tags[0]?.letter);
       $("tags-results").textContent = `${result.total} tag${result.total === 1 ? "" : "s"}${query ? ` matching “${query}”` : " in your library"}`;
-      $("tags-empty").hidden = result.total > 0;
+      $("tags-empty-state").hidden = result.total > 0;
+      $("tags-clear-search").hidden = !query;
       $("tags-empty").textContent = query ? "No tags match your search. Try a different name." : "No tags yet. Add tags when saving or editing a bookmark.";
       $("tags-pagination").hidden = pages <= 1;
       $("tags-page-label").textContent = `Page ${tagsPage} of ${pages}`;
@@ -563,10 +677,14 @@
     tagsTimer = setTimeout(() => { tagsPage = 1; commitRoute(tagsSearchSession); tagsSearchSession = true; loadTagDirectory(); }, 250);
   });
   $("tags-search").addEventListener("blur", () => { tagsSearchSession = false; });
+  $("tags-clear-search").addEventListener("click", () => {
+    clearTimeout(tagsTimer); $("tags-search").value = ""; tagsPage = 1; tagsSearchSession = false;
+    commitRoute(); loadTagDirectory(); $("tags-search").focus();
+  });
   $("tags-letter-picker").addEventListener("change", () => { if ($("tags-letter-picker").value) loadTagDirectory($("tags-letter-picker").value); });
   $("tags-retry").addEventListener("click", () => { clearTimeout(tagsTimer); loadTagDirectory(); });
-  $("tags-previous").addEventListener("click", () => { tagsPage--; commitRoute(); loadTagDirectory(); });
-  $("tags-next").addEventListener("click", () => { tagsPage++; commitRoute(); loadTagDirectory(); });
+  $("tags-previous").addEventListener("click", () => { tagsPage--; commitRoute(); $("tags-title").focus(); loadTagDirectory(); });
+  $("tags-next").addEventListener("click", () => { tagsPage++; commitRoute(); $("tags-title").focus(); loadTagDirectory(); });
 
   function actionButton(symbol, label, callback, extraClass = "") {
     const button = el("button", `card-action ${extraClass}`);
@@ -642,21 +760,28 @@
         body.append(excerpt);
       }
       const tags = el("div", "card-tags");
-      for (const name of (link.tags || []).slice(0, 5)) {
+      for (const name of (link.tags || []).slice(0, expandedBookmarkTags.has(link.id) ? undefined : 5)) {
         const tag = el("button", "card-tag", `#${name}`);
+        tag.dataset.focusKey = `link:${link.id}:tag:${name}`;
         tag.addEventListener("click", () => selectFilter("all", null, name));
         tags.append(tag);
       }
-      if ((link.tags || []).length > 5) {
+      if ((link.tags || []).length > 5 && !expandedBookmarkTags.has(link.id)) {
         const more = el("button", "card-tag", `+${link.tags.length - 5}`);
+        more.dataset.focusKey = `link:${link.id}:more-tags`;
         more.setAttribute("aria-label", `Show all ${link.tags.length} tags for ${link.title || link.url}`);
         more.addEventListener("click", () => {
+          expandedBookmarkTags.add(link.id);
           more.remove();
+          let firstAdded;
           for (const name of link.tags.slice(5)) {
             const tag = el("button", "card-tag", `#${name}`);
+            tag.dataset.focusKey = `link:${link.id}:tag:${name}`;
             tag.addEventListener("click", () => selectFilter("all", null, name));
             tags.append(tag);
+            if (!firstAdded) firstAdded = tag;
           }
+          firstAdded?.focus();
         });
         tags.append(more);
       }
@@ -718,28 +843,45 @@
       card.append(top, body, footer);
       grid.append(card);
     }
-    bulk.render(state.links);
-    $("empty-state").hidden = state.links.length > 0;
+    bulk.render(libraryUnavailable || libraryLoading ? [] : state.links);
+    grid.hidden = libraryUnavailable || libraryLoading;
+    $("empty-state").hidden = libraryUnavailable || libraryLoading || state.links.length > 0;
     const filtered = !!state.query || state.filter !== "all" || !!state.tag;
     $("empty-title").textContent = filtered ? "No bookmarks found" : "Your library starts here";
-    $("empty-message").textContent = filtered ? "Try a different search or clear your filters to see all bookmarks." : "Save your first bookmark, or import an existing library from the navigation.";
+    const offerNearMatches = !!state.query && !state.fuzzy;
+    $("empty-message").textContent = offerNearMatches ? "Try a different search, or look for near matches in titles, URLs, descriptions and tags." : filtered ? "Try a different search or clear your filters to see all bookmarks." : "Save your first bookmark, or bring your existing bookmarks with you.";
+    const emptyView = !state.query && (state.tag ? ["No bookmarks with this tag", "Choose another tag or return to all bookmarks.", false] : {
+      collection: ["This collection is empty", "Add a bookmark to start this collection.", true],
+      inbox: ["Your inbox is empty", "Bookmarks without a collection appear here.", true],
+      favorite: ["No favorites yet", "Select the star on a bookmark to keep it here.", false],
+      unread: ["Nothing left to read", "Mark a bookmark as unread to see it here.", false],
+    }[state.filter]);
+    if (emptyView) {
+      $("empty-title").textContent = emptyView[0];
+      $("empty-message").textContent = emptyView[1];
+    }
+    $("empty-near-matches").hidden = !offerNearMatches;
+    $("empty-import").hidden = filtered;
     $("empty-reset").hidden = !filtered;
+    $("empty-reset").textContent = emptyView ? "View all bookmarks" : "Clear filters";
+    $("empty-add").hidden = !!emptyView && !emptyView[2];
     $("empty-add").textContent = filtered ? "Add a bookmark" : "Add your first bookmark";
-    $("empty-add").classList.toggle("primary", !filtered);
-    $("empty-add").classList.toggle("subtle", filtered);
-    $("empty-reset").classList.toggle("primary", filtered);
-    $("empty-reset").classList.toggle("subtle", !filtered);
+    const primaryAdd = !filtered || !!emptyView?.[2];
+    $("empty-add").classList.toggle("primary", primaryAdd);
+    $("empty-add").classList.toggle("subtle", !primaryAdd);
+    $("empty-reset").classList.toggle("primary", !primaryAdd);
+    $("empty-reset").classList.toggle("subtle", primaryAdd);
     const pages = Math.max(1, Math.ceil(state.total / state.pageSize));
-    $("pagination").hidden = pages <= 1;
+    $("pagination").hidden = libraryUnavailable || libraryLoading || pages <= 1;
     $("page-label").textContent = `Page ${state.page} of ${pages}`;
     $("previous-page").disabled = state.page <= 1;
     $("next-page").disabled = state.page >= pages;
-    $("results-label").textContent = `${state.total} bookmark${state.total === 1 ? "" : "s"}${state.query ? ` matching “${state.query}”` : " in this view"}`;
+    $("results-label").textContent = libraryLoading ? "Loading your library…" : libraryUnavailable ? "Could not load this view" : `${state.total} bookmark${state.total === 1 ? "" : "s"}${state.query ? ` matching “${state.query}”` : " in this view"}`;
     restoreFocus(grid, key);
   }
 
   async function refresh(quiet = false) {
-    if (!state.signedIn) return;
+    if (!state.signedIn || settingsSection) return;
     clearTimeout(state.timer);
     const request = ++state.request;
     const params = new URLSearchParams({ page: String(state.page), sort: state.sort });
@@ -750,13 +892,25 @@
     if (state.filter === "unread") params.set("unread", "1");
     if (state.filter === "inbox") params.set("collection", "0");
     if (state.filter === "collection") params.set("collection", state.collection);
+    libraryLoading = renderedLibraryRoute !== params.toString();
+    if (libraryLoading) {
+      if ($("bookmark-grid").contains(document.activeElement) || $("pagination").contains(document.activeElement)) $("page-title").focus();
+      $("bookmark-grid").hidden = true;
+      $("empty-state").hidden = true;
+      $("pagination").hidden = true;
+      bulk.render([]);
+    }
     $("bookmark-grid").setAttribute("aria-busy", "true");
-    if (!quiet) $("results-label").textContent = "Loading your library…";
+    if (!quiet || libraryLoading) $("results-label").textContent = "Loading your library…";
     $("library-error").hidden = true;
     try {
       const [result, collections, tags, stats] = await Promise.all([api(`/api/links?${params}`), api("/api/collections"), api("/api/tags"), api("/api/stats")]);
       if (request !== state.request) return;
+      libraryUnavailable = false;
+      libraryLoading = false;
       state.links = result.links || [];
+      const visibleIds = new Set(state.links.map(link => link.id));
+      for (const id of expandedBookmarkTags) if (!visibleIds.has(id)) expandedBookmarkTags.delete(id);
       state.total = result.total || 0;
       state.pageSize = result.pageSize || 40;
       const lastPage = Math.max(1, Math.ceil(state.total / state.pageSize));
@@ -775,7 +929,14 @@
       if (stats.pending && !document.hidden) state.timer = setTimeout(() => refresh(true), 5000);
     } catch (error) {
       if (request !== state.request) return;
-      $("library-error").textContent = error.message;
+      libraryLoading = false;
+      libraryUnavailable = renderedLibraryRoute !== params.toString();
+      renderLinks();
+      const message = el("span", "", `${error.message}${libraryUnavailable ? "" : " Showing the last loaded results."} `);
+      const retry = el("button", "text-button", "Try again");
+      retry.type = "button";
+      retry.addEventListener("click", () => { $("page-title").focus(); refresh(); });
+      $("library-error").replaceChildren(message, retry);
       $("library-error").hidden = false;
       $("results-label").textContent = "Could not refresh library";
     } finally {
@@ -786,12 +947,16 @@
   function openEditor(link = null) {
     editorSession++;
     $("save-bookmark").disabled = false;
+    $("save-bookmark").textContent = "Save bookmark";
+    $("bookmark-save-status").hidden = true;
     state.editing = link;
     $("bookmark-form").reset();
     $("bookmark-error").textContent = "";
     $("bookmark-dialog-title").textContent = link ? "Edit bookmark" : "Add bookmark";
     $("bookmark-url").value = link?.url || "";
     const file = link?.type === "file";
+    $("bookmark-capture-option").hidden = file;
+    $("bookmark-save-html").disabled = file;
     $("bookmark-url").readOnly = file;
     $("bookmark-url").type = file ? "text" : "url";
     $("bookmark-title").value = link?.title || "";
@@ -811,7 +976,7 @@
   }
 
   function editorValues() {
-    return { url: $("bookmark-url").value, title: $("bookmark-title").value, description: $("bookmark-description").value, notes: $("bookmark-notes").value, collectionId: $("bookmark-collection").value ? Number($("bookmark-collection").value) : null, tags: [...new Set($("bookmark-tags").value.split(",").map((tag) => tag.trim()).filter(Boolean))], favorite: $("bookmark-favorite").checked, read: $("bookmark-read").checked };
+    return { url: $("bookmark-url").value, title: $("bookmark-title").value, description: $("bookmark-description").value, notes: $("bookmark-notes").value, collectionId: $("bookmark-collection").value ? Number($("bookmark-collection").value) : null, tags: [...new Set($("bookmark-tags").value.split(",").map((tag) => tag.trim()).filter(Boolean))], favorite: $("bookmark-favorite").checked, read: $("bookmark-read").checked, saveHTML: !$("bookmark-save-html").disabled && $("bookmark-save-html").checked };
   }
   function validateBookmarkFields() {
     const issues = workspace.bookmarkIssues({ ...editorValues(), type: state.editing?.type });
@@ -821,6 +986,7 @@
     return issues;
   }
   function fillEditor(value) {
+    $("bookmark-save-html").checked = !!value.saveHTML;
     for (const field of ["url", "title", "description", "notes"]) $("bookmark-" + field).value = value[field] || "";
     tagPickers.get("bookmark-tags").set(value.tags || []);
     fillCollections($("bookmark-collection"), value.collectionId);
@@ -848,6 +1014,34 @@
   attachTagPicker("bookmark-tags");
   attachTagPicker("bulk-tags");
 
+  async function enterLibrary() {
+    state.signedIn = true;
+    $("login-view").hidden = true;
+    $("app-view").hidden = false;
+    resetMFALogin();
+    configureLogin();
+    await restoreRoute(true);
+    openSharedLink();
+  }
+  function showMFACode(enrollment) {
+    $("mfa-code-form").hidden = false;
+    $("mfa-enrollment").hidden = !enrollment;
+    $("mfa-back").hidden = false;
+    $("login-help").hidden = true;
+    $("login-title").textContent = enrollment ? "Set up your authenticator" : "Verify it’s you";
+    $("login-description").textContent = enrollment ? "Add Pocketmark to your authenticator app, then enter its code." : "Enter a code from your authenticator app, or use a recovery code.";
+    $("mfa-code-label").textContent = enrollment ? "Code from your authenticator" : "Authentication or recovery code";
+    $("mfa-code").inputMode = enrollment ? "numeric" : "text";
+    $("mfa-code").value = "";
+    $("mfa-code").focus();
+  }
+  async function beginMFAEnrollment() {
+    const enrollment = await api("/api/mfa/enroll", { method: "POST", body: "{}" });
+    $("mfa-secret").value = enrollment.secret;
+    $("mfa-qr").src = enrollment.qr;
+    showMFACode(true);
+  }
+
   $("login-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const button = event.submitter;
@@ -855,18 +1049,56 @@
     $("login-error").textContent = "";
     try {
       if (setupRequired && $("login-password").value !== $("login-confirm").value) throw new Error("The passwords do not match.");
-      await api(setupRequired ? "/api/setup" : "/api/login", { method: "POST", body: JSON.stringify({ username: $("login-username").value.trim(), password: $("login-password").value }) });
+      const result = await api(setupRequired ? "/api/setup" : "/api/login", { method: "POST", body: JSON.stringify({ username: $("login-username").value.trim(), password: $("login-password").value }) });
       setupRequired = false;
-      configureLogin();
       $("login-confirm").value = "";
       $("login-password").value = "";
-      state.signedIn = true;
-      $("login-view").hidden = true;
-      $("app-view").hidden = false;
-      await restoreRoute(true);
-      openSharedLink();
+      $("login-form").hidden = true;
+      if (result.enrollmentRequired) { $("mfa-back").hidden = false; await beginMFAEnrollment(); }
+      else showMFACode(false);
     } catch (error) { $("login-error").textContent = error.message; } finally { button.disabled = false; }
   });
+  $("mfa-code-form").addEventListener("submit", async event => {
+    event.preventDefault(); event.submitter.disabled = true; $("login-error").textContent = "";
+    try {
+      const result = await api("/api/mfa/verify", { method: "POST", body: JSON.stringify({ code: $("mfa-code").value.trim() }) });
+      $("mfa-code").value = $("mfa-secret").value = ""; $("mfa-qr").removeAttribute("src");
+      if (result.recoveryCodes) {
+        $("mfa-code-form").hidden = $("mfa-enrollment").hidden = $("mfa-back").hidden = true;
+        $("mfa-login-codes-value").textContent = result.recoveryCodes.join("\n");
+        $("mfa-login-codes").hidden = false; $("login-title").textContent = "Your backup access";
+        $("login-description").textContent = "Keep these codes separate from your authenticator.";
+        $("mfa-login-codes-value").focus();
+      } else {
+        await enterLibrary();
+        if (result.usedRecoveryCode) toast("Recovery code used. You can replace your authenticator in Settings.");
+      }
+    } catch (error) { $("login-error").textContent = error.message; }
+    finally { event.submitter.disabled = false; }
+  });
+  function downloadRecoveryCodes(element) {
+    const url = URL.createObjectURL(new Blob([element.textContent + "\n"], { type: "text/plain;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url; link.download = "pocketmark-recovery-codes.txt";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  $("mfa-login-download").addEventListener("click", () => downloadRecoveryCodes($("mfa-login-codes-value")));
+  $("mfa-secret-copy").addEventListener("click", async () => {
+    $("login-error").textContent = "";
+    try { await navigator.clipboard.writeText($("mfa-secret").value); toast("Setup key copied."); }
+    catch { $("mfa-secret").select(); $("login-error").textContent = "Select and copy the setup key shown above."; }
+  });
+  $("mfa-login-copy").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText($("mfa-login-codes-value").textContent); toast("Recovery codes copied."); }
+    catch { $("login-error").textContent = "Select and copy the recovery codes shown above."; }
+  });
+  $("mfa-login-continue").addEventListener("click", async () => {
+    $("mfa-login-continue").disabled = true;
+    try { await enterLibrary(); } catch (error) { $("login-error").textContent = error.message; }
+    finally { $("mfa-login-continue").disabled = false; }
+  });
+  $("mfa-back").addEventListener("click", () => { resetMFALogin(); configureLogin(); $("login-error").textContent = ""; $("login-username").focus(); });
 
   $("logout-button").addEventListener("click", async () => {
     if (drafts.size && !confirm("Sign out and discard the drafts kept in this tab?")) return;
@@ -877,8 +1109,16 @@
   document.querySelectorAll(".close-dialog").forEach((button) => button.addEventListener("click", () => button.closest("dialog").close()));
   $("add-bookmark").addEventListener("click", () => openEditor());
   $("empty-add").addEventListener("click", () => openEditor());
+  $("empty-import").addEventListener("click", () => $("import-file").click());
+  $("empty-near-matches").addEventListener("click", () => {
+    clearTimeout(searchTimer); state.query = $("search").value.trim();
+    if (!state.query) { $("search").focus(); return; }
+    $("search").focus(); $("empty-near-matches").hidden = true;
+    $("fuzzy-search").checked = true; $("fuzzy-search").dispatchEvent(new Event("change"));
+  });
   $("empty-reset").addEventListener("click", () => {
     clearTimeout(searchTimer); state.query = ""; $("search").value = "";
+    state.fuzzy = false; $("fuzzy-search").checked = false;
     selectFilter("all"); $("search").focus();
   });
   $("refresh-button").addEventListener("click", () => refresh());
@@ -896,43 +1136,69 @@
     if (Object.keys(validateBookmarkFields()).length) { $("bookmark-form").reportValidity(); return; }
     const button = event.submitter;
     const session = editorSession, editing = state.editing, key = draftKey(editing), submitted = editorValues();
+    if (button.disabled) return;
     button.disabled = true;
+    button.textContent = submitted.saveHTML ? "Saving bookmark & HTML…" : "Saving bookmark…";
+    $("bookmark-save-status").hidden = !submitted.saveHTML;
+    $("bookmark-save-status").textContent = "Saving the bookmark and its HTML copy. This can take up to 45 seconds.";
     $("bookmark-error").textContent = "";
     const body = { url: $("bookmark-url").value.trim(), title: $("bookmark-title").value.trim(), description: $("bookmark-description").value.trim(), notes: $("bookmark-notes").value, collectionId: $("bookmark-collection").value ? Number($("bookmark-collection").value) : null, tags: [...new Set($("bookmark-tags").value.split(",").map((tag) => tag.trim()).filter(Boolean))], favorite: $("bookmark-favorite").checked, read: $("bookmark-read").checked };
     try {
       if (state.editing?.type !== "file" && !safeURL(body.url)) throw new Error("Please enter a complete http:// or https:// URL.");
-      await api(state.editing ? `/api/links/${state.editing.id}` : "/api/links", { method: state.editing ? "PUT" : "POST", body: JSON.stringify(body) });
+      const result = await workspace.saveBookmark(api, editing, body, submitted.saveHTML);
+      const baseline = { ...body, saveHTML: submitted.saveHTML };
       const active = session === editorSession && $("bookmark-dialog").open;
       const latest = active ? editorValues() : drafts.get(key);
       const newer = latest && JSON.stringify(latest) !== JSON.stringify(submitted);
-      if (newer) drafts.put(key, latest, body); else drafts.delete(key);
+      if (newer && active && !editing) {
+        drafts.delete(key);
+        state.editing = result.link;
+        $("bookmark-dialog-title").textContent = "Edit bookmark";
+        drafts.put(draftKey(result.link), latest, baseline);
+      } else if (newer) drafts.put(key, latest, baseline); else drafts.delete(key);
       if (active) {
-        editorBaseline = body;
+        editorBaseline = baseline;
         $("bookmark-draft").hidden = !newer;
         if (!newer) $("bookmark-dialog").close();
       }
-      toast(newer ? "Saved. Your newer edits remain a draft." : editing ? "Bookmark updated." : "Bookmark saved.");
+      if (result.captureError) htmlCaptureFailed(result.link.id, result.captureError);
+      else toast(newer ? "Saved. Your newer edits remain a draft." : result.capture ? `Bookmark and HTML copy saved.${result.capture.omitted ? ` ${result.capture.omitted} resource${result.capture.omitted === 1 ? "" : "s"} could not be included.` : ""}` : editing ? "Bookmark updated." : "Bookmark saved.");
       await refresh();
     } catch (error) { if (session === editorSession) $("bookmark-error").textContent = error.message; else toast(error.message, true); }
-    finally { if (session === editorSession) button.disabled = false; }
+    finally { if (session === editorSession) { button.disabled = false; button.textContent = "Save bookmark"; $("bookmark-save-status").hidden = true; } }
   });
+
+  function htmlCaptureFailed(id, error) {
+    toast(`Bookmark saved. The HTML copy could not be saved. ${error.message}`, true, { label: "Retry HTML", run: async () => {
+      try {
+        const result = await api(`/api/links/${id}/preserve`, { method: "POST" });
+        toast(`HTML copy saved.${result.omitted ? ` ${result.omitted} resource${result.omitted === 1 ? "" : "s"} could not be included.` : ""}`);
+      } catch (failure) { htmlCaptureFailed(id, failure); }
+    } });
+  }
 
   $("add-collection").addEventListener("click", () => {
     openCollectionEditor();
   });
+  let collectionEditorSession = 0;
   $("collection-form").addEventListener("submit", async (event) => {
     event.preventDefault();
-    const button = event.submitter;
+    const button = event.submitter, session = collectionEditorSession, editing = state.editingCollection;
     button.disabled = true;
     $("collection-error").textContent = "";
     try {
       const name = $("collection-name").value.trim();
       if (!name) throw new Error("Give your collection a name.");
-      await api(state.editingCollection ? `/api/collections/${state.editingCollection.id}` : "/api/collections", { method: state.editingCollection ? "PUT" : "POST", body: JSON.stringify({ name, parentId: $("collection-parent").value ? Number($("collection-parent").value) : null }) });
-      $("collection-dialog").close();
+      if (new TextEncoder().encode(name).length > 120) throw new Error("Collection names can use up to 120 UTF-8 bytes. Accented characters and emoji may use more than one byte.");
+      const parentId = $("collection-parent").value ? Number($("collection-parent").value) : null;
+      const saved = await api(editing ? `/api/collections/${editing.id}` : "/api/collections", { method: editing ? "PUT" : "POST", body: JSON.stringify({ name, parentId }) });
+      const active = session === collectionEditorSession && $("collection-dialog").open;
+      const newer = active && ($("collection-name").value.trim() !== name || ($("collection-parent").value ? Number($("collection-parent").value) : null) !== parentId);
+      if (newer) { state.editingCollection = editing || saved; $("collection-dialog-title").textContent = "Rename or move collection"; }
+      else if (active) $("collection-dialog").close();
       await refresh();
-      toast(state.editingCollection ? "Collection updated." : "Collection created.");
-    } catch (error) { $("collection-error").textContent = error.message; } finally { button.disabled = false; }
+      toast(newer ? "Saved. Your newer collection edits are still open." : editing ? "Collection updated." : "Collection created.");
+    } catch (error) { if (session === collectionEditorSession && $("collection-dialog").open) $("collection-error").textContent = error.message; else toast(error.message, true); } finally { if (session === collectionEditorSession) button.disabled = false; }
   });
 
   $("import-button").addEventListener("click", () => $("import-file").click());
@@ -940,6 +1206,8 @@
     const file = $("import-file").files[0];
     if (!file) return;
     $("import-button").disabled = true;
+    $("empty-import").disabled = true;
+    $("import-progress").hidden = false;
     try {
       if (file.size > 8 * 1024 * 1024) throw new Error("Choose an export smaller than 8 MiB.");
       const body = await file.text();
@@ -948,7 +1216,7 @@
       const result = await api(html ? "/api/import/html" : "/api/import", { method: "POST", headers: { "Content-Type": html ? "text/html" : "application/json" }, body });
       toast(`Imported ${result.imported} bookmarks. ${result.skipped || 0} skipped.`);
       await refresh();
-    } catch (error) { toast(error.message, true); } finally { $("import-button").disabled = false; $("import-file").value = ""; }
+    } catch (error) { toast(error.message, true); } finally { $("import-progress").hidden = true; $("import-button").disabled = false; $("empty-import").disabled = false; $("import-file").value = ""; }
   });
 
   document.addEventListener("keydown", (event) => {
@@ -963,8 +1231,10 @@
 
 
   function openCollectionEditor(collection = null) {
+    collectionEditorSession++;
     state.editingCollection = collection;
     $("collection-form").reset();
+    $("collection-form").querySelector('[type="submit"]').disabled = false;
     $("collection-error").textContent = "";
     $("collection-dialog-title").textContent = collection ? "Rename or move collection" : "New collection";
     $("collection-name").value = collection?.name || "";
@@ -979,13 +1249,58 @@
     $("collection-name").focus();
   }
 
-  $("sort-order").addEventListener("change", () => { state.sort = $("sort-order").value; state.page = 1; commitRoute(); refresh(); });
+  const sortOptions = [...$("sort-menu").querySelectorAll("[data-sort]")];
+  function syncSortMenu() {
+    for (const option of sortOptions) option.setAttribute("aria-checked", String(option.dataset.sort === state.sort));
+    const label = `Sort bookmarks: ${sortOptions.find((option) => option.dataset.sort === state.sort).textContent.trim()}`;
+    $("sort-toggle").setAttribute("aria-label", label);
+    $("sort-toggle").title = label;
+  }
+  function closeSortMenu(focus = false) {
+    $("sort-menu").hidden = true;
+    $("sort-toggle").setAttribute("aria-expanded", "false");
+    if (focus) $("sort-toggle").focus();
+  }
+  function openSortMenu() {
+    $("sort-menu").hidden = false;
+    $("sort-toggle").setAttribute("aria-expanded", "true");
+    sortOptions.find((option) => option.dataset.sort === state.sort).focus();
+  }
+  $("sort-toggle").addEventListener("click", () => { if ($("sort-menu").hidden) openSortMenu(); else closeSortMenu(); });
+  $("sort-toggle").addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); openSortMenu(); }
+  });
+  $("sort-menu").addEventListener("click", (event) => {
+    const option = event.target.closest("[data-sort]");
+    if (!option) return;
+    closeSortMenu(true);
+    if (state.sort === option.dataset.sort) return;
+    state.sort = option.dataset.sort; state.page = 1; syncSortMenu(); commitRoute(); refresh();
+  });
+  $("sort-menu").addEventListener("keydown", (event) => {
+    const index = sortOptions.indexOf(document.activeElement);
+    let next;
+    if (event.key === "ArrowDown") next = (index + 1) % sortOptions.length;
+    if (event.key === "ArrowUp") next = (index - 1 + sortOptions.length) % sortOptions.length;
+    if (event.key === "Home") next = 0;
+    if (event.key === "End") next = sortOptions.length - 1;
+    if (next !== undefined) { event.preventDefault(); sortOptions[next].focus(); }
+    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeSortMenu(true); }
+    if (event.key === "Tab") { closeSortMenu(true); if (event.shiftKey) event.preventDefault(); }
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (!$("sort-menu").hidden && !$("sort-menu").contains(event.target) && !$("sort-toggle").contains(event.target)) closeSortMenu();
+  });
+  document.addEventListener("focusin", (event) => {
+    if (!$("sort-menu").hidden && !$("sort-menu").contains(event.target) && event.target !== $("sort-toggle")) closeSortMenu();
+  });
   $("fuzzy-search").addEventListener("change", () => { state.fuzzy = $("fuzzy-search").checked; state.page = 1; commitRoute(); refresh(); });
   $("upload-file-button").addEventListener("click", () => $("library-file").click());
   $("library-file").addEventListener("change", async () => {
     const file = $("library-file").files[0];
     if (!file) return;
     $("upload-file-button").disabled = true;
+    $("upload-progress").hidden = false;
     try {
       if (file.size > 20 * 1024 * 1024) throw new Error("Choose a file smaller than 20 MiB.");
       const params = new URLSearchParams({ name: file.name });
@@ -993,7 +1308,7 @@
       const result = await api(`/api/files?${params}`, { method: "POST", headers: { "Content-Type": file.type || (/\.html?$/i.test(file.name) ? "text/html" : "application/octet-stream") }, body: file });
       await refresh(); toast("File saved to your library.");
       await reader.open(result.link.id);
-    } catch (error) { toast(error.message, true); } finally { $("library-file").value = ""; $("upload-file-button").disabled = false; }
+    } catch (error) { toast(error.message, true); } finally { $("upload-progress").hidden = true; $("library-file").value = ""; $("upload-file-button").disabled = false; }
   });
   function updateHelp() {
     const query = $("help-search").value.trim().toLocaleLowerCase();
@@ -1017,15 +1332,24 @@
 
   function configureLogin(passwordEnabled = true) {
     $("login-title").textContent = setupRequired ? "Create your account" : "Welcome back";
-    $("login-description").textContent = setupRequired ? "Set up your personal Pocketmark library." : "Sign in to your Pocketmark library.";
+    $("login-description").textContent = setupRequired ? "After creating your account, you’ll set up an authenticator app and save recovery codes." : "Sign in with your password and an authentication or recovery code.";
     $("login-submit-label").textContent = setupRequired ? "Create account" : "Sign in";
     $("login-confirm-fields").hidden = !setupRequired;
+    $("login-password-hint").hidden = !setupRequired;
+    $("login-password").setAttribute("aria-describedby", setupRequired ? "login-password-hint" : "login-help");
     $("login-confirm").required = setupRequired;
     $("login-password").autocomplete = setupRequired ? "new-password" : "current-password";
     $("login-password").minLength = setupRequired ? 12 : 1;
-    $("login-help").textContent = setupRequired ? "Choose a password of at least 12 characters. This instance has one personal account." : passwordEnabled ? "Use your Pocketmark username and password." : "Your existing library needs a password. Ask the server administrator to configure it using the account recovery instructions.";
+    $("login-help").textContent = setupRequired ? "This instance has one personal account." : passwordEnabled ? "Use your Pocketmark username and password." : "Your existing library needs a password. Ask the server administrator to configure it using the account recovery instructions.";
     $("login-submit").disabled = !setupRequired && !passwordEnabled;
   }
+  const profileHelp = {
+    read: "Can read and export library data, including saved files. Cannot change it.",
+    capture: "For the browser extension: read bookmark metadata, add or edit bookmarks, create collections and upload captures. Cannot delete, bulk edit, import, export or download saved files.",
+    sync: "WebDAV only. Floccus can read and replace the bookmark tree, including deletions. Cannot access the native library API or saved files.",
+    full: "Can read, export, change and delete library data, including WebDAV sync. Cannot manage your account, keys, sessions or full backups.",
+  };
+  $("token-profile").addEventListener("change", () => { $("token-permissions-help").textContent = profileHelp[$("token-profile").value]; });
   let settingsSession = 0;
   let tokenCount = 0;
   let tokensBusy = false;
@@ -1077,7 +1401,9 @@
   function renderTokens(tokens, session, focusID, focusAction = "toggle") {
     $("token-list").replaceChildren();
     tokenCount = tokens.length;
-    $("token-count").textContent = `${tokens.filter((token) => token.active).length} active · ${tokens.length} of 32 keys`;
+    const expiredKey = token => token.expiresAt > 0 && token.expiresAt * 1000 <= Date.now();
+    const usableKey = token => token.active && !expiredKey(token);
+    $("token-count").textContent = `${tokens.filter(usableKey).length} active · ${tokens.length} of 32 keys`;
     $("token-form").querySelector("button[type='submit']").disabled = tokensBusy || tokenCount >= 32;
     if (!tokens.length) $("token-list").append(el("li", "token-empty muted", "No API keys yet. Create a key to connect your first app."));
     for (const token of tokens || []) {
@@ -1091,18 +1417,23 @@
       rename.title = `Rename ${token.name}`;
       const nameGroup = el("div", "token-name-group");
       nameGroup.append(el("strong", "token-name", token.name), rename);
-      heading.append(nameGroup, el("span", `token-status${token.active ? " is-active" : ""}`, token.active ? "Active" : "Disabled"));
+      const expired = expiredKey(token);
+      heading.append(nameGroup, el("span", `token-status${usableKey(token) ? " is-active" : ""}`, expired ? "Expired" : token.active ? "Active" : "Disabled"));
       const metadata = el("dl", "token-metadata");
       for (const [label, value] of [["Created", token.createdAt], ["Last used", token.lastUsedAt]]) {
         const group = el("div", "");
         const detail = el("dd", ""); detail.append(tokenDate(value));
         group.append(el("dt", "", label), detail); metadata.append(group);
       }
-      details.append(heading, metadata);
+      const permissions = { read: "Read only", capture: "Add, edit & capture", sync: "Floccus sync", full: "Full library access" };
+      const expiry = token.expiresAt ? `${expired ? "Expired" : "Expires"} ${new Date(token.expiresAt * 1000).toLocaleDateString()}` : "No expiry";
+      details.append(heading, el("p", "small muted", `${permissions[token.profile] || token.profile} · ${expiry}`), metadata);
+      if (expired) details.append(el("p", "small muted", "Create a new key to reconnect this app."));
       const actions = el("div", "token-row-actions");
       const toggle = el("button", "button subtle", token.active ? "Disable" : "Reactivate");
       const revoke = el("button", "button subtle token-revoke", "Delete key");
       toggle.type = revoke.type = "button";
+      toggle.hidden = expired;
       toggle.setAttribute("aria-label", `${token.active ? "Disable" : "Reactivate"} ${token.name}`);
       toggle.title = token.active ? "Pause access without changing the key" : "Restore access with the same key";
       revoke.setAttribute("aria-label", `Delete ${token.name} permanently`);
@@ -1182,12 +1513,81 @@
       }
       toggle.addEventListener("click", () => changeKey(false));
       revoke.addEventListener("click", () => changeKey(true));
-      actions.append(toggle, revoke); row.append(details, actions); $("token-list").append(row);
+      const rotate = el("button", "button subtle", "Rotate key"); rotate.type = "button";
+      rotate.setAttribute("aria-label", `Rotate ${token.name}`);
+      rotate.hidden = !token.active || expired;
+      rotate.addEventListener("click", async () => {
+        if (tokensBusy || !confirm(`Replace the key for “${token.name}”? The old key will stop working immediately. Update the connected app with the new key.`)) return;
+        setTokensBusy(true);
+        try {
+          const result = await api(`/api/tokens/${token.id}/rotate`, { method: "POST" });
+          if (session !== settingsSession) return;
+          setTokenVisibility(false); $("new-token-value").value = result.token; $("new-token").hidden = false; $("new-token-value").focus();
+          $("tokens-feedback").textContent = "Key replaced. Copy the new key into your app; its permissions and expiry are unchanged.";
+          await loadTokens(session);
+        } catch (error) { if (session === settingsSession) $("tokens-error").textContent = error.message; }
+        finally { if (session === settingsSession) setTokensBusy(false); }
+      });
+      actions.append(toggle, rotate, revoke); row.append(details, actions); $("token-list").append(row);
       if (focusID === token.id) (focusAction === "rename" ? rename : toggle).focus();
     }
     setTokensBusy(tokensBusy);
   }
-  $("settings-button").addEventListener("click", async () => {
+  function syncSettingsNavigation() {
+    document.querySelectorAll("[data-settings-section]").forEach(button => {
+      button.disabled = (mfaManagementBusy || deferredLogin) && button.dataset.settingsSection !== "2fa";
+    });
+    document.querySelectorAll("[data-settings-back]").forEach(button => { button.disabled = mfaManagementBusy; });
+    $("settings-section-picker").disabled = mfaManagementBusy || deferredLogin;
+  }
+  function renderSettings(animate = false) {
+    const active = Boolean(settingsSection);
+    const entering = active && $("settings-page").hidden;
+    $("settings-page").hidden = !active;
+    $("library-content").hidden = active;
+    $("library-navigation").hidden = active;
+    $("settings-navigation").hidden = !active;
+    $("sidebar").setAttribute("aria-label", active ? "Settings navigation" : "Library navigation");
+    $("app-view").classList.toggle("showing-settings", active);
+    $("breadcrumb-current").textContent = active ? "Settings" : showingTags ? "All tags" : currentTitle();
+    document.querySelectorAll("[data-settings-panel]").forEach(panel => { panel.hidden = panel.dataset.settingsPanel !== settingsSection; });
+    document.querySelectorAll("[data-settings-section]").forEach(button => {
+      const selected = button.dataset.settingsSection === settingsSection;
+      button.classList.toggle("active", selected);
+      if (selected) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
+    });
+    if (active) $("settings-section-picker").value = settingsSection;
+    syncSettingsNavigation();
+    if (!active) {
+      [$("settings-page"), $("settings-navigation")].forEach(element => activeMotion.get(element)?.cancel());
+    } else if (animate && entering) {
+      // The rail changes context as the settings workspace settles beside it.
+      move($("settings-navigation"), [{ opacity: .75 }, { opacity: 1 }]);
+      move($("settings-page"), [{ opacity: .75, transform: "translateX(12px)" }, { opacity: 1, transform: "translateX(0)" }], 220);
+    }
+  }
+  function focusSettings() {
+    const heading = document.querySelector(`[data-settings-panel="${settingsSection}"] h2`);
+    heading.tabIndex = -1; heading.focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+  function navigateSettings(section) {
+    if (mfaManagementBusy || deferredLogin) return;
+    if (!settingsSection) libraryReturnScroll = window.scrollY;
+    commitRoute(false, { ...route(), settingsSection: section });
+    history.replaceState({ ...history.state, pocketmarkLibraryScroll: libraryReturnScroll }, "");
+    restoreRoute();
+  }
+  document.querySelectorAll("[data-settings-section]").forEach(button => button.addEventListener("click", () => navigateSettings(button.dataset.settingsSection)));
+  $("settings-section-picker").addEventListener("change", event => navigateSettings(event.target.value));
+  document.querySelectorAll("[data-settings-back]").forEach(button => button.addEventListener("click", () => {
+    if (mfaManagementBusy) return;
+    commitRoute(false, { ...route(), settingsSection: null });
+    history.replaceState({ ...history.state, pocketmarkScroll: libraryReturnScroll }, "");
+    if (deferredLogin) { clearSettings(); showLogin(); } else restoreRoute();
+  }));
+  $("settings-button").addEventListener("click", () => navigateSettings("api-keys"));
+  async function loadSettings() {
     const session = ++settingsSession;
     $("settings-error").textContent = "";
     $("tokens-error").textContent = "";
@@ -1198,8 +1598,8 @@
     $("token-list").replaceChildren(el("li", "token-empty muted", "Loading API keys…"));
     clearNewToken();
     $("account-password").value = "";
-    $("settings-dialog").showModal();
     await Promise.all([
+      security.loadSessions(),
       loadTokens(session).catch((error) => tokenLoadError(error, session)),
       api("/api/account").then((account) => {
         if (session !== settingsSession) return;
@@ -1207,7 +1607,7 @@
         $("account-status").textContent = account.passwordEnabled ? "Password sign-in is enabled." : "Password sign-in is not configured.";
       }).catch((error) => { if (session === settingsSession) $("settings-error").textContent = error.message; }),
     ]);
-  });
+  }
   $("account-form").addEventListener("submit", async (event) => {
     event.preventDefault(); event.submitter.disabled = true; $("settings-error").textContent = "";
     try {
@@ -1215,13 +1615,137 @@
       $("account-password").value = ""; $("account-status").textContent = "Password sign-in is enabled."; toast("Password updated.");
     } catch (error) { $("settings-error").textContent = error.message; } finally { event.submitter.disabled = false; }
   });
+  function clearMFAManagement() {
+    $("mfa-manage-form").reset(); $("mfa-manage-verify").reset();
+    $("mfa-manage-form").hidden = false;
+    $("mfa-manage-enrollment").hidden = $("mfa-manage-codes").hidden = true;
+    $("mfa-manage-secret").value = ""; $("mfa-manage-qr").removeAttribute("src");
+    $("mfa-manage-codes-value").textContent = "";
+    $("mfa-manage-feedback").textContent = $("mfa-manage-error").textContent = "";
+  }
+  function setMFAManagementBusy(busy) {
+    mfaManagementBusy = busy;
+    syncSettingsNavigation();
+    $("mfa-manage-cancel").disabled = busy;
+    document.querySelectorAll("#settings-page > section").forEach(section => { if (section.getAttribute("aria-labelledby") !== "mfa-settings-title") section.inert = busy || deferredLogin; });
+    document.querySelectorAll("#mfa-manage-form button[type='submit'], #mfa-manage-verify button[type='submit']").forEach(button => { button.disabled = busy || deferredLogin; });
+    if (busy) $("mfa-manage-feedback").textContent = "Updating authentication. Keep settings open until this finishes.";
+    else if ($("mfa-manage-feedback").textContent === "Updating authentication. Keep settings open until this finishes.") $("mfa-manage-feedback").textContent = "";
+    if (!busy && deferredLogin) showLogin();
+  }
+  function showManagedCodes(codes) {
+    $("mfa-manage-codes-value").textContent = codes.join("\n");
+    $("mfa-manage-codes").hidden = false;
+    $("mfa-manage-codes-value").focus();
+  }
+  function normalizeRecoveryCode(code) { return code.trim().replaceAll("-", "").toUpperCase(); }
+  function removeManagedRecoveryCode(proof) {
+    if ($("mfa-manage-codes").hidden) return false;
+    const codes = $("mfa-manage-codes-value").textContent.split("\n");
+    const remaining = codes.filter(code => normalizeRecoveryCode(code) !== normalizeRecoveryCode(proof));
+    if (remaining.length === codes.length) return false;
+    $("mfa-manage-codes-value").textContent = remaining.join("\n");
+    $("mfa-manage-codes").hidden = remaining.length === 0;
+    return true;
+  }
+  function mfaOutcomeUncertain(error) {
+    if (error.status === 401 && error.message === "invalid authentication code") return false;
+    return !error.status || error.status === 401 || error.status === 408 || error.status === 409 || error.status >= 500;
+  }
+  function mfaManagementFailure(error) {
+    if (!mfaOutcomeUncertain(error)) return error.message;
+    return "Could not confirm the result. The change may have completed. Use your authenticator to generate recovery codes, or reset MFA locally if needed.";
+  }
+  $("mfa-manage-form").addEventListener("submit", async event => {
+    event.preventDefault(); const session = settingsSession; const button = event.submitter;
+    if (mfaManagementBusy) return;
+    const previousCodes = $("mfa-manage-codes-value").textContent;
+    const previousCodesVisible = !$("mfa-manage-codes").hidden;
+    const proof = $("mfa-manage-code").value.trim();
+    $("mfa-manage-error").textContent = $("mfa-manage-feedback").textContent = "";
+    if (button.value === "codes") { $("mfa-manage-codes").hidden = true; $("mfa-manage-codes-value").textContent = ""; }
+    setMFAManagementBusy(true);
+    try {
+      const replace = button.value === "replace";
+      const result = await api(replace ? "/api/mfa/replace" : "/api/mfa/recovery-codes", { method: "POST", body: JSON.stringify({ password: $("mfa-manage-password").value, code: proof }) });
+      if (session !== settingsSession) return;
+      $("mfa-manage-password").value = $("mfa-manage-code").value = "";
+      if (replace) {
+        if (removeManagedRecoveryCode(proof)) $("mfa-manage-feedback").textContent = "The recovery code used for this change was removed from the list.";
+        $("mfa-manage-form").hidden = true; $("mfa-manage-enrollment").hidden = false;
+        $("mfa-manage-secret").value = result.secret; $("mfa-manage-qr").src = result.qr;
+        $("mfa-manage-new-code").focus();
+      } else { deferredLoginNotice = ""; showManagedCodes(result.recoveryCodes); }
+    } catch (error) {
+      if (session === settingsSession) {
+        if (button.value === "codes" && previousCodesVisible && !mfaOutcomeUncertain(error)) showManagedCodes(previousCodes.split("\n"));
+        let proofNotice = "";
+        if (/^[0-9A-F]{32}$/.test(normalizeRecoveryCode(proof))) {
+          const rejected = error.status === 403 && error.message === "invalid or already used authentication code";
+          if (rejected || (button.value === "replace" && error.status !== 400 && error.status !== 403)) {
+            const removed = removeManagedRecoveryCode(proof);
+            proofNotice = rejected
+              ? `The recovery code entered is invalid or has already been used.${removed ? " It was removed from the list." : ""}`
+              : `The recovery code entered may have been used.${removed ? " It was removed from the list." : " Try a different code or your authenticator."}`;
+            $("mfa-manage-feedback").textContent = proofNotice;
+          }
+        }
+        $("mfa-manage-error").textContent = mfaManagementFailure(error);
+        if (mfaOutcomeUncertain(error) || proofNotice) {
+          deferredLoginNotice = [mfaOutcomeUncertain(error) ? mfaManagementFailure(error) : "", proofNotice].filter(Boolean).join(" ");
+        }
+      }
+    }
+    finally { setMFAManagementBusy(false); }
+  });
+  $("mfa-manage-verify").addEventListener("submit", async event => {
+    event.preventDefault(); const session = settingsSession;
+    if (mfaManagementBusy) return;
+    const previousCodes = $("mfa-manage-codes-value").textContent;
+    const previousCodesVisible = !$("mfa-manage-codes").hidden;
+    $("mfa-manage-codes").hidden = true; $("mfa-manage-codes-value").textContent = "";
+    $("mfa-manage-error").textContent = "";
+    setMFAManagementBusy(true);
+    try {
+      const result = await api("/api/mfa/verify", { method: "POST", body: JSON.stringify({ code: $("mfa-manage-new-code").value.trim() }) });
+      if (session !== settingsSession) return;
+      $("mfa-manage-new-code").value = $("mfa-manage-secret").value = ""; $("mfa-manage-qr").removeAttribute("src");
+      $("mfa-manage-enrollment").hidden = true; $("mfa-manage-form").hidden = false;
+      $("mfa-manage-feedback").textContent = "Authenticator replaced. Other browsers have been signed out.";
+      deferredLoginNotice = "";
+      showManagedCodes(result.recoveryCodes); void security.loadSessions();
+    } catch (error) {
+      if (session === settingsSession) {
+        if (previousCodesVisible && !mfaOutcomeUncertain(error)) showManagedCodes(previousCodes.split("\n"));
+        $("mfa-manage-error").textContent = mfaManagementFailure(error);
+        if (mfaOutcomeUncertain(error)) deferredLoginNotice = mfaManagementFailure(error);
+      }
+    }
+    finally { setMFAManagementBusy(false); }
+  });
+  $("mfa-manage-cancel").addEventListener("click", () => {
+    if (mfaManagementBusy) return;
+    $("mfa-manage-verify").reset(); $("mfa-manage-secret").value = ""; $("mfa-manage-qr").removeAttribute("src");
+    $("mfa-manage-enrollment").hidden = true; $("mfa-manage-form").hidden = false;
+    $("mfa-manage-error").textContent = ""; $("mfa-manage-password").focus();
+  });
+  $("mfa-manage-download").addEventListener("click", () => downloadRecoveryCodes($("mfa-manage-codes-value")));
+  $("mfa-manage-secret-copy").addEventListener("click", async () => {
+    $("mfa-manage-error").textContent = $("mfa-manage-feedback").textContent = "";
+    try { await navigator.clipboard.writeText($("mfa-manage-secret").value); $("mfa-manage-feedback").textContent = "Setup key copied."; }
+    catch { $("mfa-manage-secret").select(); $("mfa-manage-error").textContent = "Select and copy the setup key shown above."; }
+  });
+  $("mfa-manage-copy").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText($("mfa-manage-codes-value").textContent); $("mfa-manage-feedback").textContent = "Recovery codes copied."; }
+    catch { $("mfa-manage-error").textContent = "Select and copy the recovery codes shown above."; }
+  });
   $("token-form").addEventListener("submit", async (event) => {
     const session = settingsSession;
     event.preventDefault();
     if (tokensBusy || editingTokenID !== null || tokenCount >= 32) return;
     setTokensBusy(true); $("tokens-error").textContent = ""; $("tokens-feedback").textContent = "";
     try {
-      const token = await api("/api/tokens", { method: "POST", body: JSON.stringify({ name: $("token-name").value.trim() }) });
+      const token = await api("/api/tokens", { method: "POST", body: JSON.stringify({ name: $("token-name").value.trim(), profile: $("token-profile").value, expiresAt: Number($("token-expiry").value) ? Math.floor(Date.now() / 1000) + Number($("token-expiry").value) * 86400 : 0 }) });
       if (session !== settingsSession) return;
       setTokenVisibility(false);
       $("new-token-value").value = token.token; $("new-token").hidden = false; $("token-name").value = "";
@@ -1231,7 +1755,10 @@
   });
   $("toggle-token").addEventListener("click", () => setTokenVisibility($("new-token-value").type === "password"));
   $("copy-token").addEventListener("click", async () => { try { await navigator.clipboard.writeText($("new-token-value").value); toast("Key copied."); } catch { setTokenVisibility(true); $("new-token-value").select(); toast("Select and copy the key."); } });
-  $("settings-dialog").addEventListener("close", () => { settingsSession++; editingTokenID = null; $("account-password").value = ""; clearNewToken(); });
+  function clearSettings() {
+    security.clear();
+    settingsSession++; editingTokenID = null; $("account-password").value = ""; clearNewToken(); clearMFAManagement();
+  }
   $("export-button").addEventListener("click", () => $("export-dialog").showModal());
 
   function openSharedLink() {

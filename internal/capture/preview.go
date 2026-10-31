@@ -8,8 +8,9 @@ import (
 )
 
 // Preview keeps the saved layout, including inline styles and embedded resources.
-// The caller MUST serve it with a sandbox CSP that disallows scripts and network
-// resources. Remove navigation that CSP resource directives do not restrict.
+// The caller MUST render it in the nested sandboxed blob viewer whose parent CSP
+// restricts frame-src to blob:. This lexical filter is defense in depth, not an
+// HTML5 sanitizer: browser parsing contexts can expose unfiltered navigation.
 // Tokenization is bounded by the attachment limit; no document tree is built.
 func Preview(src io.Reader, dst io.Writer) error {
 	z := html.NewTokenizer(io.LimitReader(src, 20<<20))
@@ -44,7 +45,7 @@ func Preview(src io.Reader, dst io.Writer) error {
 				attrs := t.Attr[:0]
 				for _, a := range t.Attr {
 					if a.Key == "target" || a.Key == "ping" || a.Key == "download" ||
-						(a.Key == "href" && !strings.HasPrefix(strings.TrimSpace(a.Val), "#")) {
+						((a.Key == "href" || a.Key == "xlink:href") && !strings.HasPrefix(strings.TrimSpace(a.Val), "#")) {
 						continue
 					}
 					attrs = append(attrs, a)

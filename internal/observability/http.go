@@ -92,7 +92,7 @@ func (o *Observer) HTTP(w http.ResponseWriter, r *http.Request, route string, ne
 		o.measurements.inflight.Add(-1)
 		o.measurements.observeHTTP(httpLabels{method, route, status}, elapsed)
 		level := slog.LevelInfo
-		if r.URL.Path == "/healthz" || r.URL.Path == "/metrics" {
+		if (r.URL.Path == "/healthz" || r.URL.Path == "/livez") || r.URL.Path == "/metrics" {
 			level = slog.LevelDebug
 		}
 		if status >= 400 {

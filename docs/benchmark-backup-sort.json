@@ -1,0 +1,790 @@
+{
+  "measured_at_utc": "2026-10-26T22:19:34.502136+00:00",
+  "host": "MacBook Air Apple M4, 24 GB; Docker Desktop Linux ARM64",
+  "before_revision": "779609e",
+  "after_base_revision": "779609e",
+  "delivery_note": "The controlled images share revision 779609e as their base. Subsequent main security, HTTP rate-limit and extension commits were integrated after measurement. Bounded copying, periodic syncing and date indexes are unchanged; final snapshots also retain upstream session scrubbing. The integrated branch is validated separately.",
+  "before_image_id": "sha256:2fb4d8ef7673e117ddfc18ef21c5d2b2b100b951cbd09b9920131d28c3414a68",
+  "after_image_id": "sha256:2d52c3172b71e5eba8f5b03d33cd3176ba3631437f89f58512c24fb7f3e3e520",
+  "source_files_sha256": {
+    "internal/store/documents.go": "39dd0f8cf46e48bd68378d57afcd8966227d768de00c0a4025e23bce6c72f6e2",
+    "internal/store/schema.go": "a5502d0ea5205da34f0dfa1e0154470e0e447364399376e690a4ea62df400b15",
+    "internal/store/store.go": "26478f6fe202eb011df05e7402bb3b6e5a925513222745340e3292557fc481d5",
+    "internal/server/assets.go": "c5f27657b1d215e673a627d019353959b6b6258fea32d417cd27843ef2fa28b1"
+  },
+  "resources": {
+    "cpus": 1,
+    "memory_mib": 128,
+    "go_soft_memory": "32MiB",
+    "default_memory_plus_swap_mib": 256
+  },
+  "fixture": {
+    "captured_links": 10000,
+    "html_bytes_per_link": 262144,
+    "indexed_text_bytes_per_link_approx": 32768,
+    "pdf_bytes_per_link": 1048576,
+    "metadata_links": 100000,
+    "automatic_remote_capture": false,
+    "pdf_rendering_measured": false
+  },
+  "methodology": {
+    "requests_per_latency_series": 30,
+    "captured_before_after_same_volume": true,
+    "metadata_before_after_same_volume": true,
+    "capture_backup_background_reads_before": false,
+    "capture_backup_background_reads_after": true,
+    "backup_time": "Includes snapshot preparation and transfer; excludes client ZIP verification and restoration",
+    "latency": "Local real HTTP API, no browser UI rendering",
+    "rss": "Application PID 1, sampled every 100 ms plus kernel lifetime peak; container includes filesystem cache"
+  },
+  "captured_before": {
+    "queries": {
+      "list": {
+        "n": 30,
+        "p50_ms": 1.71,
+        "p95_ms": 10.91,
+        "max_ms": 28.48,
+        "mean_ms": 2.98,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.093,
+        "ok_per_second": 324.05
+      },
+      "fts_common": {
+        "n": 30,
+        "p50_ms": 113.31,
+        "p95_ms": 155.28,
+        "max_ms": 341.72,
+        "mean_ms": 121.33,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 3.646,
+        "ok_per_second": 8.23
+      },
+      "fts_selective": {
+        "n": 30,
+        "p50_ms": 6.14,
+        "p95_ms": 6.96,
+        "max_ms": 8.64,
+        "mean_ms": 6.18,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.189,
+        "ok_per_second": 158.72
+      },
+      "tag": {
+        "n": 30,
+        "p50_ms": 5.56,
+        "p95_ms": 6.26,
+        "max_ms": 6.57,
+        "mean_ms": 5.5,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.168,
+        "ok_per_second": 178.34
+      },
+      "title_sort": {
+        "n": 30,
+        "p50_ms": 4.18,
+        "p95_ms": 4.82,
+        "max_ms": 82.65,
+        "mean_ms": 6.72,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.205,
+        "ok_per_second": 146.44
+      },
+      "ui_newest": {
+        "n": 30,
+        "p50_ms": 5111.15,
+        "p95_ms": 6965.28,
+        "max_ms": 7859.88,
+        "mean_ms": 5304.87,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 159.161,
+        "ok_per_second": 0.19
+      },
+      "ui_tags": {
+        "n": 30,
+        "p50_ms": 4.22,
+        "p95_ms": 5.97,
+        "max_ms": 7.83,
+        "mean_ms": 4.45,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.135,
+        "ok_per_second": 222.83
+      },
+      "tags_browse": {
+        "n": 30,
+        "p50_ms": 12.95,
+        "p95_ms": 14.83,
+        "max_ms": 15.79,
+        "mean_ms": 13.14,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.395,
+        "ok_per_second": 75.93
+      },
+      "deep_page": {
+        "n": 30,
+        "p50_ms": 1.25,
+        "p95_ms": 2.01,
+        "max_ms": 26.4,
+        "mean_ms": 2.16,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.07,
+        "ok_per_second": 427.73
+      },
+      "stats": {
+        "n": 30,
+        "p50_ms": 0.96,
+        "p95_ms": 1.41,
+        "max_ms": 5.96,
+        "mean_ms": 1.16,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.036,
+        "ok_per_second": 845.03
+      },
+      "fts_body": {
+        "n": 30,
+        "p50_ms": 6.07,
+        "p95_ms": 8.86,
+        "max_ms": 11.97,
+        "mean_ms": 6.55,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.204,
+        "ok_per_second": 146.95
+      },
+      "fuzzy": {
+        "n": 8,
+        "p50_ms": 20.12,
+        "p95_ms": 33.22,
+        "max_ms": 33.22,
+        "mean_ms": 21.38,
+        "statuses": {
+          "200": 8
+        },
+        "wall_seconds": 0.173,
+        "ok_per_second": 46.27
+      }
+    },
+    "files": {
+      "pocketmark.db": 13625421824,
+      "pocketmark.db-shm": 32768,
+      "pocketmark.db-wal": 15289352
+    },
+    "backup": {
+      "status": 200,
+      "headers_seconds": 59.017,
+      "error": "IncompleteRead(852011 bytes read)",
+      "concurrent_list": {
+        "statuses": {}
+      },
+      "memory": {
+        "samples": 688,
+        "rss_sampled_peak_mib": 28.61,
+        "rss_lifetime_peak_mib": 34.03,
+        "cgroup_sampled_peak_mib": 128.0,
+        "cgroup_lifetime_peak_mib": 128.71
+      },
+      "oom_killed": false
+    }
+  },
+  "captured_after": {
+    "queries": {
+      "list": {
+        "n": 30,
+        "p50_ms": 0.93,
+        "p95_ms": 3.4,
+        "max_ms": 38.28,
+        "mean_ms": 2.32,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.073,
+        "ok_per_second": 409.97
+      },
+      "fts_common": {
+        "n": 30,
+        "p50_ms": 99.48,
+        "p95_ms": 121.52,
+        "max_ms": 272.75,
+        "mean_ms": 106.34,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 3.196,
+        "ok_per_second": 9.39
+      },
+      "fts_selective": {
+        "n": 30,
+        "p50_ms": 6.07,
+        "p95_ms": 9.05,
+        "max_ms": 33.47,
+        "mean_ms": 7.06,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.216,
+        "ok_per_second": 139.15
+      },
+      "tag": {
+        "n": 30,
+        "p50_ms": 5.62,
+        "p95_ms": 6.8,
+        "max_ms": 6.91,
+        "mean_ms": 5.62,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.172,
+        "ok_per_second": 174.7
+      },
+      "title_sort": {
+        "n": 30,
+        "p50_ms": 3.97,
+        "p95_ms": 4.55,
+        "max_ms": 85.63,
+        "mean_ms": 6.68,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.204,
+        "ok_per_second": 147.26
+      },
+      "ui_newest": {
+        "n": 30,
+        "p50_ms": 0.88,
+        "p95_ms": 1.96,
+        "max_ms": 2.01,
+        "mean_ms": 1.0,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.033,
+        "ok_per_second": 920.46
+      },
+      "ui_tags": {
+        "n": 30,
+        "p50_ms": 6.95,
+        "p95_ms": 7.57,
+        "max_ms": 7.87,
+        "mean_ms": 6.99,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.21,
+        "ok_per_second": 142.55
+      },
+      "tags_browse": {
+        "n": 30,
+        "p50_ms": 21.17,
+        "p95_ms": 22.96,
+        "max_ms": 23.69,
+        "mean_ms": 21.33,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.641,
+        "ok_per_second": 46.78
+      },
+      "deep_page": {
+        "n": 30,
+        "p50_ms": 2.17,
+        "p95_ms": 3.37,
+        "max_ms": 31.18,
+        "mean_ms": 3.18,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.098,
+        "ok_per_second": 305.37
+      },
+      "stats": {
+        "n": 30,
+        "p50_ms": 1.35,
+        "p95_ms": 1.9,
+        "max_ms": 2.1,
+        "mean_ms": 1.4,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.042,
+        "ok_per_second": 706.35
+      },
+      "fts_body": {
+        "n": 30,
+        "p50_ms": 8.89,
+        "p95_ms": 11.7,
+        "max_ms": 11.93,
+        "mean_ms": 9.1,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.278,
+        "ok_per_second": 107.79
+      },
+      "fuzzy": {
+        "n": 8,
+        "p50_ms": 31.59,
+        "p95_ms": 35.54,
+        "max_ms": 35.54,
+        "mean_ms": 29.46,
+        "statuses": {
+          "200": 8
+        },
+        "wall_seconds": 0.237,
+        "ok_per_second": 33.79
+      }
+    },
+    "additional_date_sorts": {
+      "oldest": {
+        "n": 30,
+        "p50_ms": 1.72,
+        "p95_ms": 3.56,
+        "max_ms": 4.83,
+        "mean_ms": 2.0,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.065,
+        "ok_per_second": 460.81
+      },
+      "updated": {
+        "n": 30,
+        "p50_ms": 1.56,
+        "p95_ms": 2.44,
+        "max_ms": 2.89,
+        "mean_ms": 1.65,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.054,
+        "ok_per_second": 557.32
+      },
+      "newest&collection=0": {
+        "n": 30,
+        "p50_ms": 1.93,
+        "p95_ms": 2.69,
+        "max_ms": 11.98,
+        "mean_ms": 2.28,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.073,
+        "ok_per_second": 410.15
+      }
+    },
+    "files": {
+      "pocketmark.db": 13625421824,
+      "pocketmark.db-shm": 32768,
+      "pocketmark.db-wal": 15289352
+    },
+    "backup": {
+      "status": 200,
+      "headers_seconds": 34.965,
+      "seconds": 117.22,
+      "bytes": 13625484073,
+      "download_mib_per_second": 110.85,
+      "entries": [
+        "pocketmark.db",
+        "RESTORE.txt"
+      ],
+      "crc_ok": true,
+      "concurrent_list": {
+        "n": 789,
+        "p50_ms": 2.99,
+        "p95_ms": 10.55,
+        "max_ms": 189.4,
+        "mean_ms": 4.28,
+        "statuses": {
+          "200": 789
+        }
+      },
+      "memory": {
+        "samples": 1573,
+        "rss_sampled_peak_mib": 28.1,
+        "rss_lifetime_peak_mib": 28.2,
+        "cgroup_sampled_peak_mib": 128.0,
+        "cgroup_lifetime_peak_mib": 128.0
+      },
+      "oom_killed": false
+    },
+    "restoration": {
+      "counts": {
+        "links": 10000,
+        "assets": 20000,
+        "asset_chunks": 200000
+      },
+      "fts_matches": 10000,
+      "three_html_and_three_pdf_hashes_ok": true,
+      "seconds": 41.354
+    },
+    "memory_overall": {
+      "samples": 2041,
+      "rss_sampled_peak_mib": 28.1,
+      "rss_lifetime_peak_mib": 28.2,
+      "cgroup_sampled_peak_mib": 128.0,
+      "cgroup_lifetime_peak_mib": 128.0
+    },
+    "backup_memory_components_peak_mib": {
+      "anon": 15.09,
+      "file": 111.71,
+      "shmem": 0.0,
+      "kernel": 4.95,
+      "dirty": 8.0,
+      "writeback": 8.0,
+      "swap": 0.0
+    },
+    "memory_events": {
+      "low": "0",
+      "high": "0",
+      "max": "155148",
+      "oom": "0",
+      "oom_kill": "0",
+      "oom_group_kill": "0"
+    }
+  },
+  "repeat_without_swap": {
+    "newest_idle": {
+      "n": 30,
+      "p50_ms": 0.81,
+      "p95_ms": 2.6,
+      "max_ms": 7.15,
+      "mean_ms": 1.14,
+      "statuses": {
+        "200": 30
+      },
+      "wall_seconds": 0.04,
+      "ok_per_second": 757.3
+    },
+    "backup": {
+      "status": 200,
+      "headers_seconds": 25.117,
+      "seconds": 77.387,
+      "bytes": 13625484073,
+      "download_mib_per_second": 167.91,
+      "entries": [
+        "pocketmark.db",
+        "RESTORE.txt"
+      ],
+      "crc_ok": true,
+      "concurrent_list": {
+        "n": 405,
+        "p50_ms": 1.96,
+        "p95_ms": 4.54,
+        "max_ms": 8.97,
+        "mean_ms": 2.31,
+        "statuses": {
+          "200": 405
+        }
+      },
+      "memory": {
+        "samples": 816,
+        "rss_sampled_peak_mib": 27.34,
+        "rss_lifetime_peak_mib": 27.44,
+        "cgroup_sampled_peak_mib": 128.0,
+        "cgroup_lifetime_peak_mib": 128.0
+      },
+      "oom_killed": false
+    },
+    "restart": {
+      "seconds_including_docker": 0.33,
+      "stats_unchanged": true,
+      "sample_attachment_hashes_ok": false,
+      "first_list_after_restart": {
+        "n": 1,
+        "p50_ms": 5.7,
+        "p95_ms": 5.7,
+        "max_ms": 5.7,
+        "mean_ms": 5.7,
+        "statuses": {
+          "200": 1
+        },
+        "wall_seconds": 0.006,
+        "ok_per_second": 159.99
+      },
+      "first_search_after_restart": {
+        "n": 1,
+        "p50_ms": 16.12,
+        "p95_ms": 16.12,
+        "max_ms": 16.12,
+        "mean_ms": 16.12,
+        "statuses": {
+          "200": 1
+        },
+        "wall_seconds": 0.016,
+        "ok_per_second": 60.87
+      }
+    },
+    "restart_attachment_hashes_ok": true
+  },
+  "metadata_before": [
+    {
+      "links": 1000,
+      "import": {
+        "links": 1000,
+        "seconds": 0.088,
+        "links_per_second": 11352.0
+      },
+      "queries": {
+        "newest": {
+          "n": 30,
+          "p50_ms": 1.06,
+          "p95_ms": 2.5,
+          "max_ms": 6.45,
+          "mean_ms": 1.32,
+          "statuses": {
+            "200": 30
+          },
+          "wall_seconds": 0.042,
+          "ok_per_second": 718.21
+        },
+        "oldest": {
+          "n": 30,
+          "p50_ms": 0.65,
+          "p95_ms": 2.26,
+          "max_ms": 2.56,
+          "mean_ms": 0.79,
+          "statuses": {
+            "200": 30
+          },
+          "wall_seconds": 0.027,
+          "ok_per_second": 1132.01
+        },
+        "updated": {
+          "n": 30,
+          "p50_ms": 1.0,
+          "p95_ms": 1.24,
+          "max_ms": 1.91,
+          "mean_ms": 1.05,
+          "statuses": {
+            "200": 30
+          },
+          "wall_seconds": 0.036,
+          "ok_per_second": 844.15
+        }
+      },
+      "files": {
+        "pocketmark.db": 4096,
+        "pocketmark.db-shm": 32768,
+        "pocketmark.db-wal": 696312
+      },
+      "memory": {
+        "samples": 2,
+        "rss_sampled_peak_mib": 23.75,
+        "rss_lifetime_peak_mib": 23.89,
+        "cgroup_sampled_peak_mib": 14.63,
+        "cgroup_lifetime_peak_mib": 15.3
+      }
+    },
+    {
+      "links": 10000,
+      "import": {
+        "links": 9000,
+        "seconds": 0.633,
+        "links_per_second": 14211.1
+      },
+      "queries": {
+        "newest": {
+          "n": 30,
+          "p50_ms": 5.54,
+          "p95_ms": 6.86,
+          "max_ms": 7.34,
+          "mean_ms": 5.66,
+          "statuses": {
+            "200": 30
+          },
+          "wall_seconds": 0.178,
+          "ok_per_second": 168.58
+        },
+        "oldest": {
+          "n": 30,
+          "p50_ms": 1.64,
+          "p95_ms": 2.42,
+          "max_ms": 2.52,
+          "mean_ms": 1.73,
+          "statuses": {
+            "200": 30
+          },
+          "wall_seconds": 0.057,
+          "ok_per_second": 527.94
+        },
+        "updated": {
+          "n": 30,
+          "p50_ms": 5.43,
+          "p95_ms": 6.43,
+          "max_ms": 6.87,
+          "mean_ms": 5.49,
+          "statuses": {
+            "200": 30
+          },
+          "wall_seconds": 0.172,
+          "ok_per_second": 174.38
+        }
+      },
+      "files": {
+        "pocketmark.db": 5062656,
+        "pocketmark.db-shm": 32768,
+        "pocketmark.db-wal": 5380752
+      },
+      "memory": {
+        "samples": 5,
+        "rss_sampled_peak_mib": 30.57,
+        "rss_lifetime_peak_mib": 34.69,
+        "cgroup_sampled_peak_mib": 33.54,
+        "cgroup_lifetime_peak_mib": 33.7
+      }
+    },
+    {
+      "links": 100000,
+      "import": {
+        "links": 90000,
+        "seconds": 6.064,
+        "links_per_second": 14840.5
+      },
+      "queries": {
+        "newest": {
+          "n": 30,
+          "p50_ms": 56.34,
+          "p95_ms": 64.24,
+          "max_ms": 66.58,
+          "mean_ms": 57.46,
+          "statuses": {
+            "200": 30
+          },
+          "wall_seconds": 1.734,
+          "ok_per_second": 17.3
+        },
+        "oldest": {
+          "n": 30,
+          "p50_ms": 13.19,
+          "p95_ms": 14.12,
+          "max_ms": 14.31,
+          "mean_ms": 13.23,
+          "statuses": {
+            "200": 30
+          },
+          "wall_seconds": 0.404,
+          "ok_per_second": 74.33
+        },
+        "updated": {
+          "n": 30,
+          "p50_ms": 56.0,
+          "p95_ms": 63.46,
+          "max_ms": 66.3,
+          "mean_ms": 57.45,
+          "statuses": {
+            "200": 30
+          },
+          "wall_seconds": 1.731,
+          "ok_per_second": 17.33
+        }
+      },
+      "files": {
+        "pocketmark.db": 50348032,
+        "pocketmark.db-shm": 32768,
+        "pocketmark.db-wal": 10295912
+      },
+      "memory": {
+        "samples": 38,
+        "rss_sampled_peak_mib": 29.05,
+        "rss_lifetime_peak_mib": 38.04,
+        "cgroup_sampled_peak_mib": 79.0,
+        "cgroup_lifetime_peak_mib": 81.63
+      }
+    }
+  ],
+  "metadata_after": {
+    "links": 100000,
+    "queries": {
+      "newest": {
+        "n": 30,
+        "p50_ms": 2.93,
+        "p95_ms": 6.79,
+        "max_ms": 9.44,
+        "mean_ms": 3.4,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.108,
+        "ok_per_second": 278.96
+      },
+      "oldest": {
+        "n": 30,
+        "p50_ms": 2.12,
+        "p95_ms": 3.69,
+        "max_ms": 4.49,
+        "mean_ms": 2.23,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.07,
+        "ok_per_second": 429.79
+      },
+      "updated": {
+        "n": 30,
+        "p50_ms": 1.33,
+        "p95_ms": 2.65,
+        "max_ms": 6.46,
+        "mean_ms": 1.65,
+        "statuses": {
+          "200": 30
+        },
+        "wall_seconds": 0.053,
+        "ok_per_second": 566.79
+      }
+    },
+    "files": {
+      "pocketmark.db": 57532416,
+      "pocketmark.db-shm": 32768,
+      "pocketmark.db-wal": 8478992
+    },
+    "memory": {
+      "samples": 3,
+      "rss_sampled_peak_mib": 22.87,
+      "rss_lifetime_peak_mib": 23.03,
+      "cgroup_sampled_peak_mib": 28.68,
+      "cgroup_lifetime_peak_mib": 28.93
+    }
+  },
+  "validation": {
+    "temporary_data_removed": true,
+    "local_checks": [
+      "make check",
+      "make test (-race -p 1)",
+      "make test-extension",
+      "make build"
+    ],
+    "docker_smoke": {
+      "health_auth_hardening_limits": true,
+      "sqlite_fts5_and_capture_ssrf_rejection": true,
+      "full_backup": true,
+      "restart_persistence_and_no_oom": true
+    },
+    "autoreview": "clean, no accepted/actionable findings"
+  },
+  "boundaries": [
+    "Measured sample workloads, not maximum capacities or worst-case RAM guarantees.",
+    "Earlier 1eef406/Go 1.27.2/Alpine 3.23 runs observed OOMs. The refreshed main baseline used Go 1.27.3/Alpine 3.24: its 1000-link backup passed; its 10000-link ZIP was truncated by the 60-second HTTP deadline.",
+    "An intermediate online-copy candidate without periodic fsync still OOMed under concurrent reads. Final results include periodic destination syncing.",
+    "The backup preserves free pages instead of compacting them. Temporary source/destination connections close before download; source WAL may grow while the read view is pinned.",
+    "Background reads make the after-backup workload stricter than the before-backup workload; do not interpret times as a matching throughput comparison."
+  ]
+}

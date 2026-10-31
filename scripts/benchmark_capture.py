@@ -21,6 +21,7 @@ import urllib.request
 import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from disposable_auth import bootstrap
 
 ROOT = Path(__file__).resolve().parents[1]
 URLS = [
@@ -106,16 +107,15 @@ def main():
             require(host["NanoCpus"] == 10**9 and host["PidsLimit"] == 64, "resource limits differ")
             require("ALL" in host["CapDrop"], "capabilities not dropped")
             require(any(s.startswith("no-new-privileges") for s in host["SecurityOpt"]), "privilege setting missing")
-            require(docker("exec", cid, "stat", "-c", "%a:%u", "/data/access-token") == "600:10001",
-                    "token permissions differ")
-            # Credentials stay in memory; never record them in results or logs.
-            token = docker("exec", cid, "cat", "/data/access-token")
+            require(docker("exec", cid, "stat", "-c", "%a:%u", "/data/server-secret") == "600:10001",
+                    "secret permissions differ")
+            token = ""
             port = inspect["NetworkSettings"]["Ports"]["8090/tcp"][0]["HostPort"]
             base = "http://127.0.0.1:" + port
 
             def call(path, payload=None, authenticated=True, raw=False, method=None, content_type="application/json"):
                 headers = {"Content-Type": content_type}
-                if authenticated:
+                if authenticated and token:
                     headers["Authorization"] = "Bearer " + token
                 body = payload if isinstance(payload, bytes) else (None if payload is None else json.dumps(payload).encode())
                 req = urllib.request.Request(base + path, data=body, headers=headers, method=method)
@@ -130,6 +130,7 @@ def main():
             page, _ = call("/", authenticated=False, raw=True)
             require(b"Pocketmark" in page, "embedded UI missing")
             require(call("/healthz")["status"] == "ok", "health endpoint failed")
+            token, session, password = bootstrap(base)
             monitor = subprocess.Popen(["docker", "exec", cid, "sh", "-c", SAMPLER],
                                        text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -245,7 +246,10 @@ def main():
                 require(dav("DELETE", "/dav/bookmarks.xbel.lock")[0] == 204, "DAV unlock failed")
                 features["floccus_basic_lock_temp_move_exact_bytes"] = True
                 phase[0] = "full_backup"
-                req = urllib.request.Request(base + "/api/backup", headers={"Authorization": "Bearer " + token})
+                reauth = urllib.request.Request(base + "/api/reauth", data=json.dumps({"password": password}).encode(), headers={"Cookie": session, "Content-Type": "application/json"})
+                with urllib.request.urlopen(reauth, timeout=30) as response:
+                    require(response.status == 200, "backup reauthentication failed")
+                req = urllib.request.Request(base + "/api/backup", headers={"Cookie": session})
                 backup_path = Path(temp) / "backup.zip"
                 with urllib.request.urlopen(req, timeout=60) as response, backup_path.open("wb") as target:
                     while block := response.read(64 * 1024):

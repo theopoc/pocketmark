@@ -1,0 +1,59 @@
+{
+  "observedDate": "2026-10-26",
+  "scope": "Local security branch; no deployed cluster or published image tested",
+  "goToolchain": "go1.27.3",
+  "goTags": [
+    "sqlite_fts5",
+    "sqlite_omit_load_extension"
+  ],
+  "checks": {
+    "makeCheck": true,
+    "makeTestRace": true,
+    "uiTestsPassed": 59,
+    "extensionTestsPassed": 44,
+    "makeBuild": true,
+    "backupRestoreAndRestartRegression": true,
+    "chromeE2E": true,
+    "redactedGitleaksDirectory": true
+  },
+  "imageScan": {
+    "tool": "Trivy 0.69.3",
+    "artifact": "pocketmark-security-audit:deep-integrated",
+    "results": [
+      {
+        "target": "pocketmark-security-audit:deep-integrated (alpine 3.24.3)",
+        "type": "alpine",
+        "vulnerabilityCount": 0
+      },
+      {
+        "target": "usr/local/bin/pocketmark",
+        "type": "gobinary",
+        "vulnerabilityCount": 0
+      }
+    ],
+    "limitation": "Alpine version absent from scanner EOL list; newer scanner available"
+  },
+  "smoke": {
+    "image": "pocketmark-security-audit:deep-integrated",
+    "image_id": "sha256:b862d8e09b9564b3c6b155d6441b434a3e73b5dd6e6740feb1d9a52e3be5b0ac",
+    "platform": "linux/arm64",
+    "revision": null,
+    "version": null,
+    "checks": {
+      "health_auth_hardening_limits": true,
+      "sqlite_fts5_and_capture_ssrf_rejection": true,
+      "full_backup": true,
+      "restart_persistence_and_no_oom": true
+    },
+    "memory_events_before_restart": {
+      "low": "0",
+      "high": "0",
+      "max": "0",
+      "oom": "0",
+      "oom_kill": "0",
+      "oom_group_kill": "0"
+    },
+    "scope": "Synthetic isolated Compose smoke; not a live-page or RAM benchmark"
+  },
+  "integrationBase": "593bcf5 (per-client HTTP limits active by default); full checks, Chrome E2E, Docker smoke, memory probe and image scan rerun after rebase"
+}

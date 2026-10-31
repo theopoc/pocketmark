@@ -21,6 +21,8 @@ type APIKey struct {
 	CreatedAt  string `json:"createdAt"`
 	Active     bool   `json:"active"`
 	LastUsedAt string `json:"lastUsedAt"`
+	Profile    string `json:"profile"`
+	ExpiresAt  int64  `json:"expiresAt"`
 }
 
 var ErrAPIKeyLimit = errors.New("at most 32 API keys")
@@ -53,24 +55,69 @@ func (s *Store) CreateAccount(ctx context.Context, a Account) (bool, error) {
 }
 
 func (s *Store) SaveAccount(ctx context.Context, a Account) error {
-	_, err := s.db.ExecContext(ctx, "INSERT INTO account(id,username,salt,hash) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET username=excluded.username,salt=excluded.salt,hash=excluded.hash", a.Username, a.Salt, a.Hash)
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, "INSERT INTO account(id,username,salt,hash) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET username=excluded.username,salt=excluded.salt,hash=excluded.hash", a.Username, a.Salt, a.Hash); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, "DELETE FROM sessions"); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// SaveAccountFromSession retains a fully authenticated browser only if that
+// session and the enrolled factor still exist at the moment of the change.
+func (s *Store) SaveAccountFromSession(ctx context.Context, a Account, oldHash, newHash, device string) (time.Time, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return time.Time{}, err
+	}
+	defer tx.Rollback()
+	var expiry int64
+	var recoveryUntil int64
+	var idleMinutes int
+	if err = tx.QueryRowContext(ctx, "SELECT expires_at,idle_minutes,recovery_until FROM sessions WHERE hash=? AND "+liveSession+" AND EXISTS(SELECT 1 FROM mfa WHERE id=1 AND length(secret)>0)", oldHash).Scan(&expiry, &idleMinutes, &recoveryUntil); err != nil {
+		return time.Time{}, ErrMFAChanged
+	}
+	if _, err = tx.ExecContext(ctx, "UPDATE account SET username=?,salt=?,hash=? WHERE id=1", a.Username, a.Salt, a.Hash); err != nil {
+		return time.Time{}, err
+	}
+	if _, err = tx.ExecContext(ctx, "DELETE FROM sessions"); err != nil {
+		return time.Time{}, err
+	}
+	expires := time.Unix(expiry, 0)
+	if err = insertSessionTx(ctx, tx, a.Salt, newHash, expires, device, false); err != nil {
+		return time.Time{}, err
+	}
+	if _, err = tx.ExecContext(ctx, "UPDATE sessions SET idle_minutes=?,recovery_until=? WHERE hash=?", idleMinutes, recoveryUntil, newHash); err != nil {
+		return time.Time{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return time.Time{}, err
+	}
+	return expires, nil
 }
 
 func (s *Store) HasAPIKeyHash(ctx context.Context, hash string) bool {
 	var one int
-	return s.db.QueryRowContext(ctx, "SELECT 1 FROM api_tokens WHERE hash=? AND active=1", hash).Scan(&one) == nil
+	return s.db.QueryRowContext(ctx, "SELECT 1 FROM api_tokens WHERE hash=? AND active=1 AND (expires_at=0 OR expires_at>unixepoch())", hash).Scan(&one) == nil
 }
 
 // AuthenticateAPIKey checks the current persisted state and records successful
 // credential use in one write. Disabled and unknown keys never change history.
 func (s *Store) AuthenticateAPIKey(ctx context.Context, hash string) bool {
-	r, err := s.db.ExecContext(ctx, "UPDATE api_tokens SET last_used_at=? WHERE hash=? AND active=1", time.Now().UTC().Format(time.RFC3339Nano), hash)
-	if err != nil {
-		return false
-	}
-	n, err := r.RowsAffected()
-	return err == nil && n == 1
+	_, err := s.AuthenticateAPIKeyProfile(ctx, hash)
+	return err == nil
+}
+
+func (s *Store) AuthenticateAPIKeyProfile(ctx context.Context, hash string) (string, error) {
+	var profile string
+	err := s.db.QueryRowContext(ctx, "UPDATE api_tokens SET last_used_at=? WHERE hash=? AND active=1 AND (expires_at=0 OR expires_at>unixepoch()) RETURNING profile", time.Now().UTC().Format(time.RFC3339Nano), hash).Scan(&profile)
+	return profile, err
 }
 
 func (s *Store) SetAPIKeyActive(ctx context.Context, id int64, active bool) error {
@@ -85,7 +132,7 @@ func (s *Store) UpdateAPIKey(ctx context.Context, id int64, name *string, active
 }
 
 func (s *Store) APIKeys(ctx context.Context) ([]APIKey, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT id,name,created_at,active,last_used_at FROM api_tokens ORDER BY id")
+	rows, err := s.db.QueryContext(ctx, "SELECT id,name,created_at,active,last_used_at,profile,expires_at FROM api_tokens ORDER BY id")
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +140,7 @@ func (s *Store) APIKeys(ctx context.Context) ([]APIKey, error) {
 	keys := []APIKey{}
 	for rows.Next() {
 		var key APIKey
-		if err := rows.Scan(&key.ID, &key.Name, &key.CreatedAt, &key.Active, &key.LastUsedAt); err != nil {
+		if err := rows.Scan(&key.ID, &key.Name, &key.CreatedAt, &key.Active, &key.LastUsedAt, &key.Profile, &key.ExpiresAt); err != nil {
 			return nil, err
 		}
 		keys = append(keys, key)
@@ -102,8 +149,12 @@ func (s *Store) APIKeys(ctx context.Context) ([]APIKey, error) {
 }
 
 func (s *Store) CreateAPIKey(ctx context.Context, name, hash string) (APIKey, error) {
-	key := APIKey{Name: name, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Active: true}
-	r, err := s.db.ExecContext(ctx, "INSERT INTO api_tokens(name,hash,created_at) SELECT ?,?,? WHERE (SELECT COUNT(*) FROM api_tokens)<32", name, hash, key.CreatedAt)
+	return s.CreateScopedAPIKey(ctx, name, hash, "full", 0)
+}
+
+func (s *Store) CreateScopedAPIKey(ctx context.Context, name, hash, profile string, expires int64) (APIKey, error) {
+	key := APIKey{Name: name, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Active: true, Profile: profile, ExpiresAt: expires}
+	r, err := s.db.ExecContext(ctx, "INSERT INTO api_tokens(name,hash,created_at,profile,expires_at) SELECT ?,?,?,?,? WHERE (SELECT COUNT(*) FROM api_tokens)<32", name, hash, key.CreatedAt, profile, expires)
 	if err != nil {
 		return key, err
 	}
@@ -120,5 +171,11 @@ func (s *Store) CreateAPIKey(ctx context.Context, name, hash string) (APIKey, er
 
 func (s *Store) DeleteAPIKey(ctx context.Context, id int64) error {
 	r, err := s.db.ExecContext(ctx, "DELETE FROM api_tokens WHERE id=?", id)
+	return affected(r, err)
+}
+
+// RotateAPIKey atomically replaces the verifier, preserving permissions and expiry.
+func (s *Store) RotateAPIKey(ctx context.Context, id int64, hash string) error {
+	r, err := s.db.ExecContext(ctx, "UPDATE api_tokens SET hash=?,last_used_at='' WHERE id=? AND active=1 AND (expires_at=0 OR expires_at>unixepoch())", hash, id)
 	return affected(r, err)
 }

@@ -136,9 +136,9 @@ Dark controls, dialogs, cards, metadata, highlights and selection share the them
 
 ## Typography
 
-**Body and interface font:** the system sans stack in the frontmatter. There is no separately loaded display face. Monospace is limited to generated token fields.
+**Body and interface font:** the system sans stack in the frontmatter. There is no separately loaded display face. Monospace is used for generated credentials, including API keys, authenticator setup keys and recovery codes.
 
-The hierarchy is compact: headline for library headings, title for bookmark names, body for the base interface, and label for buttons and field labels. Secondary metadata commonly uses (11px–13px). Dialog headings use (20px); the reader title uses (28px). The sign-in introduction uses (42px) on desktop and (30px) on phones; this is an entrance-specific treatment, not a general display scale.
+The hierarchy is compact: headline for library headings, title for bookmark names, body for the base interface, and label for buttons and field labels. Secondary metadata commonly uses (11px–13px). Dialog headings use (20px); the reader title uses (22px). The sign-in introduction uses (42px) on desktop and (30px) on phones; this is an entrance-specific treatment, not a general display scale.
 
 **The Reading Measure Rule.** Keep reading text within 70ch and give it more leading than workspace metadata.
 
@@ -184,6 +184,8 @@ Grid bookmark cards use the panel radius, white background and a line border; se
 ### Inputs / Fields
 Field boundaries use control-line (#818896) in light mode and #747b92 in dark mode, providing at least 3:1 against their adjacent field surfaces. Quiet separators keep the line token. Fields retain the control radius and (10px 12px) padding. Focus has a (2px) outline and (2px) offset. Search applies its outline around the complete search container. Read-only fields use the surface fill; form errors appear inline in danger text. Bookmark fields validate the server’s UTF-8 size limits before submission and identify the field to correct. Network/session failures give recovery instructions while retaining unsaved work.
 
+Authenticator setup pairs a QR code on white with a labeled, read-only manual key. Recovery codes use selectable, scrollable text in a bordered surface, with a copy action and a manual-selection fallback.
+
 ### Navigation
 The slate-tinted rail combines outline icons, sentence-case labels and compact counts. Active navigation uses pale indigo and stronger text. On smaller screens, the same navigation element moves into the native dialog drawer; its controls gain height rather than losing functions.
 
@@ -199,10 +201,20 @@ Bookmark, reader-note and annotation drafts stay in the current tab. A bounded s
 
 Mobile bookmark actions retain a named Favorite control and disclose the other labeled commands under Actions. Quick favorite/read changes confirm with an Undo action; feedback appears inside any active native dialog so its message is visible and announced. Search-only excerpts highlight matches and display decoded tag names. Near-match scope is visible beside its checkbox: titles, URLs, descriptions and tags only. Task-based Help is searchable from the navigation.
 
-The reader keeps a compact close/highlight header and section shortcuts visible while scrolling. Formatted and printable views require a suitable HTML capture or attachment; unavailable modes explain the next step. Text size and highlighting follow the active mode. Highlights and saved-file loading errors remain local to their sections. On phones, row action targets are 44px and a 44px letter picker complements the A–Z rail.
+Opening a bookmark shows its title, source URL and Saved formats before any article text. HTML, Screenshot and PDF appear as flat rows with authored outline icons, permanent names and explicit Saved / Not saved states. Checking and Unknown distinguish in-flight and failed file checks from absent captures; a local retry stays visible on the bookmark. Screenshot includes uploaded raster images as well as browser captures. Each available format opens the newest attachment in the existing viewer, with earlier copies selectable. When no HTML attachment exists, the basic HTML archive uses the simplified sandboxed reader. Its source download remains under Reading options when attachments exist. Reading options expose text/highlights and formatted reading on demand. Its short toolbar keeps a prominent Open original link and a secondary Notes action visible. Notes opens a companion pane on screens wider than 1000px; narrower windows show the notebook with an explicit Back to bookmark action. The article keeps its own scroll position while the notebook opens or changes sections. Notes, Highlights and Files are local notebook tabs with arrow-key navigation. The notebook starts closed for each new bookmark. Anchored highlights offer Show in text; stale excerpts remain visible without a misleading jump action. An absent captured article is labeled explicitly rather than presenting the bookmark description as article text. Formatted views require a suitable HTML capture or attachment; unavailable modes explain the next step. Text size and highlighting follow the active mode. Highlights and saved-file loading errors remain local to their sections. On phones, row action targets are 44px and a 44px letter picker complements the A–Z rail.
+
+### Settings
+
+Settings is a workspace page. Its seven section destinations replace library navigation in the desktop rail: API keys, 2FA, Sessions, Backup, Password sign-in, Browser bookmark sync, and Mobile & browser. One section is visible at a time; a query parameter preserves the section across reload and browser history. Back to library restores its filters and scroll position. At 900px and below, an inline section selector and Back to library button replace the settings rail. Settings retains the workspace theme and compact form vocabulary. Authentication changes block departure while pending; displayed recovery codes survive session expiration until explicitly dismissed by returning to the library. Leaving Settings clears credentials held in the page.
+
+Entering Settings settles the workspace 12px from the right over 220ms with a light fade, paired with a 180ms navigation fade. Initial loads and section changes remain still; leaving cancels the entrance. Focus and controls update immediately. Reduced motion skips both effects.
 
 ### Reader and dialogs
-Dialogs use theme-matched panels, a dimmed backdrop, labeled headings and separated footer actions. The reader widens to (920px), uses the reader type role and a generous text measure, with highlights, assets and notes below its tools. Highlight colors describe user annotations rather than application status. On phones, the reader becomes an edge-to-edge reading surface.
+
+The bookmark editor offers an unchecked **Save an HTML copy** option for website bookmarks. Capture starts after metadata is saved, reports partial failure without undoing the bookmark, and offers a capture-only retry. Standalone files hide this option. Saved files in the reader focus on attachments and previews; PDF capture stays in the Chrome extension.
+
+Dialogs use theme-matched panels, a dimmed backdrop, labeled headings and separated footer actions. The reader widens to (1200px), keeps its toolbar separate from the scrolling article and constrains text to a (680px) measure. Its optional companion pane is (320px) wide; notes, highlights and file management stay secondary to saved formats and on-demand reading. Highlight excerpts use their saved color; annotation notes and quiet editing actions sit beneath each quote. Highlight colors describe user annotations rather than application status. On phones, the reader becomes an edge-to-edge reading surface.
+
 
 ## Do's and Don'ts
 

@@ -14,6 +14,8 @@ import (
 	"pocketmark/internal/store"
 )
 
+const setupRequest = `{"username":"reader","password":"a good personal password"}`
+
 const setupCredentials = `{"username":"reader","password":"a good personal password"}`
 
 func TestSetupOnceAcrossRestart(t *testing.T) {
@@ -35,20 +37,50 @@ func TestSetupOnceAcrossRestart(t *testing.T) {
 	defer s.Close()
 	a = New(s, testToken, "", false)
 	requireSetup(t, a, true, false)
-	requireStatus(t, request(a, "POST", "/api/setup", setupCredentials, false, map[string]string{"Origin": "https://attacker.test"}), 403)
-	requireStatus(t, request(a, "POST", "/api/setup", setupCredentials, false, map[string]string{"Origin": "chrome-extension://attacker", "Sec-Fetch-Site": "cross-site"}), 403)
+	requireStatus(t, request(a, "POST", "/api/setup", setupRequest, false, map[string]string{"Origin": "https://attacker.test"}), 403)
+	requireStatus(t, request(a, "POST", "/api/setup", setupRequest, false, map[string]string{"Origin": "chrome-extension://attacker", "Sec-Fetch-Site": "cross-site"}), 403)
+	requireStatus(t, request(a, "POST", "/api/setup", setupRequest, false, map[string]string{"Origin": "chrome-extension://attacker", "Sec-Fetch-Site": "cross-site", "Authorization": "Bearer irrelevant"}), 403)
 	requireStatus(t, request(a, "POST", "/api/setup", `{"username":"reader","password":"short"}`, false, nil), 400)
-	w := request(a, "POST", "/api/setup", setupCredentials, false, nil)
+	requireSetup(t, a, true, false)
+	w := request(a, "POST", "/api/setup", setupRequest, false, nil)
 	requireStatus(t, w, 201)
-	cookie := w.Result().Cookies()[0].String()
+	cookie, _, _, _, _ := enrollForTest(t, a, pendingCookie(t, w), "")
 	requireStatus(t, request(a, "GET", "/api/account", "", false, map[string]string{"Cookie": cookie}), 200)
 	requireSetup(t, a, false, true)
 	a = New(s, testToken, "", false)
 	requireSetup(t, a, false, true)
-	requireStatus(t, request(a, "POST", "/api/setup", setupCredentials, false, nil), 409)
+	requireStatus(t, request(a, "POST", "/api/setup", setupRequest, false, nil), 409)
 	requireStatus(t, request(a, "POST", "/api/login", `{"token":"`+testToken+`"}`, false, nil), 400)
 	requireStatus(t, request(a, "POST", "/api/login", setupCredentials, false, nil), 200)
-	requireStatus(t, request(a, "PUT", "/api/account", `{"username":"reader","password":""}`, true, nil), 400)
+	requireStatus(t, request(a, "PUT", "/api/account", `{"username":"reader","password":""}`, false, map[string]string{"Cookie": cookie}), 400)
+}
+
+func TestInterruptedSetupCanResumeWithoutAdministratorKey(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "restart.db")
+	s, err := store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := New(s, testToken, "", false)
+	w := request(a, "POST", "/api/setup", setupCredentials, false, nil)
+	requireStatus(t, w, 201)
+	pending := pendingCookie(t, w)
+	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": pending}), 401)
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	a = New(s, testToken, "", false)
+	requireStatus(t, request(a, "POST", "/api/setup", setupCredentials, false, nil), 409)
+	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Authorization": "Bearer " + testToken}), 401)
+	w = request(a, "POST", "/api/login", setupCredentials, false, nil)
+	requireStatus(t, w, 200)
+	cookie, _, _, _, _ := enrollForTest(t, a, pendingCookie(t, w), "")
+	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": cookie}), 200)
 }
 
 func requireSetup(t *testing.T, a *Server, required, enabled bool) {
@@ -119,12 +151,12 @@ func TestLegacySetupCannotClaimLibrary(t *testing.T) {
 			a := New(s, testToken, "", false)
 			requireSetup(t, a, false, password != "")
 			requireStatus(t, request(a, "GET", "/api/links", "", false, map[string]string{"Authorization": "Bearer " + key}), 200)
-			requireStatus(t, request(a, "POST", "/api/setup", setupCredentials, false, map[string]string{"Authorization": "Bearer " + key}), 409)
+			requireStatus(t, request(a, "POST", "/api/setup", setupRequest, false, map[string]string{"Authorization": "Bearer " + key}), 409)
 			if password != "" {
 				requireStatus(t, request(a, "POST", "/api/login", `{"username":"legacy","password":"legacy personal password"}`, false, nil), 200)
 			}
 
-			requireStatus(t, request(a, "POST", "/api/setup", setupCredentials, false, nil), 409)
+			requireStatus(t, request(a, "POST", "/api/setup", setupRequest, false, nil), 409)
 			requireStatus(t, request(a, "POST", "/api/login", `{"token":"`+testToken+`"}`, false, nil), 400)
 			// The existing administrative API supports migration/recovery, without
 			// issuing a browser session from the master token login endpoint.
@@ -150,7 +182,7 @@ func TestConcurrentSetupHasOneOwner(t *testing.T) {
 		wg.Add(1)
 		go func(a *Server) {
 			defer wg.Done()
-			statuses <- request(a, "POST", "/api/setup", setupCredentials, false, nil).Code
+			statuses <- request(a, "POST", "/api/setup", setupRequest, false, nil).Code
 		}(server)
 	}
 	wg.Wait()

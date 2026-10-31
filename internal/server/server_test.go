@@ -34,8 +34,70 @@ func newTestServer(t *testing.T, origin string, secure bool) *Server {
 
 func passwordLogin(t *testing.T, a *Server) *httptest.ResponseRecorder {
 	t.Helper()
-	requireStatus(t, request(a, "PUT", "/api/account", `{"username":"me","password":"test-only-password"}`, true, nil), 200)
-	return request(a, "POST", "/api/login", `{"username":"me","password":"test-only-password"}`, false, nil)
+	salt := randomSecret()
+	if err := a.Store.SaveAccount(context.Background(), store.Account{Username: "me", Salt: salt, Hash: passwordHash("test-only-password", salt)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Store.ResetMFA(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	w := request(a, "POST", "/api/login", `{"username":"me","password":"test-only-password"}`, false, nil)
+	if w.Code != 200 {
+		return w
+	}
+	_, _, _, result, _ := enrollForTest(t, a, pendingCookie(t, w), testToken)
+	return result
+}
+
+// Tests of session management create an additional persisted session directly;
+// the MFA integration tests exercise the real two-step login separately.
+func additionalTestSession(t *testing.T, a *Server) *http.Cookie {
+	t.Helper()
+	account, err := a.Store.Account(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	value := "v3." + randomSecret()
+	if err = a.Store.CreateSession(context.Background(), account.Salt, a.sessionHash(value), time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	return &http.Cookie{Name: "pocketmark", Value: value}
+}
+
+func fixtureOwnerCookie(a *Server) *http.Cookie {
+	// Most route tests need an owner, not a recovery bearer. Construct a
+	// confirmed session in the disposable database; authentication flows
+	// themselves are exercised separately using real MFA challenges.
+	ctx := context.Background()
+	account, err := a.Store.Account(ctx)
+	if err != nil {
+		salt := randomSecret()
+		account = store.Account{Username: "fixture", Salt: salt, Hash: passwordHash("fixture-password", salt)}
+		if err = a.Store.SaveAccount(ctx, account); err != nil {
+			panic(err)
+		}
+	}
+	value := "v3." + strings.Repeat("a", 64)
+	hash := a.sessionHash(value)
+	state, err := a.Store.MFA(ctx)
+	if err != nil {
+		panic(err)
+	}
+	if len(state.Secret) == 0 {
+		secret, e := a.encryptMFA("JBSWY3DPEHPK3PXP")
+		if e != nil {
+			panic(e)
+		}
+		if e = a.Store.ActivateMFA(ctx, account.Salt, state.Generation, 0, secret, nil, "", hash, time.Now().Add(time.Hour), "fixture", false); e != nil {
+			panic(e)
+		}
+	}
+	if !a.Store.SessionValid(ctx, hash) {
+		if err = a.Store.CreateSession(ctx, account.Salt, hash, time.Now().Add(time.Hour)); err != nil {
+			panic(err)
+		}
+	}
+	return &http.Cookie{Name: "pocketmark", Value: value}
 }
 
 func request(a *Server, method, path, body string, bearer bool, headers map[string]string) *httptest.ResponseRecorder {
@@ -44,7 +106,7 @@ func request(a *Server, method, path, body string, bearer bool, headers map[stri
 		r.Header.Set("Content-Type", "application/json")
 	}
 	if bearer {
-		r.Header.Set("Authorization", "Bearer "+testToken)
+		r.AddCookie(fixtureOwnerCookie(a))
 	}
 	for key, value := range headers {
 		r.Header.Set(key, value)
@@ -70,11 +132,15 @@ func TestAuthenticationCookieAndBearer(t *testing.T) {
 	requireStatus(t, request(a, "POST", "/api/login", `{"username":"me","password":"wrong"}`, false, nil), 401)
 	w := passwordLogin(t, a)
 	requireStatus(t, w, 200)
-	cookies := w.Result().Cookies()
-	if len(cookies) != 1 {
-		t.Fatalf("cookies: %v", cookies)
+	var cookie *http.Cookie
+	for _, c := range w.Result().Cookies() {
+		if c.Name == "pocketmark" {
+			cookie = c
+		}
 	}
-	cookie := cookies[0]
+	if cookie == nil {
+		t.Fatal("session cookie missing")
+	}
 	if cookie.Name != "pocketmark" || !cookie.HttpOnly || !cookie.Secure || cookie.SameSite != http.SameSiteStrictMode || cookie.Path != "/" || cookie.MaxAge <= 0 {
 		t.Fatalf("unsafe session cookie: %+v", cookie)
 	}
@@ -84,7 +150,7 @@ func TestAuthenticationCookieAndBearer(t *testing.T) {
 	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": cookie.String()}), 200)
 	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": "pocketmark=" + cookie.Value + "tampered"}), 401)
 	expiry := strconv.FormatInt(time.Now().Add(-time.Hour).Unix(), 10)
-	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": "pocketmark=" + expiry + "." + a.sign(expiry)}), 401)
+	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": "pocketmark=" + expiry + "." + a.sessionHash(expiry)}), 401)
 	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Authorization": "Bearer wrong", "Cookie": cookie.String()}), 401)
 	w = request(a, "POST", "/api/logout", "", false, map[string]string{"Cookie": cookie.String()})
 	requireStatus(t, w, 200)
@@ -103,7 +169,10 @@ func TestLoginRateLimitAndReset(t *testing.T) {
 	if w.Header().Get("Retry-After") == "" {
 		t.Fatal("missing retry guidance")
 	}
-	a.loginAt = time.Now().Add(-2 * time.Minute)
+	for key, window := range a.loginAttempts {
+		window.at = time.Now().Add(-2 * time.Minute)
+		a.loginAttempts[key] = window
+	}
 	requireStatus(t, passwordLogin(t, a), 200)
 }
 

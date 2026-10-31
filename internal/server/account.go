@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/pbkdf2"
 	"crypto/rand"
 	"crypto/sha256"
@@ -9,7 +10,6 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -36,6 +36,17 @@ func randomSecret() string {
 	}
 	return hex.EncodeToString(b)
 }
+
+// ResetLocalAccount is intended for an operator with access to the stopped
+// server's data directory. Existing MFA remains enabled and sessions are revoked.
+func ResetLocalAccount(ctx context.Context, s *store.Store, username, password string) error {
+	username = strings.TrimSpace(username)
+	if username == "" || len(username) > 120 || len(password) < 12 || len(password) > 1024 {
+		return errors.New("choose a username and a password of 12–1024 bytes")
+	}
+	salt := randomSecret()
+	return s.SaveAccount(ctx, store.Account{Username: username, Salt: salt, Hash: passwordHash(password, salt)})
+}
 func (a *Server) registerAccount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/setup", a.setupStatus)
 	mux.HandleFunc("POST /api/setup", a.setup)
@@ -45,16 +56,12 @@ func (a *Server) registerAccount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/tokens", a.createToken)
 	mux.HandleFunc("PATCH /api/tokens/{id}", a.updateToken)
 	mux.HandleFunc("DELETE /api/tokens/{id}", a.deleteToken)
+	mux.HandleFunc("POST /api/tokens/{id}/rotate", a.rotateToken)
 }
-func (a *Server) owner(r *http.Request) bool {
-	if auth := r.Header.Get("Authorization"); auth != "" {
-		return secretEqual(strings.TrimPrefix(auth, "Bearer "), a.token)
-	}
-	return a.authenticated(r)
-}
+func (a *Server) owner(r *http.Request) bool { return requestPrincipal(r).owner }
 func (a *Server) requireOwner(w http.ResponseWriter, r *http.Request) bool {
 	if !a.owner(r) {
-		fail(w, 403, "account settings require the owner session or recovery token")
+		fail(w, 403, "account settings require the owner session")
 		return false
 	}
 	return true
@@ -81,11 +88,6 @@ func (a *Server) setupStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *Server) setup(w http.ResponseWriter, r *http.Request) {
-	if !a.allowLogin() {
-		w.Header().Set("Retry-After", "60")
-		fail(w, 429, "too many login attempts; retry in a minute")
-		return
-	}
 	var b struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -96,6 +98,20 @@ func (a *Server) setup(w http.ResponseWriter, r *http.Request) {
 	b.Username = strings.TrimSpace(b.Username)
 	if b.Username == "" || len(b.Username) > 120 || len(b.Password) < 12 || len(b.Password) > 1024 {
 		fail(w, 400, "choose a username and a password of 12–1024 bytes")
+		return
+	}
+	if !a.allowLogin(r) {
+		w.Header().Set("Retry-After", "60")
+		fail(w, 429, "too many setup attempts; retry in a minute")
+		return
+	}
+	state, err := a.Store.SetupStatus(r.Context())
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+	if !state.SetupRequired {
+		fail(w, 409, "account creation is unavailable")
 		return
 	}
 	a.passwordMu.Lock()
@@ -110,8 +126,15 @@ func (a *Server) setup(w http.ResponseWriter, r *http.Request) {
 		fail(w, 409, "account creation is unavailable; sign in or ask the server administrator to configure your password")
 		return
 	}
-	a.issueSession(w)
-	respond(w, 201, map[string]bool{"authenticated": true})
+	mfaState, err := a.Store.MFA(r.Context())
+	if err != nil {
+		fail(w, 503, "authentication unavailable; sign in again")
+		return
+	}
+	if !a.newMFAChallenge(w, mfaChallenge{kind: "enroll", salt: salt, username: b.Username, generation: mfaState.Generation}) {
+		return
+	}
+	respond(w, 201, map[string]bool{"mfaRequired": true, "enrollmentRequired": true})
 }
 func (a *Server) setAccount(w http.ResponseWriter, r *http.Request) {
 	if !a.requireOwner(w, r) {
@@ -133,32 +156,16 @@ func (a *Server) setAccount(w http.ResponseWriter, r *http.Request) {
 	defer a.passwordMu.Unlock()
 	salt := randomSecret()
 	hash := passwordHash(b.Password, salt)
-	if err := a.Store.SaveAccount(r.Context(), store.Account{Username: b.Username, Salt: salt, Hash: hash}); err != nil {
-		handleError(w, err)
+	account := store.Account{Username: b.Username, Salt: salt, Hash: hash}
+	value := "v3." + randomSecret()
+	expires, err := a.Store.SaveAccountFromSession(r.Context(), account, requestPrincipal(r).session, a.sessionHash(value), r.UserAgent())
+	if err != nil {
+		fail(w, 401, "session changed; sign in again")
 		return
 	}
-	a.issueSession(w)
+	a.clearPendingMFA(false)
+	a.setSessionCookie(w, value, expires)
 	respond(w, 200, map[string]bool{"ok": true})
-}
-func (a *Server) verifyPassword(r *http.Request, username, password string) bool {
-	if len(password) > 1024 || password == "" {
-		return false
-	}
-	a.passwordMu.Lock()
-	defer a.passwordMu.Unlock()
-	account, err := a.Store.Account(r.Context())
-	if err != nil || account.Hash == "" {
-		return false
-	}
-	got := passwordHash(password, account.Salt)
-	return secretEqual(username, account.Username) && secretEqual(got, account.Hash)
-}
-func (a *Server) validAPIKey(r *http.Request, key string) bool {
-	if len(key) != 64 {
-		return false
-	}
-	sum := sha256.Sum256([]byte(key))
-	return a.Store.AuthenticateAPIKey(r.Context(), hex.EncodeToString(sum[:]))
 }
 
 type apiToken struct {
@@ -182,7 +189,9 @@ func (a *Server) createToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var b struct {
-		Name string `json:"name"`
+		Name      string `json:"name"`
+		Profile   string `json:"profile"`
+		ExpiresAt int64  `json:"expiresAt"`
 	}
 	if !decode(w, r, &b, 4096) {
 		return
@@ -192,9 +201,20 @@ func (a *Server) createToken(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "name must contain 1–120 bytes")
 		return
 	}
+	if b.Profile == "" {
+		b.Profile = "read"
+	}
+	if b.Profile != "read" && b.Profile != "capture" && b.Profile != "sync" && b.Profile != "full" {
+		fail(w, 400, "choose read, capture, sync or full permissions")
+		return
+	}
+	if b.ExpiresAt < 0 || (b.ExpiresAt != 0 && b.ExpiresAt <= time.Now().Unix()) {
+		fail(w, 400, "expiry must be a future Unix timestamp or zero")
+		return
+	}
 	token := randomSecret()
 	sum := sha256.Sum256([]byte(token))
-	key, err := a.Store.CreateAPIKey(r.Context(), b.Name, hex.EncodeToString(sum[:]))
+	key, err := a.Store.CreateScopedAPIKey(r.Context(), b.Name, hex.EncodeToString(sum[:]), b.Profile, b.ExpiresAt)
 	if errors.Is(err, store.ErrAPIKeyLimit) {
 		fail(w, 409, err.Error())
 		return
@@ -253,8 +273,25 @@ func (a *Server) deleteToken(w http.ResponseWriter, r *http.Request) {
 	}
 	respond(w, 200, map[string]bool{"ok": true})
 }
-func (a *Server) issueSession(w http.ResponseWriter) {
-	expires := time.Now().Add(7 * 24 * time.Hour)
-	value := strconv.FormatInt(expires.Unix(), 10)
-	http.SetCookie(w, &http.Cookie{Name: "pocketmark", Value: value + "." + a.sign(value), Path: "/", HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteStrictMode, Expires: expires, MaxAge: 7 * 24 * 60 * 60})
+func (a *Server) setSessionCookie(w http.ResponseWriter, value string, expires time.Time) {
+	maxAge := int(time.Until(expires).Seconds())
+	if maxAge < 1 {
+		maxAge = -1
+	}
+	http.SetCookie(w, &http.Cookie{Name: "pocketmark", Value: value, Path: "/", HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteStrictMode, Expires: expires, MaxAge: maxAge})
+}
+
+func (a *Server) rotateToken(w http.ResponseWriter, r *http.Request) {
+	token := randomSecret()
+	sum := sha256.Sum256([]byte(token))
+	err := a.Store.RotateAPIKey(r.Context(), id(r), hex.EncodeToString(sum[:]))
+	if errors.Is(err, sql.ErrNoRows) {
+		fail(w, 404, "active, unexpired key not found")
+		return
+	}
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+	respond(w, 200, map[string]string{"token": token})
 }

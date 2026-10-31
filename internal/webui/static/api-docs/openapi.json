@@ -3,7 +3,7 @@
   "info": {
     "title": "Pocketmark HTTP API",
     "version": "1.0.0",
-    "description": "Native API for your personal bookmark library. JSON errors have an error field. Browser requests use the existing owner session automatically; integrations send `Authorization: Bearer <key>`. Named keys cannot manage the account, API keys or full backups. First-run setup, login and health are public. Mutations enforce same-origin browser checks; configure POCKETMARK_ORIGIN to the exact public origin behind a reverse proxy. Limits measured in bytes are UTF-8 byte limits, not character counts. At most eight concurrent requests; excess work returns 503. “Try it out” performs real operations on this instance. WebDAV /dav/ and removed Linkwarden compatibility routes are outside this reference."
+    "description": "Native API for your personal bookmark library. JSON errors have an error field. Browser requests use the existing owner session automatically; integrations send `Authorization: Bearer <key>`. Named keys cannot manage the account, API keys or full backups. First-run setup, login and health are public. Mutations enforce same-origin browser checks; configure POCKETMARK_ORIGIN to the exact public origin behind a reverse proxy. Limits measured in bytes are UTF-8 byte limits, not character counts. At most eight concurrent library requests; excess work returns 503. “Try it out” performs real operations on this instance. WebDAV /dav/ and removed Linkwarden compatibility routes are outside this reference. Public authentication has two separate slots and a five-second POST body deadline. /healthz has separate readiness slots; /livez checks process liveness independently. All HTTP requests except GET/HEAD health probes share a per-client token bucket: 10 requests/second, burst 100 by default (POCKETMARK_RATE_LIMIT and POCKETMARK_RATE_BURST). IPv6 clients share a /64. Rejection occurs before authentication/body reads and returns 429 with Retry-After. At most 256 sources are tracked; new sources fail closed at capacity. State resets on restart. Trusted forwarding requires POCKETMARK_TRUSTED_PROXIES. Security controls: owner-only actions, five-minute password confirmation, scoped expiring API keys, immediate key rotation and revocable browser sessions. WebDAV nonstandard methods are described by x-webdav-methods; they are not native OAS operations."
   },
   "servers": [
     {
@@ -95,7 +95,8 @@
             "$ref": "#/components/responses/503"
           }
         },
-        "security": []
+        "security": [],
+        "description": "Checks SQLite with a one-second context timeout and two separate readiness slots. Independent of login and library slots."
       }
     },
     "/api/setup": {
@@ -118,6 +119,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "security": []
@@ -134,13 +138,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Session"
+                  "$ref": "#/components/schemas/MFAChallenge"
                 }
               }
             },
             "headers": {
               "Set-Cookie": {
-                "description": "Seven-day HttpOnly, SameSite=Strict pocketmark session cookie. Secure when HTTPS is configured.",
+                "description": "Five-minute HttpOnly, SameSite=Strict pocketmark_mfa challenge cookie; no library session.",
                 "schema": {
                   "type": "string"
                 }
@@ -159,21 +163,21 @@
           "415": {
             "$ref": "#/components/responses/415"
           },
-          "429": {
-            "$ref": "#/components/responses/429"
-          },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
-        "description": "Only permitted on a new, empty instance. Existing installations cannot be claimed through setup. Shares the login rate limit.",
+        "description": "Creates the owner only on an eligible empty instance. TOTP enrollment and verification are required before a browser session is issued.",
         "requestBody": {
           "required": true,
           "description": "4 KiB JSON limit. Username 1–120 bytes; password 12–1024 bytes.",
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Credentials"
+                "$ref": "#/components/schemas/SetupCredentials"
               }
             }
           }
@@ -187,20 +191,20 @@
         "tags": [
           "Authentication"
         ],
-        "summary": "Sign in with a password",
+        "summary": "Start password and TOTP sign-in",
         "responses": {
           "200": {
             "description": "Successful response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Session"
+                  "$ref": "#/components/schemas/MFAChallenge"
                 }
               }
             },
             "headers": {
               "Set-Cookie": {
-                "description": "Seven-day HttpOnly, SameSite=Strict pocketmark session cookie. Secure when HTTPS is configured.",
+                "description": "Five-minute HttpOnly, SameSite=Strict pocketmark_mfa challenge cookie; no library session.",
                 "schema": {
                   "type": "string"
                 }
@@ -237,7 +241,8 @@
             }
           }
         },
-        "security": []
+        "security": [],
+        "description": "Verifies the password and issues only a five-minute MFA challenge. Follow with enrollment or verification. Ten password attempts per minute per source; the second factor has an account-wide limit."
       }
     },
     "/api/logout": {
@@ -266,9 +271,18 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
-        "description": "Expires the browser session cookie. Does not revoke API keys or the recovery token."
+        "description": "Revokes the current session in SQLite and clears its cookie. Revocation survives restart. Other sessions and API keys remain valid. Owner session required; named keys are forbidden.",
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       }
     },
     "/api/session": {
@@ -294,8 +308,21 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
           }
-        }
+        },
+        "x-api-key-profiles": [
+          "read",
+          "capture",
+          "sync",
+          "full"
+        ],
+        "description": " Allowed API key profiles: read, capture, sync, full."
       }
     },
     "/api/account": {
@@ -324,10 +351,18 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "x-owner-only": true,
-        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. "
+        "description": "Owner only: a signed-in owner session is required. Named API keys receive 403.  Owner session required; named keys are forbidden.",
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       },
       "put": {
         "operationId": "setAccount",
@@ -368,10 +403,13 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "x-owner-only": true,
-        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. Invalidates older owner cookies and issues a replacement. Named keys remain valid.",
+        "description": "Changes owner credentials and revokes old sessions. A fully authenticated browser receives a replacement session.",
         "requestBody": {
           "required": true,
           "description": "4 KiB JSON limit. Username 1–120 bytes; password 12–1024 bytes. Password sign-in cannot be disabled.",
@@ -382,7 +420,13 @@
               }
             }
           }
-        }
+        },
+        "x-reauthentication-required": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       }
     },
     "/api/tokens": {
@@ -414,10 +458,18 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "x-owner-only": true,
-        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. Never returns the secret token."
+        "description": "Owner only: a signed-in owner session is required. Named API keys receive 403. Never returns the secret token. Owner session required; named keys are forbidden.",
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       },
       "post": {
         "operationId": "createKey",
@@ -453,10 +505,13 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "x-owner-only": true,
-        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. ",
+        "description": "Owner only: a signed-in owner session is required. Named API keys receive 403.  Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry. Defaults to read only and no expiry. Permissions and expiry are immutable; create a replacement key to change them. Migrated keys retain full library permissions and no expiry.",
         "requestBody": {
           "required": true,
           "description": "4 KiB JSON limit. At most 32 keys per instance.",
@@ -467,7 +522,13 @@
               }
             }
           }
-        }
+        },
+        "x-reauthentication-required": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       }
     },
     "/api/tokens/{id}": {
@@ -502,10 +563,19 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "x-owner-only": true,
-        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. Revocation takes effect immediately."
+        "description": "Owner only: a signed-in owner session is required. Named API keys receive 403. Revocation takes effect immediately. Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry.",
+        "x-reauthentication-required": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       },
       "parameters": [
         {
@@ -554,10 +624,13 @@
           },
           "415": {
             "$ref": "#/components/responses/415"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "x-owner-only": true,
-        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. Disabling blocks subsequent API and WebDAV authentication; reactivation restores access with the same key. Revoked keys cannot be reactivated. Supply name, active, or both. Renaming preserves the credential, creation date and usage history and does not reactivate a disabled key.",
+        "description": "Owner only: a signed-in owner session is required. Named API keys receive 403. Disabling blocks subsequent API and WebDAV authentication; reactivation restores access with the same key. Revoked keys cannot be reactivated. Supply name, active, or both. Renaming preserves the credential, creation date and usage history and does not reactivate a disabled key. Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry.",
         "requestBody": {
           "required": true,
           "description": "4 KiB JSON limit.",
@@ -592,7 +665,13 @@
               }
             }
           }
-        }
+        },
+        "x-reauthentication-required": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       }
     },
     "/api/stats": {
@@ -618,8 +697,20 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
           }
-        }
+        },
+        "x-api-key-profiles": [
+          "read",
+          "capture",
+          "full"
+        ],
+        "description": " Allowed API key profiles: read, capture, full."
       }
     },
     "/api/tags": {
@@ -649,9 +740,20 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
           }
         },
-        "description": "At most 200 tags, ordered by count descending then name."
+        "description": "At most 200 tags, ordered by count descending then name. Allowed API key profiles: read, capture, full.",
+        "x-api-key-profiles": [
+          "read",
+          "capture",
+          "full"
+        ]
       }
     },
     "/api/tags/browse": {
@@ -680,9 +782,15 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
           }
         },
-        "description": "Alphabetical order grouped by A–Z, followed by # for other initials. Groups contain distinct tag counts across all matching pages.",
+        "description": "Alphabetical order grouped by A–Z, followed by # for other initials. Groups contain distinct tag counts across all matching pages. Allowed API key profiles: read, capture, full.",
         "parameters": [
           {
             "name": "q",
@@ -715,6 +823,11 @@
               "pattern": "^[A-Za-z#]$"
             }
           }
+        ],
+        "x-api-key-profiles": [
+          "read",
+          "capture",
+          "full"
         ]
       }
     },
@@ -744,8 +857,20 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
           }
-        }
+        },
+        "x-api-key-profiles": [
+          "read",
+          "capture",
+          "full"
+        ],
+        "description": " Allowed API key profiles: read, capture, full."
       },
       "post": {
         "operationId": "createCollection",
@@ -778,6 +903,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "requestBody": {
@@ -790,7 +918,12 @@
               }
             }
           }
-        }
+        },
+        "x-api-key-profiles": [
+          "capture",
+          "full"
+        ],
+        "description": " Allowed API key profiles: capture, full."
       }
     },
     "/api/collections/{id}": {
@@ -828,9 +961,12 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
-        "description": "Rejects self-parenting and cycles. Omitted description is preserved; an empty string clears it.",
+        "description": "Rejects self-parenting and cycles. Omitted description is preserved; an empty string clears it. Allowed API key profiles: full.",
         "requestBody": {
           "required": true,
           "description": "64 KiB JSON limit.",
@@ -841,7 +977,10 @@
               }
             }
           }
-        }
+        },
+        "x-api-key-profiles": [
+          "full"
+        ]
       },
       "delete": {
         "operationId": "deleteCollection",
@@ -874,9 +1013,15 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
-        "description": "Moves direct bookmarks to the inbox and makes child collections roots."
+        "description": "Moves direct bookmarks to the inbox and makes child collections roots. Allowed API key profiles: full.",
+        "x-api-key-profiles": [
+          "full"
+        ]
       },
       "parameters": [
         {
@@ -918,9 +1063,15 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
           }
         },
-        "description": "Filters combine with AND, except exact URL lookup. List records omit captured text. Pages contain up to 40 records.",
+        "description": "Filters combine with AND, except exact URL lookup. List records omit captured text. Pages contain up to 40 records. Allowed API key profiles: read, capture, full.",
         "parameters": [
           {
             "name": "q",
@@ -1023,6 +1174,11 @@
               "type": "string"
             }
           }
+        ],
+        "x-api-key-profiles": [
+          "read",
+          "capture",
+          "full"
         ]
       },
       "post": {
@@ -1056,6 +1212,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "requestBody": {
@@ -1068,7 +1227,12 @@
               }
             }
           }
-        }
+        },
+        "x-api-key-profiles": [
+          "capture",
+          "full"
+        ],
+        "description": " Allowed API key profiles: capture, full."
       }
     },
     "/api/links/{id}": {
@@ -1100,9 +1264,20 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
           }
         },
-        "description": "Includes captured content when available."
+        "description": "Includes captured content when available. Allowed API key profiles: read, capture, full.",
+        "x-api-key-profiles": [
+          "read",
+          "capture",
+          "full"
+        ]
       },
       "put": {
         "operationId": "updateLink",
@@ -1138,9 +1313,12 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
-        "description": "Omitted tags/flags/notes are cleared. A changed URL clears the old capture and queues a new one. Editing other fields preserves the capture. Standalone files must retain their URL.",
+        "description": "Omitted tags/flags/notes are cleared. A changed URL clears the old capture and queues a new one. Editing other fields preserves the capture. Standalone files must retain their URL. Allowed API key profiles: capture, full.",
         "requestBody": {
           "required": true,
           "description": "100 KiB JSON limit. Send every editable field to retain; this is a replacement, not a partial patch.",
@@ -1151,7 +1329,11 @@
               }
             }
           }
-        }
+        },
+        "x-api-key-profiles": [
+          "capture",
+          "full"
+        ]
       },
       "delete": {
         "operationId": "deleteLink",
@@ -1184,9 +1366,15 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
-        "description": "Also deletes its capture, attachments and annotations."
+        "description": "Also deletes its capture, attachments and annotations. Allowed API key profiles: full.",
+        "x-api-key-profiles": [
+          "full"
+        ]
       },
       "parameters": [
         {
@@ -1247,9 +1435,12 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
-        "description": "One transaction; any failure rolls back every change. tags replaces all tags, move uses collectionId, favorite/read use value, capture queues website bookmarks.",
+        "description": "One transaction; any failure rolls back every change. tags replaces all tags, move uses collectionId, favorite/read use value, capture queues website bookmarks. Allowed API key profiles: full.",
         "requestBody": {
           "required": true,
           "description": "64 KiB JSON limit. Select 1–500 unique positive IDs.",
@@ -1260,7 +1451,10 @@
               }
             }
           }
-        }
+        },
+        "x-api-key-profiles": [
+          "full"
+        ]
       }
     },
     "/api/links/{id}/capture": {
@@ -1295,9 +1489,16 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
-        "description": "No request body. A processing bookmark or standalone file returns 404. When the worker is disabled the job remains queued."
+        "description": "No request body. A processing bookmark or standalone file returns 404. When the worker is disabled the job remains queued. Allowed API key profiles: capture, full.",
+        "x-api-key-profiles": [
+          "capture",
+          "full"
+        ]
       },
       "parameters": [
         {
@@ -1351,8 +1552,19 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
           }
-        }
+        },
+        "x-api-key-profiles": [
+          "read",
+          "full"
+        ],
+        "description": " Allowed API key profiles: read, full."
       },
       "parameters": [
         {
@@ -1401,9 +1613,19 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
           }
         },
-        "description": "Stale anchors remain visible rather than being silently moved after a content change."
+        "description": "Stale anchors remain visible rather than being silently moved after a content change. Allowed API key profiles: read, full.",
+        "x-api-key-profiles": [
+          "read",
+          "full"
+        ]
       },
       "post": {
         "operationId": "createAnnotation",
@@ -1446,6 +1668,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "requestBody": {
@@ -1458,7 +1683,11 @@
               }
             }
           }
-        }
+        },
+        "x-api-key-profiles": [
+          "full"
+        ],
+        "description": " Allowed API key profiles: full."
       },
       "parameters": [
         {
@@ -1516,6 +1745,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "requestBody": {
@@ -1528,7 +1760,11 @@
               }
             }
           }
-        }
+        },
+        "x-api-key-profiles": [
+          "full"
+        ],
+        "description": " Allowed API key profiles: full."
       },
       "delete": {
         "operationId": "deleteAnnotation",
@@ -1561,8 +1797,15 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
-        }
+        },
+        "x-api-key-profiles": [
+          "full"
+        ],
+        "description": " Allowed API key profiles: full."
       },
       "parameters": [
         {
@@ -1622,8 +1865,20 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
           }
-        }
+        },
+        "x-api-key-profiles": [
+          "read",
+          "capture",
+          "full"
+        ],
+        "description": " Allowed API key profiles: read, capture, full."
       },
       "post": {
         "operationId": "uploadAsset",
@@ -1670,6 +1925,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "requestBody": {
@@ -1724,7 +1982,12 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-api-key-profiles": [
+          "capture",
+          "full"
+        ],
+        "description": " Allowed API key profiles: capture, full."
       },
       "parameters": [
         {
@@ -1783,6 +2046,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "requestBody": {
@@ -1847,7 +2113,12 @@
               "minimum": 0
             }
           }
-        ]
+        ],
+        "x-api-key-profiles": [
+          "capture",
+          "full"
+        ],
+        "description": " Allowed API key profiles: capture, full."
       }
     },
     "/api/assets/{assetId}": {
@@ -1888,8 +2159,19 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
           }
-        }
+        },
+        "x-api-key-profiles": [
+          "read",
+          "full"
+        ],
+        "description": " Allowed API key profiles: read, full."
       },
       "delete": {
         "operationId": "deleteAsset",
@@ -1922,8 +2204,15 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
-        }
+        },
+        "x-api-key-profiles": [
+          "full"
+        ],
+        "description": " Allowed API key profiles: full."
       },
       "parameters": [
         {
@@ -1946,7 +2235,7 @@
           "Captures & files"
         ],
         "summary": "Preview a saved image, PDF or HTML capture",
-        "description": "Authenticated inline preview. HTML retains embedded styles/images/fonts in an opaque sandbox; scripts and network resources are blocked, refresh and external links are disabled. Original downloads remain unchanged. PDF uses the browser native viewer. Preparation shares the archive work slot.",
+        "description": "Authenticated inline preview. HTML retains embedded styles/images/fonts in an opaque sandbox; scripts and network resources are blocked, refresh and external links are disabled. Original downloads remain unchanged. PDF uses the browser native viewer. Preparation shares the archive work slot. Allowed API key profiles: read, full.",
         "responses": {
           "200": {
             "description": "Inline image/PDF bytes or passive HTML preview (up to the 20 MiB attachment limit).",
@@ -2006,8 +2295,18 @@
           },
           "422": {
             "description": "HTML preview preparation failed; download the original file instead."
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
           }
-        }
+        },
+        "x-api-key-profiles": [
+          "read",
+          "full"
+        ]
       },
       "parameters": [
         {
@@ -2058,9 +2357,16 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
-        "description": "No request body. Fetches a passive HTML page with bounded embedded resources and SSRF filtering. Scripts are not executed. Some resources may be omitted; inspect the returned counts."
+        "description": "No request body. Fetches a passive HTML page with bounded embedded resources and SSRF filtering. Scripts are not executed. Some resources may be omitted; inspect the returned counts. Allowed API key profiles: capture, full.",
+        "x-api-key-profiles": [
+          "capture",
+          "full"
+        ]
       },
       "parameters": [
         {
@@ -2111,9 +2417,15 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
           }
         },
-        "description": "At most 2 MiB input and 1 MiB output. Upload or capture HTML first. The response has a sandbox CSP and cannot run scripts.",
+        "description": "At most 2 MiB input and 1 MiB output. Upload or capture HTML first. The response has a sandbox CSP and cannot run scripts. Allowed API key profiles: read, full.",
         "parameters": [
           {
             "name": "asset",
@@ -2126,6 +2438,10 @@
               "minimum": 1
             }
           }
+        ],
+        "x-api-key-profiles": [
+          "read",
+          "full"
         ]
       },
       "parameters": [
@@ -2174,9 +2490,12 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
-        "description": "Transactional metadata import. Duplicate URLs and unsupported uploaded-file types are skipped; invalid records roll back the import. Does not import captured assets or annotations.",
+        "description": "Transactional metadata import. Duplicate URLs and unsupported uploaded-file types are skipped; invalid records roll back the import. Does not import captured assets or annotations. Allowed API key profiles: full.",
         "requestBody": {
           "required": true,
           "description": "Raw Pocketmark v1 or legacy export JSON, not multipart. Extra source fields are accepted. At most 8 MiB, 10,000 links and 2,000 collections.",
@@ -2203,7 +2522,10 @@
               }
             }
           }
-        }
+        },
+        "x-api-key-profiles": [
+          "full"
+        ]
       }
     },
     "/api/import/html": {
@@ -2238,6 +2560,9 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "requestBody": {
@@ -2251,7 +2576,11 @@
               }
             }
           }
-        }
+        },
+        "x-api-key-profiles": [
+          "full"
+        ],
+        "description": " Allowed API key profiles: full."
       }
     },
     "/api/export": {
@@ -2285,8 +2614,19 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
           }
-        }
+        },
+        "x-api-key-profiles": [
+          "read",
+          "full"
+        ],
+        "description": " Allowed API key profiles: read, full."
       }
     },
     "/api/export/html": {
@@ -2320,8 +2660,19 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
           }
-        }
+        },
+        "x-api-key-profiles": [
+          "read",
+          "full"
+        ],
+        "description": " Allowed API key profiles: read, full."
       }
     },
     "/api/backup": {
@@ -2365,10 +2716,1822 @@
           },
           "503": {
             "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
           }
         },
         "x-owner-only": true,
-        "description": "Owner only: a signed-in owner session or administrative recovery bearer token is required. Named API keys receive 403. Includes captures, attachments, annotations and account settings. Keep the recovery token separately. Restore into an empty data directory while the server is stopped, following RESTORE.txt."
+        "description": "Owner only: a signed-in owner session is required. Named API keys receive 403. Includes captures, attachments, annotations and account settings. Keep the server secret separately. Restore into an empty data directory while the server is stopped, following RESTORE.txt. Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry.",
+        "x-reauthentication-required": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
+      }
+    },
+    "/livez": {
+      "get": {
+        "operationId": "liveness",
+        "tags": [
+          "Health"
+        ],
+        "summary": "Check process liveness",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "description": "Independent of SQLite and application request slots. Use for Kubernetes liveness; /healthz is bounded SQLite readiness."
+      }
+    },
+    "/api/reauth": {
+      "post": {
+        "operationId": "reauthenticate",
+        "tags": [
+          "Account & keys"
+        ],
+        "summary": "Confirm the current password",
+        "description": "Browser cookie required. Confirmation is session-bound, persists across restart and lasts five minutes. A successful login also counts as confirmation. Shares the bounded login rate limiter and serialized password work. Wrong password is 403; revoked/expired session is 401. Body limit: 4 KiB. Owner session required; named keys are forbidden.",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "validForSeconds": {
+                      "type": "integer",
+                      "example": 300
+                    }
+                  },
+                  "required": [
+                    "validForSeconds"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  }
+                },
+                "required": [
+                  "password"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
+      }
+    },
+    "/api/sessions": {
+      "get": {
+        "operationId": "listSessions",
+        "tags": [
+          "Account & keys"
+        ],
+        "summary": "List active browser sessions",
+        "description": "At most 32 sessions, newest first. Omits expired and idle sessions. Contains no credentials or IP addresses. Legacy timestamps may be zero. Owner session required; named keys are forbidden.",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "maxItems": 32,
+                  "items": {
+                    "$ref": "#/components/schemas/BrowserSession"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
+      }
+    },
+    "/api/sessions/current": {
+      "patch": {
+        "operationId": "setSessionTimeout",
+        "tags": [
+          "Account & keys"
+        ],
+        "summary": "Set this browser’s inactivity timeout",
+        "description": "Browser cookie required. Allowed minutes: 15, 60, 1440, or 0 to disable inactivity expiry. Seven-day absolute expiry remains. New sessions default to 1440; legacy sessions retain absolute expiry only. Each authenticated HTTP request counts as activity, including background refresh. Body limit: 1 KiB. Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry.",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idleTimeoutMinutes": {
+                    "type": "integer",
+                    "enum": [
+                      0,
+                      15,
+                      60,
+                      1440
+                    ]
+                  }
+                },
+                "required": [
+                  "idleTimeoutMinutes"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-owner-only": true,
+        "x-reauthentication-required": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
+      }
+    },
+    "/api/sessions/others": {
+      "delete": {
+        "operationId": "revokeOtherSessions",
+        "tags": [
+          "Account & keys"
+        ],
+        "summary": "Sign out all other browsers",
+        "description": "Requires a browser cookie; preserves its session. In-flight requests may finish. Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry.",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "x-owner-only": true,
+        "x-reauthentication-required": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
+      }
+    },
+    "/api/sessions/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          }
+        }
+      ],
+      "delete": {
+        "operationId": "revokeSession",
+        "tags": [
+          "Account & keys"
+        ],
+        "summary": "Revoke one browser session",
+        "description": "Revocation persists across restart. Revoking the current session makes its next request return 401. In-flight requests may finish. Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry.",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "x-owner-only": true,
+        "x-reauthentication-required": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
+      }
+    },
+    "/api/tokens/{id}/rotate": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          }
+        }
+      ],
+      "post": {
+        "operationId": "rotateKey",
+        "tags": [
+          "Account & keys"
+        ],
+        "summary": "Rotate an active API key",
+        "description": "Atomically invalidates the previous secret and returns a new one once. Preserves ID, name, permissions and expiry; resets last use. Disabled, expired or missing keys return 404. Update the connected app immediately. In-flight requests may finish. Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry.",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string",
+                      "minLength": 64,
+                      "maxLength": 64
+                    }
+                  },
+                  "required": [
+                    "token"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "x-owner-only": true,
+        "x-reauthentication-required": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
+      }
+    },
+    "/metrics": {
+      "get": {
+        "operationId": "metrics",
+        "tags": [
+          "Monitoring"
+        ],
+        "summary": "Read Prometheus metrics",
+        "description": "Authenticated; read/full keys or owner. Bounded labels do not contain bookmark URLs or credential material. Allowed API key profiles: read, full.",
+        "responses": {
+          "200": {
+            "description": "Prometheus exposition text",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "x-api-key-profiles": [
+          "read",
+          "full"
+        ]
+      }
+    },
+    "/dav/": {
+      "options": {
+        "operationId": "davdavOptions",
+        "tags": [
+          "WebDAV"
+        ],
+        "summary": "OPTIONS /dav/",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "responses": {
+          "200": {
+            "description": "XBEL content, temporary bytes or lock content according to resource",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "204": {
+            "description": "Successful write, deletion or OPTIONS"
+          },
+          "405": {
+            "description": "Method not supported for this resource"
+          },
+          "412": {
+            "description": "Stale snapshot or precondition"
+          },
+          "423": {
+            "description": "Another credential owns the lock"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "ownerSession": []
+          },
+          {
+            "davBasic": []
+          }
+        ],
+        "x-api-key-profiles": [
+          "sync",
+          "full"
+        ]
+      },
+      "x-webdav-methods": {
+        "PROPFIND": {
+          "description": "Authenticated property listing, 207 XML response; Depth: 0 on collection returns collection properties."
+        }
+      }
+    },
+    "/dav/bookmarks.xbel": {
+      "get": {
+        "operationId": "davdavbookmarksxbelGet",
+        "tags": [
+          "WebDAV"
+        ],
+        "summary": "GET /dav/bookmarks.xbel",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "responses": {
+          "200": {
+            "description": "XBEL content, temporary bytes or lock content according to resource",
+            "content": {
+              "application/xbel+xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "204": {
+            "description": "Successful write, deletion or OPTIONS"
+          },
+          "405": {
+            "description": "Method not supported for this resource"
+          },
+          "412": {
+            "description": "Stale snapshot or precondition"
+          },
+          "423": {
+            "description": "Another credential owns the lock"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "ownerSession": []
+          },
+          {
+            "davBasic": []
+          }
+        ],
+        "x-api-key-profiles": [
+          "sync",
+          "full"
+        ]
+      },
+      "head": {
+        "operationId": "davdavbookmarksxbelHead",
+        "tags": [
+          "WebDAV"
+        ],
+        "summary": "HEAD /dav/bookmarks.xbel",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "responses": {
+          "200": {
+            "description": "XBEL content, temporary bytes or lock content according to resource",
+            "content": {
+              "application/xbel+xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "204": {
+            "description": "Successful write, deletion or OPTIONS"
+          },
+          "405": {
+            "description": "Method not supported for this resource"
+          },
+          "412": {
+            "description": "Stale snapshot or precondition"
+          },
+          "423": {
+            "description": "Another credential owns the lock"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "ownerSession": []
+          },
+          {
+            "davBasic": []
+          }
+        ],
+        "x-api-key-profiles": [
+          "sync",
+          "full"
+        ]
+      },
+      "put": {
+        "operationId": "davdavbookmarksxbelPut",
+        "tags": [
+          "WebDAV"
+        ],
+        "summary": "PUT /dav/bookmarks.xbel",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "responses": {
+          "200": {
+            "description": "XBEL content, temporary bytes or lock content according to resource",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "204": {
+            "description": "Successful write, deletion or OPTIONS"
+          },
+          "405": {
+            "description": "Method not supported for this resource"
+          },
+          "412": {
+            "description": "Stale snapshot or precondition"
+          },
+          "423": {
+            "description": "Another credential owns the lock"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "ownerSession": []
+          },
+          {
+            "davBasic": []
+          }
+        ],
+        "x-api-key-profiles": [
+          "sync",
+          "full"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/xml": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "options": {
+        "operationId": "davdavbookmarksxbelOptions",
+        "tags": [
+          "WebDAV"
+        ],
+        "summary": "OPTIONS /dav/bookmarks.xbel",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "responses": {
+          "200": {
+            "description": "XBEL content, temporary bytes or lock content according to resource",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "204": {
+            "description": "Successful write, deletion or OPTIONS"
+          },
+          "405": {
+            "description": "Method not supported for this resource"
+          },
+          "412": {
+            "description": "Stale snapshot or precondition"
+          },
+          "423": {
+            "description": "Another credential owns the lock"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "ownerSession": []
+          },
+          {
+            "davBasic": []
+          }
+        ],
+        "x-api-key-profiles": [
+          "sync",
+          "full"
+        ]
+      },
+      "x-webdav-methods": {
+        "PROPFIND": {
+          "description": "Authenticated property listing, 207 XML response; Depth: 0 on collection returns collection properties."
+        }
+      }
+    },
+    "/dav/bookmarks.xbel.temp": {
+      "get": {
+        "operationId": "davdavbookmarksxbeltempGet",
+        "tags": [
+          "WebDAV"
+        ],
+        "summary": "GET /dav/bookmarks.xbel.temp",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "responses": {
+          "200": {
+            "description": "XBEL content, temporary bytes or lock content according to resource",
+            "content": {
+              "application/xbel+xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "204": {
+            "description": "Successful write, deletion or OPTIONS"
+          },
+          "405": {
+            "description": "Method not supported for this resource"
+          },
+          "412": {
+            "description": "Stale snapshot or precondition"
+          },
+          "423": {
+            "description": "Another credential owns the lock"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "ownerSession": []
+          },
+          {
+            "davBasic": []
+          }
+        ],
+        "x-api-key-profiles": [
+          "sync",
+          "full"
+        ]
+      },
+      "head": {
+        "operationId": "davdavbookmarksxbeltempHead",
+        "tags": [
+          "WebDAV"
+        ],
+        "summary": "HEAD /dav/bookmarks.xbel.temp",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "responses": {
+          "200": {
+            "description": "XBEL content, temporary bytes or lock content according to resource",
+            "content": {
+              "application/xbel+xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "204": {
+            "description": "Successful write, deletion or OPTIONS"
+          },
+          "405": {
+            "description": "Method not supported for this resource"
+          },
+          "412": {
+            "description": "Stale snapshot or precondition"
+          },
+          "423": {
+            "description": "Another credential owns the lock"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "ownerSession": []
+          },
+          {
+            "davBasic": []
+          }
+        ],
+        "x-api-key-profiles": [
+          "sync",
+          "full"
+        ]
+      },
+      "put": {
+        "operationId": "davdavbookmarksxbeltempPut",
+        "tags": [
+          "WebDAV"
+        ],
+        "summary": "PUT /dav/bookmarks.xbel.temp",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "responses": {
+          "200": {
+            "description": "XBEL content, temporary bytes or lock content according to resource",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "204": {
+            "description": "Successful write, deletion or OPTIONS"
+          },
+          "405": {
+            "description": "Method not supported for this resource"
+          },
+          "412": {
+            "description": "Stale snapshot or precondition"
+          },
+          "423": {
+            "description": "Another credential owns the lock"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "ownerSession": []
+          },
+          {
+            "davBasic": []
+          }
+        ],
+        "x-api-key-profiles": [
+          "sync",
+          "full"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/xml": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "davdavbookmarksxbeltempDelete",
+        "tags": [
+          "WebDAV"
+        ],
+        "summary": "DELETE /dav/bookmarks.xbel.temp",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "responses": {
+          "200": {
+            "description": "XBEL content, temporary bytes or lock content according to resource",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "204": {
+            "description": "Successful write, deletion or OPTIONS"
+          },
+          "405": {
+            "description": "Method not supported for this resource"
+          },
+          "412": {
+            "description": "Stale snapshot or precondition"
+          },
+          "423": {
+            "description": "Another credential owns the lock"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "ownerSession": []
+          },
+          {
+            "davBasic": []
+          }
+        ],
+        "x-api-key-profiles": [
+          "sync",
+          "full"
+        ]
+      },
+      "options": {
+        "operationId": "davdavbookmarksxbeltempOptions",
+        "tags": [
+          "WebDAV"
+        ],
+        "summary": "OPTIONS /dav/bookmarks.xbel.temp",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "responses": {
+          "200": {
+            "description": "XBEL content, temporary bytes or lock content according to resource",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "204": {
+            "description": "Successful write, deletion or OPTIONS"
+          },
+          "405": {
+            "description": "Method not supported for this resource"
+          },
+          "412": {
+            "description": "Stale snapshot or precondition"
+          },
+          "423": {
+            "description": "Another credential owns the lock"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "ownerSession": []
+          },
+          {
+            "davBasic": []
+          }
+        ],
+        "x-api-key-profiles": [
+          "sync",
+          "full"
+        ]
+      },
+      "x-webdav-methods": {
+        "PROPFIND": {
+          "description": "Authenticated property listing, 207 XML response; Depth: 0 on collection returns collection properties."
+        },
+        "MOVE": {
+          "description": "Authenticated staged temp-to-primary commit. Destination must be same-server /dav/bookmarks.xbel. Returns 204, 412 or 423. Unsupported source/destination returns 400/405."
+        }
+      }
+    },
+    "/dav/bookmarks.xbel.lock": {
+      "get": {
+        "operationId": "davdavbookmarksxbellockGet",
+        "tags": [
+          "WebDAV"
+        ],
+        "summary": "GET /dav/bookmarks.xbel.lock",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "responses": {
+          "200": {
+            "description": "XBEL content, temporary bytes or lock content according to resource",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "204": {
+            "description": "Successful write, deletion or OPTIONS"
+          },
+          "405": {
+            "description": "Method not supported for this resource"
+          },
+          "412": {
+            "description": "Stale snapshot or precondition"
+          },
+          "423": {
+            "description": "Another credential owns the lock"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "ownerSession": []
+          },
+          {
+            "davBasic": []
+          }
+        ],
+        "x-api-key-profiles": [
+          "sync",
+          "full"
+        ]
+      },
+      "head": {
+        "operationId": "davdavbookmarksxbellockHead",
+        "tags": [
+          "WebDAV"
+        ],
+        "summary": "HEAD /dav/bookmarks.xbel.lock",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "responses": {
+          "200": {
+            "description": "XBEL content, temporary bytes or lock content according to resource",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "204": {
+            "description": "Successful write, deletion or OPTIONS"
+          },
+          "405": {
+            "description": "Method not supported for this resource"
+          },
+          "412": {
+            "description": "Stale snapshot or precondition"
+          },
+          "423": {
+            "description": "Another credential owns the lock"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "ownerSession": []
+          },
+          {
+            "davBasic": []
+          }
+        ],
+        "x-api-key-profiles": [
+          "sync",
+          "full"
+        ]
+      },
+      "put": {
+        "operationId": "davdavbookmarksxbellockPut",
+        "tags": [
+          "WebDAV"
+        ],
+        "summary": "PUT /dav/bookmarks.xbel.lock",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "responses": {
+          "200": {
+            "description": "XBEL content, temporary bytes or lock content according to resource",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "204": {
+            "description": "Successful write, deletion or OPTIONS"
+          },
+          "405": {
+            "description": "Method not supported for this resource"
+          },
+          "412": {
+            "description": "Stale snapshot or precondition"
+          },
+          "423": {
+            "description": "Another credential owns the lock"
+          },
+          "201": {
+            "description": "Lock acquired"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "ownerSession": []
+          },
+          {
+            "davBasic": []
+          }
+        ],
+        "x-api-key-profiles": [
+          "sync",
+          "full"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "text/plain": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "davdavbookmarksxbellockDelete",
+        "tags": [
+          "WebDAV"
+        ],
+        "summary": "DELETE /dav/bookmarks.xbel.lock",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "responses": {
+          "200": {
+            "description": "XBEL content, temporary bytes or lock content according to resource",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "204": {
+            "description": "Successful write, deletion or OPTIONS"
+          },
+          "405": {
+            "description": "Method not supported for this resource"
+          },
+          "412": {
+            "description": "Stale snapshot or precondition"
+          },
+          "423": {
+            "description": "Another credential owns the lock"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "ownerSession": []
+          },
+          {
+            "davBasic": []
+          }
+        ],
+        "x-api-key-profiles": [
+          "sync",
+          "full"
+        ]
+      },
+      "options": {
+        "operationId": "davdavbookmarksxbellockOptions",
+        "tags": [
+          "WebDAV"
+        ],
+        "summary": "OPTIONS /dav/bookmarks.xbel.lock",
+        "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
+        "responses": {
+          "200": {
+            "description": "XBEL content, temporary bytes or lock content according to resource",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "204": {
+            "description": "Successful write, deletion or OPTIONS"
+          },
+          "405": {
+            "description": "Method not supported for this resource"
+          },
+          "412": {
+            "description": "Stale snapshot or precondition"
+          },
+          "423": {
+            "description": "Another credential owns the lock"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "ownerSession": []
+          },
+          {
+            "davBasic": []
+          }
+        ],
+        "x-api-key-profiles": [
+          "sync",
+          "full"
+        ]
+      },
+      "x-webdav-methods": {}
+    },
+    "/api/mfa/enroll": {
+      "post": {
+        "operationId": "mfaEnroll",
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Prepare mandatory TOTP enrollment",
+        "description": "Requires a valid password-stage challenge cookie. The secret and QR code are returned only for this challenge.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "secret": {
+                      "type": "string"
+                    },
+                    "qr": {
+                      "type": "string",
+                      "description": "Locally generated PNG data URL; contains the enrollment secret."
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/mfa/verify": {
+      "post": {
+        "operationId": "mfaVerify",
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Verify a TOTP or recovery code",
+        "description": "Requires a live challenge cookie. Enrollment must be confirmed with the new TOTP. Successful enrollment returns recovery codes once; sign-in atomically consumes a code and creates a session.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "description": "A six-digit TOTP or single-use recovery code."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "authenticated": {
+                      "type": "boolean"
+                    },
+                    "usedRecoveryCode": {
+                      "type": "boolean"
+                    },
+                    "recoveryCodes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Single-use recovery codes, returned once."
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/mfa/replace": {
+      "post": {
+        "operationId": "mfaReplace",
+        "tags": [
+          "Account & keys"
+        ],
+        "summary": "Replace the authenticator",
+        "description": "A browser session, current password and fresh TOTP or recovery code are required. A session recently opened with a recovery code may use its one-time replacement grant.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "password": {
+                    "type": "string",
+                    "format": "password"
+                  },
+                  "code": {
+                    "type": "string",
+                    "description": "Fresh code, or empty for a recent recovery-code sign-in."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "secret": {
+                      "type": "string"
+                    },
+                    "qr": {
+                      "type": "string",
+                      "description": "Locally generated PNG data URL; contains the enrollment secret."
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
+      }
+    },
+    "/api/mfa/recovery-codes": {
+      "post": {
+        "operationId": "mfaRecoveryCodes",
+        "tags": [
+          "Account & keys"
+        ],
+        "summary": "Generate new recovery codes",
+        "description": "A browser session, current password and fresh TOTP or recovery code are required.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "password": {
+                    "type": "string",
+                    "format": "password"
+                  },
+                  "code": {
+                    "type": "string",
+                    "description": "Fresh TOTP or unused recovery code.",
+                    "minLength": 1
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "password",
+                  "code"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "recoveryCodes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Single-use recovery codes, returned once."
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "409": {
+            "$ref": "#/components/responses/409"
+          },
+          "415": {
+            "$ref": "#/components/responses/415"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          }
+        },
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
       }
     }
   },
@@ -2377,13 +4540,18 @@
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer",
-        "description": "Paste a dedicated API key without the Bearer prefix. Named keys have library access only. Account/key management and backups require the owner session or administrative recovery token. Authorization is not persisted across reloads."
+        "description": "Dedicated API key: read, capture, sync or full profile. Owner administration is forbidden for every named key. Authorization is not persisted across reloads."
       },
       "ownerSession": {
         "type": "apiKey",
         "in": "cookie",
         "name": "pocketmark",
         "description": "Existing HttpOnly owner session, sent automatically by the browser. Sign in from the library or POST /api/login; do not paste a cookie here. Browsers cannot set HttpOnly cookies from Swagger’s Authorize dialog."
+      },
+      "davBasic": {
+        "type": "http",
+        "scheme": "basic",
+        "description": "Any username; a sync/full API key as password. Personal account password is not accepted."
       }
     },
     "schemas": {
@@ -2393,6 +4561,10 @@
           "error": {
             "type": "string",
             "example": "sign in required"
+          },
+          "code": {
+            "type": "string",
+            "description": "reauth_required means confirm the password with POST /api/reauth before retrying."
           }
         },
         "required": [
@@ -2505,6 +4677,22 @@
           "lastUsedAt": {
             "type": "string",
             "description": "UTC RFC3339 timestamp of the last successful credential authentication, or an empty string if no use has been recorded. Historical use before the feature was enabled is unavailable."
+          },
+          "profile": {
+            "type": "string",
+            "enum": [
+              "read",
+              "capture",
+              "sync",
+              "full"
+            ],
+            "description": "Read: native library reads/exports and metrics. Capture: bookmark reads/edits, collection creation, capture/uploads; no deletion, imports, exports, saved-file download or DAV. Sync: WebDAV only plus session check. Full: all library operations and WebDAV. No profile permits owner administration."
+          },
+          "expiresAt": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Unix timestamp in seconds; zero means unavailable or no expiry, as specified."
           }
         },
         "required": [
@@ -2522,6 +4710,24 @@
             "type": "string",
             "description": "1–120 UTF-8 bytes after trimming.",
             "example": "My integration"
+          },
+          "profile": {
+            "type": "string",
+            "enum": [
+              "read",
+              "capture",
+              "sync",
+              "full"
+            ],
+            "default": "read",
+            "description": "Read: native library reads/exports and metrics. Capture: bookmark reads/edits, collection creation, capture/uploads; no deletion, imports, exports, saved-file download or DAV. Sync: WebDAV only plus session check. Full: all library operations and WebDAV. No profile permits owner administration."
+          },
+          "expiresAt": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Future Unix timestamp in seconds, or zero for no expiry.",
+            "default": 0
           }
         },
         "additionalProperties": false,
@@ -3205,6 +5411,93 @@
           "collections",
           "links"
         ]
+      },
+      "SetupCredentials": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "Username; 1–120 UTF-8 bytes after trimming when setting credentials.",
+            "example": "reader"
+          },
+          "password": {
+            "type": "string",
+            "description": "Password; 12–1024 UTF-8 bytes when setting credentials.",
+            "format": "password",
+            "writeOnly": true
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "username",
+          "password"
+        ]
+      },
+      "BrowserSession": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "createdAt": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Unix timestamp in seconds; zero means unavailable or no expiry, as specified."
+          },
+          "lastUsedAt": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Unix timestamp in seconds; zero means unavailable or no expiry, as specified."
+          },
+          "expiresAt": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Unix timestamp in seconds; zero means unavailable or no expiry, as specified."
+          },
+          "idleTimeoutMinutes": {
+            "type": "integer",
+            "enum": [
+              0,
+              15,
+              60,
+              1440
+            ]
+          },
+          "device": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Client-supplied User-Agent, bounded to 256 bytes; untrusted, not a verified device identity."
+          },
+          "current": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "createdAt",
+          "lastUsedAt",
+          "expiresAt",
+          "idleTimeoutMinutes",
+          "device",
+          "current"
+        ],
+        "additionalProperties": false
+      },
+      "MFAChallenge": {
+        "type": "object",
+        "properties": {
+          "mfaRequired": {
+            "type": "boolean"
+          },
+          "enrollmentRequired": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
       }
     },
     "responses": {
@@ -3300,14 +5593,14 @@
         }
       },
       "429": {
-        "description": "Too many login/setup attempts. The instance allows ten attempts per minute.",
+        "description": "HTTP client rate limit or source-table capacity exceeded, login rate limit exceeded, or password worker busy. Retry-After indicates the retry delay in whole seconds. General rate-limit rejections include Cache-Control: no-store.",
         "content": {
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/Error"
             },
             "example": {
-              "error": "too many login attempts; retry in a minute"
+              "error": "too many requests; retry shortly"
             }
           }
         },
@@ -3322,7 +5615,7 @@
         }
       },
       "503": {
-        "description": "Server busy (eight concurrent requests maximum), or database unavailable.",
+        "description": "Server busy (eight library slots, two authentication slots or two readiness slots), database unavailable, or session persistence failed.",
         "content": {
           "application/json": {
             "schema": {

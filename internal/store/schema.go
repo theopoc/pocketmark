@@ -29,6 +29,10 @@ CREATE TABLE IF NOT EXISTS annotations(id INTEGER PRIMARY KEY, link_id INTEGER N
 CREATE INDEX IF NOT EXISTS annotations_link ON annotations(link_id,id);
 CREATE INDEX IF NOT EXISTS links_collection ON links(collection_id,id DESC);
 CREATE INDEX IF NOT EXISTS links_status ON links(status,id);
+CREATE INDEX IF NOT EXISTS links_created_order ON links(julianday(created_at),id);
+CREATE INDEX IF NOT EXISTS links_updated_order ON links(julianday(updated_at),id);
+CREATE INDEX IF NOT EXISTS links_collection_created_order ON links(collection_id,julianday(created_at),id);
+CREATE INDEX IF NOT EXISTS links_collection_updated_order ON links(collection_id,julianday(updated_at),id);
 CREATE VIRTUAL TABLE IF NOT EXISTS links_fts USING fts5(title,url,description,notes,tags,content,content='links',content_rowid='id',tokenize='unicode61 remove_diacritics 2');
 CREATE TRIGGER IF NOT EXISTS links_ai AFTER INSERT ON links BEGIN
  INSERT INTO links_fts(rowid,title,url,description,notes,tags,content) VALUES(new.id,new.title,new.url,new.description,new.notes,new.tags,new.content);
@@ -53,6 +57,7 @@ PRAGMA user_version=1;
  AND NOT EXISTS(SELECT 1 FROM links) AND NOT EXISTS(SELECT 1 FROM collections)
  WHERE NOT EXISTS(SELECT 1 FROM account_setup);
  CREATE TABLE IF NOT EXISTS account(id INTEGER PRIMARY KEY CHECK(id=1),username TEXT NOT NULL,salt TEXT NOT NULL,hash TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS sessions(id INTEGER PRIMARY KEY AUTOINCREMENT,hash TEXT NOT NULL UNIQUE,expires_at INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS api_tokens(id INTEGER PRIMARY KEY,name TEXT NOT NULL,hash TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL);`); err != nil {
 		return fmt.Errorf("initialize account schema: %w", err)
 	}
@@ -61,6 +66,12 @@ PRAGMA user_version=1;
 	}
 	if err = initAPIKeyActivity(ctx, tx); err != nil {
 		return fmt.Errorf("initialize API key activity: %w", err)
+	}
+	if err = initSessionSecurity(ctx, tx); err != nil {
+		return fmt.Errorf("initialize session security: %w", err)
+	}
+	if err = initMFA(ctx, tx); err != nil {
+		return fmt.Errorf("initialize multifactor authentication: %w", err)
 	}
 	if err = initAssets(ctx, tx); err != nil {
 		return fmt.Errorf("initialize attachments: %w", err)
@@ -75,6 +86,8 @@ func initAPIKeyActivity(ctx context.Context, tx *sql.Tx) error {
 	for _, column := range []struct{ name, definition string }{
 		{"active", "INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1))"},
 		{"last_used_at", "TEXT NOT NULL DEFAULT ''"},
+		{"profile", "TEXT NOT NULL DEFAULT 'full' CHECK(profile IN ('read','capture','sync','full'))"},
+		{"expires_at", "INTEGER NOT NULL DEFAULT 0"},
 	} {
 		var exists int
 		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM pragma_table_info('api_tokens') WHERE name=?", column.name).Scan(&exists); err != nil {
@@ -82,6 +95,28 @@ func initAPIKeyActivity(ctx context.Context, tx *sql.Tx) error {
 		}
 		if exists == 0 {
 			if _, err := tx.ExecContext(ctx, "ALTER TABLE api_tokens ADD COLUMN "+column.name+" "+column.definition); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func initSessionSecurity(ctx context.Context, tx *sql.Tx) error {
+	for _, column := range []struct{ name, definition string }{
+		{"created_at", "INTEGER NOT NULL DEFAULT 0"},
+		{"last_used_at", "INTEGER NOT NULL DEFAULT 0"},
+		{"confirmed_at", "INTEGER NOT NULL DEFAULT 0"},
+		{"idle_minutes", "INTEGER NOT NULL DEFAULT 0"},
+		{"device", "TEXT NOT NULL DEFAULT ''"},
+		{"recovery_until", "INTEGER NOT NULL DEFAULT 0"},
+	} {
+		var exists int
+		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM pragma_table_info('sessions') WHERE name=?", column.name).Scan(&exists); err != nil {
+			return err
+		}
+		if exists == 0 {
+			if _, err := tx.ExecContext(ctx, "ALTER TABLE sessions ADD COLUMN "+column.name+" "+column.definition); err != nil {
 				return err
 			}
 		}

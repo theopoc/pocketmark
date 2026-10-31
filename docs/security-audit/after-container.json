@@ -1,0 +1,51 @@
+{
+  "image": "pocketmark-security-audit:deep-integrated",
+  "memoryLimitBytes": 134217728,
+  "requests": [
+    {
+      "case": "million-links",
+      "inputBytes": 3000011,
+      "status": 400,
+      "healthAfter": 200,
+      "libraryAfter": 200,
+      "running": true,
+      "oomKilled": false,
+      "cgroupMemoryPeakBytes": 10534912
+    },
+    {
+      "case": "million-pins",
+      "inputBytes": 3000028,
+      "status": 400,
+      "healthAfter": 200,
+      "libraryAfter": 200,
+      "running": true,
+      "oomKilled": false,
+      "cgroupMemoryPeakBytes": 10534912
+    },
+    {
+      "case": "million-tags",
+      "inputBytes": 3000022,
+      "status": 400,
+      "healthAfter": 200,
+      "libraryAfter": 200,
+      "running": true,
+      "oomKilled": false,
+      "cgroupMemoryPeakBytes": 10620928
+    },
+    {
+      "case": "trailing-document",
+      "inputBytes": 3000014,
+      "status": 400,
+      "healthAfter": 200,
+      "libraryAfter": 200,
+      "running": true,
+      "oomKilled": false,
+      "cgroupMemoryPeakBytes": 11075584
+    }
+  ],
+  "imageID": "sha256:b862d8e09b9564b3c6b155d6441b434a3e73b5dd6e6740feb1d9a52e3be5b0ac",
+  "identity": "uid=10001(pocketmark) gid=10001(pocketmark) groups=10001(pocketmark)",
+  "passed": true,
+  "sourceRevision": "593bcf5 + security fixes",
+  "observedDate": "2026-10-26"
+}

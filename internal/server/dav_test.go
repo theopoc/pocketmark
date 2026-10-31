@@ -20,11 +20,11 @@ func TestDAVKeysOnlyWithoutLoginThrottleOrTmpfs(t *testing.T) {
 	for i := 0; i < 12; i++ {
 		requireStatus(t, request(a, "OPTIONS", "/dav/", "", false, basic("correct horse battery")), 401)
 	}
-	if a.loginCount != 0 {
+	if len(a.loginAttempts) != 0 {
 		t.Fatal("DAV used browser login throttle")
 	}
 	requireStatus(t, request(a, "POST", "/api/login", `{"username":"me","password":"correct horse battery"}`, false, nil), 200)
-	w := request(a, "POST", "/api/tokens", `{"name":"DAV"}`, true, nil)
+	w := request(a, "POST", "/api/tokens", `{"name":"DAV","profile":"sync"}`, true, nil)
 	requireStatus(t, w, 201)
 	var key apiToken
 	if e := json.Unmarshal(w.Body.Bytes(), &key); e != nil {
@@ -46,7 +46,8 @@ func TestFloccusDAVLockTempMoveExactBytesAndInvalidation(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	h := map[string]string{"Origin": "chrome-extension://floccus", "Sec-Fetch-Site": "cross-site", "Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte("arbitrary:"+testToken))}
+	fixtureKey := createProfileKey(t, a, "sync")
+	h := map[string]string{"Origin": "chrome-extension://floccus", "Sec-Fetch-Site": "cross-site", "Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte("arbitrary:"+fixtureKey))}
 	requireStatus(t, request(a, "OPTIONS", "/dav/", "", false, map[string]string{"Origin": h["Origin"], "Access-Control-Request-Method": "PROPFIND"}), 204)
 	requireStatus(t, request(a, "PROPFIND", "/dav/", "", false, h), 207)
 	requireStatus(t, request(a, "PROPFIND", "/dav/", "", false, map[string]string{"Origin": h["Origin"]}), 403)
@@ -66,7 +67,7 @@ func TestFloccusDAVLockTempMoveExactBytesAndInvalidation(t *testing.T) {
 	if w.Header().Get("Last-Modified") == "" {
 		t.Fatal("missing lock timestamp")
 	}
-	other := request(a, "POST", "/api/tokens", `{"name":"otherDAV"}`, true, nil)
+	other := request(a, "POST", "/api/tokens", `{"name":"otherDAV","profile":"sync"}`, true, nil)
 	requireStatus(t, other, 201)
 	var key apiToken
 	json.Unmarshal(other.Body.Bytes(), &key)

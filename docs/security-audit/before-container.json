@@ -1,0 +1,38 @@
+{
+  "image": "pocketmark-security-audit:bd2e946",
+  "memoryLimitBytes": 134217728,
+  "requests": [
+    {
+      "entries": 100000,
+      "inputBytes": 300011,
+      "status": 400,
+      "error": "import supports at most 10000 links per file",
+      "running": true,
+      "oomKilled": false,
+      "exitCode": 0,
+      "cgroupMemoryPeakBytes": 58925056
+    },
+    {
+      "entries": 250000,
+      "inputBytes": 750011,
+      "status": 400,
+      "error": "import supports at most 10000 links per file",
+      "running": true,
+      "oomKilled": false,
+      "exitCode": 0,
+      "cgroupMemoryPeakBytes": 133656576
+    },
+    {
+      "entries": 1000000,
+      "inputBytes": 3000011,
+      "connectionError": "RemoteDisconnected",
+      "running": false,
+      "oomKilled": true,
+      "exitCode": 137
+    }
+  ],
+  "initialIdentity": "uid=10001(pocketmark) gid=10001(pocketmark) groups=10001(pocketmark)",
+  "imageID": "sha256:a0b6ba860b99a4b4c15d100053ad3bf21b954d10172a10aa66a84d59841c55d3",
+  "sourceRevision": "bd2e946bf4794b025ad6e60247612ceba7216f99",
+  "observedDate": "2026-10-26"
+}

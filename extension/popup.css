@@ -42,10 +42,12 @@ h2 { font-size: 20px; font-weight: 600; letter-spacing: -.35px; line-height: 1.3
 .brand { display: flex; align-items: center; gap: 11px; min-inline-size: 0; flex: 1 1 140px; }
 .brand > div { min-inline-size: 0; }
 .brand-mark { inline-size: 23px; block-size: 28px; color: var(--focus); }
-#page-title { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+#page-title { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
 #content { overflow-y: auto; overflow-x: hidden; padding: 12px 20px 14px; min-block-size: 0; flex: 1 1 auto; scrollbar-color: var(--control) var(--paper); scrollbar-width: thin; scroll-padding-block: 14px; }
 .notice { font-size: 12px; overflow-wrap: anywhere; margin-bottom: 14px; }
 .notice:empty { display: none; }
+.notice.success { color: var(--success); border: 1px solid currentColor; border-radius: 6px; padding: 10px 12px; }
+.notice.success::before { content: "✓ "; font-weight: 700; }
 .error { color: var(--danger); }
 .field { margin-bottom: 12px; min-inline-size: 0; }
 label, legend { font-size: 12px; font-weight: 600; }
@@ -69,7 +71,7 @@ fieldset { padding: 0; margin: 0; border: 0; min-inline-size: 0; }
 .actions, .tag-entry { display: flex; align-items: center; gap: 8px; }
 .tag-entry input { flex: 1 1 0; }
 .tag-entry button { flex: none; }
-.hint, .muted { color: var(--muted); font-size: 11px; font-weight: 400; line-height: 1.5; }
+.hint, .muted { color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.5; }
 .hint { margin-top: 6px; }
 .capture-disclosure { border-top: 1px solid var(--line); padding-top: 8px; }
 .capture-disclosure > summary { display: flex; align-items: center; gap: 8px; min-block-size: 32px; color: var(--ink); font-size: 12px; font-weight: 600; list-style: none; }
@@ -86,10 +88,9 @@ fieldset { padding: 0; margin: 0; border: 0; min-inline-size: 0; }
 .capture-option:has(:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 .capture-option input { inline-size: 15px; block-size: 15px; margin: 2px 0 0; flex: none; }
 .capture-option span { min-inline-size: 0; overflow-wrap: anywhere; }
-.capture-option small { display: block; margin-top: 1px; color: var(--muted); font-size: 11px; font-weight: 400; line-height: 1.4; }
-.capture-help { margin-top: 9px; }
+.capture-option small { display: block; margin-top: 1px; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.4; }
+.capture-hint { margin: 4px 0 10px; }
 summary { cursor: pointer; font-size: 11px; color: var(--muted); }
-.capture-help summary { inline-size: fit-content; min-block-size: 24px; padding-block: 3px; }
 #selected-tags { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0 0 7px; }
 #selected-tags:empty { margin: 0; }
 #selected-tags li { display: flex; align-items: center; gap: 3px; min-inline-size: 0; max-inline-size: 100%; padding-left: 8px; border: 1px solid var(--control); border-radius: 4px; background: var(--surface); }

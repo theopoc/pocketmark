@@ -35,7 +35,7 @@ belong to the deployment.
 
 ## Prometheus metrics
 
-Scrape `/metrics` with an owner session, recovery bearer token, or a dedicated
+Scrape `/metrics` with an owner session or a dedicated
 named API key created in Settings. Anonymous requests return 401. The response
 uses Prometheus text format 0.0.4 and `Cache-Control: no-store`.
 
