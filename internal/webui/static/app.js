@@ -878,9 +878,11 @@
       body.append(tags);
       const footer = el("div", "card-footer");
       const statuses = { pending: "Queued", processing: "Saving…", ready: "Captured", failed: "Capture failed" };
-      const status = el("span", "card-state", statuses[link.status] || "Saved link");
+      const status = el("span", "card-state", statuses[link.status] || "Not captured");
       status.classList.add(["pending", "processing", "ready", "failed"].includes(link.status) ? link.status : "saved");
-      status.prepend(icon(link.status === "ready" ? "check" : link.status === "failed" ? "warning" : "clock"));
+      const statusIcon = link.status === "processing" || !statuses[link.status] ? el("span", "capture-indicator") : icon(link.status === "ready" ? "check" : link.status === "failed" ? "warning" : "clock");
+      statusIcon.setAttribute("aria-hidden", "true");
+      status.prepend(statusIcon);
       footer.append(status);
       const actions = el("div", "card-actions");
       const moreActions = el("button", "card-actions-toggle button subtle", "Actions");

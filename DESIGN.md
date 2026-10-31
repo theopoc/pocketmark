@@ -178,6 +178,10 @@ Manual light/dark changes crossfade the complete view over 240ms using native br
 ### Chips
 Small rectangular tags use neutral fill, short padding and compact type. Hover or active filter states use the soft accent and indigo text. Long labels truncate rather than widening the navigation drawer.
 
+### Capture status
+
+Bookmark capture states use compact rounded badges with a text label and an icon: green Captured, amber Queued / Saving…, red Capture failed, and neutral Not captured. Only Saving… rotates a small ring to indicate active capture. Reduced motion keeps the ring still and preserves the label. Light and dark themes use tinted backgrounds with readable semantic foregrounds; badge placement and card actions remain unchanged.
+
 ### Cards / Containers
 Grid bookmark cards use the panel radius, white background and a line border; selection changes both fill and border without a checkbox. A softly tinted header groups the domain and the favorite star, with the full saved URL available on hover. The capture state and remaining actions stay in the footer. List mode removes individual card rounding, separates rows with dividers and retains the same selection, tags, capture labels and actions. Do not add permanent card shadows.
 
