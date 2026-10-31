@@ -99,3 +99,10 @@ Run `make test-extension` for deterministic regressions. Actual browser observat
 are recorded separately in [docs/REAL_CLIENTS.md](../docs/REAL_CLIENTS.md).
 
 For a new API key, choose **Add, edit & capture — browser extension** in Settings. Read-only keys cannot save pages; Floccus keys only support WebDAV. After rotating a key, reconnect the extension with its new value.
+
+
+The popup offers Dark and Light appearance in its header; the choice stays in
+this browser. Dark retains its original palette. Collection creation shows a
+live character count and percentage of the server name budget, including
+accented letters and emoji. Shared local theme/name modules are checked by
+`python3 scripts/sync_ui_assets.py` and refreshed with `--write`.

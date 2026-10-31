@@ -1,0 +1,58 @@
+/* Approved secondary surfaces only. Library rows, actions and sorting retain style.css. */
+:is(#login-view, #settings-page, #help-dialog, body.api-docs) {
+  --secondary-link: #5146c8;
+  --control-border: var(--control-line);
+  font-size: 14px;
+  line-height: 1.6;
+}
+[data-theme="dark"] :is(#login-view, #settings-page, #help-dialog),
+html[data-theme="dark"] body.api-docs { --secondary-link: var(--focus); color-scheme: dark; }
+:is(#login-view, #settings-page, #help-dialog, .api-docs) :is(label, .button, .text-button, .field-hint, .small) { font-size: 13px; }
+:is(#login-view, #settings-page, #help-dialog, .api-docs) :is(p, .field-hint, .small) { line-height: 1.6; }
+:is(#login-view, #settings-page, #help-dialog, .api-docs) .text-button { color: var(--secondary-link); }
+:is(#login-view, #settings-page, #help-dialog, .api-docs) :is(input, select, textarea) { border-color: var(--control-line); }
+:is(#login-view, #settings-page, #help-dialog, .api-docs) :is(button, a, input, select, textarea, summary):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+:is(#login-view, #settings-page, #help-dialog, .api-docs) .subtle:hover { background: var(--control-hover); border-color: var(--control-line); }
+:is(#login-view, #settings-page, #help-dialog, .api-docs) .primary:active { background: var(--accent-hover); }
+:is(#login-view, #settings-page, #help-dialog, .api-docs) button:disabled { opacity: .48; cursor: default; }
+:is(#login-view, #settings-page, #help-dialog, .api-docs) .form-error { color: var(--danger); margin-block: 8px 12px; }
+:is(#login-view, #settings-page) .field-hint { margin-top: 6px; }
+:is(#login-form, #mfa-code-form, #settings-page form) > label { margin-top: 16px; margin-bottom: 6px; }
+#settings-page h2 { scroll-margin-top: 16px; }
+#settings-page .session-times { font-size: 13px; gap: 8px 16px; }
+#settings-page :is(.settings-panel, .settings-intro) > p { max-width: 72ch; }
+#help-topics summary:hover { background: var(--control-hover); }
+#help-topics .help-answer { max-width: 72ch; }
+.api-docs .swagger-ui :is(input, select, textarea) { border-color: var(--control-line); color: var(--ink); background: var(--paper); }
+.api-docs .swagger-ui :is(.btn, label, .parameter__type, .parameter__in) { font-size: 13px; }
+.api-docs .swagger-ui :is(.opblock-summary-description, .renderedMarkdown p, .renderedMarkdown li) { font-size: 14px; line-height: 1.6; }
+.api-docs .swagger-ui .btn { min-height: 38px; }
+.api-docs .swagger-ui .btn.authorize { color: var(--ink); border-color: var(--control-line); }
+.api-docs .swagger-ui .opblock-body pre { overflow: auto; }
+
+/* Collection validation and the approved reader journey have their own scope. */
+#collection-name-hint { font-size: 13px; }
+#collection-name-hint.name-limit-warning { color: var(--danger); }
+#reader-dialog .saved-formats-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+#reader-dialog .saved-formats-heading h3 { margin: 0; }
+#reader-files { margin-block: 24px; padding-block: 20px; border-block: 1px solid var(--line); }
+#reader-files .section-heading { gap: 12px; margin-top: 0; }
+#reader-files .section-heading h3 { margin-right: auto; }
+
+@supports (transition-behavior: allow-discrete) {
+  #reader-notebook, #reader-files { opacity: 1; transition: opacity 160ms ease-out, display 160ms allow-discrete; }
+  #reader-notebook[hidden], #reader-files[hidden] { opacity: 0; }
+  @starting-style { #reader-notebook:not([hidden]), #reader-files:not([hidden]) { opacity: 0; } }
+  #help-topics details::details-content { opacity: 0; transition: opacity 160ms ease-out, content-visibility 160ms allow-discrete; }
+  #help-topics details[open]::details-content { opacity: 1; }
+}
+@media (max-width: 600px) {
+  :is(#login-view, #settings-page, #help-dialog, .api-docs) :is(.button, .icon-button, .text-button),
+  .api-docs .swagger-ui .btn, #reader-files .text-button { min-height: 44px; }
+  :is(#login-view, #settings-page, #help-dialog, .api-docs) input:not([type=checkbox]),
+  :is(#login-view, #settings-page, #help-dialog, .api-docs) :is(select, textarea) { font-size: 16px; }
+  :is(#settings-page, #help-dialog) .small { font-size: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #reader-notebook, #reader-files, #help-topics details::details-content { transition: none; }
+}

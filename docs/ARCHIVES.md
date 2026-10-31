@@ -66,7 +66,7 @@ of its format, with earlier copies available in the selector; Screenshot also
 includes saved raster images. When no HTML attachment exists, the basic archive
 opens as a simplified sandboxed page. Its source remains downloadable under
 Reading options when attachments exist. The **View** action in
-**Notes → Files** also opens the integrated viewer for raster images, PDFs and HTML,
+**Saved formats → Manage files** also opens the integrated viewer for raster images, PDFs and HTML,
 including standalone files. Its selector switches between saved attachments;
 **Download original** remains available. PDF display uses the browser's native
 viewer and may depend on browser settings.
