@@ -171,11 +171,15 @@ input[type=checkbox] { width: 15px; height: 15px; padding: 0; flex-shrink: 0; ac
 .card-tag { border: 0; background: #f0f1f6; color: #5b6272; padding: 2px 6px; border-radius: 4px; font-size: 12px; line-height: 1.5; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .card-tag:hover { background: var(--accent-soft); color: #4338b7; }
 .card-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-top: 1px solid #eceef3; }
-.card-state { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #666e7e; white-space: nowrap; }
-.card-state .icon { width: 12px; height: 12px; }
-.card-state.ready { color: var(--success); }
-.card-state.failed { color: var(--danger); }
-.card-state.pending, .card-state.processing { color: #8c5818; }
+.card-state { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #eef0f5; font-size: 12px; line-height: 1.5; color: #626978; white-space: nowrap; }
+.card-state .icon { width: 14px; height: 14px; flex-shrink: 0; }
+.capture-indicator { width: 14px; height: 14px; flex-shrink: 0; border: 1.7px solid currentColor; border-radius: 50%; }
+.card-state.processing .capture-indicator { border-right-color: transparent; animation: capture-spin 800ms linear infinite; }
+@keyframes capture-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .card-state.processing .capture-indicator { animation: none; } }
+.card-state.ready { color: var(--success); background: #e8f4ee; }
+.card-state.failed { color: var(--danger); background: #fcebed; }
+.card-state.pending, .card-state.processing { color: #8c5818; background: #fff0da; }
 .card-actions { display: flex; align-items: center; gap: 1px; }
 .card-action { display: inline-flex; justify-content: center; align-items: center; border: 0; background: transparent; color: #737b8c; width: 32px; height: 32px; flex-shrink: 0; padding: 7px; border-radius: 4px; text-decoration: none; }
 .card-action .icon { width: 18px; height: 18px; flex-shrink: 0; }
@@ -483,6 +487,10 @@ body:has(dialog[open]) { overflow: hidden; }
 [data-theme="dark"] .view-list .bookmark-card:hover { background: #222430; }
 [data-theme="dark"] .bookmark-grid:not(.view-list) .card-top { background: #262b35; }
 [data-theme="dark"] .card-description, [data-theme="dark"] .card-state { color: #a3a7b6; }
+[data-theme="dark"] .card-state { background: #2c2f3b; }
+[data-theme="dark"] .card-state.ready { background: #203a31; }
+[data-theme="dark"] .card-state.failed { background: #422631; }
+[data-theme="dark"] .card-state.pending, [data-theme="dark"] .card-state.processing { background: #3b3020; }
 [data-theme="dark"] .card-tag { background: #2c2f3b; color: #b9bfd1; }
 [data-theme="dark"] .card-tag:hover, [data-theme="dark"] .text-button, [data-theme="dark"] .card-title button:hover,
 [data-theme="dark"] #selected-count { color: #bfb6ff; }
