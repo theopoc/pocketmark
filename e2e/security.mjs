@@ -27,12 +27,13 @@ export async function securityJourney({ browser, page, base, username, password,
     await page.setViewportSize({ width: 320, height: 700 });
     for (const [section, selectors] of [['api-keys', ['#token-name', '#token-profile']], ['sessions', ['#sessions-refresh']], ['backup', ['#settings-page a[href="/api/backup"]']]]) {
       await selectSettings(page, section);
+      if (section === 'api-keys') await page.locator('#token-create summary').click();
       for (const selector of selectors) assert.ok(await page.locator(selector).evaluate(node => node.getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
     }
     assert.ok(await page.locator('#settings-page').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), 'mobile settings do not overflow');
     await page.setViewportSize({ width: 1280, height: 720 });
     await openNavigation(page);
-    await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: 'Backup' }).click();
+    await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: 'Backup & restore' }).click();
     assert.equal(await page.locator('#backup-title').evaluate(node => document.activeElement === node), true);
     await openNavigation(page);
     await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: 'API keys' }).click();
@@ -52,10 +53,19 @@ export async function securityJourney({ browser, page, base, username, password,
       await page.evaluate(() => { if (document.documentElement.dataset.theme !== 'dark') document.querySelector('[data-theme-toggle]').click(); });
     }
     await selectSettings(page, 'api-keys');
+    if (!await page.locator('#token-create').evaluate(node => node.open)) await page.locator('#token-create summary').click();
     assert.equal(await page.locator('#token-profile').inputValue(), 'read');
     assert.equal(await page.locator('#token-expiry').inputValue(), '30');
     await page.locator('#token-name').fill('Synthetic extension');
     await page.locator('#token-profile').selectOption('capture');
+    await page.setViewportSize({ width: 320, height: 700 });
+    await page.waitForFunction(() => !document.querySelector('#token-form button[type=submit]').disabled);
+    const failCreate = route => route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: 'Synthetic failure' }) });
+    await page.route('**/api/tokens', failCreate, { times: 1 });
+    await page.locator('#token-form').getByRole('button', { name: 'Create key', exact: true }).click();
+    await page.locator('#tokens-error').filter({ hasText: 'Synthetic failure' }).waitFor();
+    assert.equal(await page.locator('#tokens-error').evaluate(node => document.activeElement === node && node.getBoundingClientRect().top >= 0 && node.getBoundingClientRect().top < innerHeight), true);
+    await page.setViewportSize({ width: 1280, height: 720 });
     const expired = expireConfirmation();
     await page.locator('#token-form').getByRole('button', { name: 'Create key', exact: true }).click();
     if (expired) {

@@ -44,7 +44,7 @@ For HTTPS access, set `POCKETMARK_ORIGIN` to your public URL. See the [guide](do
 ### Pocketmark Chrome extension
 
 1. Follow the [manual installation instructions](extension/README.md#install-and-connect) to load the Pocketmark extension in Chrome.
-2. Sign in to Pocketmark, open **Settings → API keys**, create a dedicated key and copy it immediately; it is shown only once.
+2. Sign in to Pocketmark, open **Settings → Account & security → API keys**, create a dedicated key and copy it immediately; it is shown only once.
 3. Open the extension on a regular HTTP(S) page. Under **Connection settings**, enter your Pocketmark origin, such as `https://bookmarks.example.com` (without `/api` or `/dav/`), and the key. Click **Connect** and approve server access. If Chrome closes the popup, reopen it to finish connecting.
 4. Choose a collection, edit the title or tags, optionally select formats under **Attach captures**, then save.
 
@@ -52,7 +52,7 @@ Captures are off by default. Rendered HTML, visible PNG, full-page PNG and PDF c
 
 ### Floccus
 
-Floccus synchronizes browser bookmarks and nested folders with Pocketmark in both directions, including edits, moves and deletions. Create a separate key for each client: sign in to Pocketmark, open **Settings → API keys**, create a named key and copy it immediately; it is shown only once.
+Floccus synchronizes browser bookmarks and nested folders with Pocketmark in both directions, including edits, moves and deletions. Create a separate key for each client: sign in to Pocketmark, open **Settings → Account & security → API keys**, create a named key and copy it immediately; it is shown only once.
 
 Configure the **WebDAV** backend in Floccus:
 

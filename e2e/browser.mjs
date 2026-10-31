@@ -303,7 +303,7 @@ try {
     await heldCodes.ready;
     assert.equal(await page.locator('#settings-page [data-settings-back]').isDisabled(), true);
     assert.equal(await page.locator('[data-settings-section="backup"]').isDisabled(), true);
-    assert.equal(await page.locator('[data-settings-section="2fa"]').isEnabled(), true);
+    assert.equal(await page.locator('[data-settings-section="password"]').isEnabled(), true);
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('#settings-page').isVisible(), true);
     await page.evaluate(() => history.pushState({}, '', '?test=mfa-pending'));
