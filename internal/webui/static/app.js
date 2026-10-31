@@ -217,7 +217,7 @@
       const thumbnail = card.querySelector(".card-thumbnail");
       if (thumbnail && !thumbnail.src) thumbnail.src = thumbnail.dataset.src;
     }
-    else { titleRow.prepend(favorite); titleRow.after(host); }
+    else { titleRow.prepend(favorite); card.querySelector(".card-metadata").prepend(host); }
   }
   function setLibraryView(view) {
     const changed = $("bookmark-grid").classList.contains("view-list") !== (view === "list");
@@ -839,7 +839,7 @@
       titleRow.append(favorite, heading);
       const hostLabel = el("p", "card-domain", host);
       if (link.type !== "file") hostLabel.title = link.url;
-      body.append(titleRow, hostLabel);
+      body.append(titleRow);
       if (link.description) body.append(el("p", "card-description", link.description));
       if (state.query && link.searchSnippet) {
         const excerpt = el("p", "search-excerpt");
@@ -875,7 +875,9 @@
         });
         tags.append(more);
       }
-      body.append(tags);
+      const metadata = el("div", "card-metadata");
+      metadata.append(hostLabel, tags);
+      body.append(metadata);
       const footer = el("div", "card-footer");
       const statuses = { pending: "Queued", processing: "Saving…", ready: "Captured", failed: "Capture failed" };
       const status = el("span", "card-state", statuses[link.status] || "Not captured");
