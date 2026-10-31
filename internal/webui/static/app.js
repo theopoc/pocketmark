@@ -786,9 +786,6 @@
       const card = el("article", "bookmark-card");
       const top = el("div", "card-top");
       const host = link.type === "file" ? "Saved file" : domain(link.url);
-      const avatar = el("span", "domain-avatar");
-      avatar.append(icon(link.type === "file" ? "book" : "bookmark"));
-      avatar.setAttribute("aria-hidden", "true");
       const favorite = el("button", `card-action favorite-button${link.favorite ? " is-favorite" : ""}`);
       favorite.append(icon("star"));
       favorite.title = link.favorite ? "Remove from favorites" : "Add to favorites";
@@ -809,7 +806,7 @@
       card.classList.toggle("is-selected", select.checked);
       const selectTarget = el("label", "bookmark-select-target");
       selectTarget.append(select);
-      top.append(selectTarget, avatar);
+      top.append(selectTarget);
       const body = el("div", "card-body");
       const heading = el("h2", "card-title");
       const open = el("button", "", link.title || link.url);
