@@ -465,6 +465,7 @@ body:has(dialog[open]) { overflow: hidden; }
   --focus: #a39aff;
 }
 [data-theme="dark"] ::selection { background: #51488a; color: #fff; }
+[data-theme="dark"] .sidebar-brand .brand-mark { background: var(--accent); color: #fff; }
 [data-theme="dark"] .workspace-avatar { background: #30323f; color: #c1c6da; }
 [data-theme="dark"] .nav-item { color: #b4b7c5; }
 [data-theme="dark"] .nav-item .icon { color: #989fb2; }
