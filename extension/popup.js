@@ -11,7 +11,6 @@ if (chrome.extension?.getViews({ type: "popup" }).includes(window)) {
     document.body.style.maxBlockSize = `${window.innerHeight}px`;
   });
 }
-const collectionNameLimit = PocketmarkNameLimit.create($("collection-name"), $("collection-name-hint"));
 let activeTab, connected = false, connecting = false, loaded = false, ready = false, settingsOpen = false, task = null, tags = [], collections = [], poll, tagTimer, tagQuery = 0, taskSignature, collectionSession = 0;
 function status(message, error = false, success = false) {
   const changed = $("status").textContent !== message;
@@ -191,8 +190,6 @@ $("tag-input").addEventListener("input", () => {
 });
 function collectionEditor(open) {
   collectionSession++;
-  $("collection-name").disabled = !open;
-  collectionNameLimit.update();
   $("collection-create").hidden = !open; $("new-collection").setAttribute("aria-expanded", String(open));
   if (open) { $("create-collection").disabled = false; $("create-collection").textContent = "Create collection"; $("collection-name").readOnly = false; $("collection-parent").disabled = false; $("collection-parent").value = $("collection").value; $("collection-name").focus(); }
 }
@@ -203,7 +200,6 @@ $("collection-name").addEventListener("keydown", (event) => {
   if (event.key === "Escape") { event.preventDefault(); collectionEditor(false); $("new-collection").focus(); }
 });
 $("create-collection").addEventListener("click", async () => {
-  if (!collectionNameLimit.update().valid) { $("collection-name").reportValidity(); return; }
   const session = collectionSession;
   $("create-collection").disabled = true;
   $("create-collection").textContent = "Creating collection…";

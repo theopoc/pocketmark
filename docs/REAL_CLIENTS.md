@@ -5,16 +5,6 @@
 > Floccus Linkwarden API backend have been removed. The older dated observations
 > remain historical evidence; the new worker is qualified separately below.
 
-## Interface checks — 31 October 2026
-
-[The UI evidence report](UI_POLISH.md) records a bounded headless matrix on
-Chromium, Firefox and WebKit, both themes, responsive editor layouts, keyboard
-focus, saved-file reading and touch emulation. It also checks five extension
-popup states through a Chrome API adapter. These are interface checks, not a
-new qualification of the native extension worker, WebDAV clients, Safari,
-physical phones or a spoken screen reader. Earlier real-client evidence remains
-scoped to the dated observations below.
-
 ## Extension collection and tag check — 29 October 2026
 
 Chrome for Testing 156.0.8078.4 loaded a disposable copy of the extension and

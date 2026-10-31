@@ -3,7 +3,7 @@ const { test } = require("node:test"), assert = require("node:assert/strict"), v
 async function setup({ stored, permissionCloses = false, granted = true, hostGranted = true, authenticated = true, existing = false, job = null, collectionResult, tagsFail = false, tagsResult } = {}) {
   const elements = new Map(), calls = [], writes = [], permissions = [], data = stored || { server: "https://library.example", token: "key" };
   let closeCount = 0;
-  function node(id = "") { return { id, value: "", hidden: true, children: [], listeners: {}, classList: { toggle() {} }, setCustomValidity() {}, reportValidity() {}, addEventListener(type, fn) { this.listeners[type] = fn; }, setAttribute() {}, replaceChildren() { this.children = []; }, append(child) { this.children.push(child); }, focus() {} }; }
+  function node(id = "") { return { id, value: "", hidden: true, children: [], listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; }, setAttribute() {}, replaceChildren() { this.children = []; }, append(child) { this.children.push(child); }, focus() {} }; }
   const element = (id) => { if (!elements.has(id)) elements.set(id, node(id)); return elements.get(id); };
   const context = vm.createContext({ document: { getElementById: element, createElement: () => node(), createElementNS: () => node() }, URL, TextEncoder, setTimeout, clearTimeout, setInterval: () => 1, clearInterval() {}, window: { addEventListener() {}, close() { closeCount++; } },
     chrome: {
@@ -26,7 +26,7 @@ async function setup({ stored, permissionCloses = false, granted = true, hostGra
       } },
     },
   });
-  for (const file of ["name-limit.js", "common.js", "popup.js"]) vm.runInContext(fs.readFileSync(path.join(__dirname, file), "utf8"), context);
+  for (const file of ["common.js", "popup.js"]) vm.runInContext(fs.readFileSync(path.join(__dirname, file), "utf8"), context);
   await new Promise(setImmediate);
   const submit = async (id) => element(id).listeners.submit({ preventDefault() {} });
   return { element, calls, writes, permissions, data, submit, context, get closeCount() { return closeCount; }, setJob(value) { job = value; } };
