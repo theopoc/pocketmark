@@ -506,8 +506,6 @@
       button.addEventListener("click", () => { clear(); state.page = 1; commitRoute(); refresh(); $("page-title").focus(); });
       root.append(button);
     };
-    if (state.filter !== "all") add(currentTitle(), () => { state.filter = "all"; state.collection = null; });
-    if (state.tag) add(`#${state.tag}`, () => { state.tag = ""; });
     if (state.query) add(`Search: ${state.query}`, () => { clearTimeout(searchTimer); state.query = ""; $("search").value = ""; });
     if (state.fuzzy) add("Near matches", () => { state.fuzzy = false; $("fuzzy-search").checked = false; });
     root.hidden = !root.childElementCount;
@@ -1029,7 +1027,7 @@
   function openEditor(link = null) {
     editorSession++;
     $("save-bookmark").disabled = false;
-    $("save-bookmark").textContent = "Save bookmark";
+    $("save-bookmark").textContent = "Save";
     $("bookmark-save-status").hidden = true;
     state.editing = link;
     $("bookmark-form").reset();
@@ -1295,7 +1293,7 @@
       else toast(newer ? "Saved. Your newer edits remain a draft." : result.capture ? `Bookmark and HTML copy saved.${result.capture.omitted ? ` ${result.capture.omitted} resource${result.capture.omitted === 1 ? "" : "s"} could not be included.` : ""}` : editing ? "Bookmark updated." : "Bookmark saved.");
       await refresh();
     } catch (error) { if (session === editorSession) $("bookmark-error").textContent = error.message; else toast(error.message, true); }
-    finally { if (session === editorSession) { button.disabled = false; button.textContent = "Save bookmark"; $("bookmark-save-status").hidden = true; } }
+    finally { if (session === editorSession) { button.disabled = false; button.textContent = "Save"; $("bookmark-save-status").hidden = true; } }
   });
 
   function htmlCaptureFailed(id, error) {

@@ -623,7 +623,12 @@ try {
   await page.waitForFunction(() => document.activeElement.id === 'tags-letter-R');
   await page.locator('#tags-list').getByRole('button', { name: '#reading 1 bookmark' }).click();
   await card(original).waitFor();
-  await page.getByRole('button', { name: 'Remove #reading filter' }).click();
+  assert.equal(await page.locator('#active-filters').isVisible(), false, 'the tag view has no redundant removable navigation chip');
+  await page.locator('#search').fill('synthetic-filter-check');
+  await page.getByRole('button', { name: 'Remove Search: synthetic-filter-check filter', exact: true }).click();
+  await page.locator('#active-filters').waitFor({ state: 'hidden' });
+  assert.equal(new URL(page.url()).searchParams.get('tag'), 'reading', 'clearing search preserves the tag view');
+  await clickNavigation(page, '[data-filter="all"]');
   await page.setViewportSize({ width: 1280, height: 720 });
   const collectionName = 'A deliberately long collection name for mobile navigation';
   const collectionResponse = await page.request.post(new URL('/api/collections', base).href, { data: { name: collectionName, parentId: null } });
