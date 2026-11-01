@@ -22,6 +22,13 @@ html[data-theme="dark"] body.api-docs { --secondary-link: var(--focus); color-sc
 #settings-page h2 { scroll-margin-top: 16px; }
 #settings-page h2:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 #settings-page .session-times { font-size: 13px; gap: 8px 16px; }
+#settings-page #token-list .token-row { align-items: flex-start; flex-wrap: wrap; gap: 12px 24px; padding: 20px 0; }
+#settings-page #token-list .token-details { flex-basis: 100%; }
+#settings-page #token-list .token-name { font-size: 14px; }
+#settings-page #token-list .token-metadata { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 24px; max-width: 344px; margin-top: 14px; }
+#settings-page #token-list .token-row-actions { flex-direction: row; flex-wrap: wrap; gap: 8px; }
+#settings-page #token-list .token-revoke { color: var(--danger); border-color: var(--control-line); }
+#settings-page #token-list .token-revoke:hover { border-color: var(--danger); }
 #settings-page :is(.settings-panel, .settings-intro) > p { max-width: 72ch; }
 #help-topics summary:hover { background: var(--control-hover); }
 #help-topics .help-answer { max-width: 72ch; }
