@@ -140,6 +140,10 @@ Dark controls, dialogs, cards, metadata, highlights and selection share the them
 
 Every added or modified component must match both the design system and the active theme's palette. Use semantic tokens for surfaces, text, icons, borders, hover, focus and status; resolve their light and dark values independently. A matching layout or readable contrast alone does not establish theme conformity. Check the rendered component in both themes, including its interactive states, before delivery. Approved accent surfaces retain their accent treatment in both themes, with foreground colors chosen for that surface rather than the page ground.
 
+Entered search text uses `ink`; mobile action labels use the readable `muted` token rather than the desktop icon gray. The sign-in theme toggle keeps a translucent hover surface over its violet introduction panel. Programmatically focused Settings headings use the same indigo outline as other keyboard targets. Quiet Delete actions in files and annotations use `danger` on hover and focus, independently of their position among other actions.
+
+API documentation applies theme tokens to expanded response headers, examples and SVG paths as well as the collapsed overview; forced colors retain system icon colors. Operation permalinks are separate, labeled keyboard targets beside the summary buttons. Generated parameter fields have accessible names, and scrollable code examples can receive keyboard focus.
+
 ### Floating selection bar
 
 The selection bar uses an opaque violet background derived from the active theme's `accent` (75% accent mixed with black), white labels and outline icons, and light red (`#ffb4b8`) for both the Delete label and trash icon. Counts outside the current results remain white. Hover darkens the violet; keyboard focus uses a white outline. Desktop exposes Select page, Move, Tags, Favorites, Read/Unread and Refresh captures followed by Delete and the clear-selection icon. There is no More menu. The bar wraps only when space requires it, without hiding actions. Read uses the circle-check icon whenever at least one selected bookmark is unread; Unread uses the clock icon when every selected bookmark is read, including selections outside the current results.
@@ -260,7 +264,7 @@ The bookmark editor keeps its heading and save/cancel footer visible around a sc
 
 ## Approved secondary refinements — 1 November 2026
 
-The library reference is the restored interface at `e678b74`. Keep its icon actions, mobile Actions disclosure, sort button/menu, list/grid geometry, palette and density, with the approved floating selection bar colors defined under Themes. The selection bar rules belong in `style.css`; preserve its unrelated rules. Secondary refinements belong in `secondary.css`, scoped to login/MFA, settings, help, API documentation, the collection hint and the reader files/notebook. Never broaden those selectors to generic application controls.
+The library reference is the restored interface at `e678b74`. Keep its icon actions, mobile Actions disclosure, sort button/menu, list/grid geometry, palette and density, with the approved selection bar, search text and mobile action label colors defined under Themes. These library rules belong in `style.css`; preserve its unrelated rules. Secondary refinements belong in `secondary.css`, scoped to login/MFA, settings, help, API documentation, the collection hint and the reader files/notebook. Never broaden those selectors to generic application controls.
 
 Login/MFA, settings, help and API documentation use 13px labels/hints and 14px body copy on desktop; phone fields remain 16px. State colors reuse the existing palette and field boundary tokens. Direct settings headings reserve 16px of scroll space for visible keyboard focus. Notes/files and help disclosures use progressive 160ms opacity feedback with immediate reduced-motion fallback. The existing library and theme timings remain unchanged.
 

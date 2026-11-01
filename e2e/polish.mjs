@@ -64,6 +64,68 @@ async function shot(page, label, engine) {
 async function noOverflow(page, label) {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${label} overflows`);
 }
+async function expectThemeColor(locator, property, token) {
+  await settleControl(locator);
+  assert.ok(await locator.evaluate((node, { property, token }) => {
+    const probe = document.createElement('span'); probe.style.color = `var(${token})`; node.append(probe);
+    const expected = getComputedStyle(probe).color; probe.remove();
+    return getComputedStyle(node)[property] === expected;
+  }, { property, token }), `${property} matches ${token}`);
+}
+async function settleControl(locator) {
+  await locator.evaluate(async node => { await Promise.all(node.getAnimations().map(animation => animation.finished.catch(() => {}))); });
+}
+async function expandedDocumentation(page, theme, engine) {
+  for (const width of [1280, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(new URL('/api-docs/', base).href);
+    await page.locator('#swagger-ui[aria-busy=false]').waitFor();
+    await page.locator('.opblock-tag').filter({ hasText: 'Bookmarks' }).click();
+    const operation = page.locator('#operations-Bookmarks-listLinks');
+    const toggle = operation.locator('.opblock-summary-control');
+    await toggle.click();
+    assert.equal(await page.locator('.opblock-summary-control a[href], .opblock-summary-control button').count(), 0, 'summary buttons contain no interactive controls');
+    await expectThemeColor(operation.locator('tbody .header-col').first(), 'color', '--ink');
+    await expectThemeColor(operation.locator('.header-example').first(), 'color', '--muted');
+    await expectThemeColor(operation.locator('.authorization__btn path').first(), 'fill', '--ink');
+    await operation.locator('.try-out__btn').click();
+    for (const parameter of ['favorite', 'unread', 'sort', 'fuzzy']) {
+      const field = operation.locator(`tr[data-param-name="${parameter}"] select`);
+      await field.waitFor();
+      assert.equal(await field.getAttribute('aria-label'), `${parameter} (query)`);
+    }
+    const example = operation.locator('.highlight-code .microlight').first();
+    await expectThemeColor(example, 'backgroundColor', '--surface');
+    await expectThemeColor(example, 'color', '--ink');
+    await example.focus(); await example.press('Tab'); await page.keyboard.press('Shift+Tab');
+    assert.ok(await example.evaluate(node => node === document.activeElement), 'API examples accept keyboard focus');
+    await expectThemeColor(example, 'outlineColor', '--focus');
+    const permalink = operation.getByRole('link', { name: 'Permalink to GET /api/links', exact: true });
+    await toggle.click();
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+    await permalink.focus(); await permalink.press('Enter');
+    assert.match(page.url(), /#\/Bookmarks\/listLinks$/);
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'true', 'permalink opens its closed operation');
+    await permalink.press('Enter');
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'true', 'permalink preserves an open operation');
+    await toggle.focus(); await toggle.press('Space');
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+    await toggle.press('Enter');
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
+    await audit(page, `${theme}-api-expanded-${width}`, engine);
+    await noOverflow(page, 'expanded API documentation');
+    await shot(page, `${theme}-api-expanded-${width}`, engine);
+    await page.locator('#docs-theme').click();
+    await expectThemeColor(operation.locator('tbody .header-col').first(), 'color', '--ink');
+    await expectThemeColor(operation.locator('.authorization__btn path').first(), 'fill', '--ink');
+    await page.locator('#docs-theme').click();
+    if (width === 390) {
+      await page.emulateMedia({ forcedColors: 'active' });
+      assert.equal(await operation.locator('.authorization__btn path').first().evaluate(node => getComputedStyle(node).forcedColorAdjust), 'auto');
+      await page.emulateMedia({ forcedColors: 'none' });
+    }
+  }
+}
 const selected = (process.env.E2E_ENGINES || 'chromium,firefox,webkit').split(',');
 for (const name of selected) {
   const engine = { chromium, firefox, webkit }[name]; assert.ok(engine, `Unknown engine ${name}`);
@@ -80,6 +142,9 @@ for (const name of selected) {
       const card = page.locator('.bookmark-card').filter({ has: page.getByRole('button', { name: link.title, exact: true }) });
       assert.equal(await card.locator('.card-actions-toggle').isVisible(), false, 'desktop retains its icon actions');
       assert.equal(await card.locator('.card-overflow-actions .card-action').count(), 4);
+      await card.locator('.card-overflow-actions .card-action').nth(1).hover();
+      await settleControl(card.locator('.card-overflow-actions .card-action').nth(1));
+      const desktopEditHover = await card.locator('.card-overflow-actions .card-action').nth(1).evaluate(node => getComputedStyle(node).color);
       await card.getByRole('button', { name: `Edit bookmark: ${link.title}`, exact: true }).click();
       await page.locator('#bookmark-dialog .close-dialog').first().click();
       await page.locator('#add-bookmark').click();
@@ -91,11 +156,25 @@ for (const name of selected) {
       await audit(page, `${theme}-editor`, name); await shot(page, `${theme}-editor-landscape`, name);
       await page.locator('#bookmark-dialog .close-dialog').first().click();
       await page.setViewportSize({ width: 390, height: 844 });
+      await card.locator('.card-actions-toggle').click();
+      const editAction = card.locator('.card-overflow-actions .card-action').nth(1);
+      await editAction.hover();
+      await settleControl(editAction);
+      assert.equal(await editAction.evaluate(node => getComputedStyle(node).color), desktopEditHover, 'mobile hover preserves its themed desktop action color');
+      const readAction = card.locator('.card-overflow-actions .card-action').first();
+      await readAction.click();
+      await card.locator('.card-action.read').waitFor();
+      await expectThemeColor(card.locator('.card-action.read'), 'color', '--success');
+      await page.locator('#toast .toast-action').click();
+      await card.locator('.card-action.read').waitFor({ state: 'detached' });
       await page.getByRole('button', { name: 'library-notes.html', exact: true }).click();
       await page.locator('#reader-format-html').waitFor();
       assert.equal(await page.locator('#reader-format-pdf').isVisible(), false);
       await page.locator('#reader-files-toggle').click(); await page.locator('#asset-upload-button').waitFor();
       assert.equal(await page.locator('#reader-notebook').isVisible(), false, 'file management does not open Notes');
+      const deleteFile = page.getByRole('button', { name: 'Delete library-notes.html', exact: true });
+      await deleteFile.hover(); await expectThemeColor(deleteFile, 'color', '--danger');
+      await deleteFile.focus(); await expectThemeColor(deleteFile, 'color', '--danger');
       await audit(page, `${theme}-files`, name); await shot(page, `${theme}-files-mobile`, name);
       await page.getByRole('button', { name: 'Read library-notes.html', exact: true }).click();
       await page.locator('#reader-layout').waitFor();
@@ -118,6 +197,7 @@ for (const name of selected) {
       await page.goto(new URL('/?settings=2fa', base).href);
       await page.locator('#mfa-settings-title').waitFor();
       assert.ok(await page.locator('#mfa-settings-title').evaluate(n => n === document.activeElement && n.getBoundingClientRect().top >= 12), 'direct settings focus stays inside the viewport');
+      await expectThemeColor(page.locator('#mfa-settings-title'), 'outlineColor', '--focus');
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto(base.href); await clickNavigation(page, '#help-button');
       await page.locator('#help-search').fill('capture');
@@ -132,11 +212,13 @@ for (const name of selected) {
       await page.locator('#collection-dialog .close-dialog').first().click();
       await page.goto(new URL('/api-docs/', base).href); await page.locator('#swagger-ui[aria-busy=false]').waitFor();
       await audit(page, `${theme}-api-docs`, name); await noOverflow(page, 'docs'); await shot(page, `${theme}-api-docs-mobile`, name);
+      await expandedDocumentation(page, theme, name);
       assert.deepEqual(errors, [], `${name}: JavaScript errors`);
       await context.close();
       const signedOut = await browser.newContext({ viewport: { width: 390, height: 844 } });
       await signedOut.addInitScript(theme => { try { localStorage.setItem('pocketmark-theme', theme); } catch { /* Saved pages have an opaque origin. */ } }, theme);
       const login = await signedOut.newPage(); await login.goto(base.href); await login.locator('#login-submit').waitFor();
+      await login.locator('#login-view .theme-toggle').hover();
       await audit(login, `${theme}-login`, name); await shot(login, `${theme}-login-mobile`, name);
       await login.locator('#login-username').fill('ui-coverage'); await login.locator('#login-password').fill(password); await login.locator('#login-submit').click();
       await login.locator('#mfa-code-form').waitFor(); await audit(login, `${theme}-mfa`, name); await shot(login, `${theme}-mfa-mobile`, name);
@@ -164,6 +246,11 @@ for (const name of selected) {
     const touch = await browser.newContext({ storageState, viewport: { width: 390, height: 844 }, hasTouch: true, reducedMotion: 'reduce' });
     const touchPage = await touch.newPage(); await touchPage.goto(base.href); await touchPage.locator('#add-bookmark').waitFor();
     await touchPage.locator('#add-bookmark').tap(); await touchPage.locator('#bookmark-dialog').waitFor(); await touchPage.getByRole('button', { name: 'Cancel', exact: true }).tap();
+    await touchPage.goto(new URL('/api-docs/', base).href); await touchPage.locator('#swagger-ui[aria-busy=false]').waitFor();
+    await touchPage.locator('.opblock-tag').filter({ hasText: 'Bookmarks' }).tap();
+    await touchPage.getByRole('link', { name: 'Permalink to GET /api/links', exact: true }).tap();
+    assert.match(touchPage.url(), /#\/Bookmarks\/listLinks$/);
+    await touchPage.locator('#operations-Bookmarks-listLinks .opblock-body').waitFor();
     await touch.close();
   } finally { await browser.close(); }
 }

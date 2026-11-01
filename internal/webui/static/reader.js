@@ -390,7 +390,7 @@
         const passage = Array.from(annotation.quote).slice(0, 100).join("");
         edit.setAttribute("aria-label", `Edit annotation: ${passage}`);
         edit.addEventListener("click", () => editAnnotation(annotation));
-        const remove = el("button", "text-button", "Delete");
+        const remove = el("button", "text-button destructive-action", "Delete");
         remove.setAttribute("aria-label", `Delete annotation: ${passage}`);
         remove.addEventListener("click", async () => {
           if (!await confirmAction("Delete annotation?", "Delete this annotation?", "Delete annotation") || !isCurrent(request)) return;
@@ -677,7 +677,7 @@
 
           row.append(read);
         }
-        const remove = el("button", "text-button", "Delete");
+        const remove = el("button", "text-button destructive-action", "Delete");
         remove.setAttribute("aria-label", `Delete ${asset.name}`);
         remove.addEventListener("click", async () => {
           if (!await confirmAction("Delete saved file?", `Delete saved file “${asset.name}”?`, "Delete file") || !isCurrent(request)) return;

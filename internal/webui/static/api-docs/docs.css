@@ -24,6 +24,11 @@
 .api-docs .swagger-ui .opblock-tag:hover { background: var(--surface); }
 .api-docs .swagger-ui .opblock { box-shadow: none; border-radius: 6px; overflow: hidden; }
 .api-docs .swagger-ui .opblock-summary { padding: 8px; }
+.api-docs .swagger-ui .operation-summary-row { display: flex; align-items: center; }
+.api-docs .swagger-ui .operation-summary-row > .opblock-summary { flex: 1; min-width: 0; }
+.api-docs .swagger-ui .operation-permalink { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; min-height: 28px; margin-right: 6px; border-radius: 4px; color: var(--muted); }
+.api-docs .swagger-ui .operation-permalink:hover { background: var(--accent-soft); color: var(--ink); }
+.api-docs .swagger-ui .operation-permalink svg { width: 16px; height: 16px; }
 .api-docs .swagger-ui .opblock-summary-path { overflow-wrap: anywhere; }
 .api-docs .swagger-ui .opblock-summary-description { font-size: 13px; }
 .api-docs .swagger-ui .btn { box-shadow: none; border-radius: 6px; }
@@ -46,13 +51,21 @@
 .api-docs .swagger-ui .dialog-ux .modal-ux-header h3, .api-docs .swagger-ui .dialog-ux .modal-ux-content h4,
 .api-docs .swagger-ui .auth-container p, .api-docs .swagger-ui .auth-container h4,
 .api-docs .swagger-ui .renderedMarkdown p, .api-docs .swagger-ui .renderedMarkdown li { color: var(--ink); font-family: inherit; }
+.api-docs .swagger-ui tbody .header-col { color: var(--ink); }
+.api-docs .swagger-ui .headers .header-example { color: var(--muted); }
+.api-docs .swagger-ui .response-control-media-type__accept-message,
+.api-docs .swagger-ui .response-control-media-type__accept-message code { color: var(--success); }
 .api-docs .swagger-ui .opblock-control-arrow svg, .api-docs .swagger-ui .authorization__btn svg,
 .api-docs .swagger-ui .expand-operation svg, .api-docs .swagger-ui .modal-ux-header .close-modal svg { fill: var(--ink); }
 .api-docs .swagger-ui .opblock-tag svg { color: var(--ink); fill: var(--ink); }
+.api-docs .swagger-ui :is(.opblock-control-arrow, .authorization__btn, .expand-operation, .close-modal, .opblock-tag, .btn.authorize) svg path { fill: var(--ink); forced-color-adjust: auto; }
 .api-docs .swagger-ui .btn.execute { background: var(--accent); color: white; border-color: var(--accent); }
 .api-docs .swagger-ui .btn.execute:hover { background: var(--accent-hover); }
 .api-docs .swagger-ui .responses-inner h4, .api-docs .swagger-ui .responses-inner h5 { color: var(--ink); }
 .api-docs .swagger-ui .highlight-code, .api-docs .swagger-ui .microlight { background: var(--surface); color: var(--ink); }
+/* Swagger also writes its code palette inline with syntax highlighting off. */
+.api-docs .swagger-ui .highlight-code .microlight { background: var(--surface) !important; color: var(--ink) !important; }
+.api-docs .swagger-ui .highlight-code .microlight:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .api-docs .swagger-ui .opblock .opblock-summary-method { text-shadow: none; }
 .api-docs .swagger-ui .opblock.opblock-get .opblock-summary-method { background: #245e9b; }
 .api-docs .swagger-ui .opblock.opblock-post .opblock-summary-method { background: #23714a; }
@@ -65,11 +78,15 @@
   .docs-intro { align-items: flex-start; flex-direction: column; gap: 16px; }
   .api-docs .swagger-ui .opblock-summary { flex-wrap: wrap; gap: 4px; }
   .api-docs .swagger-ui .opblock-summary-description { flex-basis: 100%; }
-  .api-docs .swagger-ui .opblock-summary-path { max-width: calc(100% - 125px); font-size: 12px; }
+  .api-docs .swagger-ui .opblock-summary-path { max-width: 100%; font-size: 12px; }
   .api-docs .swagger-ui .opblock-summary-method { min-width: 62px; font-size: 12px; }
   .api-docs .swagger-ui .opblock-body { overflow-x: auto; }
   .api-docs .swagger-ui .auth-container { padding: 16px 0; }
   .api-docs .swagger-ui .auth-container input { width: 100%; }
   .api-docs .swagger-ui .dialog-ux .modal-ux { width: calc(100% - 24px); }
   .api-docs .swagger-ui .btn, .api-docs .swagger-ui .opblock-tag { min-height: 44px; }
+  .api-docs .swagger-ui .operation-permalink { width: 44px; min-height: 44px; }
+}
+@media (forced-colors: active) {
+  .api-docs .swagger-ui :is(.opblock-control-arrow, .authorization__btn, .expand-operation, .close-modal, .opblock-tag, .btn.authorize) svg path { fill: ButtonText; }
 }

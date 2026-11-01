@@ -13,12 +13,14 @@ html[data-theme="dark"] body.api-docs { --secondary-link: var(--focus); color-sc
 :is(#login-view, #settings-page, #help-dialog, .api-docs) :is(input, select, textarea) { border-color: var(--control-line); }
 :is(#login-view, #settings-page, #help-dialog, .api-docs) :is(button, a, input, select, textarea, summary):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 :is(#login-view, #settings-page, #help-dialog, .api-docs) .subtle:hover { background: var(--control-hover); border-color: var(--control-line); }
+#login-view .login-intro .theme-toggle:is(:hover, :focus-visible) { background: #ffffff12; border-color: #ffffff80; }
 :is(#login-view, #settings-page, #help-dialog, .api-docs) .primary:active { background: var(--accent-hover); }
 :is(#login-view, #settings-page, #help-dialog, .api-docs) button:disabled { opacity: .48; cursor: default; }
 :is(#login-view, #settings-page, #help-dialog, .api-docs) .form-error { color: var(--danger); margin-block: 8px 12px; }
 :is(#login-view, #settings-page) .field-hint { margin-top: 6px; }
 :is(#login-form, #mfa-code-form, #settings-page form) > label { margin-top: 16px; margin-bottom: 6px; }
 #settings-page h2 { scroll-margin-top: 16px; }
+#settings-page h2:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 #settings-page .session-times { font-size: 13px; gap: 8px 16px; }
 #settings-page :is(.settings-panel, .settings-intro) > p { max-width: 72ch; }
 #help-topics summary:hover { background: var(--control-hover); }
@@ -71,6 +73,7 @@ html[data-theme="dark"] body.api-docs { --secondary-link: var(--focus); color-sc
 #reader-files { margin-block: 24px; padding-block: 20px; border-block: 1px solid var(--line); }
 #reader-files .section-heading { gap: 12px; margin-top: 0; }
 #reader-files .section-heading h3 { margin-right: auto; }
+#reader-dialog .text-button.destructive-action:is(:hover, :focus-visible) { color: var(--danger); }
 
 @supports (transition-behavior: allow-discrete) {
   #reader-notebook, #reader-files { opacity: 1; transition: opacity 160ms ease-out, display 160ms allow-discrete; }

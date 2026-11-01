@@ -11,8 +11,10 @@ async function loadDocs({ responseOK = true, invalidJSON = false, bundle = true 
     if (!elements.has(id)) elements.set(id, {
       hidden: false, attributes: {}, events: {},
       setAttribute(key, value) { this.attributes[key] = value; },
+      getAttribute(key) { return this.attributes[key] ?? null; },
       addEventListener(event, handler) { this.events[event] = handler; },
       querySelector(selector) { return element(selector === '.operation-filter-input' ? 'filter' : 'auth-close'); },
+      querySelectorAll() { return []; },
     });
     return elements.get(id);
   }
@@ -23,6 +25,7 @@ async function loadDocs({ responseOK = true, invalidJSON = false, bundle = true 
     querySelector: element,
   };
   let config;
+  let mutation;
   let reloads = 0;
   const requests = [];
   const spec = { openapi: '3.0.3', paths: {} };
@@ -31,7 +34,7 @@ async function loadDocs({ responseOK = true, invalidJSON = false, bundle = true 
     document,
     PocketmarkThemeSwitch: { create: options => require("./static/theme-switch.js").create(options, { document }) },
     window: { SwaggerUIBundle },
-    MutationObserver: class { constructor(callback) { this.callback = callback; } observe() { this.callback(); } disconnect() {} },
+    MutationObserver: class { constructor(callback) { mutation = callback; } observe() { mutation(); } disconnect() {} },
     localStorage: { setItem() { throw new Error('storage denied'); } },
     location: { reload() { reloads++; } },
     fetch: async (...args) => {
@@ -40,7 +43,7 @@ async function loadDocs({ responseOK = true, invalidJSON = false, bundle = true 
     },
   });
   await new Promise(resolve => setImmediate(resolve));
-  return { elements, document, config, requests, spec, reloads: () => reloads };
+  return { elements, document, config, requests, spec, reloads: () => reloads, mutation: () => mutation(), element };
 }
 
 test('docs use the local spec without external validation, URL overrides or saved authorization', async () => {
@@ -83,4 +86,42 @@ test('theme switching remains usable when browser storage is denied', async () =
   button.events.click();
   assert.equal(document.documentElement.dataset.theme, 'dark');
   assert.equal(button.attributes['aria-pressed'], 'true');
+});
+
+test('late-rendered API fields get names without replacing existing labels', async () => {
+  const view = await loadDocs();
+  const fields = ['unnamed', 'explicit', 'associated', 'native'].map(view.element);
+  fields[1].setAttribute('aria-label', 'Existing name');
+  fields[2].setAttribute('aria-labelledby', 'parameter-label');
+  fields[3].labels = [{}];
+  const example = view.element('example');
+  view.elements.get('swagger-ui').querySelectorAll = selector => selector === 'tr[data-param-name]' ? [{
+    dataset: { paramName: 'favorite', paramIn: 'query' }, querySelectorAll: () => fields,
+  }] : [example];
+  view.mutation(); view.mutation();
+  assert.equal(fields[0].attributes['aria-label'], 'favorite (query)');
+  assert.equal(fields[1].attributes['aria-label'], 'Existing name');
+  assert.equal(fields[2].attributes['aria-label'], undefined);
+  assert.equal(fields[3].attributes['aria-label'], undefined);
+  assert.equal(example.attributes.tabindex, '0');
+  assert.equal(example.attributes.role, 'region');
+  assert.equal(example.attributes['aria-label'], 'API example');
+});
+
+test('operation permalinks open a closed operation while preserving open and modified clicks', async () => {
+  const { config } = await loadDocs();
+  const React = { createElement: (type, props, ...children) => ({ type, props, children }) };
+  const wrapper = config.plugins[1]({ React }).wrapComponents.OperationSummary(() => {});
+  const values = { isDeepLinkingEnabled: true, method: 'get', path: '/api/links', tag: 'Reading & tags', operationId: 'find/links' };
+  let opened = 0;
+  const render = isShown => wrapper({ operationProps: { get: key => values[key] }, isShown, toggleShown: () => opened++ });
+  const link = render(false).children[1];
+  assert.equal(link.type, 'a');
+  assert.equal(link.props.href, '#/Reading%20%26%20tags/find%2Flinks');
+  link.props.onClick({ button: 0 });
+  assert.equal(opened, 1);
+  render(true).children[1].props.onClick({ button: 0 });
+  for (const modifier of ['ctrlKey', 'metaKey', 'shiftKey', 'altKey']) link.props.onClick({ button: 0, [modifier]: true });
+  link.props.onClick({ button: 1 });
+  assert.equal(opened, 1);
 });

@@ -25,6 +25,45 @@
     reference.querySelector("#servers")?.setAttribute("aria-label", "API server");
     reference.querySelector(".operation-filter-input")?.setAttribute("aria-label", "Filter API operations");
     reference.querySelector(".modal-ux-header .close-modal")?.setAttribute("aria-label", "Close authorizations");
+    for (const row of reference.querySelectorAll("tr[data-param-name]")) {
+      for (const field of row.querySelectorAll("input, select, textarea")) {
+        if (!field.getAttribute("aria-label") && !field.getAttribute("aria-labelledby") && !field.labels?.length) {
+          field.setAttribute("aria-label", `${row.dataset.paramName} (${row.dataset.paramIn})`);
+        }
+      }
+    }
+    for (const example of reference.querySelectorAll(".highlight-code .microlight")) {
+      example.setAttribute("tabindex", "0");
+      example.setAttribute("role", "region");
+      example.setAttribute("aria-label", "API example");
+    }
+  }
+  function accessibleOperations({ React }) {
+    const plainPath = ({ text }) => React.createElement("span", null, text);
+    return { wrapComponents: {
+      // The upstream path link sits inside the summary button. Keep its text
+      // there and expose the permalink as a separate keyboard target.
+      OperationSummaryPath: (Original) => (props) => React.createElement(Original, {
+        ...props,
+        getComponent: (name, ...args) => name === "DeepLink" ? plainPath : props.getComponent(name, ...args),
+      }),
+      OperationSummary: (Original) => (props) => {
+        const operation = props.operationProps;
+        if (!operation.get("isDeepLinkingEnabled")) return React.createElement(Original, props);
+        const label = `Permalink to ${operation.get("method").toUpperCase()} ${operation.get("path")}`;
+        const href = `#/${encodeURIComponent(operation.get("tag"))}/${encodeURIComponent(operation.get("operationId"))}`;
+        const openOperation = (event) => {
+          if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+          if (!props.isShown) props.toggleShown(event);
+        };
+        return React.createElement("div", { className: "operation-summary-row" },
+          React.createElement(Original, props),
+          React.createElement("a", { className: "operation-permalink", href, onClick: openOperation, "aria-label": label, title: label },
+            React.createElement("svg", { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", focusable: "false" },
+              React.createElement("path", { d: "M10 13a5 5 0 0 0 7 .1l3-3a5 5 0 0 0-7.1-7.1l-1.7 1.7M14 11a5 5 0 0 0-7-.1l-3 3a5 5 0 0 0 7.1 7.1l1.7-1.7" }))),
+        );
+      },
+    } };
   }
   // Swagger renders these controls after its completion callback and on demand.
   const controls = new MutationObserver(labelControls);
@@ -44,7 +83,7 @@
             // The HttpOnly owner cookie is automatic, not a credential to paste.
             definitionsToAuthorize: (original) => (...args) => original(...args).filter((definition) => !definition.has("ownerSession")),
           } } },
-        })],
+        }), accessibleOperations],
         layout: "BaseLayout",
         deepLinking: true,
         filter: true,
