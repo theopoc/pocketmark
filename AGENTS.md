@@ -39,7 +39,10 @@ against the RAM goal.
   [real-client evidence](docs/REAL_CLIENTS.md). Distinguish protocol tests from
   observed and untested clients; Android's prolonged-offline cache issue remains upstream.
 - Interface changes: read [DESIGN.md](DESIGN.md), the source of truth for current
-  design rules, before editing the web UI, API documentation or extension UI.
+  design rules, before editing the web UI, API documentation or extension UI. When
+  a change affects the library page shown in the README, refresh
+  `docs/pocketmark-dark-preview.jpg` from the current rendered page with disposable
+  data, and verify the image matches the updated interface.
 
 ## Verification and delivery
 

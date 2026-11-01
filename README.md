@@ -10,7 +10,7 @@ A personal bookmark manager built for low RAM usage: one Go process, SQLite and 
 [![Releases](https://img.shields.io/badge/GitHub-Releases-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/theopoc/pocketmark/releases)
 [![Issues](https://img.shields.io/badge/GitHub-Issues-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/theopoc/pocketmark/issues)
 
-![Pocketmark bookmark library in dark theme with collections, tags and search](docs/pocketmark-dark-preview.jpg)
+![Pocketmark bookmark library in dark theme with filters, tags and search](docs/pocketmark-dark-preview.jpg)
 
 ## Features
 
