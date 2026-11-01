@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.1](https://github.com/theopoc/pocketmark/compare/v1.3.0...v1.3.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* **security:** harden credentials and previews and gate security scans ([00794c1](https://github.com/theopoc/pocketmark/commit/00794c19f29f298c9c53983e428214b863e88b85))
+* **ui:** match the approved API key page design ([ecce08b](https://github.com/theopoc/pocketmark/commit/ecce08bf0933e108c7cd592c4f0cf3b76d9c9513))
+
 ## [1.3.0](https://github.com/theopoc/pocketmark/compare/v1.2.0...v1.3.0) (2026-11-01)
 
 
