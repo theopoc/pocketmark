@@ -547,10 +547,22 @@ try {
   await card(original).getByRole('button', { name: `Add to favorites: ${original}` }).click();
   const undo = page.locator('#toast').getByRole('button', { name: 'Undo' });
   await undo.waitFor({ state: 'visible' });
+  assert.equal(await page.locator('#toast').getAttribute('role'), 'status');
+  assert.ok(await undo.evaluate(node => {
+    const button = node.getBoundingClientRect(), notice = node.closest('#toast').getBoundingClientRect();
+    return button.height >= 44 && notice.left >= 0 && notice.right <= innerWidth;
+  }), 'favorite feedback and its touch target fit the phone viewport');
   await undo.focus();
   await page.waitForTimeout(12500);
   assert.equal(await undo.isVisible(), true, 'the undo action stays available while focused');
   await undo.press('Enter');
+  await card(original).getByRole('button', { name: `Add to favorites: ${original}` }).waitFor();
+  await card(original).getByRole('button', { name: `Add to favorites: ${original}` }).click();
+  await card(original).getByRole('button', { name: `Remove from favorites: ${original}` }).click();
+  await page.locator('#toast').filter({ hasText: 'Removed from favorites.' }).waitFor();
+  await undo.click();
+  await card(original).getByRole('button', { name: `Remove from favorites: ${original}` }).waitFor();
+  await card(original).getByRole('button', { name: `Remove from favorites: ${original}` }).click();
   await card(original).getByRole('button', { name: `Add to favorites: ${original}` }).waitFor();
   for (const [endpoint, input, status, file] of [
     ['**/api/import', '#import-file', '#import-progress', { name: 'bookmarks.json', mimeType: 'application/json', buffer: Buffer.from('{}') }],

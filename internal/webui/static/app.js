@@ -314,7 +314,7 @@
     if (button && button.id !== "close-navigation" && button.id !== "sidebar-mode" && !button.hasAttribute("data-keep-navigation")) closeNavigation();
   }, true);
 
-  function toast(message, error = false, action = null) {
+  function toast(message, error = false, action = null, favorite = null) {
     clearTimeout(toastTimer);
     toastActionPending = true;
     const notice = $("toast");
@@ -322,8 +322,13 @@
     // layer to be visible and exposed to assistive technology.
     const dialogs = [...document.querySelectorAll("dialog[open]")];
     (dialogs.at(-1) || document.body).append(notice);
-    notice.replaceChildren(el("span", "", message));
+    notice.replaceChildren(el("span", "toast-message", message));
     notice.className = error ? "error" : "";
+    if (!error && favorite !== null) {
+      notice.classList.add("favorite-notice");
+      notice.classList.toggle("is-added", favorite);
+      notice.prepend(icon("star"));
+    }
     notice.setAttribute("role", error ? "alert" : "status");
     if (action) {
       const button = el("button", "toast-action", action.label);
@@ -794,7 +799,7 @@
         await api(`/api/links/${link.id}`, { method: "PUT", body: JSON.stringify({ ...editable(latest), [field]: link[field] }) });
         await refresh();
         toast("Change undone.");
-      } });
+      } }, field === "favorite" ? changes.favorite : null);
     } catch (error) { toast(error.message, true); if (button) button.disabled = false; }
   }
 
