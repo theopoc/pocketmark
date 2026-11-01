@@ -11,6 +11,13 @@ import { openSettings, refreshSessionsBeforeMFA } from './settings.mjs';
 
 const base = new URL(process.env.E2E_BASE_URL);
 assert.equal(base.hostname, '127.0.0.1', 'E2E requires a disposable loopback instance');
+async function chooseOption(page, id, label) {
+  const trigger = page.locator(`#${id}-trigger`);
+  await trigger.click();
+  assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
+  await page.locator(`#${id}-options`).getByRole('option', { name: label, exact: true }).click();
+  assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+}
 // Use full Chromium's headless mode: the headless shell omits the native PDF viewer.
 const browser = await chromium.launch(process.env.E2E_CHROMIUM_EXECUTABLE
   ? { executablePath: process.env.E2E_CHROMIUM_EXECUTABLE }
@@ -537,7 +544,7 @@ try {
     assert.ok(await page.locator(`#${id}`).evaluate(node => node.getBoundingClientRect().height >= 44), `${id} has a mobile touch target`);
   }
   await page.locator('#bulk-open').click();
-  await page.locator('#bulk-capture').click();
+  await page.locator('#bulk-menu [data-bulk-action="capture"]').click();
   assert.ok(await page.locator('#bulk-apply').evaluate(node => {
     const button = node.getBoundingClientRect(), dialog = node.closest('dialog').getBoundingClientRect();
     return button.height >= 44 && button.left >= dialog.left && button.right <= dialog.right;
@@ -602,7 +609,7 @@ try {
     if (saved) assert.ok(await page.locator(`#reader-format-${format}`).evaluate(node => node.getBoundingClientRect().height >= 44));
   }
   await page.locator('#reader-options summary').click();
-  for (const selector of ['#reader-original', '#reader-notebook-toggle', '#reader-text-mode', '#reader-size']) {
+  for (const selector of ['#reader-original', '#reader-notebook-toggle', '#reader-text-mode', '#reader-size-trigger']) {
     assert.ok(await page.locator(selector).evaluate(node => node.getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
   }
   await page.locator('#reader-files-toggle').click();
@@ -648,7 +655,7 @@ try {
   assert.equal(await page.locator('#tags-search').inputValue(), '');
   assert.equal(await page.locator('#tags-search').evaluate(node => document.activeElement === node), true);
   await page.locator('#tags-list').getByRole('button', { name: '#reading 1 bookmark' }).waitFor();
-  await page.locator('#tags-letter-picker').selectOption('R');
+  await chooseOption(page, 'tags-letter-picker', 'R');
   await page.waitForFunction(() => document.activeElement.id === 'tags-letter-R');
   await page.locator('#tags-list').getByRole('button', { name: '#reading 1 bookmark' }).click();
   await card(original).waitFor();
@@ -682,6 +689,7 @@ try {
   await page.locator('#empty-title').filter({ hasText: 'This collection is empty' }).waitFor();
   await page.locator('#empty-add').click();
   assert.equal(await page.locator('#bookmark-collection option:checked').textContent(), collectionName);
+  assert.equal(await page.locator('#bookmark-collection-trigger').innerText(), collectionName);
   await page.locator('#bookmark-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.locator('#empty-reset').click();
   await card(original).waitFor();
@@ -810,7 +818,7 @@ try {
     page.waitForEvent('console', { predicate: message => /frame-src/.test(message.text()) && /Content Security Policy/.test(message.text()) }),
     capture.locator('#noscript-link').click(),
   ]);
-  await page.locator('#asset-viewer-select').selectOption({ label: 'legacy.html' });
+  await chooseOption(page, 'asset-viewer-select', 'legacy.html');
   await capture.getByRole('heading', { name: 'Café €' }).waitFor();
   await page.getByRole('button', { name: 'Close preview', exact: true }).click();
   await page.locator('#reader-format-image').click();

@@ -38,7 +38,7 @@
         </div>
         <div class="field">
           <label for="tag-input">Tags</label><ul id="selected-tags" aria-label="Selected tags"></ul>
-          <div class="tag-entry"><input id="tag-input" list="tag-options" placeholder="Choose or create a tag" aria-describedby="tag-hint"><button id="add-tag" type="button" class="secondary">Add</button></div>
+          <div class="tag-entry"><input id="tag-input" placeholder="Choose or create a tag" aria-describedby="tag-hint"><button id="add-tag" type="button" class="secondary">Add</button></div>
           <datalist id="tag-options"></datalist><p id="tag-hint" class="hint" role="status">Press Enter or use commas to add tags.</p>
         </div>
         <details id="capture-options" class="capture-disclosure">
@@ -68,5 +68,6 @@
     <div id="task-actions" class="actions" hidden><button id="retry" type="button">Retry failed items</button><button id="discard" type="button" class="text-button">Discard pending files</button></div>
     <p id="background-note" class="hint" hidden>You can close this popup. Work continues in Chrome.</p>
   </footer>
+  <script src="selectors.js" defer></script>
 </body>
 </html>

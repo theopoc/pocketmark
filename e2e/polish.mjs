@@ -91,9 +91,17 @@ async function expandedDocumentation(page, theme, engine) {
     await operation.locator('.try-out__btn').click();
     for (const parameter of ['favorite', 'unread', 'sort', 'fuzzy']) {
       const field = operation.locator(`tr[data-param-name="${parameter}"] select`);
-      await field.waitFor();
+      await field.waitFor({ state: 'attached' });
       assert.equal(await field.getAttribute('aria-label'), `${parameter} (query)`);
+      await operation.getByRole('combobox', { name: `${parameter} (query)` }).waitFor();
     }
+    const sort = operation.getByRole('combobox', { name: 'sort (query)' });
+    await sort.click();
+    await page.getByRole('option', { name: 'oldest', exact: true }).click();
+    assert.equal(await operation.locator('tr[data-param-name="sort"] select').inputValue(), 'oldest');
+    assert.match(await sort.textContent(), /oldest/);
+    await sort.focus(); await sort.press('ArrowDown'); await sort.press('Escape');
+    assert.equal(await sort.getAttribute('aria-expanded'), 'false');
     const example = operation.locator('.highlight-code .microlight').first();
     await expectThemeColor(example, 'backgroundColor', '--surface');
     await expectThemeColor(example, 'color', '--ink');

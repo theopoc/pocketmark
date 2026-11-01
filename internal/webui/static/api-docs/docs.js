@@ -21,8 +21,29 @@
 
   const status = document.getElementById("docs-status");
   const reference = document.getElementById("swagger-ui");
+  // Swagger owns and may replace these DOM nodes during React updates. Leave
+  // each native select in place and dispose its adjacent control when removed.
+  const enhancedSelects = new Map();
+  function selectorState(select) {
+    return JSON.stringify([select.selectedIndex, select.disabled, [...select.options].map(option => [option.value, option.textContent, option.disabled])]);
+  }
+  function syncSelectors() {
+    for (const [select] of enhancedSelects) {
+      if (!reference.contains(select) || !select.nextElementSibling?.classList.contains("app-select")) {
+        globalThis.PocketmarkSelect.destroy(select);
+        enhancedSelects.delete(select);
+      }
+    }
+    for (const select of reference.querySelectorAll("select:not([hidden]):not([multiple])")) {
+      const state = selectorState(select);
+      if (!enhancedSelects.has(select)) globalThis.PocketmarkSelect.enhance(select);
+      else if (enhancedSelects.get(select) !== state) globalThis.PocketmarkSelect.sync(select);
+      enhancedSelects.set(select, state);
+    }
+  }
   function labelControls() {
-    reference.querySelector("#servers")?.setAttribute("aria-label", "API server");
+    const servers = reference.querySelector("#servers");
+    if (servers && servers.getAttribute("aria-label") !== "API server") servers.setAttribute("aria-label", "API server");
     reference.querySelector(".operation-filter-input")?.setAttribute("aria-label", "Filter API operations");
     reference.querySelector(".modal-ux-header .close-modal")?.setAttribute("aria-label", "Close authorizations");
     for (const row of reference.querySelectorAll("tr[data-param-name]")) {
@@ -37,6 +58,7 @@
       example.setAttribute("role", "region");
       example.setAttribute("aria-label", "API example");
     }
+    syncSelectors();
   }
   function accessibleOperations({ React }) {
     const plainPath = ({ text }) => React.createElement("span", null, text);

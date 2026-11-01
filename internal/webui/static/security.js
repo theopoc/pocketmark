@@ -43,6 +43,7 @@ globalThis.PocketmarkSecurity = {
         $("sessions-list").replaceChildren();
         const current = sessions.find(session => session.current);
         $("session-idle").value = String(current?.idleTimeoutMinutes ?? 1440);
+        globalThis.PocketmarkSelect?.sync($("session-idle"));
         $("sessions-others").disabled = !sessions.some(session => !session.current);
         if (!sessions.length) $("sessions-list").append(node("li", "No active browser sessions.", "muted"));
         for (const session of sessions) {

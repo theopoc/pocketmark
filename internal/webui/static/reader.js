@@ -447,6 +447,7 @@
       $("annotation-color").value = annotation.color || "yellow";
       const draft = drafts.get(annotationKey());
       if (draft) { $("annotation-note").value = draft.note; $("annotation-color").value = draft.color; }
+      browser.PocketmarkSelect?.sync($("annotation-color"));
       $("annotation-draft-notice").hidden = !draft;
       $("annotation-error").textContent = "";
       $("annotation-dialog").showModal();
@@ -583,6 +584,7 @@
       const url = asset.basicArchive ? `/api/links/${state.reading.id}/reader` : `/api/assets/${asset.id}/view`;
       $("asset-viewer-content").replaceChildren();
       $("asset-viewer-select").value = String(asset.id);
+      browser.PocketmarkSelect?.sync($("asset-viewer-select"));
       $("asset-viewer-download").href = asset.basicArchive ? `/api/links/${state.reading.id}/archive` : `/api/assets/${asset.id}`;
       $("asset-viewer-status").textContent = "Opening saved file…";
       $("asset-viewer-retry").hidden = true;

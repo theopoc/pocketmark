@@ -27,12 +27,19 @@ async function loadDocs({ responseOK = true, invalidJSON = false, bundle = true 
   let config;
   let mutation;
   let reloads = 0;
+  const selectorEvents = [];
+  const selectAPI = {
+    enhance(select) { selectorEvents.push(['enhance', select]); select.nextElementSibling = { classList: { contains: name => name === 'app-select' } }; },
+    sync(select) { selectorEvents.push(['sync', select]); },
+    destroy(select) { selectorEvents.push(['destroy', select]); select.nextElementSibling = null; },
+  };
   const requests = [];
   const spec = { openapi: '3.0.3', paths: {} };
   const SwaggerUIBundle = bundle ? Object.assign(options => { config = options; options.onComplete(); }, { presets: { apis: {} } }) : undefined;
   vm.runInNewContext(source, {
     document,
     PocketmarkThemeSwitch: { create: options => require("./static/theme-switch.js").create(options, { document }) },
+    PocketmarkSelect: selectAPI,
     window: { SwaggerUIBundle },
     MutationObserver: class { constructor(callback) { mutation = callback; } observe() { mutation(); } disconnect() {} },
     localStorage: { setItem() { throw new Error('storage denied'); } },
@@ -43,7 +50,7 @@ async function loadDocs({ responseOK = true, invalidJSON = false, bundle = true 
     },
   });
   await new Promise(resolve => setImmediate(resolve));
-  return { elements, document, config, requests, spec, reloads: () => reloads, mutation: () => mutation(), element };
+  return { elements, document, config, requests, spec, selectorEvents, reloads: () => reloads, mutation: () => mutation(), element };
 }
 
 test('docs use the local spec without external validation, URL overrides or saved authorization', async () => {
@@ -97,7 +104,7 @@ test('late-rendered API fields get names without replacing existing labels', asy
   const example = view.element('example');
   view.elements.get('swagger-ui').querySelectorAll = selector => selector === 'tr[data-param-name]' ? [{
     dataset: { paramName: 'favorite', paramIn: 'query' }, querySelectorAll: () => fields,
-  }] : [example];
+  }] : selector === '.highlight-code .microlight' ? [example] : [];
   view.mutation(); view.mutation();
   assert.equal(fields[0].attributes['aria-label'], 'favorite (query)');
   assert.equal(fields[1].attributes['aria-label'], 'Existing name');
@@ -106,6 +113,27 @@ test('late-rendered API fields get names without replacing existing labels', asy
   assert.equal(example.attributes.tabindex, '0');
   assert.equal(example.attributes.role, 'region');
   assert.equal(example.attributes['aria-label'], 'API example');
+});
+
+test('late Swagger selectors are enhanced once, synchronized and disposed when React removes them', async () => {
+  const view = await loadDocs();
+  const reference = view.elements.get('swagger-ui');
+  const select = { selectedIndex: 0, disabled: false, options: [{ value: 'one', textContent: 'One', disabled: false }] };
+  let selects = [select];
+  reference.contains = node => selects.includes(node);
+  reference.querySelectorAll = selector => selector === 'select:not([hidden]):not([multiple])' ? selects : [];
+  view.mutation(); view.mutation();
+  assert.deepEqual(view.selectorEvents.map(([type]) => type), ['enhance']);
+  select.options.push({ value: 'two', textContent: 'Two', disabled: false });
+  view.mutation();
+  assert.deepEqual(view.selectorEvents.map(([type]) => type), ['enhance', 'sync']);
+  // React may clear the added sibling while retaining the source select.
+  select.nextElementSibling = null;
+  view.mutation();
+  assert.deepEqual(view.selectorEvents.map(([type]) => type), ['enhance', 'sync', 'destroy', 'enhance']);
+  selects = [];
+  view.mutation();
+  assert.deepEqual(view.selectorEvents.map(([type]) => type), ['enhance', 'sync', 'destroy', 'enhance', 'destroy']);
 });
 
 test('operation permalinks open a closed operation while preserving open and modified clicks', async () => {

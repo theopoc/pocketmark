@@ -43,6 +43,7 @@ function controls() {
   $("connection-toggle").setAttribute("aria-expanded", String(settingsOpen));
   $("connect").disabled = connecting || task?.status === "running";
   $("connect").textContent = connecting ? "Connecting…" : "Connect";
+  globalThis.PocketmarkSelectors?.sync();
   captureHint();
 }
 function showSettings(open) {
@@ -86,10 +87,12 @@ function renderCollections(selected = "") {
     options($("collection"), collectionPath(collection), collection.id); options($("collection-parent"), collectionPath(collection), collection.id);
   }
   $("collection").value = String(selected || "");
+  globalThis.PocketmarkSelectors?.sync();
 }
 function tagOptions(values) {
   $("tag-options").replaceChildren();
   for (const tag of values) if (!tags.includes(tag.name)) options($("tag-options"), tag.name, tag.name);
+  globalThis.PocketmarkSelectors?.refreshTags();
 }
 async function load() {
   loaded = false; controls();
@@ -97,9 +100,9 @@ async function load() {
   const data = await send("load", { tabId: activeTab.id });
   collections = data.collections;
   renderCollections(data.link?.collectionId);
-  tagOptions(data.tags);
   $("title").value = data.link?.title || activeTab.title || activeTab.url;
   tags = data.link?.tags || []; renderTags();
+  tagOptions(data.tags);
   $("save").textContent = data.link ? "Save changes" : "Save bookmark";
   status(task && (task.status !== "done" || task.fields.url === activeTab?.url) ? "" : data.link ? "Already saved. Edit its title, collection or tags." : "Ready to save this page.");
   if (data.link && task?.status === "done" && task.server === data.server && task.fields.url === activeTab.url) status("Saved to Pocketmark.", false, true);
@@ -195,6 +198,7 @@ function collectionEditor(open) {
   collectionNameLimit.update();
   $("collection-create").hidden = !open; $("new-collection").setAttribute("aria-expanded", String(open));
   if (open) { $("create-collection").disabled = false; $("create-collection").textContent = "Create collection"; $("collection-name").readOnly = false; $("collection-parent").disabled = false; $("collection-parent").value = $("collection").value; $("collection-name").focus(); }
+  globalThis.PocketmarkSelectors?.sync();
 }
 $("new-collection").addEventListener("click", () => collectionEditor($("collection-create").hidden));
 $("cancel-collection").addEventListener("click", () => { collectionEditor(false); $("new-collection").focus(); });
@@ -208,19 +212,20 @@ $("create-collection").addEventListener("click", async () => {
   $("create-collection").disabled = true;
   $("create-collection").textContent = "Creating collection…";
   $("collection-name").readOnly = true; $("collection-parent").disabled = true;
+  globalThis.PocketmarkSelectors?.sync();
   try {
     const collection = await send("collection", { name: $("collection-name").value, parentId: Number($("collection-parent").value) || null });
     collections.push(collection);
     if (session === collectionSession) {
       renderCollections(collection.id); collectionEditor(false); $("collection-name").value = "";
-      $("collection").focus(); status("Collection created and selected.");
+      (globalThis.PocketmarkSelectors?.trigger("collection") || $("collection")).focus(); status("Collection created and selected.");
     } else {
       const parent = $("collection-parent").value;
-      renderCollections($("collection").value); $("collection-parent").value = parent;
+      renderCollections($("collection").value); $("collection-parent").value = parent; globalThis.PocketmarkSelectors?.sync();
       status($("collection-create").hidden ? "Collection created." : "Collection created. Your current draft is unchanged.");
     }
   } catch (error) { status(error.message, true); }
-  finally { if (session === collectionSession) { $("create-collection").disabled = false; $("create-collection").textContent = "Create collection"; $("collection-name").readOnly = false; $("collection-parent").disabled = false; } }
+  finally { if (session === collectionSession) { $("create-collection").disabled = false; $("create-collection").textContent = "Create collection"; $("collection-name").readOnly = false; $("collection-parent").disabled = false; globalThis.PocketmarkSelectors?.sync(); } }
 });
 $("save-form").addEventListener("submit", async (event) => {
   event.preventDefault(); $("save").disabled = true;
