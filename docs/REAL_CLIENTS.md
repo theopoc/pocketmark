@@ -7,7 +7,7 @@
 
 ## Approved interface checks — 1 November 2026
 
-[The approved UI ledger](UI_APPROVED.md) records bounded Chromium, Firefox and
+[The dated UI validation report](UI_VALIDATION_2026-11-01.md) records bounded Chromium, Firefox and
 WebKit checks and exact screenshot comparisons preserving the library actions
 and sort design. Both themes, keyboard focus and emulated phone layouts are
 covered. Extension screenshots use a bounded Chrome API adapter; they do not

@@ -6,7 +6,10 @@
 /tmp/
 /.cache/
 /.claude/
-/.codex/
+/.codex/*
+!/.codex/agents/
+/.codex/agents/*
+!/.codex/agents/design_reviewer.toml
 /.agents/
 /.impeccable/review/
 /.impeccable/questions/
