@@ -198,6 +198,8 @@ Manual light/dark changes crossfade the complete view over 240ms using native br
 ### Chips
 Small rectangular tags use neutral fill, short padding and compact type. Hover or active filter states use the soft accent and indigo text. Long labels truncate rather than widening the navigation drawer.
 
+Quick filters beneath library search use rounded pills. The selected filter uses the accent with white text and a check; inactive filters use the themed control surface and border. They wrap as needed and have 44px minimum height on phones.
+
 ### Capture status
 
 Bookmark capture states use compact rounded badges with a text label and an icon: green Captured, amber Queued / Saving…, red Capture failed, and neutral Not captured. Only Saving… rotates a small ring to indicate active capture. Reduced motion keeps the ring still and preserves the label. Light and dark themes use tinted backgrounds with readable semantic foregrounds; badge placement and card actions remain unchanged.

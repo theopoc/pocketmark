@@ -522,6 +522,9 @@
       button.classList.toggle("active", active);
       if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
     });
+    document.querySelectorAll("[data-quick-filter]").forEach((button) => {
+      button.setAttribute("aria-pressed", String(!showingTags && !state.tag && button.dataset.quickFilter === state.filter));
+    });
     renderActiveFilters();
   }
 
@@ -545,7 +548,7 @@
     (target || root.querySelector(".card-title button") || $("page-title")).focus({ preventScroll: true });
   }
 
-  function selectFilter(filter, collection = null, tag = "") {
+  function selectFilter(filter, collection = null, tag = "", focusHeading = true) {
     clearTimeout(searchTimer);
     state.query = $("search").value.trim();
     clearTimeout(tagsTimer);
@@ -562,7 +565,7 @@
     updateHeading();
     renderCollections();
     refresh();
-    $("page-title").focus();
+    if (focusHeading) $("page-title").focus();
   }
 
   function orderedCollections() {
@@ -1295,6 +1298,10 @@
   });
 
   document.querySelectorAll("[data-filter]").forEach((button) => button.addEventListener("click", () => selectFilter(button.dataset.filter)));
+  document.querySelectorAll("[data-quick-filter]").forEach((button) => button.addEventListener("click", () => {
+    if (!state.tag && state.filter === button.dataset.quickFilter) return;
+    selectFilter(button.dataset.quickFilter, null, "", false);
+  }));
   // Treat an outside click like Escape so each dialog keeps its cancellation guards.
   document.querySelectorAll("dialog").forEach((dialog) => {
     let backdropPress = false;
