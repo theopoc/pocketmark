@@ -120,6 +120,16 @@ test("mobile partial-page warning is emitted after the sheet closes", async () =
   assert.equal(openAtNotice, false); assert.equal(env.get("bulk-dialog").open, false);
   assert.match(env.notices[0][0], /500.*not selected/);
 });
+test("selection labels reflect the visible selection on desktop and phone", async () => {
+  const e = setup(), links = [e.link(1), e.link(2)];
+  e.bulk.render(links); e.bulk.select(links[0], true);
+  for (const id of ["select-page-label", "bulk-select-page-label"]) assert.equal(e.get(id).textContent, "Select all");
+  await fire(e.get("select-page"), "click");
+  for (const id of ["select-page-label", "bulk-select-page-label"]) assert.equal(e.get(id).textContent, "Unselect all");
+  await fire(e.get("bulk-select-page"), "click");
+  assert.equal(e.bulk.has(links[0].id), false); assert.equal(e.bulk.has(links[1].id), false);
+  for (const id of ["select-page-label", "bulk-select-page-label"]) assert.equal(e.get(id).textContent, "Select all");
+});
 test("selecting exactly 500 bookmarks does not report a partial selection", async () => {
   const e = setup(), links = Array.from({ length: 500 }, (_, i) => e.link(i + 1));
   e.bulk.render(links); await fire(e.get("select-page"), "click");
