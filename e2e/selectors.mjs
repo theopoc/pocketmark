@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
+import './navigation-layout.mjs';
 
 const root = new URL('../internal/webui/static/', import.meta.url);
 const html = (await readFile(new URL('index.html', root), 'utf8'))
