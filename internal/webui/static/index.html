@@ -172,19 +172,16 @@
       <div id="bulk-bar" class="bulk-bar" role="group" aria-label="Selected bookmark actions" hidden>
         <div class="bulk-selection"><span id="selected-count" role="status">0 selected</span><span id="selected-outside" hidden></span></div>
         <div class="bulk-buttons">
-          <button id="bulk-move" type="button" class="bulk-button"><span data-icon="folder-input" aria-hidden="true"></span>Move</button>
-          <button id="bulk-tag-action" type="button" class="bulk-button"><span data-icon="tag" aria-hidden="true"></span>Tag</button>
-          <button id="bulk-delete" type="button" class="bulk-button bulk-delete"><span data-icon="trash" aria-hidden="true"></span>Delete</button>
-          <details id="bulk-more" class="bulk-more"><summary id="bulk-open" class="bulk-button">More</summary>
-            <div class="bulk-more-panel">
-              <button id="select-page" type="button" aria-pressed="false">Select page</button>
-              <button id="bulk-favorite" type="button">Favorite status</button>
-              <button id="bulk-read" type="button">Read status</button>
-              <button id="bulk-capture" type="button">Refresh captures</button>
-            </div>
-          </details>
-          <button id="clear-selection" type="button" class="bulk-button bulk-clear" aria-label="Clear selection" title="Clear selection (Esc)"><span data-icon="close" aria-hidden="true"></span></button>
+          <button id="select-page" type="button" class="bulk-button" aria-pressed="false"><span data-icon="list" aria-hidden="true"></span><span id="select-page-label">Select page</span></button>
+          <button id="bulk-move" type="button" class="bulk-button" aria-haspopup="dialog"><span data-icon="folder-input" aria-hidden="true"></span>Move</button>
+          <button id="bulk-tag-action" type="button" class="bulk-button" aria-haspopup="dialog"><span data-icon="tag" aria-hidden="true"></span>Tags</button>
+          <button id="bulk-favorite" type="button" class="bulk-button" aria-haspopup="dialog"><span data-icon="star" aria-hidden="true"></span>Favorites</button>
+          <button id="bulk-read" type="button" class="bulk-button" aria-haspopup="dialog"><span id="bulk-read-icon" aria-hidden="true"></span><span id="bulk-read-label">Read</span></button>
+          <button id="bulk-capture" type="button" class="bulk-button" aria-haspopup="dialog"><span data-icon="refresh" aria-hidden="true"></span>Refresh captures</button>
+          <button id="bulk-delete" type="button" class="bulk-button bulk-delete" aria-haspopup="dialog"><span data-icon="trash" aria-hidden="true"></span>Delete</button>
         </div>
+        <button id="bulk-open" type="button" class="bulk-button bulk-mobile-open" aria-haspopup="dialog"><span data-icon="menu" aria-hidden="true"></span>Actions</button>
+        <button id="clear-selection" type="button" class="bulk-button bulk-clear" aria-label="Clear selection" title="Clear selection (Esc)"><span data-icon="close" aria-hidden="true"></span></button>
       </div>
       <nav id="pagination" class="pagination" aria-label="Results pages" hidden><button id="previous-page" class="button subtle"><span data-icon="arrow-left" aria-hidden="true"></span>Previous</button><span id="page-label"></span><button id="next-page" class="button subtle">Next<span data-icon="arrow-right" aria-hidden="true"></span></button></nav>
       </div>
@@ -238,13 +235,6 @@
       <p id="delete-bookmark-description">Delete <strong id="delete-bookmark-name"></strong> and its saved content? This cannot be undone.</p>
       <p id="delete-bookmark-error" class="form-error" role="alert"></p>
       <div class="dialog-actions"><button id="delete-bookmark-cancel" type="button" class="button subtle close-dialog" autofocus>Cancel</button><button id="delete-bookmark-confirm" type="submit" class="button danger">Delete bookmark</button></div>
-    </form>
-  </dialog>
-  <dialog id="delete-selection-dialog" class="modal compact-modal" role="alertdialog" aria-labelledby="delete-selection-title" aria-describedby="delete-selection-description">
-    <form method="dialog">
-      <div class="dialog-heading"><h2 id="delete-selection-title">Delete bookmarks?</h2></div>
-      <p id="delete-selection-description"></p>
-      <div class="dialog-actions"><button value="cancel" class="button subtle" autofocus>Cancel</button><button value="delete" class="button danger">Delete bookmarks</button></div>
     </form>
   </dialog>
   <dialog id="confirm-action-dialog" class="modal compact-modal" role="alertdialog" aria-labelledby="confirm-action-title" aria-describedby="confirm-action-description">
@@ -339,14 +329,32 @@
     <div id="asset-viewer-content" class="asset-viewer-content"></div>
   </dialog>
 
-<dialog id="bulk-dialog" class="modal compact-modal" aria-labelledby="bulk-title"><form id="bulk-form">
-  <div class="dialog-heading"><h2 id="bulk-title">Selected bookmarks</h2><button type="button" class="icon-button close-dialog" aria-label="Close"><span data-icon="close" aria-hidden="true"></span></button></div>
-  <p id="bulk-scope" class="small muted"></p><details id="bulk-review"><summary>Review selected bookmarks</summary><ul id="bulk-items" class="bulk-items"></ul></details>
-  <label for="bulk-action">Action</label><select id="bulk-action" required><option value="">Choose an action</option><option value="move">Move to collection</option><option value="tags">Replace tags</option><option value="favorite">Favorite status</option><option value="read">Read status</option><option value="capture">Refresh captures</option><option value="delete">Delete bookmarks</option></select>
-  <div id="bulk-move-fields" hidden><label for="bulk-collection">Collection</label><select id="bulk-collection"></select></div>
+<dialog id="bulk-dialog" class="modal compact-modal bulk-dialog" aria-labelledby="bulk-title" aria-describedby="bulk-scope"><form id="bulk-form">
+  <div class="dialog-heading"><button id="bulk-back" type="button" class="icon-button" aria-label="Back to selected bookmark actions" hidden><span data-icon="arrow-left" aria-hidden="true"></span></button><h2 id="bulk-title">Selected bookmarks</h2><button id="bulk-close" type="button" class="icon-button close-dialog" aria-label="Close"><span data-icon="close" aria-hidden="true"></span></button></div>
+  <p id="bulk-scope" class="small muted"></p>
+  <div id="bulk-menu" class="bulk-menu" hidden>
+    <button type="button" data-bulk-action="move"><span data-icon="folder-input" aria-hidden="true"></span>Move to collection<span class="bulk-chevron" data-icon="chevron-right" aria-hidden="true"></span></button>
+    <button type="button" data-bulk-action="tags"><span data-icon="tag" aria-hidden="true"></span>Replace tags<span class="bulk-chevron" data-icon="chevron-right" aria-hidden="true"></span></button>
+    <button type="button" data-bulk-action="favorite"><span data-icon="star" aria-hidden="true"></span>Favorites<span class="bulk-chevron" data-icon="chevron-right" aria-hidden="true"></span></button>
+    <button type="button" data-bulk-action="read"><span id="bulk-menu-read-icon" aria-hidden="true"></span><span id="bulk-menu-read-label">Read</span><span class="bulk-chevron" data-icon="chevron-right" aria-hidden="true"></span></button>
+    <button type="button" data-bulk-action="capture"><span data-icon="refresh" aria-hidden="true"></span>Refresh captures</button>
+    <button id="bulk-select-page" type="button"><span data-icon="list" aria-hidden="true"></span><span id="bulk-select-page-label">Select page</span></button>
+    <button type="button" data-bulk-action="delete" class="bulk-menu-delete"><span data-icon="trash" aria-hidden="true"></span><span id="bulk-menu-delete-label">Delete bookmarks</span></button>
+  </div>
+  <div id="bulk-move-fields" hidden>
+    <label for="bulk-collection-search" class="sr-only">Find a collection</label><input id="bulk-collection-search" type="search" placeholder="Find a collection…" autocomplete="off">
+    <select id="bulk-collection" hidden aria-label="Destination collection" tabindex="-1"></select>
+    <div id="bulk-collections" class="bulk-collections" role="group" aria-label="Destination collection"></div><p id="bulk-collections-empty" class="small muted" hidden>No matching collections.</p>
+  </div>
   <div id="bulk-tags-fields" hidden><label for="bulk-tags">Tags</label><input id="bulk-tags"><p class="small muted">These tags will replace the existing tags on every selected bookmark.</p></div>
-  <div id="bulk-value-fields" hidden><label id="bulk-value-label" for="bulk-value">Set status</label><select id="bulk-value"><option value="true">Yes</option><option value="false">No</option></select></div>
-  <p id="bulk-error" class="form-error" role="alert"></p><div class="dialog-actions"><button type="button" class="button subtle close-dialog">Cancel</button><button id="bulk-apply" class="button primary" type="submit" disabled>Choose an action</button></div>
+  <div id="bulk-status-choices" class="bulk-menu" hidden>
+    <button id="bulk-status-true" type="button"><span id="bulk-status-true-icon" aria-hidden="true"></span><span id="bulk-status-true-label"></span></button>
+    <button id="bulk-status-false" type="button"><span id="bulk-status-false-icon" aria-hidden="true"></span><span id="bulk-status-false-label"></span></button>
+  </div>
+  <p id="bulk-description" hidden></p>
+  <details id="bulk-review"><summary id="bulk-review-label">Review selected bookmarks</summary><ul id="bulk-items" class="bulk-items"></ul></details>
+  <p id="bulk-error" class="form-error" role="alert"></p>
+  <div id="bulk-footer" class="dialog-actions"><button id="bulk-cancel" type="button" class="button subtle close-dialog">Cancel</button><button id="bulk-apply" class="button primary" type="submit">Apply</button></div>
 </form></dialog>
   <dialog id="annotation-dialog" class="modal compact-modal" aria-labelledby="annotation-title"><form id="annotation-form"><div class="dialog-heading"><h2 id="annotation-title">Annotation</h2><button type="button" class="icon-button close-dialog" aria-label="Close"><span data-icon="close" aria-hidden="true"></span></button></div><p id="annotation-draft-notice" class="draft-notice" hidden>Unsaved annotation restored from this tab.</p><blockquote id="annotation-quote"></blockquote><label for="annotation-note">Note</label><textarea id="annotation-note" rows="3"></textarea><label for="annotation-color">Highlight color</label><select id="annotation-color"><option value="yellow">Yellow</option><option value="green">Green</option><option value="blue">Blue</option><option value="pink">Pink</option></select><p id="annotation-error" class="form-error" role="alert"></p><div class="dialog-actions"><button type="button" class="button subtle close-dialog">Cancel</button><button class="button primary" type="submit">Save annotation</button></div></form></dialog>
 

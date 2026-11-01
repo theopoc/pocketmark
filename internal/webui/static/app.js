@@ -145,6 +145,8 @@
     edit: ["m16 3 5 5-12 12-6 1 1-6L16 3Z", "m13 6 5 5"],
     trash: ["M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"],
     external: ["M14 3h7v7M21 3 10 14", "M10 3H3v18h18v-7"],
+    "check-circle": ["m8 12 3 3 5-6", "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"],
+    "star-minus": ["m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z", "M9 11h6"],
     check: ["m5 12 4 4L19 6"], warning: ["m12 3 10 18H2L12 3Z", "M12 9v5M12 17h.01"],
     download: ["M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"],
     upload: ["M12 16V4m-5 5 5-5 5 5M4 16v5h16v-5"],
@@ -453,8 +455,7 @@
   });
 
   const bulk = globalThis.PocketmarkBulk.create({
-    api, toast, onChange: () => refresh(true), onSelectionChange: syncBookmarkSelection, fillCollections,
-    confirmDelete: confirmBulkDelete,
+    api, toast, onChange: () => refresh(true), onSelectionChange: syncBookmarkSelection, fillCollections, icon,
     defaultCollection: () => state.filter === "collection" ? state.collection : null, onSessionExpired: showLogin,
   });
 
@@ -1227,17 +1228,6 @@
       dialog.addEventListener("close", () => resolve(dialog.returnValue === "confirm"), { once: true });
       dialog.showModal();
       $("confirm-action-cancel").focus();
-    });
-  }
-
-  function confirmBulkDelete(count) {
-    const dialog = $("delete-selection-dialog");
-    $("delete-selection-description").textContent = `Delete ${count} selected bookmark${count === 1 ? "" : "s"} and its saved content? This cannot be undone.`;
-    dialog.returnValue = "";
-    return new Promise((resolve) => {
-      dialog.addEventListener("close", () => resolve(dialog.returnValue === "delete"), { once: true });
-      dialog.showModal();
-      dialog.querySelector("button").focus();
     });
   }
 

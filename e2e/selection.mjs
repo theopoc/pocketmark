@@ -47,14 +47,14 @@ export async function selectionJourney(page, screenshots) {
   assert.equal(await page.locator('#bulk-bar').isVisible(), true);
   assert.equal(await page.locator('#selected-count').textContent(), '2 selected');
   assert.equal(await page.locator('.results-bar #select-page, .results-bar #bulk-open, .results-bar #clear-selection').count(), 0, 'selection actions live only in the floating bar');
-  await page.locator('#bulk-open').click();
-  await page.locator('#bulk-read').focus(); await page.keyboard.press('Escape');
-  assert.equal(await page.locator('#bulk-more').getAttribute('open'), null);
+  await page.locator('#bulk-read').click();
+  await page.locator('#bulk-status-true').focus(); await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#bulk-dialog').isVisible(), false);
   await count(2);
   for (const [button, action] of [['bulk-move', 'move'], ['bulk-tag-action', 'tags']]) {
     await page.locator(`#${button}`).click();
-    assert.equal(await page.locator('#bulk-action').inputValue(), action);
-    assert.equal(await page.locator(action === 'tags' ? '#bulk-tags-query' : '#bulk-collection').evaluate(node => node === document.activeElement), true, `${action} focuses its visible field`);
+    assert.equal(await page.locator('#bulk-dialog').getAttribute('data-action'), action);
+    assert.equal(await page.locator(action === 'tags' ? '#bulk-tags-query' : '#bulk-collection-search').evaluate(node => node === document.activeElement), true, `${action} focuses its visible field`);
     await page.locator('#bulk-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   }
   await page.keyboard.press('Escape'); await count(0);
@@ -113,9 +113,17 @@ export async function selectionJourney(page, screenshots) {
   assert.ok(await page.locator('#bulk-bar').evaluate(node => { const rect = node.getBoundingClientRect(); return rect.left >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight; }), 'floating actions stay inside the phone viewport');
   if (screenshots) await page.screenshot({ path: `${screenshots}/selection-mobile.png` });
   await page.locator('.selection-help summary').click();
-  await page.locator('#bulk-delete').click();
+  await page.locator('#bulk-open').click();
+  await page.setViewportSize({ width: 844, height: 390 });
+  assert.ok(await page.locator('#bulk-dialog').evaluate(node => {
+    const r = node.getBoundingClientRect(); return r.x >= 0 && r.y >= 0 && r.right <= innerWidth && r.bottom <= innerHeight;
+  }), 'an open phone sheet stays reachable after landscape rotation');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.activeElement?.id === 'select-page');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#bulk-open').click();
+  await page.locator('[data-bulk-action="delete"]').click();
   await page.locator('#bulk-apply').click();
-  await page.locator('#delete-selection-dialog button[value="delete"]').click();
   await page.locator('#bulk-dialog').waitFor({ state: 'hidden' });
   await count(0);
   assert.equal(await page.locator('.bookmark-exit-layer').count(), 0, 'reduced motion omits exit layers');
