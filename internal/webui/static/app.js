@@ -156,6 +156,10 @@
     "panel-open": ["M4 4h16v16H4zM9 4v16", "m14 9 3 3-3 3"],
     "panel-close": ["M4 4h16v16H4zM9 4v16", "m17 9-3 3 3 3"],
     menu: ["M4 6h16M4 12h16M4 18h16"], lock: ["M5 10h14v11H5V10Z", "M8 10V6a4 4 0 0 1 8 0v4"],
+    key: ["M15 3a6 6 0 0 0-5.5 8.4L3 18v3h3v-3h3v-3l2.6-2.5A6 6 0 1 0 15 3Z", "M16 7h.01"],
+    shield: ["m12 3 9 4v5c0 5-9 10-9 10S3 17 3 12V7l9-4Z"],
+    monitor: ["M3 3h18v14H3Z", "M12 17v4M8 21h8"],
+    pause: ["M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z", "m6 6 12 12"],
     "chevron-right": ["m9 5 7 7-7 7"], "arrow-right": ["M4 12h16m-6-6 6 6-6 6"],
     "arrow-left": ["M20 12H4m6-6-6 6 6 6"],
     book: ["M12 5C8 2 4 3 2 4v16c3-2 7-2 10 0 3-2 7-2 10 0V4c-2-1-6-2-10 1ZM12 5v15"],
@@ -1783,6 +1787,7 @@
       if (expired) details.append(el("p", "small muted", "Create a new key to reconnect this app."));
       const actions = el("div", "token-row-actions");
       const toggle = el("button", "button subtle", token.active ? "Disable" : "Reactivate");
+      toggle.prepend(icon(token.active ? "pause" : "refresh"));
       const revoke = el("button", "button subtle token-revoke", "Delete key");
       toggle.type = revoke.type = "button";
       toggle.hidden = expired;
@@ -1866,6 +1871,7 @@
       toggle.addEventListener("click", () => changeKey(false));
       revoke.addEventListener("click", () => changeKey(true));
       const rotate = el("button", "button subtle", "Rotate key"); rotate.type = "button";
+      rotate.prepend(icon("refresh"));
       rotate.setAttribute("aria-label", `Rotate ${token.name}`);
       rotate.hidden = !token.active || expired;
       rotate.addEventListener("click", async () => {
@@ -1903,6 +1909,8 @@
     $("settings-navigation").hidden = !active;
     $("sidebar").setAttribute("aria-label", active ? "Settings navigation" : "Library navigation");
     $("app-view").classList.toggle("showing-settings", active);
+    $("app-view").classList.toggle("showing-api-keys", settingsSection === "api-keys");
+    $("settings-page").setAttribute("aria-labelledby", settingsSection === "api-keys" ? "api-keys-title" : "settings-title");
     renderBreadcrumb();
     document.querySelectorAll("[data-settings-panel]").forEach(panel => { panel.hidden = panel.dataset.settingsPanel !== settingsSection && !( ["password", "2fa", "sessions"].includes(settingsSection) && ["password", "2fa", "sessions"].includes(panel.dataset.settingsPanel)); });
     document.querySelectorAll("[data-settings-section]").forEach(button => {
@@ -1933,6 +1941,7 @@
     restoreRoute();
   }
   document.querySelectorAll("[data-settings-section]").forEach(button => button.addEventListener("click", () => navigateSettings(button.dataset.settingsSection)));
+  document.querySelectorAll("[data-api-key-section]").forEach(button => button.addEventListener("click", () => navigateSettings(button.dataset.apiKeySection)));
   function leaveSettings(libraryRoot = false) {
     if (mfaManagementBusy) return;
     const destination = { ...route(), settingsSection: null };

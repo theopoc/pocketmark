@@ -237,6 +237,23 @@ Opening a bookmark shows its title, source URL and Saved formats before any arti
 
 Settings is a workspace page. The drawer offers Account & security, its indented API keys destination, Backup & restore, Browser bookmark sync, and Mobile & browser. Account & security brings password, two-factor authentication and browser sessions together. API keys puts existing keys first and reveals the creation form on demand. A query parameter preserves the section across reload and browser history, including older links. Back to library restores filters and scroll position. Authentication changes block departure while pending; displayed recovery codes survive session expiration until explicitly dismissed by returning to the library. Leaving Settings clears credentials held in the page.
 
+The API keys destination follows its approved expandable-list composition. It has a
+72px brand header and a visible settings rail (316px on wide desktops), with the
+API keys title and description at the left and Create API key and the active-key
+count at the right. The workspace fills the remaining width; it does not repeat
+the generic Settings heading. This frame is exclusive to the API keys destination.
+At 900px and below, its settings navigation becomes a horizontally scrollable row;
+on phones the heading, count and creation action stack without horizontal page
+overflow. Other Settings destinations retain their existing frame.
+
+API key names use 24px semibold type on desktop (17px on phones), with status and
+permissions in each expandable summary. The expanded row shows three metadata
+columns with quiet separators, then labeled icon actions; Delete stays separated
+at the trailing edge. Phone metadata uses two columns and actions wrap with 44px
+targets. The page uses the existing theme tokens, system font and authored outline
+icons; its scoped rules live in `secondary.css`.
+
+
 Entering Settings settles the workspace 12px from the right over 220ms with a light fade, paired with a 180ms navigation fade. Initial loads and section changes remain still; leaving cancels the entrance. Focus and controls update immediately. Reduced motion skips both effects.
 
 ### Reader and dialogs
