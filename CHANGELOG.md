@@ -1,5 +1,56 @@
 # Changelog
 
+## [1.3.0](https://github.com/theopoc/pocketmark/compare/v1.2.0...v1.3.0) (2026-11-01)
+
+
+### Features
+
+* simplify account security settings ([9ce7682](https://github.com/theopoc/pocketmark/commit/9ce76829345eacaabf6be1572e68ebdc664a0547))
+* **ui:** add automatic and fixed sidebar modes ([#79](https://github.com/theopoc/pocketmark/issues/79)) ([7584f3d](https://github.com/theopoc/pocketmark/commit/7584f3d2d94beafd5c5fc3b5e5b9e94a47fd499c))
+* **ui:** add cached bookmark thumbnails ([5a58294](https://github.com/theopoc/pocketmark/commit/5a58294066b65d1106307732deac56ff2aefaf82))
+* **ui:** add capture status badges and progress spinner ([895000e](https://github.com/theopoc/pocketmark/commit/895000e168972974df8dd95d77543dcf769ac8f0))
+* **ui:** add quick bookmark filters ([404d984](https://github.com/theopoc/pocketmark/commit/404d98449619edcf2274e79f29ccd8563a397bc8))
+* **ui:** align bookmark list details in columns ([#120](https://github.com/theopoc/pocketmark/issues/120)) ([70bdefa](https://github.com/theopoc/pocketmark/commit/70bdefa4bd31e6670c8b623429fee822d964fade))
+* **ui:** apply annotated library toolbar and row layout ([b047e6d](https://github.com/theopoc/pocketmark/commit/b047e6dfcf14b9c990249d81379c24d4687d0e76))
+* **ui:** complete interface consistency and saved-file polish ([7bcfce3](https://github.com/theopoc/pocketmark/commit/7bcfce398c7e0698ff3986dbd7c3650f5f08c70c))
+* **ui:** confirm bookmark deletion in app ([ca8af84](https://github.com/theopoc/pocketmark/commit/ca8af84d172ba852e1013f7c54bf14d162b0f427))
+* **ui:** float bookmark selection actions ([#108](https://github.com/theopoc/pocketmark/issues/108)) ([85c50e8](https://github.com/theopoc/pocketmark/commit/85c50e8cb956f25242921fa00a683bdb04f8025c))
+* **ui:** polish library workflows and saved-format navigation ([793b220](https://github.com/theopoc/pocketmark/commit/793b2208bf33522096fa6fb64ec936cc81b09ee6))
+* **ui:** refine approved surfaces and preserve library controls ([043eca8](https://github.com/theopoc/pocketmark/commit/043eca8d150d7b44db0bd908247598f4781d9f50))
+* **ui:** refine bookmark cards and library branding ([#81](https://github.com/theopoc/pocketmark/issues/81)) ([200397a](https://github.com/theopoc/pocketmark/commit/200397ab7a27a00fb45847a5b3fbbba588d9ac11))
+* **ui:** replace browser confirmation prompts ([3106ec2](https://github.com/theopoc/pocketmark/commit/3106ec28cd5a78526e4b4c59700c5a55b63e243a))
+* **ui:** select bookmarks with mouse gestures and animate removals ([f28f0fc](https://github.com/theopoc/pocketmark/commit/f28f0fc221664245a4cda2d2ac75527674007aec))
+* **ui:** show site icons in bookmark list ([#121](https://github.com/theopoc/pocketmark/issues/121)) ([4ae176a](https://github.com/theopoc/pocketmark/commit/4ae176aec28d2e5980c2eecd7eb69344474d4e2a))
+* **ui:** simplify library controls and include near matches ([5de88cc](https://github.com/theopoc/pocketmark/commit/5de88ccd392f61fb324c6b1755e60da24827dbd2))
+* **ui:** simplify selected bookmark actions ([6ccd10b](https://github.com/theopoc/pocketmark/commit/6ccd10b3e4bdcf4dbb5ccc171085ff8a72d18022))
+* **ui:** theme selectors across Pocketmark ([75c93fa](https://github.com/theopoc/pocketmark/commit/75c93fa55b4ff3ee96523832a3dba90735a444e6))
+* **ui:** use expandable API key rows ([bcfa2f4](https://github.com/theopoc/pocketmark/commit/bcfa2f461d220c6c9902adefd4a8f08e4de9f262))
+
+
+### Bug Fixes
+
+* align sidebar help links ([e84fc75](https://github.com/theopoc/pocketmark/commit/e84fc7538c967242a2d48b8b31e992fd47b396c5))
+* dismiss all dialogs when clicking outside ([2de80f1](https://github.com/theopoc/pocketmark/commit/2de80f178b74811496ffbec255b0b870da8b7ab5))
+* reveal collection actions on hover ([21749c9](https://github.com/theopoc/pocketmark/commit/21749c90d1c279debfa07ef98c769f90b2f5894e))
+* **security:** create API keys without password confirmation ([f41795b](https://github.com/theopoc/pocketmark/commit/f41795b042ee2d251ae27b8a68cda88bf888a8cc))
+* **ui:** align dark brand and favicon colors ([0308444](https://github.com/theopoc/pocketmark/commit/0308444c495afe37a34ca0f801e8ee7e57ce067d))
+* **ui:** align theme colors and accessible API controls ([bed5968](https://github.com/theopoc/pocketmark/commit/bed596889f526dea3b73a45b7bc227b563372ed2))
+* **ui:** clarify selection action labels ([469e2bf](https://github.com/theopoc/pocketmark/commit/469e2bfa0cc83963095acb4ddcb2b1e3a1bc9a44))
+* **ui:** collapse sidebar when disabling fixed mode ([93f6ef5](https://github.com/theopoc/pocketmark/commit/93f6ef5a016490e98d7cd8b09c8934d809a0f376))
+* **ui:** keep sidebar layout stable for library tools ([4bbe4a2](https://github.com/theopoc/pocketmark/commit/4bbe4a2513ef60cfe54b2ba0cee2122a95dd996f))
+* **ui:** make breadcrumb levels navigable ([b922139](https://github.com/theopoc/pocketmark/commit/b922139405150876aac0f9ab087106729ca6cc9f))
+* **ui:** match selection toolbar colors to active theme ([35e747e](https://github.com/theopoc/pocketmark/commit/35e747e706ad9e1c4decb67d89fc68f0aa2d25cd))
+* **ui:** polish API key management ([5112f0b](https://github.com/theopoc/pocketmark/commit/5112f0b59adaea64da19d28e4a11c64e6c34ace8))
+* **ui:** redesign favorite snackbar ([98330cc](https://github.com/theopoc/pocketmark/commit/98330ccf59ea1f0b7e8c5bf5bd08d99147898962))
+* **ui:** remove decorative bookmark card icons ([#90](https://github.com/theopoc/pocketmark/issues/90)) ([05a1025](https://github.com/theopoc/pocketmark/commit/05a10254d2bd5414e2f1fe5026fe9873c762e0c6))
+* **ui:** show collection name errors only when needed ([be8e9bb](https://github.com/theopoc/pocketmark/commit/be8e9bb6cc9483b364ffcd75ebab6828a433f3c8))
+* **ui:** show spinner while refreshing library ([213c145](https://github.com/theopoc/pocketmark/commit/213c1450aed76025ae018ef4ad2b2ef1c178a145))
+
+
+### Reverts
+
+* **ui:** restore interface before PR 102 ([e678b74](https://github.com/theopoc/pocketmark/commit/e678b747e0320dd63dc410fc7add647b81066c2b))
+
 ## [1.2.0](https://github.com/theopoc/pocketmark/compare/v1.1.0...v1.2.0) (2026-10-31)
 
 
