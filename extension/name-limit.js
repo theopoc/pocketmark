@@ -2,15 +2,14 @@
 ((root) => {
   function describe(value, limit = 120) {
     const name = value.trim(), used = new TextEncoder().encode(name).length;
-    const count = Array.from(name).length;
-    return { used, valid: used <= limit, text: `${count} character${count === 1 ? "" : "s"} · ${Math.ceil(used * 100 / limit)}% of name limit used` };
+    const valid = used <= limit;
+    return { used, valid, text: valid ? "" : "This name is too long. Shorten it, especially if it contains accents or emoji." };
   }
   function create(input, hint) {
     function update() {
       const result = describe(input.value);
       hint.textContent = result.text;
-      hint.classList.toggle("name-limit-warning", result.used > 108);
-      input.setCustomValidity(result.valid ? "" : "This name is too long. Shorten it, especially if it contains accents or emoji.");
+      input.setCustomValidity(result.text);
       return result;
     }
     input.addEventListener("input", update);

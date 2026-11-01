@@ -158,7 +158,8 @@ summary { cursor: pointer; font-size: 11px; color: var(--muted); }
 }
 :root[data-theme="light"] .text-button { color: #5146c8; }
 .theme-toggle { flex: none; padding-inline: 10px; }
-#collection-name-hint.name-limit-warning { color: var(--danger); }
+#collection-name-hint { color: var(--danger); }
+#collection-name-hint:empty { display: none; }
 button:active { background: var(--accent-hover); }
 .secondary:active, .text-button:active { background: var(--accent-soft); }
 #status, #task { animation: popup-feedback 160ms ease-out; }
