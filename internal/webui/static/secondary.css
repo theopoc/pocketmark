@@ -1,4 +1,4 @@
-/* Approved secondary surfaces only. Library rows, actions and sorting retain style.css. */
+/* Secondary surfaces and favorite feedback. Library rows, actions and sorting retain style.css. */
 :is(#login-view, #settings-page, #help-dialog, body.api-docs) {
   --secondary-link: #5146c8;
   --control-border: var(--control-line);
@@ -33,6 +33,39 @@ html[data-theme="dark"] body.api-docs { --secondary-link: var(--focus); color-sc
 /* Collection validation and the approved reader journey have their own scope. */
 #collection-name-hint { font-size: 13px; }
 #collection-name-hint.name-limit-warning { color: var(--danger); }
+
+/* Favorite feedback: a compact status and an immediately reachable Undo action. */
+#toast.favorite-notice {
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  min-height: 60px;
+  gap: 12px;
+  padding: 8px 10px 8px 16px;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 8px 32px #0003;
+}
+#toast.favorite-notice > .icon { width: 20px; height: 20px; color: var(--muted); }
+#toast.favorite-notice.is-added > .icon { color: var(--accent); fill: currentColor; }
+[data-theme="dark"] #toast.favorite-notice.is-added > .icon { color: var(--focus); }
+#toast.favorite-notice .toast-message { min-width: 0; flex: 1; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+#toast.favorite-notice .toast-action {
+  min-width: 60px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+[data-theme="dark"] #toast.favorite-notice .toast-action { color: var(--focus); }
+#toast.favorite-notice .toast-action:hover { background: var(--control-hover); text-decoration: none; }
+#toast.favorite-notice .toast-action:active { background: var(--accent-soft); }
+#toast.favorite-notice .toast-action:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 #reader-dialog .saved-formats-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 #reader-dialog .saved-formats-heading h3 { margin: 0; }
 #reader-files { margin-block: 24px; padding-block: 20px; border-block: 1px solid var(--line); }
