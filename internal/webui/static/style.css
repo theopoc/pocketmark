@@ -109,9 +109,13 @@ kbd { font-size: 11px; line-height: 1.4; font-family: inherit; display: inline-f
 .main-content { min-width: 0; outline: none; }
 .topbar { min-height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 32px; border-bottom: 1px solid var(--line); gap: 16px; }
 .topbar-location, .breadcrumb { display: flex; align-items: center; min-width: 0; gap: 13px; }
-.breadcrumb { color: var(--muted); font-size: 12px; }
-.breadcrumb .icon { width: 13px; height: 13px; color: #9399a5; }
-#breadcrumb-current { color: #464b59; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 30vw; }
+.breadcrumb { color: var(--muted); font-size: 12px; overflow-x: auto; scrollbar-width: thin; padding: 6px; margin: -6px; }
+.breadcrumb.has-earlier-crumbs::before { content: "‹"; position: sticky; left: -6px; z-index: 1; flex: none; width: 20px; margin-right: -33px; align-self: stretch; display: flex; align-items: center; background: linear-gradient(to right, var(--paper) 45%, transparent); color: var(--ink); font-size: 18px; pointer-events: none; }
+.breadcrumb button { flex: none; max-width: 30vw; padding: 4px 0; border: 0; background: transparent; color: inherit; font: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.breadcrumb button:hover { color: var(--accent); text-decoration: underline; }
+.breadcrumb .icon { flex: none; }
+.breadcrumb .icon { width: 13px; height: 13px; color: var(--muted); }
+#breadcrumb-current { color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 30vw; }
 .workspace-badge { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; white-space: nowrap; }
 .workspace-badge .icon { width: 13px; height: 13px; }
 .library-content { padding: 30px 32px 0; max-width: 1680px; margin-inline: auto; }
@@ -509,7 +513,7 @@ body:has(dialog[open]) { overflow: hidden; }
 [data-theme="dark"] .nav-count { background: #ffffff0d; }
 [data-theme="dark"] .tag-button { border-color: #383b49; color: #afb4c5; }
 [data-theme="dark"] .tag-button:hover, [data-theme="dark"] .tag-button.active { background: var(--accent-soft); border-color: #686095; color: #d0caff; }
-[data-theme="dark"] #breadcrumb-current { color: #c1c4d1; }
+#breadcrumb-current:hover { color: var(--accent); }
 [data-theme="dark"] input, [data-theme="dark"] textarea, [data-theme="dark"] select,
 [data-theme="dark"] .search-box { background: #1b1d25; border-color: #3a3d4b; color: #d0d3df; }
 [data-theme="dark"] .search-box input { background: transparent; }
@@ -572,8 +576,7 @@ body:has(dialog[open]) { overflow: hidden; }
   .topbar { padding-inline: 20px; min-height: 58px; }
   .library-content { padding: 24px 20px 0; }
   .topbar-location { gap: 10px; }
-  .breadcrumb-root, .breadcrumb > [data-icon] { display: none; }
-  #breadcrumb-current { max-width: 55vw; }
+  .breadcrumb button { max-width: 45vw; min-width: 44px; min-height: 44px; }
   .library-header { gap: 16px; }
   .library-header .reader-actions { flex-shrink: 0; }
   .navigation-dialog .nav-item { min-height: 42px; }

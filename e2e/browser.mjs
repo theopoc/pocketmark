@@ -1,4 +1,4 @@
-import { clickNavigation, openNavigation, navigationJourney, dialogDismissalJourney } from './navigation.mjs';
+import { clickNavigation, openNavigation, navigationJourney, dialogDismissalJourney, breadcrumbJourney } from './navigation.mjs';
 // Real Chromium, real HTTP and SQLite. Run only against the disposable smoke instance.
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
@@ -150,6 +150,18 @@ try {
   await page.keyboard.press('Enter');
   assert.equal(await page.evaluate(() => document.activeElement.id), 'main-content', 'library shortcut moves keyboard focus to the main content');
   assert.equal(page.url(), libraryURL, 'library shortcut does not add a history entry');
+  const breadcrumbIDs = [];
+  for (const name of ['Parent', 'Child', 'Leaf']) {
+    const response = await page.request.post(new URL('/api/collections', base).href, { data: { name, parentId: breadcrumbIDs.at(-1) ?? null } });
+    assert.equal(response.status(), 201);
+    breadcrumbIDs.push((await response.json()).id);
+  }
+  await breadcrumbJourney(page, breadcrumbIDs);
+  for (const id of breadcrumbIDs.reverse()) {
+    const response = await page.request.delete(new URL(`/api/collections/${id}`, base).href);
+    assert.equal(response.status(), 200);
+  }
+  await page.goto(libraryURL);
   await navigationJourney(page);
   await dialogDismissalJourney(page);
   await selectionJourney(page);
@@ -302,6 +314,7 @@ try {
     await page.locator('#mfa-manage-form button[value="codes"]').click();
     await heldCodes.ready;
     assert.equal(await page.locator('#settings-page [data-settings-back]').isDisabled(), true);
+    assert.equal(await page.locator('#breadcrumb button:disabled').count(), 2);
     assert.equal(await page.locator('[data-settings-section="backup"]').isDisabled(), true);
     assert.equal(await page.locator('[data-settings-section="password"]').isEnabled(), true);
     await page.keyboard.press('Escape');
@@ -537,7 +550,7 @@ try {
     assert.ok(await page.locator(`#${id}`).evaluate(node => node.getBoundingClientRect().height >= 44), `${id} has a mobile touch target`);
   }
   await page.locator('#bulk-open').click();
-  await page.locator('#bulk-capture').click();
+  await page.locator('#bulk-dialog [data-bulk-action="capture"]').click();
   assert.ok(await page.locator('#bulk-apply').evaluate(node => {
     const button = node.getBoundingClientRect(), dialog = node.closest('dialog').getBoundingClientRect();
     return button.height >= 44 && button.left >= dialog.left && button.right <= dialog.right;

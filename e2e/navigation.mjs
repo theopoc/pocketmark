@@ -179,3 +179,41 @@ export async function navigationJourney(page) {
   await page.unroute('**/api/logout');
   await page.locator('#logout-cancel').click();
 }
+
+export async function breadcrumbJourney(page, ids) {
+  const original = page.viewportSize();
+  const [parent, child, leaf] = ids;
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto(new URL(`/?filter=collection&collection=${leaf}&q=example`, page.url()).href);
+    const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
+    await crumbs.getByRole('button', { name: 'Leaf', exact: true }).waitFor();
+    assert.deepEqual(await crumbs.getByRole('button').allTextContents(), ['My library', 'Parent', 'Child', 'Leaf']);
+    await page.waitForFunction(() => {
+      const scroller = document.querySelector('#breadcrumb').getBoundingClientRect();
+      const current = document.querySelector('#breadcrumb-current').getBoundingClientRect();
+      return current.left >= scroller.left + 5 && current.right <= scroller.right - 5;
+    });
+    await crumbs.getByRole('button', { name: 'My library', exact: true }).focus();
+    await page.waitForFunction(() => {
+      const scroller = document.querySelector('#breadcrumb').getBoundingClientRect();
+      const focused = document.activeElement.getBoundingClientRect();
+      return focused.left >= scroller.left + 5 && focused.right <= scroller.right - 5;
+    });
+    await crumbs.getByRole('button', { name: 'Leaf', exact: true }).click();
+    assert.equal(new URL(page.url()).searchParams.get('collection'), String(leaf));
+    await crumbs.getByRole('button', { name: 'Child', exact: true }).click();
+    assert.equal(new URL(page.url()).searchParams.get('collection'), String(child));
+    assert.equal(new URL(page.url()).searchParams.get('q'), 'example');
+    await page.goBack();
+    await crumbs.getByRole('button', { name: 'Leaf', exact: true }).waitFor();
+    await crumbs.getByRole('button', { name: 'Parent', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    assert.equal(new URL(page.url()).searchParams.get('collection'), String(parent));
+    await crumbs.getByRole('button', { name: 'My library', exact: true }).click();
+    assert.equal(new URL(page.url()).searchParams.has('collection'), false);
+    assert.equal(await page.locator('#page-title').textContent(), 'All bookmarks');
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+  }
+  await page.setViewportSize(original);
+}
