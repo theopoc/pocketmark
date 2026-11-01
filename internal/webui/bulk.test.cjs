@@ -5,6 +5,7 @@ const deferred = () => { let resolve, reject; const promise = new Promise((a, b)
 class Element {
   constructor() { Object.assign(this, { value: "", textContent: "", hidden: false, disabled: false, open: false, children: [], events: new Map(), options: [{}, {}] }); }
   setAttribute(name, value) { this[name] = value; }
+  contains(node) { return node === this; }
   addEventListener(type, fn) { if (!this.events.has(type)) this.events.set(type, []); this.events.get(type).push(fn); }
   replaceChildren(...children) { this.children = children; }
   focus() { this.focused = true; }
@@ -18,9 +19,9 @@ function setup(request = async () => {}, confirm = () => true) {
   const get = id => { assert.ok(nodes.has(id), `unknown shipped element ${id}`); return nodes.get(id); };
   get("bulk-form").reset = () => { for (const id of ["bulk-action", "bulk-tags", "bulk-collection", "bulk-value"]) get(id).value = ""; };
   const calls = [], notices = [], changes = [], selections = [], expiries = [];
-  const bulk = create({ api: async (path, options) => { const call = { path, ...options, body: JSON.parse(options.body) }; calls.push(call); return request(call); }, toast: (...args) => notices.push(args), onChange: async () => changes.push(true), onSelectionChange: () => selections.push(true), fillCollections: (select, value) => { select.value = value == null ? "" : String(value); }, defaultCollection: () => 7, onSessionExpired: () => expiries.push(true), confirmDelete: confirm }, { document: { getElementById: get, createElement: () => new Element() } });
+  const bulk = create({ api: async (path, options) => { const call = { path, ...options, body: JSON.parse(options.body) }; calls.push(call); return request(call); }, toast: (...args) => notices.push(args), onChange: async () => changes.push(true), onSelectionChange: () => selections.push(true), fillCollections: (select, value) => { select.value = value == null ? "" : String(value); }, defaultCollection: () => 7, onSessionExpired: () => expiries.push(true), confirmDelete: confirm }, { document: { getElementById: get, createElement: () => new Element(), addEventListener() {} } });
   const link = id => ({ id, title: `Page ${id}`, url: `https://example.org/${id}` });
-  const open = async (action = "favorite") => { await fire(get("bulk-open"), "click"); get("bulk-action").value = action; await fire(get("bulk-action"), "change"); };
+  const open = async (action = "favorite") => { await fire(get(action === "tags" ? "bulk-tag-action" : `bulk-${action}`), "click"); };
   const submit = () => fire(get("bulk-form"), "submit");
   return { bulk, get, calls, notices, changes, selections, expiries, link, open, submit };
 }
@@ -83,7 +84,7 @@ test("select-page and individual selection enforce 500 while clear updates the t
   assert.equal(env.bulk.select(links[501], true), false); assert.match(env.notices[1][0], /500/);
   assert.equal(env.get("select-page")["aria-pressed"], "mixed");
   await fire(env.get("clear-selection"), "click");
-  assert.equal(env.bulk.has(1), false); assert.equal(env.get("bulk-open").hidden, true);
+  assert.equal(env.bulk.has(1), false); assert.equal(env.get("bulk-bar").hidden, true);
 });
 test("selecting exactly 500 bookmarks does not report a partial selection", async () => {
   const env = setup(), links = Array.from({ length: 500 }, (_, i) => env.link(i + 1));
@@ -105,7 +106,7 @@ test("select page is unavailable when the current page has no bookmarks", () => 
   env.bulk.select(env.link(1), true);
   env.bulk.render([]);
   assert.equal(env.get("select-page").disabled, true);
-  assert.equal(env.get("bulk-open").hidden, false);
+  assert.equal(env.get("bulk-bar").hidden, false);
 });
 test("duplicate submits and action changes cannot release a pending operation", async () => {
   const pending = deferred(), env = setup(() => pending.promise);
@@ -139,4 +140,26 @@ test("the shipped shell loads and caches bulk before app without private data", 
   const context = vm.createContext({ self: { addEventListener() {} } }); vm.runInContext(fs.readFileSync(`${__dirname}/static/sw.js`, "utf8"), context);
   assert.equal(vm.runInContext('ASSETS.includes("/bulk.js")', context), true);
   assert.equal(vm.runInContext('ASSETS.some(path => path === "/" || path.startsWith("/api/"))', context), false);
+});
+
+test("floating actions initialize fresh forms and never submit before confirmation", async () => {
+  const env = setup();
+  assert.equal(env.get("bulk-bar").hidden, true);
+  env.bulk.select(env.link(1), true);
+  assert.equal(env.get("bulk-bar").hidden, false);
+  for (const action of ["move", "tags", "favorite", "read", "capture", "delete"]) {
+    env.get("bulk-more").open = true;
+    await env.open(action);
+    assert.equal(env.get("bulk-action").value, action);
+    assert.equal(env.get("bulk-more").open, false);
+    assert.equal(env.get("bulk-dialog").open, true);
+    assert.equal(env.get("bulk-apply").disabled, false);
+    assert.equal(env.get("bulk-tags").value, "");
+    assert.equal(env.calls.length, 0);
+    env.get("bulk-tags").value = "unsaved tags";
+    env.bulk.close();
+  }
+  await fire(env.get("clear-selection"), "click");
+  assert.equal(env.get("bulk-bar").hidden, true);
+  assert.equal(env.get("page-title").focused, true);
 });

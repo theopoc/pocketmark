@@ -152,7 +152,7 @@
         <label class="search-box"><span data-icon="search" aria-hidden="true"></span><span class="sr-only">Search bookmarks</span><input id="search" type="search" placeholder="Search bookmarks, tags, and content…" autocomplete="off"><kbd aria-hidden="true" data-shortcut-hint>/</kbd></label>
       </div>
       <div id="active-filters" class="active-filters" aria-label="Active filters" hidden></div>
-      <div class="results-bar"><div class="bulk-toolbar"><span id="results-label" aria-live="polite">Loading your library…</span><span id="selected-count" role="status" hidden>0 selected</span><span id="selected-outside" hidden></span><button id="select-page" class="text-button" type="button" aria-pressed="false">Select page</button><button id="bulk-open" class="button primary" hidden disabled>Actions</button><button id="clear-selection" class="text-button" hidden>Clear<span class="selection-escape" aria-hidden="true"> Esc</span></button></div><div class="results-tools"><span id="capture-label" class="capture-summary"></span><div class="selection-guidance"><span class="selection-hint">Click or drag to select</span><details class="selection-help"><summary aria-label="Selection help"><span data-icon="info" aria-hidden="true"></span></summary><div id="selection-help" class="selection-help-panel"><strong>Select bookmarks</strong><p>Click an empty area of a bookmark to select it. Drag across bookmarks to select several.</p><p><kbd>Shift</kbd> + click selects a range. <kbd>Ctrl</kbd> / <kbd>⌘</kbd> + drag adds to your selection.</p><p>On the keyboard, focus a bookmark and press <kbd>Space</kbd>. Press <kbd>Esc</kbd> to clear.</p><p>On touch screens, tap an empty area of a bookmark. Titles open the reader; action buttons work as usual.</p></div></details></div>
+      <div class="results-bar"><span id="results-label" aria-live="polite">Loading your library…</span><div class="results-tools"><span id="capture-label" class="capture-summary"></span><div class="selection-guidance"><span class="selection-hint">Click or drag to select</span><details class="selection-help"><summary aria-label="Selection help"><span data-icon="info" aria-hidden="true"></span></summary><div id="selection-help" class="selection-help-panel"><strong>Select bookmarks</strong><p>Click an empty area of a bookmark to select it. Drag across bookmarks to select several.</p><p><kbd>Shift</kbd> + click selects a range. <kbd>Ctrl</kbd> / <kbd>⌘</kbd> + drag adds to your selection.</p><p>On the keyboard, focus a bookmark and press <kbd>Space</kbd>. Press <kbd>Esc</kbd> to clear.</p><p>On touch screens, tap an empty area of a bookmark. Titles open the reader; action buttons work as usual.</p></div></details></div>
         <div class="library-view-controls">
           <button id="refresh-button" class="button subtle icon-only" title="Refresh library" aria-label="Refresh library"><span data-icon="refresh" aria-hidden="true"></span></button>
           <button id="sort-toggle" class="button subtle" type="button" aria-label="Sort bookmarks: Newest first" title="Sort bookmarks: Newest first" aria-haspopup="menu" aria-controls="sort-menu" aria-expanded="false"><span data-icon="sort" aria-hidden="true"></span><span id="sort-label">Newest first</span></button>
@@ -169,6 +169,23 @@
       <div id="library-error" class="error-banner" role="alert" hidden></div>
       <section id="bookmark-grid" class="bookmark-grid view-list" aria-label="Bookmarks" aria-busy="true"></section>
       <section id="empty-state" class="empty-state" aria-labelledby="empty-title" hidden><div id="empty-art" class="empty-art" data-icon="bookmark" aria-hidden="true"></div><h2 id="empty-title">Your library starts here</h2><p id="empty-message" class="muted">Save your first bookmark, or bring your existing bookmarks with you.</p><div class="reader-actions"><button id="empty-add" class="button primary"><span data-icon="plus" aria-hidden="true"></span>Add bookmark</button><button id="empty-import" class="button subtle" type="button">Import bookmarks</button><button id="empty-reset" class="button subtle" hidden>Clear filters</button></div></section>
+      <div id="bulk-bar" class="bulk-bar" role="group" aria-label="Selected bookmark actions" hidden>
+        <div class="bulk-selection"><span id="selected-count" role="status">0 selected</span><span id="selected-outside" hidden></span></div>
+        <div class="bulk-buttons">
+          <button id="bulk-move" type="button" class="bulk-button"><span data-icon="folder-input" aria-hidden="true"></span>Move</button>
+          <button id="bulk-tag-action" type="button" class="bulk-button"><span data-icon="tag" aria-hidden="true"></span>Tag</button>
+          <button id="bulk-delete" type="button" class="bulk-button bulk-delete"><span data-icon="trash" aria-hidden="true"></span>Delete</button>
+          <details id="bulk-more" class="bulk-more"><summary id="bulk-open" class="bulk-button">More</summary>
+            <div class="bulk-more-panel">
+              <button id="select-page" type="button" aria-pressed="false">Select page</button>
+              <button id="bulk-favorite" type="button">Favorite status</button>
+              <button id="bulk-read" type="button">Read status</button>
+              <button id="bulk-capture" type="button">Refresh captures</button>
+            </div>
+          </details>
+          <button id="clear-selection" type="button" class="bulk-button bulk-clear" aria-label="Clear selection" title="Clear selection (Esc)"><span data-icon="close" aria-hidden="true"></span></button>
+        </div>
+      </div>
       <nav id="pagination" class="pagination" aria-label="Results pages" hidden><button id="previous-page" class="button subtle"><span data-icon="arrow-left" aria-hidden="true"></span>Previous</button><span id="page-label"></span><button id="next-page" class="button subtle">Next<span data-icon="arrow-right" aria-hidden="true"></span></button></nav>
       </div>
       <footer class="main-footer"><span>Pocketmark</span><span data-shortcut-hint><kbd>/</kbd> Search <span class="shortcut-divider">·</span> <kbd>N</kbd> New bookmark</span></footer>

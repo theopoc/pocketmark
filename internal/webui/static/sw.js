@@ -1,6 +1,6 @@
 "use strict";
 // Deliberately cache no API responses, private pages or captured content.
-const CACHE = "pocketmark-shell-v14";
+const CACHE = "pocketmark-shell-v17";
 const ASSETS = ["/secondary.css", "/name-limit.js", "/theme-switch.js", "/theme.js", "/workspace.js", "/reader.js", "/bulk.js", "/selection.js", "/tag-picker.js", "/security.js", "/app.js", "/style.css", "/icon.svg", "/manifest.webmanifest"];
 self.addEventListener("install", (event) => { event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS))); });
 self.addEventListener("activate", (event) => { event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith("pocketmark-shell-") && key !== CACHE).map((key) => caches.delete(key))))); });
