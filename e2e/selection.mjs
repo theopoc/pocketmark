@@ -44,6 +44,19 @@ export async function selectionJourney(page, screenshots) {
   await surface(0); await count(1);
   await surface(2, ['Shift']); await count(3);
   await surface(1); await count(2);
+  assert.equal(await page.locator('#bulk-bar').isVisible(), true);
+  assert.equal(await page.locator('#selected-count').textContent(), '2 selected');
+  assert.equal(await page.locator('.results-bar #select-page, .results-bar #bulk-open, .results-bar #clear-selection').count(), 0, 'selection actions live only in the floating bar');
+  await page.locator('#bulk-open').click();
+  await page.locator('#bulk-read').focus(); await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#bulk-more').getAttribute('open'), null);
+  await count(2);
+  for (const [button, action] of [['bulk-move', 'move'], ['bulk-tag-action', 'tags']]) {
+    await page.locator(`#${button}`).click();
+    assert.equal(await page.locator('#bulk-action').inputValue(), action);
+    assert.equal(await page.locator(action === 'tags' ? '#bulk-tags-query' : '#bulk-collection').evaluate(node => node === document.activeElement), true, `${action} focuses its visible field`);
+    await page.locator('#bulk-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  }
   await page.keyboard.press('Escape'); await count(0);
   await cards.nth(1).focus(); await page.keyboard.press('Space'); await count(1);
   assert.match(await cards.nth(1).getAttribute('aria-label'), /selected/);
@@ -97,10 +110,10 @@ export async function selectionJourney(page, screenshots) {
     const rect = node.getBoundingClientRect(); return rect.left >= 0 && rect.right <= innerWidth;
   }), 'selection help fits a phone');
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'selection toolbar fits a phone');
+  assert.ok(await page.locator('#bulk-bar').evaluate(node => { const rect = node.getBoundingClientRect(); return rect.left >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight; }), 'floating actions stay inside the phone viewport');
   if (screenshots) await page.screenshot({ path: `${screenshots}/selection-mobile.png` });
   await page.locator('.selection-help summary').click();
-  await page.locator('#bulk-open').click();
-  await page.locator('#bulk-action').selectOption('delete');
+  await page.locator('#bulk-delete').click();
   await page.locator('#bulk-apply').click();
   await page.locator('#delete-selection-dialog button[value="delete"]').click();
   await page.locator('#bulk-dialog').waitFor({ state: 'hidden' });

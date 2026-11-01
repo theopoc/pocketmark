@@ -537,7 +537,7 @@ try {
     assert.ok(await page.locator(`#${id}`).evaluate(node => node.getBoundingClientRect().height >= 44), `${id} has a mobile touch target`);
   }
   await page.locator('#bulk-open').click();
-  await page.locator('#bulk-action').selectOption('capture');
+  await page.locator('#bulk-capture').click();
   assert.ok(await page.locator('#bulk-apply').evaluate(node => {
     const button = node.getBoundingClientRect(), dialog = node.closest('dialog').getBoundingClientRect();
     return button.height >= 44 && button.left >= dialog.left && button.right <= dialog.right;
