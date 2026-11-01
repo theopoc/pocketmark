@@ -138,6 +138,12 @@ The frontmatter colors describe the light palette. Dark mode overrides the same 
 
 Dark controls, dialogs, cards, metadata, highlights and selection share the theme; original saved-page layouts keep their source appearance. Primary-button foregrounds remain white in both modes. Native controls follow `color-scheme`; browser theme color follows the selected page ground. Print uses a white reader surface and black text.
 
+Every added or modified component must match both the design system and the active theme's palette. Use semantic tokens for surfaces, text, icons, borders, hover, focus and status; resolve their light and dark values independently. A matching layout or readable contrast alone does not establish theme conformity. Check the rendered component in both themes, including its interactive states, before delivery. Approved accent surfaces retain their accent treatment in both themes, with foreground colors chosen for that surface rather than the page ground.
+
+### Floating selection bar
+
+The selection bar uses an opaque violet background derived from the active theme's `accent` (75% accent mixed with black), white labels and outline icons, and light red (`#ffb4b8`) for both the Delete label and trash icon. The darker violet and light red preserve at least 4.5:1 text contrast. Counts outside the current results remain white. Hover and the open More control darken the violet; keyboard focus uses a white outline. The More panel uses the active theme's `paper`, `ink`, `line` and `accent-soft` tokens. Keep the bar's existing geometry and phone wrapping. A pale inverted bar in dark mode does not match this treatment.
+
 ## Typography
 
 **Body and interface font:** the system sans stack in the frontmatter. There is no separately loaded display face. Monospace is used for generated credentials, including API keys, authenticator setup keys and recovery codes.
@@ -250,7 +256,7 @@ The bookmark editor keeps its heading and save/cancel footer visible around a sc
 
 ## Approved secondary refinements — 1 November 2026
 
-The library reference is the restored interface at `e678b74`. Keep its icon actions, mobile Actions disclosure, sort button/menu, list/grid geometry, palette and density. `style.css` remains unchanged. Secondary refinements belong in `secondary.css`, scoped to login/MFA, settings, help, API documentation, the collection hint and the reader files/notebook. Never broaden those selectors to generic application controls.
+The library reference is the restored interface at `e678b74`. Keep its icon actions, mobile Actions disclosure, sort button/menu, list/grid geometry, palette and density, with the approved floating selection bar colors defined under Themes. The selection bar rules belong in `style.css`; preserve its unrelated rules. Secondary refinements belong in `secondary.css`, scoped to login/MFA, settings, help, API documentation, the collection hint and the reader files/notebook. Never broaden those selectors to generic application controls.
 
 Login/MFA, settings, help and API documentation use 13px labels/hints and 14px body copy on desktop; phone fields remain 16px. State colors reuse the existing palette and field boundary tokens. Direct settings headings reserve 16px of scroll space for visible keyboard focus. Notes/files and help disclosures use progressive 160ms opacity feedback with immediate reduced-motion fallback. The existing library and theme timings remain unchanged.
 

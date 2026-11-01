@@ -950,13 +950,14 @@ body:has(dialog[open]) { overflow: hidden; }
 @media (max-width: 600px) { .card-domain, .card-tag, .card-state, .view-list .card-state, .capture-summary { font-size: 12px; } }
 
 /* Selection actions float independently of the library's result controls. */
-.bulk-bar { position: fixed; z-index: 30; bottom: max(20px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 16px; width: max-content; max-width: calc(100% - 32px); padding: 8px; border-radius: 12px; background: #20232c; color: #fff; box-shadow: 0 6px 24px #20232c40; }
+.bulk-bar { position: fixed; z-index: 30; bottom: max(20px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 16px; width: max-content; max-width: calc(100% - 32px); padding: 8px; border-radius: 12px; background: color-mix(in srgb, var(--accent) 75%, #000); color: #fff; box-shadow: 0 6px 24px #20232c40; }
 .bulk-selection { display: flex; flex-direction: column; gap: 2px; padding: 0 8px; min-width: 0; }
 #selected-count { color: inherit; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
-#selected-outside { color: #c6cad6; font-size: 12px; }
+#selected-outside { color: inherit; font-size: 12px; }
 .bulk-buttons { display: flex; align-items: center; gap: 4px; }
 .bulk-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 10px; border: 0; border-radius: 6px; color: inherit; background: transparent; font-size: 13px; font-weight: 550; white-space: nowrap; }
-.bulk-button:hover, .bulk-more[open] > summary { background: #ffffff1a; }
+.bulk-button:hover, .bulk-more[open] > summary { background: #0002; }
+.bulk-button:focus-visible { outline-color: #fff; }
 .bulk-button .icon { width: 16px; height: 16px; }
 #bulk-move .icon { width: 20px; height: 20px; stroke-width: 2; }
 .bulk-delete { color: #ffb4b8; }
@@ -970,10 +971,7 @@ body:has(dialog[open]) { overflow: hidden; }
 body:has(#bulk-bar:not([hidden])) .main-content { padding-bottom: calc(var(--bulk-bar-height, 100px) + 40px); }
 html:has(#bulk-bar:not([hidden])) { scroll-padding-bottom: calc(var(--bulk-bar-height, 100px) + 40px); }
 body:has(#bulk-bar:not([hidden])) > #toast { bottom: calc(var(--bulk-bar-height, 100px) + 40px); }
-[data-theme="dark"] .bulk-bar { background: #eceef5; color: #20232c; box-shadow: 0 6px 24px #0006; }
-[data-theme="dark"] .bulk-bar #selected-outside { color: #51596b; }
-[data-theme="dark"] .bulk-delete { color: #a82232; }
-[data-theme="dark"] .bulk-button:hover, [data-theme="dark"] .bulk-more[open] > summary { background: #20232c15; }
+[data-theme="dark"] .bulk-bar { box-shadow: 0 6px 24px #0006; }
 @media (max-width: 600px) {
   .selection-hint { display: none; }
   .bulk-bar { flex-direction: column; gap: 4px; max-width: calc(100% - 24px); padding: 8px; }

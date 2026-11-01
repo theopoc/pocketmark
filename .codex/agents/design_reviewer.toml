@@ -21,6 +21,14 @@ Inspect the actual rendered result with available browser tools or supplied
 before/after captures from matching fixtures, viewport, theme and interaction
 state. Cover affected desktop and phone layouts in light and dark themes; inspect
 hierarchy, typography, spacing, colors, density, icons, overflow and action access.
+For every added or modified component, assess design conformity and theme palette
+conformity separately using DESIGN.md's Themes rules. Inspect computed surface,
+text, icon, border, hover, focus and status colors against the active theme's
+tokens and any documented component-specific foregrounds. Verify both themes,
+including switching themes while the component is visible. Matching geometry or
+passing contrast alone does not establish palette conformity. Report a wrong-theme
+surface as a finding even when it is legible; include per-theme coverage and any
+unverified states in the result.
 Exercise relevant keyboard navigation and focus, accessible names, error/empty/
 loading/disabled states, and reduced motion when affected. Static screenshots
 establish only visual observations; interaction claims require interaction evidence.
