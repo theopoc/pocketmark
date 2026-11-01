@@ -74,9 +74,9 @@ viewer and may depend on browser settings.
 HTML previews retain saved styles and embedded images/fonts up to the full
 20 MiB attachment limit, independently of the structural reader's 2 MiB limit.
 They use an opaque CSP sandbox with scripts, forms, frames and network resources
-blocked. The parent shell’s `frame-src blob:` policy blocks network navigation from the nested frame, including HTML parsing contexts missed by lexical filtering. Direct HTML `/view` responses use attachment disposition: rendering requires the integrated viewer. Missing resources
+blocked. The parent shell’s `frame-src blob:` policy blocks network navigation from the nested frame, including navigation initiated by saved markup. Direct HTML `/view` responses use attachment disposition: rendering requires the integrated viewer. Missing resources
 stay missing; this preserves the saved appearance, not live-site interactivity.
-Preparation uses bounded tokenization and temporary disk files in the existing
+Preparation uses bounded byte copying and temporary disk files in the existing
 single work slot; no browser process or resident cache is added. Closing the
 viewer unloads its content. Untrusted HTML never gains the application's origin. The API does not upload to a third-party service.
 
@@ -100,7 +100,13 @@ again. Preserve the `server-secret` file (or legacy `access-token` file or
 `POCKETMARK_TOKEN`) separately. Restore with the service stopped into an empty data
 directory, never alongside an old WAL/SHM file. New ZIP snapshots invalidate recovery codes and the current TOTP window on restore; wait for up to two new authenticator codes before signing in and generating recovery codes, or use the local `-reset-mfa` command if the authenticator is unavailable. Clock differences can add delay. Older ZIPs and raw copies are not detected and may restore earlier TOTP counters: reset MFA or regenerate recovery codes manually, and revoke restored sessions. Changing the server secret invalidates session digests and makes the encrypted TOTP secret unreadable. A still-valid recovery code can be used to sign in and replace the authenticator; otherwise reset MFA and enroll again. A new ZIP restored with a different key requires reset because its recovery codes are invalidated. Named API keys are independent of that key: review them because a rollback can restore keys revoked after the backup. No scheduled backup is enabled.
 
-HTML token filtering removes ordinary `href`/SVG `xlink:href` destinations as defense in depth; it is not a complete HTML5 sanitizer. The nested viewer and attachment disposition are mandatory security boundaries. Downloaded originals remain untrusted files; opening them outside Pocketmark is outside this boundary.
+HTML preview preparation deliberately does not parse or sanitize saved markup.
+It copies at most 20 MiB through a bounded buffer to avoid memory amplification
+from adversarial tags with many attributes. The nested opaque sandbox, parent
+CSP and attachment disposition are mandatory security boundaries. Navigation,
+scripts, forms and network resources remain blocked in the integrated viewer.
+Downloaded originals remain untrusted files; opening them outside Pocketmark is
+outside this boundary.
 
 ## Card thumbnails
 

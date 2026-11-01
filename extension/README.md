@@ -16,7 +16,7 @@ no Linkwarden extension or service is involved. Requires Chrome 120 or newer.
 
 The key stays in this browser profile's local extension storage, never Chrome
 Sync. It grants library access, not account/key administration or full backups.
-Revoke it from Pocketmark if needed. Use HTTPS except on a trusted local network.
+Revoke it from Pocketmark if needed. Use HTTPS except on this computer (localhost or a loopback IP).
 A task with pending files stays bound to its original server; retry or discard
 that task before connecting to another server.
 
@@ -105,3 +105,7 @@ The popup offers Dark and Light appearance in its header; the choice stays in
 this browser. Dark retains its original palette. Collection creation shows an error when the server name limit is exceeded,
 including with accented letters and emoji. Shared local theme/name modules are checked by
 `python3 scripts/sync_ui_assets.py` and refreshed with `--write`.
+
+Connections require HTTPS, except HTTP on `localhost`, `127.0.0.0/8` or `[::1]`.
+Existing remote HTTP connections must be replaced with the HTTPS server address
+before saving or retrying captures; keys are never sent to those HTTP addresses.

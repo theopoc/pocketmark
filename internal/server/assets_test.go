@@ -66,8 +66,8 @@ func TestAssetPreviewsPreserveLayoutAndRequireAuthentication(t *testing.T) {
 							t.Errorf("lost saved appearance: %q", want)
 						}
 					}
-					if strings.Contains(body, "attacker.test") || strings.Contains(body, "<base") {
-						t.Fatal("preview allows navigation out of the saved page")
+					if body != file.body {
+						t.Fatal("preview must preserve bytes; isolation belongs to the sandbox and CSP")
 					}
 				}
 			} else if w.Body.String() != file.body {

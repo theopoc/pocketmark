@@ -163,6 +163,39 @@ jobs:
         run: |
           npm ci --prefix e2e --ignore-scripts --no-audit --no-fund
           ./e2e/node_modules/.bin/playwright install --with-deps chromium
+      - name: Resolve the candidate image
+        id: candidate
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          python3 - <<'PYCODE'
+          import json, os
+          from pathlib import Path
+          digest = json.loads(Path('digests', os.environ['ARCH'] + '.json').read_text())['digest']
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('image=' + os.environ['IMAGE'] + '@' + digest + '\n')
+          PYCODE
+      - run: mkdir -p reports
+      - name: Inventory the exact candidate image
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ${{ steps.candidate.outputs.image }}
+          syft-version: v1.55.0
+          format: cyclonedx-json
+          output-file: reports/image-sbom-${{ matrix.arch }}.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Block vulnerable images before publication
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          sbom: reports/image-sbom-${{ matrix.arch }}.json
+          grype-version: v0.121.0
+          severity-cutoff: high
+          fail-build: true
+          only-fixed: false
+          output-format: json
+          output-file: reports/image-vulnerabilities-${{ matrix.arch }}.json
       - name: Test the exact candidate digest before tagging
         env:
           IMAGE: ${{ needs.prepare.outputs.image }}

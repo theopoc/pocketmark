@@ -1,0 +1,8 @@
+name: Pocketmark security analysis
+queries:
+  - uses: security-extended
+paths-ignore:
+  - '**/*.test.cjs'
+  - e2e
+  - tools
+  - internal/webui/static/api-docs/vendor

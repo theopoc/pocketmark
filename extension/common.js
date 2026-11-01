@@ -4,10 +4,12 @@ globalThis.Pocketmark = (() => {
   function origin(value) {
     const url = new URL(value);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || url.pathname !== "/") throw new Error("Enter an http(s) server address without a path or credentials.");
+    const loopback = url.hostname === "localhost" || url.hostname === "[::1]" || /^127\.\d+\.\d+\.\d+$/.test(url.hostname);
+    if (url.protocol === "http:" && !loopback) throw new Error("Use HTTPS for your server. HTTP is allowed only on this computer (localhost or a loopback IP).");
     return url.origin;
   }
   async function request(connection, path, options = {}) {
-    const response = await fetch(connection.server + path, { ...options, credentials: "omit", redirect: "error", signal: AbortSignal.timeout(25000), headers: { Authorization: `Bearer ${connection.token}`, ...options.headers } });
+    const response = await fetch(origin(connection.server) + path, { ...options, credentials: "omit", redirect: "error", signal: AbortSignal.timeout(25000), headers: { Authorization: `Bearer ${connection.token}`, ...options.headers } });
     const text = await response.text();
     let data;
     try { data = text ? JSON.parse(text) : null; } catch { throw new Error("Unexpected server response. Check the Pocketmark address."); }

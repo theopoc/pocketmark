@@ -21,7 +21,7 @@ var apiAccess = map[string]routeAccess{
 	"GET /api/account":                                  {owner: true},
 	"PUT /api/account":                                  {owner: true, confirm: true},
 	"GET /api/tokens":                                   {owner: true},
-	"POST /api/tokens":                                  {owner: true},
+	"POST /api/tokens":                                  {owner: true, confirm: true},
 	"PATCH /api/tokens/{id}":                            {owner: true, confirm: true},
 	"DELETE /api/tokens/{id}":                           {owner: true, confirm: true},
 	"POST /api/tokens/{id}/rotate":                      {owner: true, confirm: true},

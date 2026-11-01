@@ -77,6 +77,11 @@ export async function securityJourney({ browser, page, base, username, password,
     await page.setViewportSize({ width: 1280, height: 720 });
     const expired = expireConfirmation();
     await page.locator('#token-form').getByRole('button', { name: 'Create key', exact: true }).click();
+    if (expired) {
+      await page.locator('#reauth-dialog').waitFor({ state: 'visible' });
+      await page.locator('#reauth-password').fill(password);
+      await page.locator('#reauth-submit').click();
+    }
     await page.locator('#new-token').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#reauth-dialog').isVisible(), false);
     const original = await page.locator('#new-token-value').inputValue();
@@ -105,6 +110,7 @@ export async function securityJourney({ browser, page, base, username, password,
     await keyRow.locator('input').press('Escape');
     assert.equal(await keyRow.getByRole('button', { name: 'Rename Synthetic extension', exact: true }).evaluate(node => document.activeElement === node), true);
     assert.equal((await request.delete(url('/api/links/99999'), { headers: { Authorization: `Bearer ${original}` } })).status(), 403);
+    expireConfirmation();
     await page.getByRole('button', { name: 'Rotate Synthetic extension', exact: true }).click();
     await page.locator('#confirm-action-submit').click();
     if (expired) {
@@ -152,7 +158,7 @@ export async function securityJourney({ browser, page, base, username, password,
     const expiresAt = Math.floor(Date.now() / 1000) + 2;
     assert.equal((await request.post(url('/api/tokens'), { data: { name: 'Synthetic expired key', profile: 'read', expiresAt } })).status(), 201);
     await page.waitForFunction(expiry => Date.now() >= expiry * 1000, expiresAt);
-    await page.locator('#settings-page [data-settings-back]').click();
+    await page.locator('#settings-page [data-settings-back]:visible').click();
     await page.locator('#settings-page').waitFor({ state: 'hidden' });
     await clickNavigation(page, '#settings-button');
     const expiredRow = page.locator('#token-list .token-row').filter({ hasText: 'Synthetic expired key' });
@@ -194,7 +200,7 @@ export async function securityJourney({ browser, page, base, username, password,
     await page.mouse.click(0, 0);
     await page.waitForFunction(() => document.getElementById('reauth-password').value === '');
     assert.equal(await page.locator('#reauth-password').inputValue(), '');
-    await page.locator('#settings-page [data-settings-back]').click();
+    await page.locator('#settings-page [data-settings-back]:visible').click();
     await page.waitForFunction(() => document.getElementById('new-token-value').value === '');
     assert.equal(await page.locator('#new-token-value').inputValue(), '');
   } finally { await peer.close(); }

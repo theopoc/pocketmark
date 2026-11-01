@@ -11,6 +11,8 @@ binaries at the exact source revision. Scheduled runs never publish a release.
 | Plan | Conventional Commit PR title and fail-closed source selection. |
 | Quality | Formatting/vet, module checksums/tidy, syntax, actionlint and GoReleaser config. |
 | Security | Full-history redacted Gitleaks for every change; reachable Go vulnerabilities when server checks are selected. |
+| SAST | CodeQL security-extended for Go and JavaScript, including extension-only changes; findings or missing results fail CI. |
+| JavaScript SCA | npm audit for test/scanner dependencies and the Swagger package; byte equality with vendored assets; Retire.js scans the embedded bundle. High/critical findings block. |
 | Tests, AMD64 and ARM64 | Native race tests and atomic coverage, with at most two packages built/tested concurrently. UI regressions remain on both; Python/release-expression regressions and Chromium selector checks run once on AMD64. |
 | Extension | Syntax, regressions, Chromium selector checks and installable ZIP validation in a separate job. |
 | Build, AMD64 and ARM64 | Native musl static binaries and build metadata, retained for 90 days. |
@@ -18,7 +20,7 @@ binaries at the exact source revision. Scheduled runs never publish a release.
 | Docker release | Incorporate validated native executables; test candidate digests with Compose/Chromium before publishing and qualifying the tag. |
 
 Documentation-only PRs (root Markdown and `docs/`) run the plan, secrets and final
-gate. Extension-only PRs also run the extension job. Everything else, including
+gate. Extension-only PRs also run the extension, SAST and JavaScript SCA jobs. Everything else, including
 unknown paths, embedded Markdown, workflows, local actions, Makefile and tooling,
 selects the full suite. Renames include deleted and added paths; filenames are
 NUL-delimited. Empty diffs conservatively select the full suite. No API pagination
@@ -58,6 +60,41 @@ The separate Dependabot workflow only reads verified PR metadata before enabling
 The module toolchain baseline is declared in `go.mod`; the Docker builder version is declared separately in `Dockerfile`. Review their alignment when either changes and keep both toolchains patched. A numerically newer Go minor version does not imply its patch level contains every security fix. Govulncheck remains blocking rather than suppressing standard-library reports.
 
 The deterministic container smoke test does not depend on public websites. The separate live-page workload in [BENCHMARK.md](BENCHMARK.md) measures RAM and external capture behavior; CI smoke checks are not performance measurements or native mobile UI tests. Keep runtime data, tool sessions, downloaded clients, build output and generated validation evidence out of commits, following [AGENTS.md](../AGENTS.md#verification-and-delivery). Record check results and evidence limits in the PR; use ignored `reports/` or `artifacts/` directories for local outputs.
+
+## Security analysis boundaries
+
+CodeQL actions are SHA-pinned and run the bundled `security-extended` queries for
+Go and JavaScript. The Go build uses the production SQLite tags with compilation
+forced for extraction. JavaScript excludes test harnesses and upstream minified
+vendor assets; the latter are covered by dependency scanning. Reports stay in
+short-lived artifacts, without uploading databases or requiring code-scanning
+write permissions. `check_sarif.py` makes findings and absent/failed analyses
+blocking dependencies of `CI passed`; there is no suppressed baseline.
+
+The CI-only npm inventory under `tools/security/` pins Retire.js and Swagger UI.
+The lockfile is audited, and `check_swagger_vendor.py` compares all five vendored
+files with that exact installed package. Update the inventory and shipped files
+together. Retire.js reads current advisory data and checks embedded libraries
+that npm's top-level Swagger package metadata does not expose. `npm audit` also
+checks the `e2e/` lockfile. High/critical findings and scanner errors block; lower
+severities remain visible for review. Dependabot watches both npm inventories.
+Neither scanner tools nor their node_modules are embedded in the application.
+
+Reproduce JavaScript SCA locally:
+
+```sh
+npm ci --prefix tools/security --ignore-scripts --no-audit --no-fund
+npm audit --prefix tools/security --audit-level=high
+npm audit --prefix e2e --audit-level=high
+python3 scripts/check_swagger_vendor.py
+tools/security/node_modules/.bin/retire --path internal/webui/static/api-docs/vendor --severity high
+```
+
+For local image SCA with Syft 1.55.0 and Grype 0.121.0, generate a CycloneDX JSON
+SBOM with `syft pocketmark:ci -o cyclonedx-json=artifacts/image-sbom.json`, then run
+`grype sbom:artifacts/image-sbom.json --fail-on high`. The release gate runs both
+on each exact AMD64/ARM64 candidate digest. No version is published by these
+local checks. SBOM generation is inventory evidence, not a signed attestation.
 
 ## Local pre-commit hooks
 
@@ -205,7 +242,7 @@ Both runtime recipes use the same user, healthcheck and memory settings. Native 
 
 The OCI revision is the release source SHA and the OCI version is `vMAJOR.MINOR.PATCH`. Images are built once per release attempt; no SHA-tag promotion or image evidence from main CI is involved. Existing version tags must already contain the same platform digests; differing content is never replaced. A retry that produces different bytes therefore fails safely instead of overwriting an existing version.
 
-Main binaries are retained for 90 days, subject to repository retention policy. Missing/expired binaries or a failed main CI block publication rather than silently rebuilding release archives. Rerun the original main CI for recoverable failures. Build attestations are disabled so the index contains exactly two runnable platforms; this pipeline does not claim signed provenance or an SBOM. Untagged candidates may remain after a failed release attempt.
+Main binaries are retained for 90 days, subject to repository retention policy. Missing/expired binaries or a failed main CI block publication rather than silently rebuilding release archives. Rerun the original main CI for recoverable failures. Build attestations remain disabled so the index contains exactly two runnable platforms; this pipeline does not claim signed provenance. Syft 1.55.0 generates a CycloneDX SBOM for each candidate image, and Grype 0.121.0 scans it before the version index can be published. High/critical findings block, including findings without a fix. SBOMs and scan results are retained with container-test evidence for seven days. Image inventory covers detected OS and language packages; statically embedded C code is not guaranteed to be identified. Untagged candidates may remain after a failed release attempt.
 
 GHCR package visibility is separate from the public source repository and must remain private; consumers need authenticated read access. These workflows publish artifacts and do not deploy to a server. Release calls the container workflow directly because publication using `GITHUB_TOKEN` does not trigger another workflow's `release:published` event. [GitHub event semantics](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
 
@@ -234,6 +271,10 @@ flowchart TD
     PLAN --> G["CI passed · explicit dependency results"]
     EXT --> G
     PLAN --> S["Secrets always / selected vulnerability scan"]
+    PLAN --> SA["CodeQL Go + JavaScript"]
+    PLAN --> SC["JavaScript SCA + vendored bundle"]
+    SA --> G
+    SC --> G
     PLAN --> T["Tests · AMD64 / ARM64"]
     PLAN --> B["Build · AMD64 / ARM64"]
     Q --> G
@@ -252,7 +293,7 @@ flowchart TD
     CI --> WAIT
     WAIT --> PUB["Package existing binaries · publish GitHub release"]
     PUB --> DB["Docker packaging · existing native binaries"]
-    DB --> DT["Docker tests · Compose and Chromium"]
+    DB --> DT["Docker tests · SCA/SBOM, Compose and Chromium"]
     DT --> DP["Publish tested version index"]
     DP --> V["Qualify published tag · both architectures"]
 ```
