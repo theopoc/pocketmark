@@ -213,6 +213,8 @@ Authenticator setup pairs a QR code on white with a labeled, read-only manual ke
 ### Navigation
 The slate-tinted drawer combines outline icons, sentence-case labels and compact counts. Its Pocketmark mark is a white serif “p.” on an indigo square, shared with the Chrome extension. Active navigation uses pale indigo and stronger text. On desktop with a mouse, the sidebar appears at the left edge on hover or from the header menu; its panel control switches between automatic hiding and a fixed layout, remembered in the browser. Keyboard focus keeps it visible. On smaller screens and touch devices, the header opens a modal drawer; its close button, Escape, backdrop and destination choices dismiss it. Motion respects reduced-motion preferences, and smaller screens give controls more height rather than losing functions.
 
+The header breadcrumb links to the library and every collection ancestor. It scrolls horizontally on narrow screens, initially showing the current location; earlier levels remain reachable by scrolling or keyboard. Breadcrumb controls retain visible focus outlines and 44px phone targets.
+
 ### Tag directory
 Tags has a primary navigation entry. Keep up to 12 most-used tags as quick filters at the bottom of the sidebar, including while browsing the directory. The directory groups names under letter headings in three columns on wide screens, two on medium screens and one on phones. Compact counts sit beside each name. A sticky vertical A–Z rail (plus `#` for other initials) jumps across the paginated directory, disables unavailable letters and moves keyboard focus to the selected heading. Search narrows both the index and available letters. Fetch at most 40 tag rows and 27 group totals per request.
 
