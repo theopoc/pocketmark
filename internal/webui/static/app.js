@@ -194,6 +194,34 @@
     try { localStorage.setItem("pocketmark-theme", theme); } catch { /* Keep the session choice when storage is unavailable. */ }
   }));
 
+  let iconQueue = [], iconActive = 0;
+  function loadSiteIcons() {
+    if (libraryView !== "list") return;
+    iconQueue = [...$("bookmark-grid").querySelectorAll(".card-site-mark[data-icon-src]")].filter(mark => mark.getClientRects().length > 0);
+    pumpSiteIcons();
+  }
+  function pumpSiteIcons() {
+    while (iconActive < 2 && iconQueue.length) {
+      const mark = iconQueue.shift();
+      if (!mark.isConnected || !mark.getClientRects().length || libraryView !== "list" || !mark.dataset.iconSrc) continue;
+      const image = document.createElement("img");
+      image.alt = "";
+      image.decoding = "async";
+      iconActive++;
+      image.onload = () => { if (mark.isConnected) mark.replaceChildren(image); finish(); };
+      image.onerror = () => {
+        if (!mark.dataset.iconRetried) {
+          mark.dataset.iconRetried = "true";
+          mark.dataset.iconSrc = image.src;
+          setTimeout(loadSiteIcons, 2000);
+        }
+        finish();
+      };
+      function finish() { iconActive--; pumpSiteIcons(); }
+      image.src = mark.dataset.iconSrc;
+      delete mark.dataset.iconSrc;
+    }
+  }
   let libraryView = "list";
   try { if (localStorage.getItem("pocketmark-view") === "grid") libraryView = "grid"; } catch { /* Storage is optional. */ }
   function arrangeBookmarkCard(card) {
@@ -213,12 +241,15 @@
     libraryView = view;
     $("bookmark-grid").classList.toggle("view-list", view === "list");
     $("bookmark-grid").querySelectorAll(".bookmark-card").forEach(arrangeBookmarkCard);
+    if (view === "list") requestAnimationFrame(loadSiteIcons);
     for (const value of ["list", "grid"]) $("view-" + value).setAttribute("aria-pressed", String(view === value));
     try { localStorage.setItem("pocketmark-view", view); } catch { /* Private browsing may disallow storage. */ }
     if (changed && state.signedIn) move($("bookmark-grid"), [{ opacity: .8 }, { opacity: 1 }]);
   }
   $("view-list").addEventListener("click", () => setLibraryView("list"));
   $("view-grid").addEventListener("click", () => setLibraryView("grid"));
+  window.addEventListener("resize", loadSiteIcons);
+  if ("ResizeObserver" in window) new ResizeObserver(loadSiteIcons).observe($("bookmark-grid"));
   setLibraryView(libraryView);
 
   const navigation = $("navigation-dialog");
@@ -880,8 +911,10 @@
       card.setAttribute("aria-keyshortcuts", "Space Shift+Space");
       card.setAttribute("aria-description", "Press Space to toggle selection. Shift+Space selects a range.");
       const body = el("div", "card-body");
-      const siteMark = el("span", "card-site-mark", link.type === "file" ? "F" : (host.replace(/^www\./, "")[0] || "?").toLocaleUpperCase());
+      const siteMark = el("span", "card-site-mark", link.type === "file" ? "F" : "");
       siteMark.setAttribute("aria-hidden", "true");
+      if (link.type !== "file") siteMark.append(icon("bookmark"));
+      if (link.type !== "file") siteMark.dataset.iconSrc = `/api/links/${link.id}/favicon?v=${encodeURIComponent(link.updatedAt || "")}`;
       const heading = el("h2", "card-title");
       const open = el("button", "", link.title || link.url);
       open.dataset.focusKey = `link:${link.id}:open`;
@@ -994,6 +1027,7 @@
       arrangeBookmarkCard(card);
       grid.append(card);
     }
+    requestAnimationFrame(loadSiteIcons);
     bulk.render(libraryUnavailable || libraryLoading ? [] : state.links);
     grid.hidden = libraryUnavailable || libraryLoading;
     $("empty-state").hidden = libraryUnavailable || libraryLoading || state.links.length > 0;

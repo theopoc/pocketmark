@@ -33,6 +33,7 @@ func (a *Server) registerAssets(mux *http.ServeMux) {
 		}
 	}
 	mux.HandleFunc("GET /api/links/{id}/thumbnail", a.thumbnail)
+	mux.HandleFunc("GET /api/links/{id}/favicon", a.siteIcon)
 	mux.HandleFunc("GET /api/links/{id}/assets", a.listAssets)
 	mux.HandleFunc("POST /api/links/{id}/assets", limited(a.uploadAsset))
 	mux.HandleFunc("GET /api/assets/{assetId}", a.downloadAsset)

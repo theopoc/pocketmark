@@ -124,3 +124,7 @@ Grid cards load thumbnails lazily from the authenticated
 Private HTTP caching uses ETag revalidation, so a recapture cannot leave a stale
 image cached indefinitely. Missing or failed images leave the original card
 layout. The original page remains the source of the preview's appearance.
+
+## Bookmark site icons
+
+When a wide list is visible, Pocketmark requests icons for its displayed bookmarks. The server reads the icon link from the saved HTML when available, falling back to `/favicon.ico` at the bookmark origin. It contacts the icon host named by the saved page, or the bookmark origin as a fallback, without using an icon lookup service; this reveals the server IP to that host. Fetches share capture’s public-address and redirect checks, have a five-second total deadline, a 128 KiB limit and at most two concurrent requests. PNG, JPEG, GIF and ICO are supported; SVG and unsupported or oversized images fall back to a neutral icon. Icons are not stored on the server; the authenticated browser caches successful responses privately for one hour. Files and narrow or grid views do not trigger icon requests. A failed request is retried once; later attempts occur when the list is refreshed.
