@@ -22,13 +22,32 @@ html[data-theme="dark"] body.api-docs { --secondary-link: var(--focus); color-sc
 #settings-page h2 { scroll-margin-top: 16px; }
 #settings-page h2:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 #settings-page .session-times { font-size: 13px; gap: 8px 16px; }
-#settings-page #token-list .token-row { align-items: flex-start; flex-wrap: wrap; gap: 12px 24px; padding: 20px 0; }
-#settings-page #token-list .token-details { flex-basis: 100%; }
+#settings-page #token-list .token-row { display: block; padding: 0; }
+#settings-page #token-list .token-accordion { min-width: 0; }
+#settings-page #token-list .token-summary { display: flex; align-items: flex-start; gap: 12px; padding: 20px 0; cursor: pointer; list-style: none; border-radius: 4px; }
+#settings-page #token-list .token-summary::-webkit-details-marker { display: none; }
+#settings-page #token-list .token-summary:hover { background: var(--surface); }
+#settings-page #token-list .token-summary[aria-disabled="true"] { cursor: default; }
+#settings-page #token-list .token-chevron { flex: 0 0 18px; margin-top: 5px; color: var(--muted); }
+#settings-page #token-list .token-accordion[open] > .token-summary .token-chevron { transform: rotate(90deg); }
+#settings-page #token-list .token-overview { flex: 1; min-width: 0; }
 #settings-page #token-list .token-name { font-size: 14px; }
-#settings-page #token-list .token-metadata { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 24px; max-width: 344px; margin-top: 14px; }
-#settings-page #token-list .token-row-actions { flex-direction: row; flex-wrap: wrap; gap: 8px; }
-#settings-page #token-list .token-revoke { color: var(--danger); border-color: var(--control-line); }
-#settings-page #token-list .token-revoke:hover { border-color: var(--danger); }
+#settings-page #token-list .token-permissions, #settings-page #token-list .token-summary-activity { display: block; margin-top: 4px; }
+#settings-page #token-list .token-summary-expiry { flex: 0 1 140px; text-align: right; overflow-wrap: anywhere; padding-top: 2px; }
+#settings-page #token-list .token-accordion[open] :is(.token-summary-activity, .token-summary-expiry) { display: none; }
+#settings-page #token-list .token-details { margin-left: 30px; padding-bottom: 20px; }
+#settings-page #token-list .token-metadata { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 24px; margin: 0; padding: 16px 0; border-block: 1px solid var(--line); }
+#settings-page #token-list .token-row-actions { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; }
+#settings-page #token-list .token-row-actions .button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+#settings-page #token-list .token-revoke { margin-left: auto; color: var(--danger); border-color: transparent; background: transparent; }
+#settings-page #token-list .token-revoke:is(:hover, :focus-visible) { color: var(--danger); background: var(--surface); border-color: var(--danger); }
+#settings-page #token-list .token-rename-form { margin-bottom: 16px; }
+@media (max-width: 600px) {
+  #settings-page #token-list .token-summary { flex-wrap: wrap; gap: 8px 12px; }
+  #settings-page #token-list .token-summary-expiry { flex-basis: 100%; padding: 0 0 0 30px; text-align: left; }
+  #settings-page #token-list .token-metadata { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  #settings-page #token-list .token-revoke { margin-left: 0; }
+}
 #settings-page :is(.settings-panel, .settings-intro) > p { max-width: 72ch; }
 #help-topics summary:hover { background: var(--control-hover); }
 #help-topics .help-answer { max-width: 72ch; }
