@@ -209,7 +209,7 @@ try {
     await page.locator('#mfa-manage-form button[value="replace"]').click();
     await page.locator('#mfa-manage-enrollment').waitFor({ state: 'visible' });
     // Closing settings must not spend the recovery grant before confirmation.
-    await page.locator('#settings-page [data-settings-back]').click();
+    await page.locator('#settings-page [data-settings-back]:visible').click();
     await page.locator('#settings-page').waitFor({ state: 'hidden' });
     await openSettings(page, '2fa');
     await page.locator('#mfa-manage-password').fill(password);
@@ -223,7 +223,7 @@ try {
     const heldReplacement = await holdResponse(page, '/api/mfa/verify');
     await page.locator('#mfa-manage-verify button[type="submit"]').click();
     await heldReplacement.ready;
-    assert.equal(await page.locator('#settings-page [data-settings-back]').isDisabled(), true);
+    assert.equal(await page.locator('#settings-page [data-settings-back]:visible').isDisabled(), true);
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('#settings-page').isVisible(), true);
     heldReplacement.release();
@@ -320,7 +320,7 @@ try {
     const heldCodes = await holdResponse(page, '/api/mfa/recovery-codes');
     await page.locator('#mfa-manage-form button[value="codes"]').click();
     await heldCodes.ready;
-    assert.equal(await page.locator('#settings-page [data-settings-back]').isDisabled(), true);
+    assert.equal(await page.locator('#settings-page [data-settings-back]:visible').isDisabled(), true);
     assert.equal(await page.locator('#breadcrumb button:disabled').count(), 2);
     assert.equal(await page.locator('[data-settings-section="backup"]').isDisabled(), true);
     assert.equal(await page.locator('[data-settings-section="password"]').isEnabled(), true);
@@ -344,7 +344,7 @@ try {
     freshRecoveryCodes = (await page.locator('#mfa-manage-codes-value').textContent()).trim().split('\n');
     assert.equal(freshRecoveryCodes.length, 10);
     await page.locator('#mfa-manage-feedback').filter({ hasText: 'These recovery codes may have changed' }).waitFor();
-    await page.locator('#settings-page [data-settings-back]').click();
+    await page.locator('#settings-page [data-settings-back]:visible').click();
     await page.waitForFunction(() => document.getElementById('mfa-manage-codes-value').textContent === '');
     assert.equal(await page.locator('#mfa-manage-codes-value').textContent(), '');
     assert.equal(await page.locator('#mfa-manage-secret').inputValue(), '');
@@ -389,7 +389,7 @@ try {
       assert.equal((await page.locator('#mfa-manage-codes-value').textContent()).trim(), replacementCodes.slice(4).join('\n'));
       await invalid.remove();
       await expired.remove();
-      await page.locator('#settings-page [data-settings-back]').click();
+      await page.locator('#settings-page [data-settings-back]:visible').click();
       await page.locator('#login-view').waitFor({ state: 'visible' });
       await page.reload();
       await page.locator('#app-view').waitFor({ state: 'visible' });
@@ -785,9 +785,9 @@ try {
     <h1>Original saved appearance</h1><img id="embedded" src="data:image/png;base64,${png.toString('base64')}">
     <script>parent.previewCompromised = true</script><img src="/preview-leak">
     <iframe src="/preview-frame-leak"></iframe><style>@import url('/preview-style-leak');</style>
-    <meta http-equiv="refresh" content="0;url=/preview-navigation-leak"><base href="/preview-base-leak">
+    <meta http-equiv="refresh" content="0;url=${new URL('/preview-navigation-leak', base).href}"><base href="${base.href}">
     <noscript><a id="noscript-link" href="${new URL('/preview-noscript-leak', base).href}">No-script navigation</a></noscript>
-    <a href="/preview-link-leak" target="_top">External link</a><svg xmlns:xlink="http://www.w3.org/1999/xlink"><a href="#safe"><set attributeName="href" to="/preview-svg-leak"/><text y="20">SVG link</text></a><a id="xlink" xlink:href="/preview-xlink-leak"><text y="60">Namespaced link</text></a></svg>` + '<!-- padding -->'.repeat(145000);
+    <a href="${new URL('/preview-link-leak', base).href}" target="_top">External link</a><a id="popup-link" href="${new URL('/preview-popup-leak', base).href}" target="_blank">Popup</a><form action="${new URL('/preview-form-leak', base).href}"><button>Submit saved form</button></form><iframe srcdoc="&lt;script&gt;parent.previewCompromised=true&lt;/script&gt;&lt;img src='${new URL('/preview-srcdoc-leak', base).href}'&gt;"></iframe><svg xmlns:xlink="http://www.w3.org/1999/xlink"><a href="#safe"><set attributeName="href" to="/preview-svg-leak"/><text y="20">SVG link</text></a><a id="xlink" xlink:href="${new URL('/preview-xlink-leak', base).href}"><text y="60">Namespaced link</text></a></svg>` + '<!-- padding -->'.repeat(145000);
   const legacy = Buffer.concat([Buffer.from('<!doctype html><meta charset="windows-1252"><h1>Caf'), Buffer.from([0xe9, 0x20, 0x80]), Buffer.from('</h1>')]);
   let htmlAsset;
   for (const [name, media, data] of [['legacy.html', 'text/html', legacy], ['capture.html', 'text/html', Buffer.from(html)], ['capture.png', 'image/png', png], ['capture.pdf', 'application/pdf', pdf]]) {
@@ -795,7 +795,9 @@ try {
     assert.equal(response.status(), 201, await response.text());
     if (name === 'capture.html') htmlAsset = await response.json();
   }
-  let downloads = 0;
+  let downloads = 0, popups = 0;
+  const originalURL = page.url();
+  page.on('popup', () => popups++);
   const leakedRequests = [];
   page.on('download', () => downloads++);
   page.on('response', response => { if (new URL(response.url()).pathname.startsWith('/preview-')) leakedRequests.push(response.url()); });
@@ -816,13 +818,25 @@ try {
   await capture.getByRole('heading', { name: 'Original saved appearance' }).waitFor();
   assert.equal(await capture.locator('h1').evaluate(node => getComputedStyle(node).color), 'rgb(12, 34, 56)');
   assert.equal(await capture.locator('#embedded').evaluate(node => node.complete && node.naturalWidth > 0), true);
-  assert.equal(await capture.getByText('External link', { exact: true }).getAttribute('href'), null);
-  assert.equal(await capture.locator('set, animate').count(), 0);
-  assert.equal(await capture.locator('#xlink').getAttribute('xlink:href'), null);
-  await capture.locator('#xlink').click();
+  // Raw saved markup is retained: exercise the mandatory browser boundaries.
+  await capture.getByText('External link', { exact: true }).click();
+  await capture.locator('#popup-link').click();
+  await capture.getByRole('button', { name: 'Submit saved form' }).click();
+  await Promise.all([
+    page.waitForEvent('console', { predicate: message => /frame-src/.test(message.text()) && /Content Security Policy/.test(message.text()) }),
+    capture.locator('#xlink').click(),
+  ]);
+  assert.equal(page.url(), originalURL);
+  assert.equal(popups, 0);
   assert.equal(await page.evaluate(() => window.previewCompromised), undefined);
   assert.equal(await page.frameLocator('#asset-viewer-content iframe').locator('iframe').getAttribute('sandbox'), '');
-  // noscript is raw text to the tokenizer, but markup to a scriptless browser.
+  // A denied SVG navigation can replace the child document with a browser error.
+  // Reopen the saved page before testing another independent navigation attempt.
+  await chooseOption(page, 'asset-viewer-select', 'legacy.html');
+  await capture.getByRole('heading', { name: 'Café €' }).waitFor();
+  await chooseOption(page, 'asset-viewer-select', 'capture.html');
+  await capture.getByRole('heading', { name: 'Original saved appearance' }).waitFor();
+  // Navigation is blocked even when the browser interprets saved noscript markup.
   // The absolute URL avoids a false pass caused by relative blob URL resolution.
   assert.equal(await capture.locator('#noscript-link').getAttribute('href'), new URL('/preview-noscript-leak', base).href);
   // Chromium can reject the navigation before creating a network request, so

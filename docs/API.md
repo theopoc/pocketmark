@@ -294,7 +294,7 @@ are authenticated. Invalid Authorization never falls back to a valid cookie.
 ### Password confirmation
 
 Browser sessions require password confirmation within the last **five minutes**
-for password changes, changes to existing API keys, downloading a
+for password changes, creating or changing API keys, downloading a
 full backup, changing inactivity timeout, and revoking sessions through the session
 management endpoints. Fresh password login/setup counts as confirmation. Expiry
 returns HTTP 403 with `{"error":"Confirm your password to continue.","code":"reauth_required"}`

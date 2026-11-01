@@ -14,6 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def results(server=True, extension=True):
     return {name: {'result': state, 'outputs': {}} for name, state in {
         'plan': 'success', 'security': 'success',
+        'sast': 'success' if server or extension else 'skipped',
+        'sca': 'success' if server or extension else 'skipped',
         'quality': 'success' if server else 'skipped',
         'test': 'success' if server else 'skipped',
         'build': 'success' if server else 'skipped',
@@ -85,7 +87,7 @@ class WorkflowGateTests(unittest.TestCase):
         self.assertIn('    name: CI passed\n', workflow)
         gate = workflow.split('\n  required:\n')[1]
         self.assertIn('if: always()', gate)
-        self.assertIn('needs: [plan, quality, security, test, build, extension]', gate)
+        self.assertIn('needs: [plan, quality, security, sast, sca, test, build, extension]', gate)
         self.assertIn('python3 scripts/ci_plan.py require', gate)
         self.assertFalse((ROOT / '.github/workflows/ci-required.yml').exists())
         self.assertFalse((ROOT / '.github/workflows/extension.yml').exists())

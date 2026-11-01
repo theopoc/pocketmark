@@ -1,0 +1,9 @@
+{
+  "name": "pocketmark-security-tools",
+  "private": true,
+  "description": "CI-only scanner and inventory of the separately vendored Swagger UI; never shipped or loaded by the app",
+  "devDependencies": {
+    "retire": "6.1.0",
+    "swagger-ui-dist": "5.34.1"
+  }
+}

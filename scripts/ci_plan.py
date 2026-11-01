@@ -26,7 +26,7 @@ def select(event, paths):
 
 
 def require_results(needs):
-    expected = {'plan', 'security', 'quality', 'test', 'build', 'extension'}
+    expected = {'plan', 'security', 'sast', 'sca', 'quality', 'test', 'build', 'extension'}
     if set(needs) != expected or needs['plan'].get('result') != 'success':
         raise ValueError('Missing or unsuccessful CI plan/jobs')
     outputs = needs['plan'].get('outputs', {})
@@ -34,6 +34,7 @@ def require_results(needs):
         raise ValueError('Missing or invalid CI selection')
     for name in expected:
         selected = (name in ('plan', 'security') or
+                    (name in ('sast', 'sca') and 'true' in outputs.values()) or
                     outputs['extension' if name == 'extension' else 'server'] == 'true')
         required = 'success' if selected else 'skipped'
         if needs[name].get('result') != required:

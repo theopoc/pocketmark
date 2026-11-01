@@ -103,6 +103,70 @@ jobs:
         if: needs.plan.outputs.server == 'true'
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 -tags=sqlite_fts5,sqlite_omit_load_extension ./...
 
+  sast:
+    name: SAST (${{ matrix.language }})
+    needs: plan
+    if: needs.plan.outputs.server == 'true' || needs.plan.outputs.extension == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: go
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/go-cache
+        if: matrix.language == 'go'
+        with:
+          mode: quality
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          config-file: .github/codeql.yml
+      - if: matrix.language == 'go'
+        run: GOFLAGS=-a make build
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          output: artifacts/codeql
+          upload: never
+          upload-database: false
+      - name: Block on findings or missing analysis
+        run: python3 scripts/check_sarif.py artifacts/codeql
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: sast-${{ matrix.language }}
+          path: artifacts/codeql/*.sarif
+          retention-days: 7
+
+  sca:
+    name: JavaScript dependency security
+    needs: plan
+    if: needs.plan.outputs.server == 'true' || needs.plan.outputs.extension == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - run: npm ci --prefix tools/security --ignore-scripts --no-audit --no-fund
+      - run: npm audit --prefix tools/security --audit-level=high
+      - run: npm audit --prefix e2e --audit-level=high
+      - name: Verify vendored Swagger UI matches the scanned package
+        run: python3 scripts/check_swagger_vendor.py
+      - name: Scan the actual embedded JavaScript bundle
+        run: tools/security/node_modules/.bin/retire --path internal/webui/static/api-docs/vendor --severity high
+
   test:
     needs: plan
     if: needs.plan.outputs.server == 'true'
@@ -238,7 +302,7 @@ jobs:
   required:
     name: CI passed
     if: always()
-    needs: [plan, quality, security, test, build, extension]
+    needs: [plan, quality, security, sast, sca, test, build, extension]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:

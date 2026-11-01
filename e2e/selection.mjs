@@ -18,10 +18,11 @@ export async function selectionJourney(page, screenshots) {
   const layout = await cards.first().evaluate(card => {
     const rect = selector => card.querySelector(selector).getBoundingClientRect();
     const title = rect('.card-title'), description = rect('.card-description'), domain = rect('.card-domain'), tags = rect('.card-tags');
-    return { aligned: Math.abs(title.x - description.x) < 1 && Math.abs(title.x - domain.x) < 1,
-      ordered: title.y < description.y && description.y < domain.y, metadataRow: Math.abs(domain.y - tags.y) < 5 };
+    return { aligned: Math.abs(title.x - description.x) < 1,
+      ordered: title.y < description.y && description.right <= domain.x && domain.right <= tags.x,
+      metadataRow: Math.abs((domain.top + domain.bottom) / 2 - (tags.top + tags.bottom) / 2) < 5 };
   });
-  assert.deepEqual(layout, { aligned: true, ordered: true, metadataRow: true }, 'list metadata follows the annotated hierarchy');
+  assert.deepEqual(layout, { aligned: true, ordered: true, metadataRow: true }, 'wide list keeps title/description together and domain/tags in separate columns');
   assert.equal(await page.locator('.results-tools #refresh-button').count(), 1, 'Refresh is grouped with selection help and view controls');
   const surface = async (index, modifiers = []) => {
     await cards.nth(index).scrollIntoViewIfNeeded();

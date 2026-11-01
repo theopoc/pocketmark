@@ -67,8 +67,12 @@ func TestSensitiveRoutesRequireRecentPassword(t *testing.T) {
 		}
 	}
 	requireStatus(t, request(a, "POST", "/api/reauth", `{"password":"wrong"}`, false, headers), 403)
-	requireStatus(t, request(a, "POST", "/api/tokens", `{"name":"without confirmation"}`, false, headers), 201)
+	requireStatus(t, request(a, "POST", "/api/tokens", `{"name":"without confirmation","profile":"full","expiresAt":0}`, false, headers), 403)
 	requireStatus(t, request(a, "POST", "/api/reauth", `{"password":"test-only-password"}`, false, map[string]string{"Cookie": cookie, "Origin": "https://evil.test"}), 403)
+	var count int
+	if err := db.QueryRow("SELECT count(*) FROM api_tokens").Scan(&count); err != nil || count != 0 {
+		t.Fatalf("unconfirmed request created a key: count=%d err=%v", count, err)
+	}
 	requireStatus(t, request(a, "POST", "/api/reauth", `{"password":"test-only-password"}`, false, headers), 200)
 	requireStatus(t, request(a, "POST", "/api/tokens", `{"name":"confirmed"}`, false, headers), 201)
 	requireStatus(t, request(a, "GET", "/api/backup", "", false, headers), 200)
