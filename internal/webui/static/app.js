@@ -1681,6 +1681,9 @@
   function setTokensBusy(busy) {
     tokensBusy = busy;
     $("token-form").querySelector("button[type='submit']").disabled = busy || editingTokenID !== null || tokenCount >= 32;
+    $("token-list").querySelectorAll(".token-summary").forEach(summary => {
+      summary.setAttribute("aria-disabled", String(busy || editingTokenID !== null));
+    });
     $("token-list").querySelectorAll("button, .token-rename-form input").forEach((control) => {
       control.disabled = busy || (editingTokenID !== null && !control.closest(".token-rename-form"));
     });
@@ -1729,6 +1732,9 @@
     return time;
   }
   function renderTokens(tokens, session, focusID, focusAction = "toggle") {
+    const previousRows = $("token-list").querySelectorAll(".token-accordion");
+    const openIDs = new Set([...previousRows].filter(row => row.open).map(row => row.dataset.tokenId));
+    const initial = previousRows.length === 0;
     $("token-list").replaceChildren();
     tokenCount = tokens.length;
     const expiredKey = token => token.expiresAt > 0 && token.expiresAt * 1000 <= Date.now();
@@ -1738,15 +1744,24 @@
     if (!tokens.length) $("token-list").append(el("li", "token-empty muted", "No API keys yet. Create a key to connect your first app."));
     for (const token of tokens || []) {
       const row = el("li", "token-row");
+      const accordion = el("details", "token-accordion");
+      accordion.dataset.tokenId = String(token.id);
+      accordion.open = openIDs.has(String(token.id)) || focusID === token.id || (initial && token === tokens[0]);
+      const summary = el("summary", "token-summary");
+      summary.addEventListener("click", event => {
+        if (tokensBusy || editingTokenID !== null) event.preventDefault();
+      });
+      const chevron = icon("chevron-right"); chevron.classList.add("token-chevron");
+      const overview = el("span", "token-overview");
       const details = el("div", "token-details");
-      const heading = el("div", "token-name-row");
-      const rename = el("button", "icon-button token-rename");
-      rename.append(icon("edit"));
+      const heading = el("span", "token-name-row");
+      const rename = el("button", "button subtle token-rename", "Rename");
+      rename.prepend(icon("edit"));
       rename.type = "button";
       rename.setAttribute("aria-label", `Rename ${token.name}`);
       rename.title = `Rename ${token.name}`;
-      const nameGroup = el("div", "token-name-group");
-      nameGroup.append(el("strong", "token-name", token.name), rename);
+      const nameGroup = el("span", "token-name-group");
+      nameGroup.append(el("strong", "token-name", token.name));
       const expired = expiredKey(token);
       heading.append(nameGroup, el("span", `token-status${usableKey(token) ? " is-active" : ""}`, expired ? "Expired" : token.active ? "Active" : "Disabled"));
       const metadata = el("dl", "token-metadata");
@@ -1757,7 +1772,14 @@
       }
       const permissions = { read: "Read only", capture: "Add, edit & capture", sync: "Floccus sync", full: "Full library access" };
       const expiry = token.expiresAt ? `${expired ? "Expired" : "Expires"} ${new Date(token.expiresAt * 1000).toLocaleDateString()}` : "No expiry";
-      details.append(heading, el("p", "small muted", `${permissions[token.profile] || token.profile} · ${expiry}`), metadata);
+      const expiryGroup = el("div", "");
+      expiryGroup.append(el("dt", "", expired ? "Expired" : "Expires"), el("dd", "", token.expiresAt ? new Date(token.expiresAt * 1000).toLocaleDateString() : "No expiry"));
+      metadata.append(expiryGroup);
+      const activity = el("span", "token-summary-activity small muted");
+      activity.append("Last used: ", tokenDate(token.lastUsedAt));
+      overview.append(heading, el("span", "token-permissions small muted", permissions[token.profile] || token.profile), activity);
+      summary.append(chevron, overview, el("span", "token-summary-expiry small muted", expiry));
+      details.append(metadata);
       if (expired) details.append(el("p", "small muted", "Create a new key to reconnect this app."));
       const actions = el("div", "token-row-actions");
       const toggle = el("button", "button subtle", token.active ? "Disable" : "Reactivate");
@@ -1816,7 +1838,7 @@
           }
         });
         buttons.append(save, cancel); form.append(label, input, help, buttons, error);
-        heading.hidden = true; details.prepend(form); setTokensBusy(false); input.focus(); input.select();
+        details.prepend(form); setTokensBusy(false); input.focus(); input.select();
       });
       async function changeKey(remove) {
         if (tokensBusy || editingTokenID !== null) return;
@@ -1858,8 +1880,10 @@
         } catch (error) { if (session === settingsSession) showTokenError(error.message); }
         finally { if (session === settingsSession) setTokensBusy(false); }
       });
-      actions.append(toggle, rotate, revoke); row.append(details, actions); $("token-list").append(row);
-      if (focusID === token.id) (focusAction === "rename" ? rename : toggle).focus();
+      revoke.prepend(icon("trash"));
+      actions.append(rename, toggle, rotate, revoke); details.append(actions);
+      accordion.append(summary, details); row.append(accordion); $("token-list").append(row);
+      if (focusID === token.id) (focusAction === "rename" || expired ? rename : toggle).focus();
     }
     setTokensBusy(tokensBusy);
   }
