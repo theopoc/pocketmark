@@ -37,10 +37,8 @@
         const entry = selected.get(link.id);
         if (entry) Object.assign(entry, { label: link.title || link.url || `Bookmark ${link.id}`, read: !!link.read, favorite: !!link.favorite });
       }
-      const count = visible.filter(link => selected.has(link.id)).length, outside = selected.size - count;
+      const count = visible.filter(link => selected.has(link.id)).length;
       $("selected-count").textContent = `${selected.size} selected`;
-      $("selected-outside").textContent = outside ? `${outside} outside these results` : "";
-      $("selected-outside").hidden = !outside;
       bar.hidden = !selected.size;
       const allRead = selected.size > 0 && [...selected.values()].every(entry => entry.read);
       const symbol = allRead ? "clock" : "check-circle", label = allRead ? "Unread" : "Read";
@@ -125,13 +123,8 @@
       dialog.setAttribute("role", action === "delete" ? "alertdialog" : "dialog");
       dialog.setAttribute("aria-describedby", ["delete", "capture"].includes(action) ? "bulk-scope bulk-description" : "bulk-scope");
       const count = entries.length, scope = bookmarks(count);
-      const outside = entries.filter(([id]) => !visible.some(link => link.id === id)).length;
       $("bulk-title").textContent = !action ? `${count} selected` : ["favorite", "read"].includes(action) ? actionNames[action] : `${actionNames[action]} ${scope}${["delete", "capture"].includes(action) ? "?" : ""}`;
-      $("bulk-scope").textContent = outside ? `${outside} outside these results. This action applies to all ${count} selected bookmarks.` : `${count} selected bookmark${count === 1 ? "" : "s"}`;
-      $("bulk-review-label").textContent = `Review ${scope}`;
-      $("bulk-review").hidden = !action;
-      $("bulk-review").open = outside > 0 || action === "delete";
-      $("bulk-items").replaceChildren(...entries.map(([, entry]) => { const li = document.createElement("li"); li.textContent = entry.label; return li; }));
+      $("bulk-scope").textContent = `${count} selected bookmark${count === 1 ? "" : "s"}`;
       $("bulk-menu").hidden = !!action;
       $("bulk-back").hidden = !fromMenu;
       $("bulk-move-fields").hidden = action !== "move";

@@ -703,9 +703,6 @@ body:has(dialog[open]) { overflow: hidden; }
 .draft-notice { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; background: var(--accent-soft); color: var(--ink); padding: 10px 12px; border-radius: 6px; font-size: 12px; margin-bottom: 16px; }
 .draft-notice .text-button { color: inherit; }
 #reader-mode-hint, .draft-notice, #bulk-scope { overflow-wrap: anywhere; }
-.bulk-items { max-height: 180px; overflow-y: auto; padding-left: 20px; font-size: 12px; overflow-wrap: anywhere; }
-#bulk-review { margin-bottom: 16px; }
-#bulk-review summary { cursor: pointer; font-size: 12px; }
 .reader-sticky-heading { display: block; flex-shrink: 0; z-index: 2; background: var(--paper); margin: 0; padding: 14px 24px; border-bottom: 1px solid var(--line); }
 .reader-heading-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; }
 .reader-section-nav { display: flex; gap: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
@@ -898,7 +895,6 @@ body:has(dialog[open]) { overflow: hidden; }
 .selection-help-panel strong { font-size: 13px; }
 .selection-help-panel p { margin: 10px 0 0; }
 .selection-help-panel kbd { font-size: 10px; }
-#selected-outside { color: var(--muted); }
 .selection-marquee { position: fixed; z-index: 20; pointer-events: none; background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid var(--focus); border-radius: 3px; }
 .is-selecting, .is-selecting * { user-select: none; cursor: crosshair; }
 .bookmark-exit-layer { display: block; position: fixed; z-index: 4; pointer-events: none; overflow: hidden; padding: 0; border: 0; }
@@ -955,7 +951,6 @@ body:has(dialog[open]) { overflow: hidden; }
 .bulk-bar { position: fixed; z-index: 30; bottom: max(20px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; width: max-content; max-width: calc(100% - 32px); padding: 8px; border-radius: 12px; background: color-mix(in srgb, var(--accent) 75%, #000); color: #fff; box-shadow: 0 6px 24px #20232c40; }
 .bulk-selection { display: flex; flex-direction: column; gap: 2px; padding: 0 8px; min-width: 0; }
 #selected-count { color: inherit; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
-#selected-outside { color: inherit; font-size: 12px; max-width: 170px; }
 .bulk-buttons { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; border-left: 1px solid #fff3; padding-left: 8px; }
 .bulk-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 10px; border: 0; border-radius: 6px; color: inherit; background: transparent; font-size: 13px; font-weight: 550; white-space: nowrap; }
 .bulk-button:hover { background: #0002; }
@@ -976,10 +971,6 @@ body:has(#bulk-bar:not([hidden])) > #toast { bottom: calc(var(--bulk-bar-height,
 .bulk-dialog .dialog-heading h2 { flex: 1; margin: 0; font-size: 18px; }
 .bulk-dialog .dialog-heading .icon-button { flex: none; }
 .bulk-dialog #bulk-scope { margin: 8px 0 16px; }
-.bulk-dialog #bulk-review { margin: 16px 0 0; }
-.bulk-dialog #bulk-review summary { min-height: 32px; padding-block: 6px; }
-.bulk-dialog .bulk-items { padding-left: 20px; margin-bottom: 0; }
-.bulk-dialog .bulk-items li { padding-block: 4px; }
 .bulk-dialog .dialog-actions { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 20px; }
 .bulk-dialog .form-error:empty { display: none; }
 .bulk-dialog #bulk-description { font-size: 14px; line-height: 1.6; }
@@ -1008,7 +999,6 @@ body:has(#bulk-bar:not([hidden])) > #toast { bottom: calc(var(--bulk-bar-height,
   .bulk-dialog::backdrop { background: #10111966; }
   .bulk-dialog .dialog-heading .icon-button { min-width: 44px; min-height: 44px; }
   .bulk-dialog .dialog-heading h2 { font-size: 18px; }
-  .bulk-dialog #bulk-review summary { min-height: 44px; padding-block: 12px; }
   .bulk-dialog #bulk-scope { margin-top: 0; }
   .bulk-dialog .bulk-menu button { min-height: 48px; }
   .bulk-dialog .dialog-actions { flex-direction: column-reverse; }
