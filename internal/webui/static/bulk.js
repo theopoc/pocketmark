@@ -47,7 +47,7 @@
         $(prefix + "-label").textContent = label;
       }
       $("bulk-read").setAttribute("aria-label", allRead ? "Mark selected bookmarks as unread" : "Mark selected bookmarks as read");
-      const pageLabel = visible.length > 0 && count === visible.length ? "Deselect page" : "Select page";
+      const pageLabel = visible.length > 0 && count === visible.length ? "Unselect all" : "Select all";
       for (const id of ["select-page", "bulk-select-page"]) {
         $(id).disabled = visible.length === 0;
         $(id).setAttribute("aria-pressed", count > 0 && count < visible.length ? "mixed" : String(visible.length > 0 && count === visible.length));
