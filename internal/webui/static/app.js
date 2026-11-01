@@ -880,6 +880,8 @@
       card.setAttribute("aria-keyshortcuts", "Space Shift+Space");
       card.setAttribute("aria-description", "Press Space to toggle selection. Shift+Space selects a range.");
       const body = el("div", "card-body");
+      const siteMark = el("span", "card-site-mark", link.type === "file" ? "F" : (host.replace(/^www\./, "")[0] || "?").toLocaleUpperCase());
+      siteMark.setAttribute("aria-hidden", "true");
       const heading = el("h2", "card-title");
       const open = el("button", "", link.title || link.url);
       open.dataset.focusKey = `link:${link.id}:open`;
@@ -889,7 +891,7 @@
       titleRow.append(favorite, heading);
       const hostLabel = el("p", "card-domain", host);
       if (link.type !== "file") hostLabel.title = link.url;
-      body.append(titleRow);
+      body.append(siteMark, titleRow);
       if (link.description) body.append(el("p", "card-description", link.description));
       if (state.query && link.searchSnippet) {
         const excerpt = el("p", "search-excerpt");
