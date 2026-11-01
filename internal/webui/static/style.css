@@ -958,6 +958,7 @@ body:has(dialog[open]) { overflow: hidden; }
 .bulk-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 10px; border: 0; border-radius: 6px; color: inherit; background: transparent; font-size: 13px; font-weight: 550; white-space: nowrap; }
 .bulk-button:hover, .bulk-more[open] > summary { background: #ffffff1a; }
 .bulk-button .icon { width: 16px; height: 16px; }
+#bulk-move .icon { width: 20px; height: 20px; stroke-width: 2; }
 .bulk-delete { color: #ffb4b8; }
 .bulk-clear { min-width: 44px; }
 .bulk-more { position: relative; }
