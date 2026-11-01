@@ -77,12 +77,8 @@ export async function securityJourney({ browser, page, base, username, password,
     await page.setViewportSize({ width: 1280, height: 720 });
     const expired = expireConfirmation();
     await page.locator('#token-form').getByRole('button', { name: 'Create key', exact: true }).click();
-    if (expired) {
-      await page.locator('#reauth-dialog').waitFor({ state: 'visible' });
-      await page.locator('#reauth-password').fill(password);
-      await page.locator('#reauth-submit').click();
-    }
     await page.locator('#new-token').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#reauth-dialog').isVisible(), false);
     const original = await page.locator('#new-token-value').inputValue();
     assert.equal(original.length, 64);
     assert.equal(await page.locator('#new-token-value').getAttribute('type'), 'password');
@@ -92,6 +88,11 @@ export async function securityJourney({ browser, page, base, username, password,
     assert.equal((await request.delete(url('/api/links/99999'), { headers: { Authorization: `Bearer ${original}` } })).status(), 403);
     await page.getByRole('button', { name: 'Rotate Synthetic extension', exact: true }).click();
     await page.locator('#confirm-action-submit').click();
+    if (expired) {
+      await page.locator('#reauth-dialog').waitFor({ state: 'visible' });
+      await page.locator('#reauth-password').fill(password);
+      await page.locator('#reauth-submit').click();
+    }
     await page.waitForFunction(old => document.getElementById('new-token-value').value !== old, original);
     const rotated = await page.locator('#new-token-value').inputValue();
     assert.equal((await request.get(url('/api/session'), { headers: { Authorization: `Bearer ${original}` } })).status(), 401);

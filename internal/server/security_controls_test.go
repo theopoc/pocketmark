@@ -67,7 +67,7 @@ func TestSensitiveRoutesRequireRecentPassword(t *testing.T) {
 		}
 	}
 	requireStatus(t, request(a, "POST", "/api/reauth", `{"password":"wrong"}`, false, headers), 403)
-	requireStatus(t, request(a, "POST", "/api/tokens", `{"name":"blocked"}`, false, headers), 403)
+	requireStatus(t, request(a, "POST", "/api/tokens", `{"name":"without confirmation"}`, false, headers), 201)
 	requireStatus(t, request(a, "POST", "/api/reauth", `{"password":"test-only-password"}`, false, map[string]string{"Cookie": cookie, "Origin": "https://evil.test"}), 403)
 	requireStatus(t, request(a, "POST", "/api/reauth", `{"password":"test-only-password"}`, false, headers), 200)
 	requireStatus(t, request(a, "POST", "/api/tokens", `{"name":"confirmed"}`, false, headers), 201)
@@ -77,7 +77,7 @@ func TestSensitiveRoutesRequireRecentPassword(t *testing.T) {
 	if _, err := db.Exec("UPDATE sessions SET confirmed_at=0 WHERE hash=?", a.sessionHash(other.Value)); err != nil {
 		t.Fatal(err)
 	}
-	requireStatus(t, request(a, "POST", "/api/tokens", `{"name":"other"}`, false, map[string]string{"Cookie": other.String()}), 403)
+	requireStatus(t, request(a, "DELETE", "/api/tokens/1", ``, false, map[string]string{"Cookie": other.String()}), 403)
 	// The former server secret is no longer an administrative credential.
 	requireStatus(t, request(a, "PUT", "/api/account", `{"username":"recovered","password":"new-recovery-password"}`, false, map[string]string{"Authorization": "Bearer " + testToken}), 401)
 	requireStatus(t, request(a, "GET", "/api/session", "", false, headers), 200)
