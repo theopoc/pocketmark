@@ -3,6 +3,9 @@
 /dist/
 /artifacts/
 /reports/
+/benchmarks/
+/test-results/
+/playwright-report/
 /tmp/
 /.cache/
 /.claude/
@@ -50,3 +53,14 @@ __pycache__/
 /.skills/
 /SKILL.md
 /.impeccable/
+
+# Generated documentation evidence; keep maintained guides and the README illustration.
+/docs/*.json
+/docs/*.png
+/docs/*.jpg
+!/docs/pocketmark-dark-preview.jpg
+/docs/*AUDIT*.md
+/docs/*REPORT*.md
+/docs/*RESEARCH*.md
+/docs/*VALIDATION*.md
+/docs/security-audit/

@@ -29,7 +29,7 @@ The [personal Chrome extension](../extension/README.md) adds or edits the curren
 
 HTML, visible PNG, full-page PNG and PDF are independently selectable and off by default. One bounded background task continues after the popup closes. Captured files remain locally in IndexedDB until uploaded or explicitly discarded; failures require a manual retry. Earlier server attachments are retained. Chrome's `debugger` permission is declared at installation and used for the chosen source tab while capture/upload work runs. Rendering consumes client resources, not server RAM. See [installation and limits](../extension/README.md).
 
-Linkwarden's `/api/v1/` and `/api/v2/` compatibility interfaces, third-party extension/mobile support and the Floccus Linkwarden API backend have been removed. WebDAV remains available, and no library data is deleted. Older client observations remain historical evidence in [REAL_CLIENTS.md](REAL_CLIENTS.md).
+Linkwarden's `/api/v1/` and `/api/v2/` compatibility interfaces, third-party extension/mobile support and the Floccus Linkwarden API backend have been removed. WebDAV remains available, and no library data is deleted. See [client compatibility and verification](REAL_CLIENTS.md) for observed workflows and qualification limits.
 
 ## Floccus setup and data semantics
 
@@ -42,7 +42,7 @@ The staged upload/MOVE sequence preserves exact uploaded bytes. Native changes d
 ## Remaining qualification, not implemented guarantees
 
 - No server-side Chromium or perfect arbitrary-site offline reproduction. Full-page/PDF generation uses the Chrome extension in the user's browser.
-- Chrome runtime evidence is recorded in [REAL_CLIENTS.md](REAL_CLIENTS.md). Historical third-party Android and extension results no longer describe supported clients. Bounded Chromium, Firefox and WebKit interface checks are recorded in the [dated UI validation report](UI_VALIDATION_2026-11-01.md); they do not establish full-client qualification. iOS, physical phones and Safari remain untested.
+- [Client compatibility and verification](REAL_CLIENTS.md) distinguishes historical real-client observations from protocol and emulated interface checks. Neither establishes full-client qualification for the current revision. iOS, physical phones and Safari remain untested.
 - Uploaded PDF/image bytes are preserved; PDF text extraction and image OCR are not provided.
 - A server snapshot cannot log into websites; the user's browser can capture a page they have opened, subject to its permissions and resource restrictions.
-- RAM measurements exclude the user's browser and Docker VM; see [BENCHMARK.md](BENCHMARK.md) for measured workloads rather than a universal memory guarantee.
+- RAM measurements exclude the user's browser and Docker VM; see [BENCHMARK.md](BENCHMARK.md) for workload methodology and measurement boundaries.

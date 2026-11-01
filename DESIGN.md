@@ -84,8 +84,9 @@ components:
 
 # Design System: Pocketmark
 
-This document is the source of truth for current interface design rules. Dated
-UI validation reports preserve historical observations and their testing limits.
+This document is the source of truth for current interface design rules.
+Record validation evidence and its testing limits in the PR; keep generated
+artifacts outside version control as described in [AGENTS.md](AGENTS.md).
 
 ## Overview
 
@@ -254,6 +255,3 @@ The library reference is the restored interface at `e678b74`. Keep its icon acti
 Login/MFA, settings, help and API documentation use 13px labels/hints and 14px body copy on desktop; phone fields remain 16px. State colors reuse the existing palette and field boundary tokens. Direct settings headings reserve 16px of scroll space for visible keyboard focus. Notes/files and help disclosures use progressive 160ms opacity feedback with immediate reduced-motion fallback. The existing library and theme timings remain unchanged.
 
 The app, API documentation and extension share an interruption-safe theme controller. The extension supplements its original dark palette with a locally stored light theme, keeping the field order and bottom save action. Collection hints show character count and percentage of the server UTF-8 budget. Shared local theme/name modules are checked by `scripts/sync_ui_assets.py`; no runtime dependency is added.
-
-Historical evidence and validation limits are recorded in the
-[UI validation report of 1 November 2026](docs/UI_VALIDATION_2026-11-01.md).

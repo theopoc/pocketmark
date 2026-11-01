@@ -33,7 +33,7 @@ Open the same local URL. Compose stores data in a named volume and publishes por
 
 Tagged releases also publish a private multiarchitecture image at `ghcr.io/theopoc/pocketmark:vMAJOR.MINOR.PATCH` for Linux AMD64/ARM64. After authenticating Docker with read access to the package, use that image in place of `build: .` in your Compose configuration. Keep the same volume, port binding and resource/security settings. See [GHCR publication and verification](CI.md#ghcr-images).
 
-The supplied Compose configuration sets a **128 MiB container memory limit** and one CPU. This is a deployment limit, not a guarantee that every workload completes within it. See [benchmark methodology and results](BENCHMARK.md) for measured behavior.
+The supplied Compose configuration sets a **128 MiB container memory limit** and one CPU. This is a deployment limit, not a guarantee that every workload completes within it. See [memory measurement methodology](BENCHMARK.md) for workload boundaries.
 
 ## What is included
 
@@ -52,9 +52,9 @@ The supplied Compose configuration sets a **128 MiB container memory limit** and
 
 Default capture fetches one HTML response, with a 20-second timeout, at most five redirects, a 2 MiB response/decompressed-body limit and up to 256 KiB of extracted text. When adding or editing a bookmark, select **Save an HTML copy** for bounded resource embedding, or use the extension for an already-rendered page and a visible-tab PNG screenshot. The same Chrome extension generates PDF and full-page screenshots on demand, using an explicit debugger permission; [installation and limits](../extension/README.md). Existing PDF, image and HTML files can be attached under **Reader → Files**. No Chromium instance runs on the server. Private, loopback and reserved network destinations can be bookmarked, but server capture refuses them. See [archive limits](ARCHIVES.md).
 
-Collaboration/public sharing, SSO/OIDC, RSS, AI automation, scheduled recapture and automatic backups are intentionally excluded. Screenshots and PDF rendering consume memory in the user's browser; their memory is not included in server measurements. Historical Chrome and third-party client observations are preserved in the [real-client validation record](REAL_CLIENTS.md). The supported integration paths are the Pocketmark Chrome extension and Floccus WebDAV; older Linkwarden client observations do not qualify the new extension.
+Collaboration/public sharing, SSO/OIDC, RSS, AI automation, scheduled recapture and automatic backups are intentionally excluded. Screenshots and PDF rendering consume memory in the user's browser; their memory is not included in server measurements. See [client compatibility and verification](REAL_CLIENTS.md) for observed workflows and qualification limits. The supported integration paths are the Pocketmark Chrome extension and Floccus WebDAV; older Linkwarden client observations do not qualify the new extension.
 
-The unmodified third-party Android app (1.4.4) was also tested in an ARM64 emulator: sign-in, bookmarks, collections/descriptions, tags, search, banners and archive views work for the exercised flows. Prolonged offline opening has an identified client-cache limitation; iOS and physical phones remain untested. See [mobile results and corrections](REAL_CLIENTS.md#official-android-application--20-october-2026).
+Third-party Android clients are outside the supported scope. The historical emulator run identified a prolonged-offline client-cache limitation; iOS and physical phones remain untested. See [client qualification limits](REAL_CLIENTS.md#observed-workflows-and-their-limits).
 
 ## Configuration
 
@@ -109,13 +109,13 @@ make test
 make check
 ```
 
-`make test` runs Go tests with the race detector. `make check` runs `go vet` and JavaScript syntax checking, which requires Node.js as a development tool. Build and runtime do not require Node.js. See `python3 scripts/benchmark.py --help` and the [benchmark report](BENCHMARK.md) for the reproducible memory workload.
+`make test` runs Go tests with the race detector. `make check` runs `go vet` and JavaScript syntax checking, which requires Node.js as a development tool. Build and runtime do not require Node.js. See `python3 scripts/benchmark.py --help` and the [measurement methodology](BENCHMARK.md) for the reproducible memory workload.
 
 GitHub Actions also checks formatting, dependency integrity, secrets, reachable vulnerabilities, extension tests and release packaging. Native Linux AMD64/ARM64 jobs run race tests, build static binaries and validate the hardened Docker/Compose runtime. GoReleaser OSS packages the tested binaries and extensions, generates SHA-256 checksums and publishes version tags; manual release runs exercise packaging and verification without publishing. See [CI and release](CI.md) and [contributor instructions](../AGENTS.md).
 
 For capture-enabled Docker validation, run `docker build -t pocketmark:validation .`, then `python3 scripts/benchmark_capture.py`. It captures six public documentation pages, measures process/container memory, checks restart persistence, and removes its isolated test deployment.
 
-For the extended feature workload, use `python3 scripts/benchmark_capture.py --features --image pocketmark:mobile --output docs/benchmark-mobile.json` after `docker build -t pocketmark:mobile .`. It also exercises a 19 MiB upload/download, offline resource capture, annotations, bulk editing, HTML/XBEL round-trips, the staged Floccus DAV protocol and a full backup. The final ARM64 run measured **10.52 MiB idle RSS**, **23.59 MiB peak application RSS** and **95.37 MiB peak whole-container memory**, including filesystem cache. No OOM or limit events occurred. Client rendering, the Android emulator and the Docker VM are excluded; see the [benchmark report](BENCHMARK.md) for workload boundaries.
+For the extended feature workload, add `--features` and keep output in ignored `reports/`, for example `python3 scripts/benchmark_capture.py --features --image pocketmark:validation --output reports/benchmark-features.json`. It also exercises a 19 MiB upload/download, offline resource capture, annotations, bulk editing, HTML/XBEL round-trips, the staged Floccus DAV protocol and a full backup. See [measurement boundaries](BENCHMARK.md); record results in the PR rather than committing generated evidence.
 
 | Path | Contents |
 | --- | --- |
