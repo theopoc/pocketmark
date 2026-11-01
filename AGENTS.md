@@ -38,6 +38,9 @@ against the RAM goal.
 - Client compatibility or Floccus: read [feature coverage](docs/FEATURES.md) and
   [real-client evidence](docs/REAL_CLIENTS.md). Distinguish protocol tests from
   observed and untested clients; Android's prolonged-offline cache issue remains upstream.
+- Interface changes: read [DESIGN.md](DESIGN.md), the source of truth for current
+  design rules, before editing the web UI, API documentation or extension UI.
+  Dated UI validation reports record historical evidence, not additional design rules.
 
 ## Verification and delivery
 
@@ -73,13 +76,19 @@ For every task, including documentation, follow the detailed
    from its merge-base, including committed, staged, unstaged and new files.
    Supply the request, repository instructions and validation results. Apply
    recommendations, rerun affected checks and re-review until no actionable findings remain.
-3. Complete applicable checks and secret scanning; commit with a Conventional
+3. For interface changes, also launch the project-local `design_reviewer` defined
+   in [.codex/agents/design_reviewer.toml](.codex/agents/design_reviewer.toml).
+   Supply the request, merge-base, complete diff, validation results and disposable
+   preview or before/after evidence. If named custom agents are unavailable, launch
+   a subagent with that file's `developer_instructions`. Apply actionable findings
+   and re-review corrections; record coverage and anything unverified in the PR.
+4. Complete applicable checks and secret scanning; commit with a Conventional
    Commit message, push and create/update a PR to `main`. Record behavior,
    validation, review outcome and concrete reasons for any rejected recommendations.
-4. Keep the branch current and resolve conflicts while preserving both sides' intent.
+5. Keep the branch current and resolve conflicts while preserving both sides' intent.
    Repeat review and checks after corrections or conflict resolution; monitor CI
    until every required check, including `CI passed`, succeeds at the latest head.
-5. Verify the reviewed head is current and conflict-free, then automatically
+6. Verify the reviewed head is current and conflict-free, then automatically
    squash-merge with the validated PR title, respecting branch protection.
    Verify the merged state and report the PR link, review outcome and CI result;
    report any blocker explicitly.

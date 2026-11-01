@@ -91,6 +91,11 @@ The repository settings observed on 2026-10-23 allow only squash merges and dele
 
 Follow the [development workflow in AGENTS.md](../AGENTS.md#development-workflow) for every development task, including documentation changes. Before delivery, launch a code-review subagent on the complete task diff from its merge-base with refreshed `origin/main`, including uncommitted changes and newly added files. Apply its recommendations, rerun affected checks and have the corrections reviewed until no actionable findings remain. Record the review outcome, any rejected recommendation with its concrete rationale, resulting behavior, compatibility impact, checks and secret scanning in the PR.
 
+Interface changes also require the project-local design review described in
+[AGENTS.md](../AGENTS.md#development-workflow), with rendered evidence and explicit
+coverage limits. Current design rules belong to [DESIGN.md](../DESIGN.md);
+dated validation reports preserve historical evidence.
+
 Keep the branch up to date with `origin/main` and resolve merge conflicts autonomously, reading both sides to preserve intended behavior and unrelated changes. Verify that no conflict markers remain. Conflict resolutions and subsequent development changes require renewed subagent review and applicable local checks before pushing, followed by CI on the latest pushed commit. Fix CI failures and repeat these gates for corrections.
 
 Once subagent review is complete and every required check, including `CI passed`, succeeds, the development agent verifies that the PR is conflict-free, up to date and still at the validated head, then squash-merges it automatically without asking for confirmation. Preserve the validated PR title and respect branch protection; a changed head requires renewed review, local validation and CI. Pending, failed, cancelled or skipped required checks do not authorize merge. Before reporting completion, verify the merged state and provide the PR link, review outcome and CI result; report any blocker explicitly. This is an agent delivery responsibility, not a new GitHub Actions merge workflow; eligible Dependabot PRs use the separate automation below.

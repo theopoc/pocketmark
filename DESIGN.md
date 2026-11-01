@@ -84,6 +84,9 @@ components:
 
 # Design System: Pocketmark
 
+This document is the source of truth for current interface design rules. Dated
+UI validation reports preserve historical observations and their testing limits.
+
 ## Overview
 
 **Creative North Star: "The Personal Library Workspace"**
@@ -252,4 +255,5 @@ Login/MFA, settings, help and API documentation use 13px labels/hints and 14px b
 
 The app, API documentation and extension share an interruption-safe theme controller. The extension supplements its original dark palette with a locally stored light theme, keeping the field order and bottom save action. Collection hints show character count and percentage of the server UTF-8 budget. Shared local theme/name modules are checked by `scripts/sync_ui_assets.py`; no runtime dependency is added.
 
-See [approved UI ledger](docs/UI_APPROVED.md) for scope, evidence and validation limits.
+Historical evidence and validation limits are recorded in the
+[UI validation report of 1 November 2026](docs/UI_VALIDATION_2026-11-01.md).

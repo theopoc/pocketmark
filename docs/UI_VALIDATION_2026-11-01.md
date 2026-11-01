@@ -1,18 +1,21 @@
-# Approved interface changes — 1 November 2026
+# UI validation report — 1 November 2026
+
+This is a historical report of the scope delivered and checks performed on this
+date. Current interface design rules live in [DESIGN.md](../DESIGN.md); this
+report does not define additional rules or establish validation of later changes.
 
 The user approved nine separate lots after reverting PR #102, with an explicit
 requirement to keep the current bookmark actions and sort design. The visual
 reference is `e678b74`, whose tree equals the pre-#102 interface (`793b220`).
 
-## Protected reference
+## Delivered scope
 
-`internal/webui/static/style.css` is unchanged. Bookmark action markup and event
-handlers, sort markup/handlers and library row/grid geometry are preserved.
-New styles live in `secondary.css`, scoped to the approved secondary surfaces.
-The extension keeps its existing dark palette and supplements it with light.
-No library data, storage migration, authentication policy, capture permission or
-server architecture is changed. No production dependency or resident service
-is introduced.
+The delivered change preserved `internal/webui/static/style.css`, bookmark and
+sort markup/handlers, and library row/grid geometry. It added scoped secondary
+styles and an extension light theme alongside the existing dark palette.
+It changed no library data, storage migration, authentication policy, capture
+permission or server architecture, and introduced no production dependency or
+resident service.
 
 ## Approval ledger
 
