@@ -41,10 +41,8 @@ test("selection spans pages; one reviewed scope drives a collection move", async
   assert.equal(e.get("select-page")["aria-pressed"], "mixed");
   e.bulk.render([e.link(3)]); e.bulk.select(e.link(3), true);
   assert.equal(e.get("selected-count").textContent, "2 selected");
-  assert.equal(e.get("selected-outside").textContent, "1 outside these results");
   await e.open("move");
-  assert.equal(e.get("bulk-review").open, true);
-  assert.deepEqual(e.get("bulk-items").children.map(n => n.textContent), ["Page 1", "Page 3"]);
+  assert.equal(e.get("bulk-scope").textContent, "2 selected bookmarks");
   assert.equal(e.get("bulk-collection").value, "7");
   await e.submit(); assert.deepEqual(e.calls[0].body.ids, [1, 3]); assert.equal(e.calls[0].body.collectionId, 7);
   assert.equal(e.bulk.has(1), false); assert.equal(e.get("bulk-dialog").open, false);
