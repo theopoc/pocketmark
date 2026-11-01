@@ -151,6 +151,12 @@
       <div class="library-toolbar">
         <label class="search-box"><span data-icon="search" aria-hidden="true"></span><span class="sr-only">Search bookmarks</span><input id="search" type="search" placeholder="Search bookmarks, tags, and content…" autocomplete="off"><kbd aria-hidden="true" data-shortcut-hint>/</kbd></label>
       </div>
+      <div class="quick-filters" role="group" aria-label="Filter bookmarks">
+        <button type="button" data-quick-filter="all" aria-pressed="true"><span data-icon="check" aria-hidden="true"></span>All</button>
+        <button type="button" data-quick-filter="unread" aria-pressed="false"><span data-icon="check" aria-hidden="true"></span>Unread</button>
+        <button type="button" data-quick-filter="favorite" aria-pressed="false"><span data-icon="check" aria-hidden="true"></span>Favorites</button>
+        <button type="button" data-quick-filter="inbox" aria-pressed="false"><span data-icon="check" aria-hidden="true"></span>Inbox</button>
+      </div>
       <div id="active-filters" class="active-filters" aria-label="Active filters" hidden></div>
       <div class="results-bar"><span id="results-label" aria-live="polite">Loading your library…</span><div class="results-tools"><span id="capture-label" class="capture-summary"></span><div class="selection-guidance"><span class="selection-hint">Click or drag to select</span><details class="selection-help"><summary aria-label="Selection help"><span data-icon="info" aria-hidden="true"></span></summary><div id="selection-help" class="selection-help-panel"><strong>Select bookmarks</strong><p>Click an empty area of a bookmark to select it. Drag across bookmarks to select several.</p><p><kbd>Shift</kbd> + click selects a range. <kbd>Ctrl</kbd> / <kbd>⌘</kbd> + drag adds to your selection.</p><p>On the keyboard, focus a bookmark and press <kbd>Space</kbd>. Press <kbd>Esc</kbd> to clear.</p><p>On touch screens, tap an empty area of a bookmark. Titles open the reader; action buttons work as usual.</p></div></details></div>
         <div class="library-view-controls">
