@@ -24,6 +24,7 @@
   let renderedLibraryRoute = null;
   let libraryUnavailable = false;
   let libraryLoading = false;
+  let refreshRequest = 0;
   const sharedParams = new URLSearchParams(location.search);
   let editorBaseline = null;
   let editorSession = 0;
@@ -134,6 +135,7 @@
     plus: ["M12 5v14M5 12h14"], close: ["m6 6 12 12M6 18 18 6"],
     search: ["M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0", "m15 15 6 6"],
     refresh: ["M20 7a9 9 0 1 0 1 9", "M20 2v6h-6"],
+    spinner: ["M21 12a9 9 0 1 1-9-9"],
     sort: ["M3 5h10M3 10h7M3 15h4", "M17 4v16m-4-4 4 4 4-4"],
     grid: ["M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"],
     list: ["M9 5h12M9 12h12M9 19h12M3 5h.01M3 12h.01M3 19h.01"],
@@ -972,10 +974,21 @@
     restoreFocus(grid, key);
   }
 
+  function setRefreshBusy(busy) {
+    const button = $("refresh-button");
+    button.setAttribute("aria-disabled", String(busy));
+    button.setAttribute("aria-busy", String(busy));
+    button.title = busy ? "Refreshing library…" : "Refresh library";
+    button.setAttribute("aria-label", button.title);
+    button.querySelector("[data-icon]").replaceChildren(icon(busy ? "spinner" : "refresh"));
+  }
+
   async function refresh(quiet = false) {
     if (!state.signedIn || settingsSection) return;
     clearTimeout(state.timer);
     const request = ++state.request;
+    refreshRequest = request;
+    setRefreshBusy(true);
     const params = new URLSearchParams({ page: String(state.page), sort: state.sort });
     if (state.query) params.set("fuzzy", "1");
     if (state.query) params.set("q", state.query);
@@ -1032,6 +1045,7 @@
       $("library-error").hidden = false;
       $("results-label").textContent = "Could not refresh library";
     } finally {
+      if (request === refreshRequest) setRefreshBusy(false);
       if (request === state.request) $("bookmark-grid").setAttribute("aria-busy", "false");
     }
   }
@@ -1313,7 +1327,9 @@
   }
   $("empty-reset").addEventListener("click", resetLibraryFilters);
   $("tags-browse-bookmarks").addEventListener("click", resetLibraryFilters);
-  $("refresh-button").addEventListener("click", () => refresh());
+  $("refresh-button").addEventListener("click", (event) => {
+    if (event.currentTarget.getAttribute("aria-busy") !== "true") refresh();
+  });
   $("search").addEventListener("input", () => {
     clearTimeout(searchTimer);
     state.request++;
