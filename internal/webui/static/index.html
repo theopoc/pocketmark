@@ -92,7 +92,22 @@
     <form id="session-idle-form"><label for="session-idle">Sign out this browser after inactivity</label><select id="session-idle"><option value="15">15 minutes</option><option value="60">1 hour</option><option value="1440">24 hours</option><option value="0">Only at the seven-day expiry</option></select><p class="small muted">Requests from an open library count as activity. Changing this setting requires recent password confirmation.</p><button class="button subtle" type="submit">Save timeout</button></form>
     <p id="sessions-feedback" class="small muted" role="status"></p><p id="sessions-error" class="form-error" role="alert"></p>
   </section>        <section class="settings-section" data-settings-panel="api-keys" aria-labelledby="api-keys-title" hidden>
-    <div class="token-heading"><div><h2 id="api-keys-title">API keys</h2><p class="small muted">Connect apps to your library with a separate key for each app.</p></div><span id="token-count" class="small muted"></span></div>
+    <header class="api-key-topbar"><a class="brand" href="/" aria-label="Pocketmark home"><span class="brand-mark" aria-hidden="true">p.</span><span>Pocketmark</span></a><span class="muted">Personal library</span><button class="button subtle theme-toggle" data-theme-toggle aria-label="Dark mode" aria-pressed="true" title="Switch to light mode"><span data-theme-icon aria-hidden="true"></span><span data-theme-label>Dark</span></button></header>
+    <div class="api-key-layout">
+      <nav class="api-key-navigation" aria-label="API key settings navigation">
+        <button type="button" class="nav-item active" data-api-key-section="api-keys" aria-current="page"><span data-icon="key" aria-hidden="true"></span>API keys</button>
+        <button type="button" class="nav-item" data-api-key-section="2fa"><span data-icon="shield" aria-hidden="true"></span>Two-factor authentication</button>
+        <button type="button" class="nav-item" data-api-key-section="sessions"><span data-icon="monitor" aria-hidden="true"></span>Browser sessions</button>
+        <button type="button" class="nav-item" data-api-key-section="password"><span data-icon="lock" aria-hidden="true"></span>Password</button>
+        <button type="button" class="nav-item" data-api-key-section="backup"><span data-icon="download" aria-hidden="true"></span>Backup &amp; restore</button>
+        <div class="api-key-secondary-navigation">
+          <button type="button" class="nav-item" data-api-key-section="sync"><span data-icon="refresh" aria-hidden="true"></span>Browser bookmark sync</button>
+          <button type="button" class="nav-item" data-api-key-section="mobile"><span data-icon="book" aria-hidden="true"></span>Mobile &amp; browser</button>
+        </div>
+        <button type="button" class="nav-item api-key-library-back" data-settings-back><span data-icon="arrow-left" aria-hidden="true"></span>Back to library</button>
+      </nav>
+      <div class="api-key-workspace">
+    <div class="token-heading"><div><h2 id="api-keys-title">API keys</h2><p class="small muted">Connect each app with its own key.</p></div><span id="token-count" class="small muted"></span></div>
     <div id="new-token" hidden>
       <label for="new-token-value">New API key</label>
       <input id="new-token-value" type="password" readonly autocomplete="off" spellcheck="false" aria-describedby="new-token-help">
@@ -103,7 +118,7 @@
       </div>
     </div>
     <p id="tokens-error" class="form-error" role="alert"></p>
-    <details id="token-create" class="token-create"><summary class="button primary">Create API key</summary>    <form id="token-form">
+    <details id="token-create" class="token-create"><summary class="button primary"><span data-icon="plus" aria-hidden="true"></span>Create API key</summary>    <form id="token-form">
       <p id="token-help" class="small muted">Choose a name and the access this app needs.</p>
       <label for="token-name">Key name</label>
       <input id="token-name" required maxlength="100" placeholder="My browser extension" aria-describedby="token-help">
@@ -114,9 +129,11 @@
       <button class="button subtle" type="submit">Create key</button>
     </form>
     </details>
-    <p id="token-activity-help" class="small muted">Last used includes connected apps and bookmark sync. Earlier activity may be unavailable.</p>
     <ul id="token-list" aria-label="API keys" aria-describedby="token-activity-help"></ul>
+    <p id="token-activity-help" class="small muted">Last used includes connected apps and bookmark sync. Earlier activity may be unavailable.</p>
     <p id="tokens-feedback" class="small muted" role="status"></p>
+      </div>
+    </div>
   </section><section class="settings-section" data-settings-panel="backup" aria-labelledby="backup-title" hidden><h2 id="backup-title">Backup &amp; restore</h2><p class="small muted">A full backup keeps your bookmarks, captures, attachments, highlights and account settings together.</p><a class="button subtle" href="/api/backup">Download full backup</a><details class="help-details"><summary>How to restore a backup</summary><ol class="small muted"><li>Stop Pocketmark before restoring.</li><li>Unzip the backup and follow its RESTORE instructions. Use an empty data directory and keep your server-secret (or legacy access-token / POCKETMARK_TOKEN) separately.</li><li>Restore file ownership if needed, then restart Pocketmark.</li></ol><p class="small muted">JSON and browser HTML exports contain bookmark metadata, not captures or attached files.</p></details></section><section class="settings-section" data-settings-panel="sync" aria-labelledby="sync-title" hidden>
     <h2 id="sync-title">Browser bookmark sync</h2><p class="small muted">Use a dedicated Floccus API key to sync bookmarks and collection folders.</p>
     <ol class="setup-steps"><li><a href="/?settings=api-keys">Create an API key</a> with <strong>Floccus sync</strong> permissions.</li><li>In Floccus, add a <strong>WebDAV</strong> account.<label for="sync-address">Server address</label><div class="copy-field"><input id="sync-address" readonly><button id="sync-copy" type="button" class="button subtle">Copy address</button></div></li><li>Use <code>bookmarks.xbel</code> as the file name, any username, and your dedicated API key as the password.</li></ol>

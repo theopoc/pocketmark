@@ -87,6 +87,12 @@ export async function securityJourney({ browser, page, base, username, password,
     assert.equal(key.profile, 'capture'); assert.ok(key.expiresAt > Date.now() / 1000);
     const keyRow = page.locator('#token-list .token-accordion').filter({ hasText: 'Synthetic extension' });
     const keySummary = keyRow.locator('summary');
+    const apiTitle = await page.locator('#api-keys-title').boundingBox();
+    const createAction = await page.locator('#token-create > summary').boundingBox();
+    assert.ok(createAction.x > apiTitle.x && Math.abs(createAction.y - apiTitle.y) < 8,
+      'desktop creation action is aligned to the right of the API keys title');
+    assert.equal(await page.locator('#settings-title').isVisible(), false,
+      'API keys uses its own heading rather than a duplicate Settings heading');
     assert.equal(await keyRow.evaluate(node => node.open), true);
     await keySummary.press('Enter');
     assert.equal(await keyRow.evaluate(node => node.open), false);

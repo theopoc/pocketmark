@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 
 export async function openNavigation(page) {
+  if (await page.locator('.showing-api-keys').count()) return; // This page exposes its own settings navigation.
   const desktop = await page.evaluate(() => matchMedia('(min-width: 901px) and (hover: hover) and (pointer: fine)').matches);
   if (desktop) {
     await page.mouse.move(2, 200);
@@ -19,6 +20,12 @@ export async function openWorkspaceActions(page) {
 }
 
 export async function clickNavigation(page, selector) {
+  if (await page.locator('.showing-api-keys').count()) {
+    const local = selector.includes('data-settings-section')
+      ? selector.replace('data-settings-section', 'data-api-key-section')
+      : selector.includes('[data-settings-back]') ? '.api-key-navigation [data-settings-back]' : null;
+    if (local) { await page.locator(local).click(); return; }
+  }
   if (['#import-button', '#export-button', '#logout-button'].includes(selector)) {
     await openWorkspaceActions(page);
   } else await openNavigation(page);
