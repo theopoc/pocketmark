@@ -140,6 +140,7 @@
     grid: ["M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"],
     list: ["M9 5h12M9 12h12M9 19h12M3 5h.01M3 12h.01M3 19h.01"],
     folder: ["M3 7V4h6l2 3h10v13H3V7Z"],
+    "folder-input": ["M3 10V4h6l2 3h10v13H3v-3", "M2 13h10", "m9 10 3 3-3 3"],
     tag: ["M3 3h8l10 10-8 8L3 11V3Z", "M7 7h.01"],
     edit: ["m16 3 5 5-12 12-6 1 1-6L16 3Z", "m13 6 5 5"],
     trash: ["M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"],
