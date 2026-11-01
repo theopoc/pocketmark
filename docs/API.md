@@ -362,3 +362,7 @@ no-cache` and ETag revalidation (304). Link-list records include
 `hasThumbnail:true` only when an image is cached. No original image URL or image
 bytes are included in the list response. See [archive boundaries](ARCHIVES.md)
 for capture, invalidation and image limits.
+
+### Bookmark site icon
+
+`GET /api/links/{id}/favicon` retrieves a site icon for a saved URL. It requires library read access and returns a supported raster icon up to 128 KiB, or 404 when unavailable. Responses are privately cached in the browser for one hour. At most two icon fetches run concurrently; excess requests receive 503. See [archive boundaries](ARCHIVES.md) for network and privacy details.

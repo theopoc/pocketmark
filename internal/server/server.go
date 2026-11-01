@@ -32,6 +32,7 @@ type Server struct {
 	origin         string
 	mux            *http.ServeMux
 	requests       chan struct{}
+	iconRequests   chan struct{}
 	imports        chan struct{}
 	loginMu        sync.Mutex
 	loginAttempts  map[netip.Addr]loginWindow
@@ -47,7 +48,7 @@ type Server struct {
 }
 
 func New(s *store.Store, token, origin string, secure bool, observers ...*observability.Observer) *Server {
-	a := &Server{Store: s, token: token, origin: strings.TrimSuffix(origin, "/"), secure: secure, mux: http.NewServeMux(), requests: make(chan struct{}, 8), imports: make(chan struct{}, 1), authRequests: make(chan struct{}, 2), healthRequests: make(chan struct{}, 2), loginAttempts: make(map[netip.Addr]loginWindow), totpNow: time.Now}
+	a := &Server{Store: s, token: token, origin: strings.TrimSuffix(origin, "/"), secure: secure, mux: http.NewServeMux(), requests: make(chan struct{}, 8), iconRequests: make(chan struct{}, 2), imports: make(chan struct{}, 1), authRequests: make(chan struct{}, 2), healthRequests: make(chan struct{}, 2), loginAttempts: make(map[netip.Addr]loginWindow), totpNow: time.Now}
 	a.rateLimit = newRequestLimiter(10, 100)
 	if len(observers) > 0 && observers[0] != nil {
 		a.observer = observers[0]

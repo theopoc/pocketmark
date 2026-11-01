@@ -4588,6 +4588,48 @@
           }
         ]
       }
+    },
+    "/api/links/{id}/favicon": {
+      "get": {
+        "operationId": "getSiteIcon",
+        "tags": [
+          "Archives"
+        ],
+        "summary": "Get a site icon",
+        "responses": {
+          "200": {
+            "description": "PNG, JPEG, GIF or ICO icon, up to 128 KiB; private one-hour browser cache"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "404": {
+            "description": "No supported icon"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "description": "Icon fetch capacity is busy"
+          }
+        },
+        "x-api-key-profiles": [
+          "read",
+          "capture",
+          "full"
+        ],
+        "description": "Fetches an optional raster icon from the bookmarked site, using public-address filtering and bounded network requests. No third-party icon service is used."
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ]
     }
   },
   "components": {

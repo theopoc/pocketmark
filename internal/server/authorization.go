@@ -49,6 +49,7 @@ var apiAccess = map[string]routeAccess{
 	"POST /api/links/bulk":                              {profiles: "full"},
 	"POST /api/links/{id}/capture":                      {profiles: "capture full"},
 	"GET /api/links/{id}/archive":                       {profiles: "read full"},
+	"GET /api/links/{id}/favicon":                       {profiles: "read capture full"},
 	"GET /api/links/{id}/thumbnail":                     {profiles: "read capture full"},
 	"GET /api/links/{id}/assets":                        {profiles: "read capture full"},
 	"POST /api/links/{id}/assets":                       {profiles: "capture full"},
