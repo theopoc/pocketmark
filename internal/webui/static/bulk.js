@@ -6,9 +6,13 @@
     // Entries carry identity, so a remove/reselect is newer than an in-flight action.
     const selected = new Map();
     let visible = [], session = null;
-    const dialog = $("bulk-dialog");
+    const dialog = $("bulk-dialog"), bar = $("bulk-bar"), more = $("bulk-more");
+    // Reserve the actual wrapped height for pagination, focus targets and feedback.
+    if (browser.ResizeObserver) new browser.ResizeObserver(() => {
+      document.documentElement.style.setProperty("--bulk-bar-height", `${bar.hidden ? 0 : bar.getBoundingClientRect().height}px`);
+    }).observe(bar);
     const actions = { move: "Move", tags: "Replace tags on", favorite: "Update favorites for", read: "Update reading status for", capture: "Refresh captures for", delete: "Delete" };
-    function close() { session = null; if (dialog.open) dialog.close(); }
+    function close() { more.open = false; session = null; if (dialog.open) dialog.close(); }
     dialog.addEventListener("close", () => { if (!dialog.open) session = null; });
     function render(links = visible) {
       visible = links;
@@ -16,9 +20,8 @@
       $("selected-count").textContent = `${selected.size} selected`;
       $("selected-outside").textContent = outside ? `${outside} outside these results` : "";
       $("selected-outside").hidden = !outside;
-      $("selected-count").hidden = !selected.size;
-      $("bulk-open").hidden = !selected.size; $("bulk-open").disabled = !selected.size;
-      $("clear-selection").hidden = !selected.size;
+      bar.hidden = !selected.size;
+      if (!selected.size) more.open = false;
       $("select-page").disabled = visible.length === 0;
       $("select-page").setAttribute("aria-pressed", count > 0 && count < visible.length ? "mixed" : String(visible.length > 0 && count === visible.length));
       $("select-page").textContent = visible.length > 0 && count === visible.length ? "Deselect page" : "Select page";
@@ -31,7 +34,11 @@
       render();
       return selected.has(link.id);
     }
-    function clear() { selected.clear(); close(); render(); }
+    function clear() {
+      const restoreFocus = document.activeElement && bar.contains(document.activeElement);
+      selected.clear(); close(); render();
+      if (restoreFocus) $("page-title").focus();
+    }
     function updateAction() {
       const action = $("bulk-action").value, count = session?.entries.length || 0;
       $("bulk-move-fields").hidden = action !== "move";
@@ -52,12 +59,16 @@
         }
         select(link, checked);
       }
+      more.open = false;
       render();
       onSelectionChange();
+      $(selected.size ? "bulk-open" : "page-title").focus();
     });
-    $("clear-selection").addEventListener("click", () => { clear(); onSelectionChange(); $("select-page").focus(); });
-    $("bulk-open").addEventListener("click", () => {
+    $("clear-selection").addEventListener("click", () => { clear(); onSelectionChange(); $("page-title").focus(); });
+    function open(action, trigger) {
       if (!selected.size) return;
+      more.open = false;
+      $(more.contains($(trigger)) ? "bulk-open" : trigger).focus();
       session = { entries: [...selected], pending: false };
       $("bulk-form").reset();
       fillCollections($("bulk-collection"), defaultCollection());
@@ -67,8 +78,18 @@
       $("bulk-scope").textContent = outside ? `${outside} selected bookmark${outside === 1 ? " is" : "s are"} outside the current results. Review the full selection before applying an action.` : "This action applies to the bookmarks listed below.";
       $("bulk-review").open = outside > 0;
       $("bulk-items").replaceChildren(...session.entries.map(([, entry]) => { const li = document.createElement("li"); li.textContent = entry.label; return li; }));
-      updateAction(); dialog.showModal(); $("bulk-action").focus();
+      $("bulk-action").value = action;
+      updateAction(); dialog.showModal();
+      $(action === "move" ? "bulk-collection" : action === "tags" ? ($("bulk-tags").hidden ? "bulk-tags-query" : "bulk-tags") : ["favorite", "read"].includes(action) ? "bulk-value" : "bulk-apply").focus();
+    }
+    for (const [id, action] of Object.entries({ "bulk-move": "move", "bulk-tag-action": "tags", "bulk-delete": "delete", "bulk-favorite": "favorite", "bulk-read": "read", "bulk-capture": "capture" })) {
+      $(id).addEventListener("click", () => open(action, id));
+    }
+    more.addEventListener("keydown", event => {
+      if (event.key !== "Escape" || !more.open) return;
+      more.open = false; $("bulk-open").focus(); event.preventDefault(); event.stopPropagation();
     });
+    document.addEventListener("click", event => { if (!more.contains(event.target)) more.open = false; });
     $("bulk-action").addEventListener("change", updateAction);
     $("bulk-form").addEventListener("submit", async event => {
       event.preventDefault();
@@ -84,7 +105,7 @@
         // Only the dialog that submitted this operation may consume its selection.
         if (active()) {
           for (const [id, entry] of current.entries) if (selected.get(id) === entry) selected.delete(id);
-          close(); render(); onSelectionChange(); toast("Selected bookmarks updated.");
+          close(); render(); onSelectionChange(); if (!selected.size) $("page-title").focus(); toast("Selected bookmarks updated.");
         }
         await onChange();
       } catch (error) {
