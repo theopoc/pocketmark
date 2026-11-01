@@ -206,9 +206,21 @@ for (const name of selected) {
       assert.ok(await helpTopic.evaluate(n => getComputedStyle(n).backgroundColor !== 'rgba(0, 0, 0, 0)'), 'Help hover has a visible background');
       await audit(page, `${theme}-help`, name); await shot(page, `${theme}-help-mobile`, name);
       await page.getByRole('button', { name: 'Close help', exact: true }).click();
-      await clickNavigation(page, '#add-collection'); await page.locator('#collection-name').fill('é'.repeat(61));
+      await clickNavigation(page, '#add-collection');
+      await page.locator('#collection-name').fill('a'.repeat(120));
+      assert.equal(await page.locator('#collection-name-hint').isVisible(), false);
+      await page.locator('#collection-name').fill('é'.repeat(61));
       assert.equal(await page.locator('#collection-name').evaluate(n => n.checkValidity()), false);
-      assert.match(await page.locator('#collection-name-hint').textContent(), /102%/);
+      assert.match(await page.locator('#collection-name-hint').textContent(), /name is too long/i);
+      await expectThemeColor(page.locator('#collection-name-hint'), 'color', '--danger');
+      await shot(page, `${theme}-collection-error-mobile`, name);
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await shot(page, `${theme}-collection-error-desktop`, name);
+      await page.locator('#collection-name').fill('Corrected');
+      assert.equal(await page.locator('#collection-name-hint').isVisible(), false);
+      await shot(page, `${theme}-collection-valid-desktop`, name);
+      await page.setViewportSize({ width: 390, height: 844 });
+      await shot(page, `${theme}-collection-valid-mobile`, name);
       await page.locator('#collection-dialog .close-dialog').first().click();
       await page.goto(new URL('/api-docs/', base).href); await page.locator('#swagger-ui[aria-busy=false]').waitFor();
       await audit(page, `${theme}-api-docs`, name); await noOverflow(page, 'docs'); await shot(page, `${theme}-api-docs-mobile`, name);
@@ -280,8 +292,17 @@ try {
         assert.ok(await page.locator('#task').evaluate(n => getComputedStyle(n, '::details-content').transitionDuration.split(',').every(value => parseFloat(value) === 0)), 'reduced motion removes extension disclosure fades');
         if (state === 'editor') {
           await page.locator('#new-collection').click();
+          await page.locator('#collection-name').fill('a'.repeat(120));
+          assert.equal(await page.locator('#collection-name-hint').isVisible(), false);
           await page.locator('#collection-name').fill('é'.repeat(61));
           assert.equal(await page.locator('#collection-name').evaluate(n => n.checkValidity()), false);
+          assert.match(await page.locator('#collection-name-hint').textContent(), /name is too long/i);
+          await expectThemeColor(page.locator('#collection-name-hint'), 'color', '--danger');
+          await shot(page, `${theme}-extension-collection-error`, 'chromium');
+          await page.locator('#collection-name').fill('Corrected');
+          assert.equal(await page.locator('#collection-name-hint').isVisible(), false);
+          await shot(page, `${theme}-extension-collection-valid`, 'chromium');
+          await page.locator('#collection-name').fill('é'.repeat(61));
           await page.locator('#cancel-collection').click();
           assert.equal(await page.locator('#save-form').evaluate(n => n.checkValidity()), true, 'cancelled invalid collection cannot block saving');
         }

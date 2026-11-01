@@ -102,7 +102,6 @@ For a new API key, choose **Add, edit & capture — browser extension** in Setti
 
 
 The popup offers Dark and Light appearance in its header; the choice stays in
-this browser. Dark retains its original palette. Collection creation shows a
-live character count and percentage of the server name budget, including
-accented letters and emoji. Shared local theme/name modules are checked by
+this browser. Dark retains its original palette. Collection creation shows an error when the server name limit is exceeded,
+including with accented letters and emoji. Shared local theme/name modules are checked by
 `python3 scripts/sync_ui_assets.py` and refreshed with `--write`.

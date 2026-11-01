@@ -1,13 +1,28 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { describe } = require('./static/name-limit.js');
+const { describe, create } = require('./static/name-limit.js');
 
-test('collection names count Unicode characters while enforcing the server byte budget', () => {
-  assert.equal(describe('a'.repeat(120)).valid, true);
-  assert.equal(describe('é'.repeat(60)).valid, true);
-  assert.equal(describe('é'.repeat(61)).valid, false);
-  assert.equal(describe('😀'.repeat(30)).valid, true);
-  assert.equal(describe('😀'.repeat(31)).valid, false);
-  assert.match(describe(' 😀 ').text, /^1 character · 4%/);
-  assert.match(describe('').text, /^0 characters · 0%/);
+test('collection names enforce the server UTF-8 byte limit without a counter', () => {
+  for (const name of ['', 'a'.repeat(120), 'é'.repeat(60), '😀'.repeat(30), ' 😀 ']) {
+    assert.equal(describe(name).valid, true);
+    assert.equal(describe(name).text, '');
+  }
+  for (const name of ['a'.repeat(121), 'é'.repeat(61), '😀'.repeat(31)]) {
+    assert.equal(describe(name).valid, false);
+    assert.match(describe(name).text, /name is too long/i);
+  }
+});
+
+test('the error appears only above the limit and clears after correction', () => {
+  let onInput, validity;
+  const input = { value: '', addEventListener: (_, listener) => { onInput = listener; }, setCustomValidity: message => { validity = message; } };
+  const hint = { textContent: '' };
+  create(input, hint);
+  assert.equal(hint.textContent, '');
+  input.value = 'a'.repeat(120); onInput();
+  assert.equal(hint.textContent, ''); assert.equal(validity, '');
+  input.value += 'a'; onInput();
+  assert.match(hint.textContent, /name is too long/i); assert.equal(validity, hint.textContent);
+  input.value = 'é'.repeat(60); onInput();
+  assert.equal(hint.textContent, ''); assert.equal(validity, '');
 });

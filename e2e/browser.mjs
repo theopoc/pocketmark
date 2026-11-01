@@ -393,7 +393,7 @@ try {
   await page.locator('#collection-name').fill('é'.repeat(61));
   await page.locator('#save-collection').click();
   assert.equal(await page.locator('#collection-name').evaluate(node => node.validity.customError), true);
-  assert.match(await page.locator('#collection-name-hint').textContent(), /102%/);
+  assert.match(await page.locator('#collection-name-hint').textContent(), /name is too long/i);
   assert.equal(await page.locator('#collection-name').inputValue(), 'é'.repeat(61));
   assert.equal(await page.locator('#save-collection').isEnabled(), true);
   await page.locator('#collection-dialog').getByRole('button', { name: 'Cancel' }).click();
