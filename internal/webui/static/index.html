@@ -170,7 +170,7 @@
       <section id="bookmark-grid" class="bookmark-grid view-list" aria-label="Bookmarks" aria-busy="true"></section>
       <section id="empty-state" class="empty-state" aria-labelledby="empty-title" hidden><div id="empty-art" class="empty-art" data-icon="bookmark" aria-hidden="true"></div><h2 id="empty-title">Your library starts here</h2><p id="empty-message" class="muted">Save your first bookmark, or bring your existing bookmarks with you.</p><div class="reader-actions"><button id="empty-add" class="button primary"><span data-icon="plus" aria-hidden="true"></span>Add bookmark</button><button id="empty-import" class="button subtle" type="button">Import bookmarks</button><button id="empty-reset" class="button subtle" hidden>Clear filters</button></div></section>
       <div id="bulk-bar" class="bulk-bar" role="group" aria-label="Selected bookmark actions" hidden>
-        <div class="bulk-selection"><span id="selected-count" role="status">0 selected</span><span id="selected-outside" hidden></span></div>
+        <div class="bulk-selection"><span id="selected-count" role="status">0 selected</span></div>
         <div class="bulk-buttons">
           <button id="select-page" type="button" class="bulk-button" aria-pressed="false"><span data-icon="list" aria-hidden="true"></span><span id="select-page-label">Select all</span></button>
           <button id="bulk-move" type="button" class="bulk-button" aria-haspopup="dialog"><span data-icon="folder-input" aria-hidden="true"></span>Move</button>
@@ -352,7 +352,6 @@
     <button id="bulk-status-false" type="button"><span id="bulk-status-false-icon" aria-hidden="true"></span><span id="bulk-status-false-label"></span></button>
   </div>
   <p id="bulk-description" hidden></p>
-  <details id="bulk-review"><summary id="bulk-review-label">Review selected bookmarks</summary><ul id="bulk-items" class="bulk-items"></ul></details>
   <p id="bulk-error" class="form-error" role="alert"></p>
   <div id="bulk-footer" class="dialog-actions"><button id="bulk-cancel" type="button" class="button subtle close-dialog">Cancel</button><button id="bulk-apply" class="button primary" type="submit">Apply</button></div>
 </form></dialog>
