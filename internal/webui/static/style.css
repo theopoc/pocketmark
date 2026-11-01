@@ -189,6 +189,9 @@ input[type=checkbox] { width: 15px; height: 15px; padding: 0; flex-shrink: 0; ac
 .capture-indicator { width: 14px; height: 14px; flex-shrink: 0; border: 1.7px solid currentColor; border-radius: 50%; }
 .card-state.processing .capture-indicator { border-right-color: transparent; animation: capture-spin 800ms linear infinite; }
 @keyframes capture-spin { to { transform: rotate(360deg); } }
+#refresh-button[aria-busy=true] { cursor: progress; }
+#refresh-button[aria-busy=true] .icon { animation: capture-spin 800ms linear infinite; }
+@media (prefers-reduced-motion: reduce) { #refresh-button[aria-busy=true] .icon { animation: none; } }
 @media (prefers-reduced-motion: reduce) { .card-state.processing .capture-indicator { animation: none; } }
 .card-state.ready { color: var(--success); background: #e8f4ee; }
 .card-state.failed { color: var(--danger); background: #fcebed; }
