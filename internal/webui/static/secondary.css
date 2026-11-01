@@ -34,7 +34,8 @@ html[data-theme="dark"] body.api-docs { --secondary-link: var(--focus); color-sc
 
 /* Collection validation and the approved reader journey have their own scope. */
 #collection-name-hint { font-size: 13px; }
-#collection-name-hint.name-limit-warning { color: var(--danger); }
+#collection-name-hint { color: var(--danger); }
+#collection-name-hint:empty { display: none; }
 
 /* Favorite feedback: a compact status and an immediately reachable Undo action. */
 #toast.favorite-notice {
