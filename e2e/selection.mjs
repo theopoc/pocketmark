@@ -115,6 +115,10 @@ export async function selectionJourney(page, screenshots) {
   await page.locator('.selection-help summary').click();
   await page.locator('#bulk-open').click();
   await page.setViewportSize({ width: 844, height: 390 });
+  await page.waitForFunction(() => {
+    const r = document.querySelector('#bulk-dialog').getBoundingClientRect();
+    return r.x >= 0 && r.y >= 0 && r.right <= innerWidth && r.bottom <= innerHeight;
+  });
   assert.ok(await page.locator('#bulk-dialog').evaluate(node => {
     const r = node.getBoundingClientRect(); return r.x >= 0 && r.y >= 0 && r.right <= innerWidth && r.bottom <= innerHeight;
   }), 'an open phone sheet stays reachable after landscape rotation');

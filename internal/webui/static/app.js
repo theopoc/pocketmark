@@ -508,10 +508,55 @@
     return { all: "All bookmarks", inbox: "Inbox", favorite: "Favorites", unread: "To read" }[state.filter];
   }
 
+  $("breadcrumb").addEventListener("scroll", () => {
+    const root = $("breadcrumb");
+    root.classList.toggle("has-earlier-crumbs", root.scrollLeft > 1);
+  }, { passive: true });
+
+  function renderBreadcrumb() {
+    const root = $("breadcrumb"), key = focusedKey(root);
+    const crumbs = [{ label: "My library", key: "root", action: () => {
+      if (settingsSection) { leaveSettings(true); return; }
+      selectFilter("all");
+    } }];
+    if (settingsSection) {
+      crumbs.push({ label: "Settings", key: "settings", action: () => navigateSettings(settingsSection) });
+    } else if (showingTags) {
+      crumbs.push({ label: "Tags", key: "tags", action: () => $("all-tags").click() });
+    } else if (!state.tag && state.filter === "collection") {
+      const seen = new Set();
+      let collection = state.collections.find(item => String(item.id) === String(state.collection));
+      const parents = [];
+      while (collection && !seen.has(collection.id)) {
+        seen.add(collection.id); parents.unshift(collection);
+        collection = state.collections.find(item => String(item.id) === String(collection.parentId));
+      }
+      if (!parents.length) crumbs.push({ label: "Collection", key: "current", action: () => selectFilter("collection", state.collection) });
+      for (const item of parents) crumbs.push({ label: item.name, key: `collection:${item.id}`, action: () => selectFilter("collection", item.id) });
+    } else {
+      crumbs.push({ label: currentTitle(), key: "current", action: () => selectFilter(state.filter, state.collection, state.tag) });
+    }
+    const signature = JSON.stringify(crumbs.map(crumb => [crumb.key, crumb.label]));
+    const changed = root.dataset.signature !== signature;
+    root.dataset.signature = signature;
+    root.replaceChildren();
+    crumbs.forEach((crumb, index) => {
+      if (index) root.append(icon("chevron-right"));
+      const button = el("button", index === 0 ? "breadcrumb-root" : "", crumb.label);
+      button.type = "button"; button.dataset.focusKey = crumb.key;
+      if (index === crumbs.length - 1) { button.id = "breadcrumb-current"; button.setAttribute("aria-current", "page"); }
+      if (settingsSection && mfaManagementBusy) button.disabled = true;
+      button.addEventListener("click", crumb.action);
+      root.append(button);
+    });
+    restoreFocus(root, key);
+    if (changed && !key) requestAnimationFrame(() => { if (root.dataset.signature === signature) root.scrollLeft = root.scrollWidth; });
+  }
+
   function updateHeading() {
     const title = currentTitle();
     $("page-title").textContent = title;
-    $("breadcrumb-current").textContent = settingsSection ? "Settings" : showingTags ? "Tags" : title;
+    renderBreadcrumb();
     $("tags-library-context").hidden = !state.query;
     $("tags-library-context").textContent = `Your bookmark search “${state.query}” will remain applied when you open a tag.`;
     $("all-tags").classList.toggle("active", showingTags);
@@ -1780,6 +1825,7 @@
       button.disabled = (mfaManagementBusy || deferredLogin) && button.dataset.settingsSection !== "password";
     });
     document.querySelectorAll("[data-settings-back]").forEach(button => { button.disabled = mfaManagementBusy; });
+    $("breadcrumb").querySelectorAll("button").forEach(button => { button.disabled = mfaManagementBusy; });
   }
   function renderSettings(animate = false) {
     const active = Boolean(settingsSection);
@@ -1790,7 +1836,7 @@
     $("settings-navigation").hidden = !active;
     $("sidebar").setAttribute("aria-label", active ? "Settings navigation" : "Library navigation");
     $("app-view").classList.toggle("showing-settings", active);
-    $("breadcrumb-current").textContent = active ? "Settings" : showingTags ? "Tags" : currentTitle();
+    renderBreadcrumb();
     document.querySelectorAll("[data-settings-panel]").forEach(panel => { panel.hidden = panel.dataset.settingsPanel !== settingsSection && !( ["password", "2fa", "sessions"].includes(settingsSection) && ["password", "2fa", "sessions"].includes(panel.dataset.settingsPanel)); });
     document.querySelectorAll("[data-settings-section]").forEach(button => {
       const selected = button.dataset.settingsSection === settingsSection || (button.dataset.settingsSection === "password" && ["2fa", "sessions"].includes(settingsSection));
@@ -1820,12 +1866,15 @@
     restoreRoute();
   }
   document.querySelectorAll("[data-settings-section]").forEach(button => button.addEventListener("click", () => navigateSettings(button.dataset.settingsSection)));
-  document.querySelectorAll("[data-settings-back]").forEach(button => button.addEventListener("click", () => {
+  function leaveSettings(libraryRoot = false) {
     if (mfaManagementBusy) return;
-    commitRoute(false, { ...route(), settingsSection: null });
+    const destination = { ...route(), settingsSection: null };
+    if (libraryRoot) Object.assign(destination, { filter: "all", collection: null, tag: "", showingTags: false, page: 1 });
+    commitRoute(false, destination);
     history.replaceState({ ...history.state, pocketmarkScroll: libraryReturnScroll }, "");
     if (deferredLogin) { clearSettings(); showLogin(); } else restoreRoute();
-  }));
+  }
+  document.querySelectorAll("[data-settings-back]").forEach(button => button.addEventListener("click", () => leaveSettings()));
   $("settings-button").addEventListener("click", () => navigateSettings("api-keys"));
   document.querySelectorAll('#settings-page a[href="/?settings=api-keys"]').forEach(link => link.addEventListener("click", event => {
     event.preventDefault(); navigateSettings("api-keys");
