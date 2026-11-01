@@ -71,7 +71,7 @@ def summarize(samples):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", default="pocketmark:validation")
-    parser.add_argument("--output", default="docs/benchmark-capture.json")
+    parser.add_argument("--output", default="reports/benchmark-capture.json")
     parser.add_argument("--features", action="store_true", help="also exercise offline archives, 19 MiB upload, annotations, bulk, WebDAV and full backup")
     args = parser.parse_args()
     project = "pocketmark-validation-" + secrets.token_hex(5)

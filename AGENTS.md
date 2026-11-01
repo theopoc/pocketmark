@@ -40,7 +40,6 @@ against the RAM goal.
   observed and untested clients; Android's prolonged-offline cache issue remains upstream.
 - Interface changes: read [DESIGN.md](DESIGN.md), the source of truth for current
   design rules, before editing the web UI, API documentation or extension UI.
-  Dated UI validation reports record historical evidence, not additional design rules.
 
 ## Verification and delivery
 
@@ -63,8 +62,15 @@ Live-network RAM benchmarks are optional; follow [measurement boundaries](docs/B
 
 Use disposable data and browser/device profiles. Keep secrets, personal databases,
 `.env` files, raw request logs, tool sessions, downloaded clients and binaries out
-of commits. Curated synthetic screenshots and benchmark summaries belong in `docs/`.
-Review the diff and staged paths and run a redacted secret scan before committing.
+of commits.
+
+Never commit reports, audits, research notes, benchmark results or summaries,
+validation records, test screenshots, traces, profiles or other generated evidence,
+even under `docs/`. Store them outside the repository or in ignored `reports/`
+or `artifacts/` directories; summarize checks and review outcomes in the PR.
+Keep maintained guides, benchmark scripts, regression fixtures and documentation
+illustrations in version control. Review the diff and staged paths for generated
+evidence and run a redacted secret scan before committing.
 
 ## Development workflow
 

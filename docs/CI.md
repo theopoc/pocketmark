@@ -57,7 +57,7 @@ The separate Dependabot workflow only reads verified PR metadata before enabling
 
 The module toolchain baseline is declared in `go.mod`; the Docker builder version is declared separately in `Dockerfile`. Review their alignment when either changes and keep both toolchains patched. A numerically newer Go minor version does not imply its patch level contains every security fix. Govulncheck remains blocking rather than suppressing standard-library reports.
 
-The deterministic container smoke test does not depend on public websites. The separate live-page workload in [BENCHMARK.md](BENCHMARK.md) measures RAM and external capture behavior; CI smoke checks are not performance measurements or native mobile UI tests. Repository runtime data, tool sessions, downloaded clients, build output and raw HTTP traces are ignored. Maintained synthetic screenshots and summarized benchmark evidence remain in `docs/`.
+The deterministic container smoke test does not depend on public websites. The separate live-page workload in [BENCHMARK.md](BENCHMARK.md) measures RAM and external capture behavior; CI smoke checks are not performance measurements or native mobile UI tests. Keep runtime data, tool sessions, downloaded clients, build output and generated validation evidence out of commits, following [AGENTS.md](../AGENTS.md#verification-and-delivery). Record check results and evidence limits in the PR; use ignored `reports/` or `artifacts/` directories for local outputs.
 
 ## Local pre-commit hooks
 
@@ -72,7 +72,7 @@ Hooks run on staged files before each commit. The first run creates isolated hoo
 
 | Hook | Reason |
 | --- | --- |
-| Large files (1 MiB for newly added files) | Catch accidental binaries and data exports; existing curated screenshots remain valid. |
+| Large files (1 MiB for newly added files) | Catch accidental binaries and data exports. |
 | Merge and case conflicts | Reject unresolved merges and paths that collide on macOS/Linux. |
 | JSON, YAML and TOML syntax | Validate manifests, workflows and tooling configuration without reformatting them. |
 | Final newline and trailing whitespace | Keep diffs readable; preserve Markdown hard line breaks. |
@@ -93,8 +93,8 @@ Follow the [development workflow in AGENTS.md](../AGENTS.md#development-workflow
 
 Interface changes also require the project-local design review described in
 [AGENTS.md](../AGENTS.md#development-workflow), with rendered evidence and explicit
-coverage limits. Current design rules belong to [DESIGN.md](../DESIGN.md);
-dated validation reports preserve historical evidence.
+coverage limits in the PR. Current design rules belong to [DESIGN.md](../DESIGN.md);
+generated evidence stays outside version control.
 
 Keep the branch up to date with `origin/main` and resolve merge conflicts autonomously, reading both sides to preserve intended behavior and unrelated changes. Verify that no conflict markers remain. Conflict resolutions and subsequent development changes require renewed subagent review and applicable local checks before pushing, followed by CI on the latest pushed commit. Fix CI failures and repeat these gates for corrections.
 
@@ -109,8 +109,6 @@ Enable the repository's **Allow auto-merge** setting while retaining the active 
 The workflow uses `gh pr merge --auto --squash --match-head-commit` with the event's head SHA. GitHub waits for the complete `CI passed` gate, an up-to-date branch and resolved review threads; it has no ruleset bypass. Failed, skipped, cancelled or pending CI cannot authorize merge. Keep `CI passed` required from the GitHub Actions app with strict branch updates and no bypass actors: the workflow relies on this server-side enforcement. Existing open PRs are evaluated on their next supported PR event after the workflow reaches `main`. As with other operations performed using `GITHUB_TOKEN`, the resulting merge does not trigger push-based CI or Release Please; subsequent eligible pushes to `main` pick up the dependency commits. The PR's complete CI still gates its merge. CI regression tests evaluate the actual eligibility expressions and exercise the actual selector and final gate for missing jobs, unexpected skips, pending states, failures and cancellations.
 
 The title check uses PR-event metadata. Dispatch, push and scheduled CI runs validate source rather than a PR title; these runs cannot attest to PR metadata. Metadata edits rerun the selected source jobs and title validation together. Keeping a separate required title check would require a coordinated branch-rules change; no such protection change is made here. For a future busy repository, consider an independent required metadata check and `merge_group` support before enabling a merge queue.
-
-See [the sourced pipeline research](CI_RESEARCH.md) and [the scored audit](CI_AUDIT.md) for rationale, evidence and remaining limitations.
 
 ## Reproduce locally
 

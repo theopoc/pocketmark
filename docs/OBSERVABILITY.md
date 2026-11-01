@@ -148,36 +148,9 @@ when a collector stalls and the span queue fills. They require no public network
 or external collector.
 
 
-## Native memory sample (23 October 2026)
-
-A small local comparison used Go 1.26.10 on macOS ARM64, three fresh processes per
-mode, an empty disposable SQLite database, capture disabled, `GOMEMLIMIT=32MiB`,
-and 300 sequential authenticated `GET /api/stats` requests. Logs were discarded.
-Tracing tests sampled 100% of root requests, above the normal 10% default. The
-synthetic collector ran in a separate process, excluded from application RSS.
-[Measurements and binary hashes](benchmark-observability.json) retain all runs.
-
-| Mode | Median idle RSS across runs | Largest loaded RSS sample |
-| --- | --- | --- |
-| `main` at `2fa06a0` | 14.97 MiB | 18.12 MiB |
-| JSON logs + metrics, tracing disabled | 20.00 MiB | 22.56 MiB |
-| Tracing enabled, healthy collector, 100% sampling | 20.12 MiB | 24.20 MiB |
-| Tracing enabled, unreachable collector, 100% sampling | 19.05 MiB | 24.03 MiB |
-
-The disabled build still includes the official SDK/protobuf code, increasing
-resident memory even without exporter workers. In this sample, disabled tracing
-added about 5 MiB at idle and 4.4 MiB to the largest loaded sample versus `main`;
-active tracing added about 1.6 MiB to that loaded sample. This is the explicit
-tradeoff for the supported official exporter rather than a second process or a
-custom OTLP implementation.
-
-The disabled-tracing HTTP instrumentation microbenchmark on the same Mac measured
-1,696 ns/op, 1,520 temporary bytes/op and 27 allocations/op with output discarded
-(`go test -run '^$' -bench BenchmarkHTTP -benchmem ./internal/observability`). These
-allocations are not retained per request. Timings do not include actual stderr
-I/O or request handling. The map bounds are covered by deterministic tests.
-
-These are sampled native process measurements, not kernel lifetime peaks,
-container measurements, a capture/upload workload, a large-library benchmark, or
-a worst-case memory bound. They cannot be compared directly to the Linux Docker
-measurements in `BENCHMARK.md`.
+For optional memory comparisons, use the [measurement methodology](BENCHMARK.md)
+with separate fresh processes for tracing disabled, a healthy collector and an
+unreachable collector. Keep the workload, sampling rate and toolchain identical.
+Exclude the external collector from application RSS and distinguish native RSS
+from container memory. Record results and limitations in the PR, keeping raw
+samples in ignored `reports/` or `artifacts/` directories.

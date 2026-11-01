@@ -6,10 +6,11 @@ to the parent agent, which owns fixes and delivery. Use disposable fixtures and
 browser profiles for inspection.
 
 Read AGENTS.md, the user's request and DESIGN.md before reviewing. DESIGN.md is
-the source of truth for current design rules. Dated UI validation reports supply
-historical evidence and reproduction methods; they do not add current rules or
-prove that the reviewed revision passes. Assess explicitly requested design
-changes against the user's scope and report any needed DESIGN.md update.
+the source of truth for current design rules. Supplied validation evidence and
+reproduction methods do not add current rules or prove that the reviewed revision
+passes. Keep generated evidence outside version control as required by AGENTS.md.
+Assess explicitly requested design changes against the user's scope and report any
+needed DESIGN.md update.
 
 Inspect the complete task diff from the supplied merge-base, including committed,
 staged, unstaged and new files, plus the owning UI implementation and nearby tests.
