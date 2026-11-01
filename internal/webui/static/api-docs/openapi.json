@@ -511,7 +511,7 @@
           }
         },
         "x-owner-only": true,
-        "description": "Owner only: a signed-in owner session is required. Named API keys receive 403.  Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry. Defaults to read only and no expiry. Permissions and expiry are immutable; create a replacement key to change them. Migrated keys retain full library permissions and no expiry.",
+        "description": "Owner only: a signed-in owner session is required. Named API keys receive 403. Defaults to read only and no expiry. Permissions and expiry are immutable; create a replacement key to change them. Migrated keys retain full library permissions and no expiry.",
         "requestBody": {
           "required": true,
           "description": "4 KiB JSON limit. At most 32 keys per instance.",
@@ -523,7 +523,6 @@
             }
           }
         },
-        "x-reauthentication-required": true,
         "security": [
           {
             "ownerSession": []
