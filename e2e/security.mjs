@@ -6,6 +6,14 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
+async function chooseOption(page, id, label) {
+  const trigger = page.locator(`#${id}-trigger`);
+  await trigger.click();
+  assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
+  await page.locator(`#${id}-options`).getByRole('option', { name: label, exact: true }).click();
+  assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+}
+
 export async function securityJourney({ browser, page, base, username, password, recoveryCode }) {
   const url = path => new URL(path, base).href;
   const request = page.request;
@@ -25,7 +33,7 @@ export async function securityJourney({ browser, page, base, username, password,
     await selectSettings(page, 'sessions');
     await page.locator('#sessions-list .token-row').nth(1).waitFor();
     await page.setViewportSize({ width: 320, height: 700 });
-    for (const [section, selectors] of [['api-keys', ['#token-name', '#token-profile']], ['sessions', ['#sessions-refresh']], ['backup', ['#settings-page a[href="/api/backup"]']]]) {
+    for (const [section, selectors] of [['api-keys', ['#token-name', '#token-profile-trigger']], ['sessions', ['#sessions-refresh']], ['backup', ['#settings-page a[href="/api/backup"]']]]) {
       await selectSettings(page, section);
       if (section === 'api-keys') await page.locator('#token-create summary').click();
       for (const selector of selectors) assert.ok(await page.locator(selector).evaluate(node => node.getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
@@ -57,7 +65,8 @@ export async function securityJourney({ browser, page, base, username, password,
     assert.equal(await page.locator('#token-profile').inputValue(), 'read');
     assert.equal(await page.locator('#token-expiry').inputValue(), '30');
     await page.locator('#token-name').fill('Synthetic extension');
-    await page.locator('#token-profile').selectOption('capture');
+    await chooseOption(page, 'token-profile', 'Add, edit & capture');
+    assert.equal(await page.locator('#token-profile').inputValue(), 'capture');
     await page.setViewportSize({ width: 320, height: 700 });
     await page.waitForFunction(() => !document.querySelector('#token-form button[type=submit]').disabled);
     const failCreate = route => route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: 'Synthetic failure' }) });
@@ -114,7 +123,8 @@ export async function securityJourney({ browser, page, base, username, password,
     assert.equal(await page.locator('#reauth-password').inputValue(), '');
 
     await selectSettings(page, 'sessions');
-    await page.locator('#session-idle').selectOption('60');
+    await chooseOption(page, 'session-idle', '1 hour');
+    assert.equal(await page.locator('#session-idle').inputValue(), '60');
     await page.locator('#session-idle-form').getByRole('button', { name: 'Save timeout' }).click();
     await page.locator('#sessions-feedback').filter({ hasText: 'Inactivity timeout saved' }).waitFor();
     const sessions = await (await request.get(url('/api/sessions'))).json();

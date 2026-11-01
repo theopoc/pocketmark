@@ -11,8 +11,8 @@ binaries at the exact source revision. Scheduled runs never publish a release.
 | Plan | Conventional Commit PR title and fail-closed source selection. |
 | Quality | Formatting/vet, module checksums/tidy, syntax, actionlint and GoReleaser config. |
 | Security | Full-history redacted Gitleaks for every change; reachable Go vulnerabilities when server checks are selected. |
-| Tests, AMD64 and ARM64 | Native race tests and atomic coverage, with at most two packages built/tested concurrently. UI regressions remain on both; Python/release-expression regressions run once on AMD64. |
-| Extension | Syntax, regressions and installable ZIP validation in a separate job. |
+| Tests, AMD64 and ARM64 | Native race tests and atomic coverage, with at most two packages built/tested concurrently. UI regressions remain on both; Python/release-expression regressions and Chromium selector checks run once on AMD64. |
+| Extension | Syntax, regressions, Chromium selector checks and installable ZIP validation in a separate job. |
 | Build, AMD64 and ARM64 | Native musl static binaries and build metadata, retained for 90 days. |
 | CI passed | Final `needs` + `always()` job; no polling or runner occupied during other jobs. |
 | Docker release | Incorporate validated native executables; test candidate digests with Compose/Chromium before publishing and qualifying the tag. |
@@ -124,12 +124,14 @@ make release-check
 docker build -t pocketmark:ci .
 npm ci --prefix e2e --ignore-scripts --no-audit --no-fund
 ./e2e/node_modules/.bin/playwright install --with-deps chromium
+node e2e/selectors.mjs
+node e2e/extension-selectors.mjs
 python3 scripts/smoke_docker.py --image pocketmark:ci --browser
 ```
 
-The browser dependency is pinned and locked under `e2e/`; it is test tooling only and is not copied into the application image. The browser runs on the CI runner, outside the server's 128 MiB container limit. These Chromium desktop journeys are separate from extension regressions and do not qualify Firefox, Safari, native mobile clients or full accessibility.
+The browser dependency is pinned and locked under `e2e/`; it is test tooling only and is not copied into the application image. The browser runs on the CI runner, outside the server's 128 MiB container limit. Selector checks cover the web UI and extension at desktop and narrow viewport sizes in both themes; the separate container browser journey exercises the running server. These Chromium checks do not qualify Firefox, Safari, native mobile clients or full accessibility.
 
-Extension regressions run once in the selected extension job. Main, manual and scheduled runs always include it for complete release evidence. Container and Chromium journeys run during release; ordinary source CI does not build containers.
+Extension regressions run once in the selected extension job, including extension-only changes. Main, manual and scheduled runs always include it for complete release evidence. Selector Chromium checks run in ordinary source CI; the container journey runs during release, and ordinary source CI does not build containers.
 
 The release expression regression checks use `@actions/expressions` only as a temporary CI/test tool; it is not an application or frontend dependency. They read the expression directly from the workflow and cover missing/empty PR outputs after a version PR is merged, ordinary opened PRs, and malformed output. Reproduce them locally with:
 
@@ -140,7 +142,7 @@ ACTIONS_EXPRESSIONS_PATH=/tmp/pocketmark-release-expressions/node_modules/@actio
   node --test scripts/test_release_expressions.mjs
 ```
 
-Release tooling uses **GoReleaser OSS 2.18.3**, pinned in Actions. No Pro license or additional secret is required. Linux binaries require `musl-gcc` and matching native architecture because SQLite uses CGO. The native CI jobs compile and test them; GoReleaser's OSS `meta` archives then package those exact binaries with installation instructions. It generates the extension ZIPs and `SHA256SUMS` too. The single extension ZIP contains twelve explicitly named production files, including its background worker, and declares `debugger` access. Tests and local data are never globbed into release archives.
+Release tooling uses **GoReleaser OSS 2.18.3**, pinned in Actions. No Pro license or additional secret is required. Linux binaries require `musl-gcc` and matching native architecture because SQLite uses CGO. The native CI jobs compile and test them; GoReleaser's OSS `meta` archives then package those exact binaries with installation instructions. It generates the extension ZIPs and `SHA256SUMS` too. The single extension ZIP contains thirteen explicitly named production files, including its background worker, and declares `debugger` access. Tests and local data are never globbed into release archives.
 
 For a local packaging rehearsal, download the `linux-amd64` and `linux-arm64` CI artifacts into `artifacts/linux-amd64/` and `artifacts/linux-arm64/`, retaining their executable and `.buildinfo.txt` files. With GoReleaser 2.18.3 installed, run:
 

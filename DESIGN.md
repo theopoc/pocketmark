@@ -210,6 +210,8 @@ Grid bookmark cards use the panel radius, white background and a line border; se
 ### Inputs / Fields
 Field boundaries use control-line (#818896) in light mode and #747b92 in dark mode, providing at least 3:1 against their adjacent field surfaces. Quiet separators keep the line token. Fields retain the control radius and (10px 12px) padding. Focus has a (2px) outline and (2px) offset. Search applies its outline around the complete search container. Read-only fields use the surface fill; form errors appear inline in danger text. Bookmark fields validate the server’s UTF-8 size limits before submission and identify the field to correct. Network/session failures give recovery instructions while retaining unsaved work.
 
+Single-choice selectors use the same field boundary and an authored chevron. Their option panels use the active theme's paper, ink, line and accent-soft tokens, a compact radius and a restrained shadow. The current choice is identified by an indigo check and selection treatment; focus is visible independently. Collection choices retain their hierarchy, and long lists scroll within the available space. Menus stay reachable within dialogs, the extension popup and phone viewports, with at least 44px option targets on phones. Keyboard and assistive-technology users can identify, open, navigate and dismiss each selector. The extension's tag suggestions follow the same theme-matched menu vocabulary while retaining free-form tag entry.
+
 Authenticator setup pairs a QR code on white with a labeled, read-only manual key. Recovery codes use selectable, scrollable text in a bordered surface, with a copy action and a manual-selection fallback.
 
 ### Navigation

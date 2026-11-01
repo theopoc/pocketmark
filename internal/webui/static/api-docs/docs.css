@@ -19,6 +19,7 @@
 .api-docs .swagger-ui .scheme-container { background: var(--surface); box-shadow: none; padding: 16px; margin-bottom: 24px; border-radius: 6px; }
 .api-docs .swagger-ui .servers > label { display: flex; flex-direction: column; gap: 6px; margin: 0; }
 .api-docs .swagger-ui .servers > label select { margin: 0; }
+.api-docs .swagger-ui .app-select-trigger, .api-docs .swagger-ui .app-select-panel { font-weight: 400; }
 .api-docs .swagger-ui .filter .operation-filter-input { margin: 0 0 16px; max-width: none; }
 .api-docs .swagger-ui .opblock-tag { font-size: 18px; border-color: var(--line); padding-inline: 0; }
 .api-docs .swagger-ui .opblock-tag:hover { background: var(--surface); }

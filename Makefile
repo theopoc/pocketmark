@@ -25,11 +25,14 @@ check: fmt-check
 	node --check internal/webui/static/bulk.js
 	node --check internal/webui/static/selection.js
 	node --check internal/webui/static/tag-picker.js
+	node --check internal/webui/static/select.js
 	node --check internal/webui/static/app.js
 	node --check internal/webui/static/security.js
 	node --check internal/webui/static/sw.js
 	node --check internal/webui/static/api-docs/docs.js
 	node --check e2e/selection.mjs
+	node --check e2e/selectors.mjs
+	node --check e2e/extension-selectors.mjs
 	node --check e2e/navigation.mjs
 	node --check e2e/fidelity.mjs
 	node --check e2e/polish.mjs

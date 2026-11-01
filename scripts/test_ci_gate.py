@@ -92,6 +92,22 @@ class WorkflowGateTests(unittest.TestCase):
         release = (ROOT / '.github/workflows/release.yml').read_text()
         self.assertNotIn('gh workflow run ci-required.yml', release)
 
+    def test_selector_browser_regressions_are_in_selected_jobs(self):
+        workflow = (ROOT / '.github/workflows/ci.yml').read_text()
+        tests = workflow.split('\n  test:\n', 1)[1].split('\n  build:\n', 1)[0]
+        extension = workflow.split('\n  extension:\n', 1)[1].split('\n  required:\n', 1)[0]
+        install = 'npm ci --prefix e2e --ignore-scripts --no-audit --no-fund'
+        browser = './e2e/node_modules/.bin/playwright install --with-deps chromium'
+        for job in (tests, extension):
+            self.assertIn(install, job)
+            self.assertIn(browser, job)
+            self.assertNotIn('continue-on-error', job)
+        self.assertIn("- name: Test web selectors in Chromium\n        if: matrix.arch == 'amd64'\n        run: node e2e/selectors.mjs", tests)
+        self.assertIn("- name: Install selector browser tooling\n        if: matrix.arch == 'amd64'", tests)
+        self.assertIn('- name: Test extension selectors in Chromium\n        run: node e2e/extension-selectors.mjs', extension)
+        self.assertIn("if: needs.plan.outputs.server == 'true'", tests)
+        self.assertIn("if: needs.plan.outputs.extension == 'true'", extension)
+
     def test_git_diff_includes_both_sides_of_renames(self):
         with tempfile.TemporaryDirectory() as directory:
             def git(*args):

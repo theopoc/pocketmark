@@ -2,6 +2,7 @@
 
 (() => {
   const $ = (id) => document.getElementById(id);
+  globalThis.PocketmarkSelect.enhanceAll(document);
   const state = { filter: "all", collection: null, tag: "", query: "", page: 1, pageSize: 40, total: 0, links: [], collections: [], editing: null, request: 0, timer: null, signedIn: false, sort: "newest", editingCollection: null };
   let toastTimer, toastActionPending = false;
   let expandedBookmarkActions = null;

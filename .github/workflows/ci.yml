@@ -108,7 +108,7 @@ jobs:
     if: needs.plan.outputs.server == 'true'
     name: Tests (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 15
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -137,6 +137,14 @@ jobs:
       - name: Test release packaging
         if: matrix.arch == 'amd64'
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+      - name: Install selector browser tooling
+        if: matrix.arch == 'amd64'
+        run: |
+          npm ci --prefix e2e --ignore-scripts --no-audit --no-fund
+          ./e2e/node_modules/.bin/playwright install --with-deps chromium
+      - name: Test web selectors in Chromium
+        if: matrix.arch == 'amd64'
+        run: node e2e/selectors.mjs
       - name: Test workflow expressions
         if: matrix.arch == 'amd64'
         run: |
@@ -205,7 +213,7 @@ jobs:
     needs: plan
     if: needs.plan.outputs.extension == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -218,6 +226,12 @@ jobs:
           for source in extension/*.js; do node --check "$source"; done
           python3 -m py_compile extension/package.py
       - run: make test-extension
+      - name: Install selector browser tooling
+        run: |
+          npm ci --prefix e2e --ignore-scripts --no-audit --no-fund
+          ./e2e/node_modules/.bin/playwright install --with-deps chromium
+      - name: Test extension selectors in Chromium
+        run: node e2e/extension-selectors.mjs
       - name: Validate the installable extension package
         run: python3 -m unittest discover -s scripts -p 'test_package_extension.py' -v
 

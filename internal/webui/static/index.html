@@ -12,12 +12,14 @@
   <script src="/theme-switch.js" defer></script>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/secondary.css">
+  <link rel="stylesheet" href="/select.css">
   <script src="/name-limit.js" defer></script>
   <script src="/workspace.js" defer></script>
   <script src="/reader.js" defer></script>
   <script src="/bulk.js" defer></script>
   <script src="/selection.js" defer></script>
   <script src="/tag-picker.js" defer></script>
+  <script src="/select.js" defer></script>
   <script src="/security.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
@@ -134,7 +136,7 @@
         <div class="library-header"><div><h1 id="tags-title" tabindex="-1">Tags</h1><p class="muted">Browse your tags. Select one to see its bookmarks.</p></div><button id="tags-back" class="button subtle"><span data-icon="arrow-left" aria-hidden="true"></span>Back to library</button></div>
         <label class="search-box"><span data-icon="search" aria-hidden="true"></span><span class="sr-only">Search tags</span><input id="tags-search" type="search" placeholder="Search tags…" autocomplete="off" maxlength="512"></label>
         <p id="tags-library-context" class="small muted" hidden></p><div class="tags-summary"><span id="tags-results" aria-live="polite"></span><button id="tags-retry" class="text-button">Refresh tags</button></div>
-        <label id="tags-letter-control" class="tags-letter-picker">Jump to letter <select id="tags-letter-picker"><option value="">Choose a letter</option></select></label>
+        <div id="tags-letter-control" class="tags-letter-picker"><label for="tags-letter-picker">Jump to letter</label><select id="tags-letter-picker"><option value="">Choose a letter</option></select></div>
         <div id="tags-error" class="error-banner" role="alert" hidden></div>
         <div id="tags-index-layout" class="tags-index-layout">
           <div id="tags-list" class="tags-directory" aria-label="Tags" aria-busy="false"></div>

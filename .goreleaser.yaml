@@ -37,6 +37,7 @@ archives:
       - {src: extension/popup.html, dst: popup.html}
       - {src: extension/popup.js, dst: popup.js}
       - {src: extension/popup.css, dst: popup.css}
+      - {src: extension/selectors.js, dst: selectors.js}
       - {src: extension/theme-switch.js, dst: theme-switch.js}
       - {src: extension/ui-theme.js, dst: ui-theme.js}
       - {src: extension/name-limit.js, dst: name-limit.js}

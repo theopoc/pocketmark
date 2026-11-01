@@ -71,6 +71,14 @@ fieldset { padding: 0; margin: 0; border: 0; min-inline-size: 0; }
 .actions, .tag-entry { display: flex; align-items: center; gap: 8px; }
 .tag-entry input { flex: 1 1 0; }
 .tag-entry button { flex: none; }
+.choice-trigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; inline-size: 100%; min-inline-size: 0; min-block-size: 38px; padding: 9px 10px; border: 1px solid var(--control); color: var(--ink); background: var(--surface); text-align: left; font-weight: 400; }
+.choice-trigger > span { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.choice-trigger svg { inline-size: 16px; block-size: 16px; }
+.choice-trigger:hover, .choice-trigger:active, .choice-trigger[aria-expanded="true"] { color: var(--ink); background: var(--surface); border-color: var(--focus); }
+.choice-panel { position: fixed; z-index: 20; overflow-y: auto; overscroll-behavior: contain; padding: 5px; border: 1px solid var(--control); border-radius: 6px; background: var(--paper); box-shadow: 0 8px 24px rgb(0 0 0 / .2); scrollbar-color: var(--control) var(--paper); }
+.choice-option { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-block-size: 36px; padding: 8px; border-radius: 4px; color: var(--ink); cursor: pointer; overflow-wrap: anywhere; }
+.choice-option:hover, .choice-option[data-active="true"], .choice-option[aria-selected="true"] { background: var(--accent-soft); }
+.choice-option svg { inline-size: 16px; block-size: 16px; color: var(--focus); }
 .hint, .muted { color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.5; }
 .hint { margin-top: 6px; }
 .capture-disclosure { border-top: 1px solid var(--line); padding-top: 8px; }
@@ -145,7 +153,7 @@ summary { cursor: pointer; font-size: 11px; color: var(--muted); }
   .field-heading { flex-wrap: wrap; }
   #task-count { display: none; }
 }
-@media (pointer: coarse) { button, .capture-option, input:not([type="checkbox"]), select { min-block-size: 44px; } }
+@media (pointer: coarse) { button, .capture-option, input:not([type="checkbox"]), select, .choice-option { min-block-size: 44px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; } }
 
 /* Light appearance supplements the original dark palette and popup structure. */
