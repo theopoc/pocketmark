@@ -126,8 +126,11 @@ func (s *Store) Bulk(ctx context.Context, b BulkChange) error {
 		tags, _ := json.Marshal(l.Tags)
 		query = "UPDATE links SET tags=?,updated_at=? WHERE id=?"
 		args = []any{string(tags), time.Now().UTC().Format(time.RFC3339Nano)}
-	case "favorite", "read":
-		query = "UPDATE links SET " + b.Action + "=?,updated_at=? WHERE id=?"
+	case "favorite":
+		query = "UPDATE links SET favorite=?,updated_at=? WHERE id=?"
+		args = []any{b.Value, time.Now().UTC().Format(time.RFC3339Nano)}
+	case "read":
+		query = "UPDATE links SET read=?,updated_at=? WHERE id=?"
 		args = []any{b.Value, time.Now().UTC().Format(time.RFC3339Nano)}
 	case "capture":
 		query = "UPDATE links SET status='pending',error='' WHERE id=? AND status<>'processing' AND url NOT LIKE 'pocketmark-file:%'"

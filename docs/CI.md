@@ -11,7 +11,7 @@ binaries at the exact source revision. Scheduled runs never publish a release.
 | Plan | Conventional Commit PR title and fail-closed source selection. |
 | Quality | Formatting/vet, module checksums/tidy, syntax, actionlint and GoReleaser config. |
 | Security | Full-history redacted Gitleaks for every change; reachable Go vulnerabilities when server checks are selected. |
-| SAST | CodeQL security-extended for Go and JavaScript, including extension-only changes; findings or missing results fail CI. |
+| SAST | CodeQL security-extended for Go and JavaScript, including extension-only changes; findings or missing results fail CI, except two reviewed, fingerprint-bound in-source suppressions for random API keys and constant-time comparisons. |
 | JavaScript SCA | npm audit for test/scanner dependencies and the Swagger package; byte equality with vendored assets; Retire.js scans the embedded bundle. High/critical findings block. |
 | Tests, AMD64 and ARM64 | Native race tests and atomic coverage, with at most two packages built/tested concurrently. UI regressions remain on both; Python/release-expression regressions and Chromium selector checks run once on AMD64. |
 | Extension | Syntax, regressions, Chromium selector checks and installable ZIP validation in a separate job. |
