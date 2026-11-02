@@ -2,38 +2,28 @@
 
 One unfiltered `ci.yml` workflow runs on PR creation, source changes, reopening,
 title edits and readiness changes; on every main push; on manual dispatch; and
-on Mondays at 05:23 UTC. PRs first select their checks from a complete Git diff.
-Main, dispatch and scheduled runs always execute the full suite and retain native
-binaries at the exact source revision. Scheduled runs never publish a release.
+on Mondays at 05:23 UTC. Every run executes the full suite, including
+PRs that change only documentation or the extension. Independent jobs start in
+parallel; there is no path-selection job or final aggregation job. Main runs
+retain native binaries at the exact source revision. Scheduled runs never publish
+a release.
 
 | Phase | Checks and outputs |
 | --- | --- |
-| Plan | Conventional Commit PR title and fail-closed source selection. |
-| Quality | Formatting/vet, module checksums/tidy, syntax, actionlint and GoReleaser config. |
-| Security | Full-history redacted Gitleaks for every change; reachable Go vulnerabilities when server checks are selected. |
-| SAST | Full CodeQL security-extended for Go and JavaScript on every PR, including documentation-only changes; unreviewed findings or missing/incremental results fail CI. |
-| JavaScript SCA | npm audit for test/scanner dependencies and the Swagger package; byte equality with vendored assets; Retire.js scans the embedded bundle. High/critical findings block. |
+| Quality | Commitlint validates the PR title; formatting/vet, module checksums/tidy, syntax, actionlint and GoReleaser config. |
+| Security | Full-history redacted Gitleaks, reachable Go vulnerabilities, npm audits, vendored Swagger byte equality and Retire.js bundle scanning. High/critical vulnerabilities block. |
+| SAST | Separate parallel CodeQL security-extended jobs for Go and JavaScript; unreviewed findings or missing/incremental results fail CI. |
 | Tests, AMD64 and ARM64 | Native race tests and atomic coverage, with at most two packages built/tested concurrently. UI regressions remain on both; Python/release-expression regressions and Chromium selector checks run once on AMD64. |
-| Extension | Syntax, regressions, Chromium selector checks and installable ZIP validation in a separate job. |
+| Extension | Syntax, regressions, Chromium selector checks and installable ZIP validation. |
 | Build, AMD64 and ARM64 | Native musl static binaries and build metadata, retained for 90 days. |
-| CI passed | Final `needs` + `always()` job; no polling or runner occupied during other jobs. |
 | Docker release | Incorporate validated native executables; test candidate digests with Compose/Chromium before publishing and qualifying the tag. |
 
-Documentation-only PRs (root Markdown and `docs/`) run the plan, secrets, full SAST
-and final gate. Extension-only PRs also run the extension and JavaScript SCA jobs. Everything else, including
-unknown paths, embedded Markdown, workflows, local actions, Makefile and tooling,
-selects the full suite. Renames include deleted and added paths; filenames are
-NUL-delimited. Empty diffs conservatively select the full suite. No API pagination
-or delayed discovery of check names is involved.
-
-The required name remains `CI passed` from GitHub Actions, preserving the existing
-branch rules. `scripts/ci_plan.py require` checks every expected dependency and
-its selection. Selected jobs must succeed; only explicitly unselected jobs may
-be skipped. Missing plans/jobs, failed or cancelled jobs and unexpected skips
-fail the gate. Matrices use `fail-fast: false` and their aggregate results feed
-the gate. The same graph applies to Release Please dispatches, fixing the former
-independent gate's ability to finish before the manually dispatched source run.
-The old `ci-required.yml`, `extension.yml` and third-party polling action are gone.
+The **Protect main** ruleset requires all nine job results from GitHub Actions:
+`Quality`, `Security`, `SAST (go)`, `SAST (javascript-typescript)`, `Tests (amd64)`,
+`Tests (arm64)`, `Build (amd64)`, `Build (arm64)` and `Extension`. These jobs have no
+job-level conditions or dependencies that could skip them. Matrices use
+`fail-fast: false`. Keep the ruleset synchronized when renaming jobs or changing
+matrix entries. The obsolete `CI passed` check is no longer required.
 
 ### Go caches and timings
 
@@ -66,14 +56,14 @@ The deterministic container smoke test does not depend on public websites. The s
 CodeQL actions are SHA-pinned and run the bundled `security-extended` queries for
 Go and JavaScript. `CODEQL_ACTION_DIFF_INFORMED_QUERIES: 'false'` disables automatic
 PR diff filtering so the pre-merge gate evaluates the same complete source as
-main. Both language jobs run on every PR, independently of path selection, and
-remain required by `CI passed`. The SARIF gate also rejects reports declaring an
+main. Both language jobs run on every PR and are individually required by branch
+protection. The SARIF gate also rejects reports declaring an
 incremental mode, even if they have no findings. The Go build uses the production SQLite tags with compilation
 forced for extraction. JavaScript excludes test harnesses and upstream minified
 vendor assets; the latter are covered by dependency scanning. Reports stay in
 short-lived artifacts, without uploading databases or requiring code-scanning
 write permissions. `check_sarif.py` makes unreviewed findings and absent/failed
-analyses blocking dependencies of `CI passed`.
+analyses blocking checks before merging.
 
 One reviewed false positive is accepted: `go/weak-sensitive-data-hashing` at the
 API-key SHA256 verifier in `internal/server/authorization.go`. WebDAV transports
@@ -91,8 +81,9 @@ The lockfile is audited, and `check_swagger_vendor.py` compares all five vendore
 files with that exact installed package. Update the inventory and shipped files
 together. Retire.js reads current advisory data and checks embedded libraries
 that npm's top-level Swagger package metadata does not expose. `npm audit` also
-checks the `e2e/` lockfile. High/critical findings and scanner errors block; lower
-severities remain visible for review. Dependabot watches both npm inventories.
+checks the `e2e/` and `tools/quality/` lockfiles, including Commitlint. High/critical
+findings and scanner errors block; lower severities remain visible for review.
+Dependabot watches all three npm inventories.
 Neither scanner tools nor their node_modules are embedded in the application.
 
 Reproduce JavaScript SCA locally:
@@ -101,6 +92,7 @@ Reproduce JavaScript SCA locally:
 npm ci --prefix tools/security --ignore-scripts --no-audit --no-fund
 npm audit --prefix tools/security --audit-level=high
 npm audit --prefix e2e --audit-level=high
+npm audit --prefix tools/quality --audit-level=high
 python3 scripts/check_swagger_vendor.py
 tools/security/node_modules/.bin/retire --path internal/webui/static/api-docs/vendor --severity high
 ```
@@ -139,7 +131,7 @@ CI uses the [official Gitleaks action](https://github.com/gitleaks/gitleaks-acti
 
 Use short-lived branches from current `main`, one focused PR per change, and a Conventional Commit title such as `fix(api): reject invalid tokens`. CI validates the title on PR creation, new commits, reopening and metadata edits. The squash commit drives Release Please, so preserve that validated title when merging. A `!` requests a breaking release. Avoid long-lived `develop` or release branches for this single-maintainer project.
 
-The repository settings observed on 2026-10-23 allow only squash merges and delete merged branches. This audit set `squash_merge_commit_title` to `PR_TITLE`, so GitHub proposes the validated PR title even for a one-commit PR; the maintainer can still edit it at merge time. The active **Protect main** ruleset requires a PR, resolved review threads, linear history, and `CI passed` from the GitHub Actions app (integration ID 15368), with the branch up to date. It blocks deletion and force pushes, with no bypass actors. Zero required human approvals is intentional for personal maintenance; review the diff and evidence before merging. A repository setting, rather than workflow YAML, enforces this policy. Do not merge on an earlier commit's green checks. [GitHub required-check semantics](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks).
+The repository settings observed on 2026-10-23 allow only squash merges and delete merged branches. This audit set `squash_merge_commit_title` to `PR_TITLE`, so GitHub proposes the validated PR title even for a one-commit PR; the maintainer can still edit it at merge time. The active **Protect main** ruleset requires a PR, resolved review threads, linear history, and all nine CI job results listed above from the GitHub Actions app (integration ID 15368), with the branch up to date. It blocks deletion and force pushes, with no bypass actors. Zero required human approvals is intentional for personal maintenance; review the diff and evidence before merging. A repository setting, rather than workflow YAML, enforces this policy. Do not merge on an earlier commit's green checks. [GitHub required-check semantics](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks).
 
 Follow the [development workflow in AGENTS.md](../AGENTS.md#development-workflow) for every development task, including documentation changes. Before delivery, launch a code-review subagent on the complete task diff from its merge-base with refreshed `origin/main`, including uncommitted changes and newly added files. Apply its recommendations, rerun affected checks and have the corrections reviewed until no actionable findings remain. Record the review outcome, any rejected recommendation with its concrete rationale, resulting behavior, compatibility impact, checks and secret scanning in the PR.
 
@@ -150,7 +142,7 @@ generated evidence stays outside version control.
 
 Keep the branch up to date with `origin/main` and resolve merge conflicts autonomously, reading both sides to preserve intended behavior and unrelated changes. Verify that no conflict markers remain. Conflict resolutions and subsequent development changes require renewed subagent review and applicable local checks before pushing, followed by CI on the latest pushed commit. Fix CI failures and repeat these gates for corrections.
 
-Once subagent review is complete and every required check, including `CI passed`, succeeds, the development agent verifies that the PR is conflict-free, up to date and still at the validated head, then squash-merges it automatically without asking for confirmation. Preserve the validated PR title and respect branch protection; a changed head requires renewed review, local validation and CI. Pending, failed, cancelled or skipped required checks do not authorize merge. Before reporting completion, verify the merged state and provide the PR link, review outcome and CI result; report any blocker explicitly. This is an agent delivery responsibility, not a new GitHub Actions merge workflow; eligible Dependabot PRs use the separate automation below.
+Once subagent review is complete and every required check succeeds, the development agent verifies that the PR is conflict-free, up to date and still at the validated head, then squash-merges it automatically without asking for confirmation. Preserve the validated PR title and respect branch protection; a changed head requires renewed review, local validation and CI. Pending, failed, cancelled or skipped required checks do not authorize merge. Before reporting completion, verify the merged state and provide the PR link, review outcome and CI result; report any blocker explicitly. This is an agent delivery responsibility, not a new GitHub Actions merge workflow; eligible Dependabot PRs use the separate automation below.
 
 For a normal PR, merging updates `main` and may update a Release Please PR. Release Please version PRs still require an explicit publication request before merging: merging one authorizes publication, so review its version and notes first. Release tags matching `v*` cannot be updated or deleted under the separate active tag ruleset.
 
@@ -158,15 +150,27 @@ Dependabot checks Actions, Go modules and Docker base images weekly, with at mos
 
 Enable the repository's **Allow auto-merge** setting while retaining the active **Protect main** ruleset above. `dependabot-auto-merge.yml` handles PR creation, new commits, reopening and readiness for review. It only accepts non-draft PRs opened by `dependabot[bot]` from this repository. The SHA-pinned official `dependabot/fetch-metadata` action verifies Dependabot's signed commits; verification is never disabled. Its `update-type` is the highest semver change across the PR, so any major update in a group prevents automatic merge. Only explicit `version-update:semver-minor` and `version-update:semver-patch` metadata enable squash auto-merge; unknown or missing metadata fails closed. [Fetch Metadata documentation](https://github.com/dependabot/fetch-metadata/tree/v3.1.0).
 
-The workflow uses `gh pr merge --auto --squash --match-head-commit` with the event's head SHA. GitHub waits for the complete `CI passed` gate, an up-to-date branch and resolved review threads; it has no ruleset bypass. Failed, skipped, cancelled or pending CI cannot authorize merge. Keep `CI passed` required from the GitHub Actions app with strict branch updates and no bypass actors: the workflow relies on this server-side enforcement. Existing open PRs are evaluated on their next supported PR event after the workflow reaches `main`. As with other operations performed using `GITHUB_TOKEN`, the resulting merge does not trigger push-based CI or Release Please; subsequent eligible pushes to `main` pick up the dependency commits. The PR's complete CI still gates its merge. CI regression tests evaluate the actual eligibility expressions and exercise the actual selector and final gate for missing jobs, unexpected skips, pending states, failures and cancellations.
+The workflow uses `gh pr merge --auto --squash --match-head-commit` with the event's head SHA. GitHub waits for all nine required CI checks, an up-to-date branch and resolved review threads; it has no ruleset bypass. Failed, skipped, cancelled or pending CI cannot authorize merge. Keep all nine CI job results required from the GitHub Actions app with strict branch updates and no bypass actors: the workflow relies on this server-side enforcement. Existing open PRs are evaluated on their next supported PR event after the workflow reaches `main`. As with other operations performed using `GITHUB_TOKEN`, the resulting merge does not trigger push-based CI or Release Please; subsequent eligible pushes to `main` pick up the dependency commits. The PR's complete CI still gates its merge. CI regression tests evaluate the actual eligibility expressions; the independent required jobs provide the merge gate.
 
-The title check uses PR-event metadata. Dispatch, push and scheduled CI runs validate source rather than a PR title; these runs cannot attest to PR metadata. Metadata edits rerun the selected source jobs and title validation together. Keeping a separate required title check would require a coordinated branch-rules change; no such protection change is made here. For a future busy repository, consider an independent required metadata check and `merge_group` support before enabling a merge queue.
+Commitlint runs in Quality with the conventional configuration and a locked
+CI-only dependency inventory under `tools/quality/`. PR titles reach the CLI via
+a quoted environment variable and stdin, never as shell source. Default ignored
+messages are disabled, so merge/revert/version-like titles still need the
+Conventional Commit format. Subject casing allows proper names such as Go and
+SQLite. Commitlint's other conventional defaults apply, including a 100-character
+header limit. Only the title is checked because it becomes the squash commit;
+intermediate commits are not checked. Dispatch, push and scheduled runs validate
+source rather than PR metadata. Metadata edits rerun the full suite and title
+validation together. For a future busy repository, consider an independent
+required metadata check and `merge_group` support before enabling a merge queue.
 
 ## Reproduce locally
 
 Requirements: Go as declared by `go.mod`, a C compiler, Node.js 24, Python 3, `make`, and Docker Compose for the container test.
 
 ```sh
+npm ci --prefix tools/quality --ignore-scripts --no-audit --no-fund
+printf '%s\n' 'ci: simplify checks' | tools/quality/node_modules/.bin/commitlint --strict
 make check
 make test
 make test-extension
@@ -183,7 +187,7 @@ python3 scripts/smoke_docker.py --image pocketmark:ci --browser
 
 The browser dependency is pinned and locked under `e2e/`; it is test tooling only and is not copied into the application image. The browser runs on the CI runner, outside the server's 128 MiB container limit. Selector checks cover the web UI and extension at desktop and narrow viewport sizes in both themes; the separate container browser journey exercises the running server. These Chromium checks do not qualify Firefox, Safari, native mobile clients or full accessibility.
 
-Extension regressions run once in the selected extension job, including extension-only changes. Main, manual and scheduled runs always include it for complete release evidence. Selector Chromium checks run in ordinary source CI; the container journey runs during release, and ordinary source CI does not build containers.
+Extension regressions run once in their independent job on every run. Main, manual and scheduled runs always include it for complete release evidence. Selector Chromium checks run in ordinary source CI; the container journey runs during release, and ordinary source CI does not build containers.
 
 The release expression regression checks use `@actions/expressions` only as a temporary CI/test tool; it is not an application or frontend dependency. They read the expression directly from the workflow and cover missing/empty PR outputs after a version PR is merged, ordinary opened PRs, and malformed output. Reproduce them locally with:
 
@@ -280,23 +284,18 @@ flowchart TD
     DEV["Development task"] --> REVIEW["Subagent review · apply recommendations and re-review"]
     REVIEW --> LOCAL["Applicable local checks + redacted secret scan"]
     LOCAL --> PR["Push and create/update PR to main"]
-    PR --> PLAN["Select checks + validate title"]
-    PLAN --> Q["Quality"]
-    PLAN --> EXT["Extension when selected"]
-    PLAN --> G["CI passed · explicit dependency results"]
-    EXT --> G
-    PLAN --> S["Secrets always / selected vulnerability scan"]
-    PLAN --> SA["CodeQL Go + JavaScript"]
-    PLAN --> SC["JavaScript SCA + vendored bundle"]
-    SA --> G
-    SC --> G
-    PLAN --> T["Tests · AMD64 / ARM64"]
-    PLAN --> B["Build · AMD64 / ARM64"]
-    Q --> G
-    S --> G
-    T --> G
-    B --> G
-    G --> HEAD{"Reviewed head current and conflict-free?"}
+    PR --> Q["Quality + Commitlint title"]
+    PR --> EXT["Extension"]
+    PR --> S["Secrets + Go / JavaScript SCA"]
+    PR --> SA["CodeQL Go + JavaScript"]
+    PR --> T["Tests · AMD64 / ARM64"]
+    PR --> B["Build · AMD64 / ARM64"]
+    Q --> HEAD{"All nine required checks pass; reviewed head current and conflict-free?"}
+    EXT --> HEAD
+    S --> HEAD
+    SA --> HEAD
+    T --> HEAD
+    B --> HEAD
     HEAD -->|Yes| M["Agent automatically squash-merges development PR"]
     HEAD -->|No| UPDATE["Update branch · resolve conflicts"]
     UPDATE --> REVIEW

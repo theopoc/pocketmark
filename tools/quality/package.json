@@ -1,0 +1,9 @@
+{
+  "name": "pocketmark-quality-tools",
+  "private": true,
+  "description": "CI-only Conventional Commit PR title validation; never shipped with the app",
+  "devDependencies": {
+    "@commitlint/cli": "21.2.4",
+    "@commitlint/config-conventional": "21.2.4"
+  }
+}

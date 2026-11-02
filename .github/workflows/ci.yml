@@ -26,28 +26,7 @@ env:
   CGO_ENABLED: '1'
 
 jobs:
-  plan:
-    name: Select checks and validate PR title
-    runs-on: ubuntu-24.04
-    timeout-minutes: 3
-    outputs:
-      server: ${{ steps.plan.outputs.server }}
-      extension: ${{ steps.plan.outputs.extension }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Validate the squash commit title
-        if: github.event_name == 'pull_request'
-        run: python3 scripts/check_pr_title.py
-      - id: plan
-        run: python3 scripts/ci_plan.py select
-
   quality:
-    needs: plan
-    if: needs.plan.outputs.server == 'true'
     name: Quality
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -62,6 +41,17 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
+      - name: Install Commitlint
+        run: npm ci --prefix tools/quality --ignore-scripts --no-audit --no-fund
+      - name: Test Commitlint title validation
+        run: node --test tools/quality/*.test.cjs
+      - name: Validate the squash commit title
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          [[ "$PR_TITLE" != *$'\n'* && "$PR_TITLE" != *$'\r'* ]]
+          printf '%s\n' "$PR_TITLE" | tools/quality/node_modules/.bin/commitlint --strict
       - run: go mod verify
       - run: go mod tidy -diff
       - run: make check
@@ -74,9 +64,7 @@ jobs:
       - run: make release-check
 
   security:
-    needs: plan
-    if: always()
-    name: Secrets and reachable Go vulnerabilities
+    name: Security
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -86,7 +74,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/go-cache
-        if: needs.plan.outputs.server == 'true'
         with:
           mode: security
       - name: Scan the complete history for secrets
@@ -100,13 +87,22 @@ jobs:
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
           GITLEAKS_ENABLE_SUMMARY: 'false'
       - name: Check reachable dependency vulnerabilities
-        if: needs.plan.outputs.server == 'true'
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 -tags=sqlite_fts5,sqlite_omit_load_extension ./...
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - run: npm ci --prefix tools/security --ignore-scripts --no-audit --no-fund
+      - run: npm audit --prefix tools/security --audit-level=high
+      - run: npm audit --prefix e2e --audit-level=high
+      - run: npm audit --prefix tools/quality --audit-level=high
+      - name: Verify vendored Swagger UI matches the scanned package
+        run: python3 scripts/check_swagger_vendor.py
+      - name: Scan the actual embedded JavaScript bundle
+        run: tools/security/node_modules/.bin/retire --path internal/webui/static/api-docs/vendor --severity high
 
   sast:
     name: SAST (${{ matrix.language }})
-    needs: plan
-    if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
@@ -149,30 +145,7 @@ jobs:
           path: artifacts/codeql/*.sarif
           retention-days: 7
 
-  sca:
-    name: JavaScript dependency security
-    needs: plan
-    if: needs.plan.outputs.server == 'true' || needs.plan.outputs.extension == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
-      - run: npm ci --prefix tools/security --ignore-scripts --no-audit --no-fund
-      - run: npm audit --prefix tools/security --audit-level=high
-      - run: npm audit --prefix e2e --audit-level=high
-      - name: Verify vendored Swagger UI matches the scanned package
-        run: python3 scripts/check_swagger_vendor.py
-      - name: Scan the actual embedded JavaScript bundle
-        run: tools/security/node_modules/.bin/retire --path internal/webui/static/api-docs/vendor --severity high
-
   test:
-    needs: plan
-    if: needs.plan.outputs.server == 'true'
     name: Tests (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
@@ -229,8 +202,6 @@ jobs:
           retention-days: 7
 
   build:
-    needs: plan
-    if: needs.plan.outputs.server == 'true'
     name: Build (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
@@ -277,8 +248,6 @@ jobs:
 
   extension:
     name: Extension
-    needs: plan
-    if: needs.plan.outputs.extension == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -301,18 +270,3 @@ jobs:
         run: node e2e/extension-selectors.mjs
       - name: Validate the installable extension package
         run: python3 -m unittest discover -s scripts -p 'test_package_extension.py' -v
-
-  required:
-    name: CI passed
-    if: always()
-    needs: [plan, quality, security, sast, sca, test, build, extension]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 2
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Require exactly the selected jobs
-        env:
-          RESULTS: ${{ toJSON(needs) }}
-        run: python3 scripts/ci_plan.py require
