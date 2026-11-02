@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.2](https://github.com/theopoc/pocketmark/compare/v1.3.1...v1.3.2) (2026-11-02)
+
+
+### Bug Fixes
+
+* **ci:** enforce full CodeQL checks on PRs ([9861862](https://github.com/theopoc/pocketmark/commit/9861862226408da69a6a890091a0f1a1621e1725))
+
 ## [1.3.1](https://github.com/theopoc/pocketmark/compare/v1.3.0...v1.3.1) (2026-11-02)
 
 
