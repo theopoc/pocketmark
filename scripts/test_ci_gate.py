@@ -1,149 +1,50 @@
-"""Exercise the real selector and final gate, including absent dispatch jobs."""
-import json
-import os
+"""Keep every merge-blocking check independent and unconditional."""
 from pathlib import Path
-import subprocess
-import tempfile
+import re
 import unittest
-
-from ci_plan import select, require_results
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def results(server=True, extension=True):
-    return {name: {'result': state, 'outputs': {}} for name, state in {
-        'plan': 'success', 'security': 'success',
-        'sast': 'success',
-        'sca': 'success' if server or extension else 'skipped',
-        'quality': 'success' if server else 'skipped',
-        'test': 'success' if server else 'skipped',
-        'build': 'success' if server else 'skipped',
-        'extension': 'success' if extension else 'skipped',
-    }.items()} | {'plan': {'result': 'success', 'outputs': {
-        'server': str(server).lower(), 'extension': str(extension).lower()}}}
-
-
 class WorkflowGateTests(unittest.TestCase):
-    def test_paths_fail_closed_and_main_dispatch_schedule_are_complete(self):
-        for event in ('push', 'workflow_dispatch', 'schedule'):
-            self.assertEqual(select(event, ['docs/CI.md']), (True, True))
-        for paths, expected in [(['docs/CI.md'], (False, False)),
-                                (['README.md'], (False, False)),
-                                (['extension/popup.js'], (False, True)),
-                                (['extension/README.md'], (False, True)),
-                                (['internal/server/a.go'], (True, True)),
-                                (['docs/x.md', 'internal/new'], (True, True)),
-                                (['.github/workflows/extension.yml'], (True, True)),
-                                (['.github/actions/go-cache/action.yml'], (True, True)),
-                                (['Makefile'], (True, True)),
-                                (['scripts/test_ci_gate.py'], (True, True)),
-                                (['unknown'], (True, True)), ([], (True, True))]:
-            with self.subTest(paths=paths):
-                self.assertEqual(select('pull_request', paths), expected)
+    @classmethod
+    def setUpClass(cls):
+        cls.workflow = (ROOT / '.github/workflows/ci.yml').read_text()
+        cls.jobs = dict(re.findall(r'^  ([a-z]+):\n(.*?)(?=^  [a-z]+:|\Z)',
+                                   cls.workflow.split('\njobs:\n', 1)[1], re.M | re.S))
 
-    def test_only_planned_skips_pass(self):
-        for server, extension in ((False, False), (False, True), (True, True)):
-            require_results(results(server, extension))
-            for job in results():
-                for state in ('failure', 'cancelled', 'neutral', None, 'pending'):
-                    with self.subTest(server=server, extension=extension, job=job, state=state):
-                        bad = results(server, extension)
-                        bad[job]['result'] = state
-                        with self.assertRaises(ValueError):
-                            require_results(bad)
-        for job in results():
-            bad = results()
-            bad[job]['result'] = 'skipped'
-            with self.subTest(job=job), self.assertRaises(ValueError):
-                require_results(bad)
+    def test_required_jobs_cannot_be_skipped_by_paths_or_dependencies(self):
+        self.assertEqual(set(self.jobs), {'quality', 'security', 'sast', 'test', 'build', 'extension'})
+        self.assertNotRegex(self.workflow, r'(?m)^    (?:if|needs):')
+        self.assertNotRegex(self.workflow, r'(?m)^    paths(?:-ignore)?:')
+        self.assertNotIn('continue-on-error:', self.workflow)
+        for name, arches in (('sast', ('go', 'javascript-typescript')),
+                             ('test', ('amd64', 'arm64')), ('build', ('amd64', 'arm64'))):
+            for arch in arches:
+                self.assertIn(arch, self.jobs[name])
+            self.assertIn('fail-fast: false', self.jobs[name])
 
-    def test_missing_jobs_and_malformed_plan_never_pass(self):
-        for job in results():
-            bad = results()
-            del bad[job]
-            with self.subTest(job=job), self.assertRaises(ValueError):
-                require_results(bad)
-        for output in ({}, {'server': 'false'}, {'server': 'yes', 'extension': 'true'}):
-            bad = results()
-            bad['plan']['outputs'] = output
-            with self.assertRaises(ValueError):
-                require_results(bad)
-        with self.assertRaises(ValueError):
-            require_results({})
-
-    def test_dispatch_gate_cli_rejects_build_still_running(self):
-        bad = results()
-        bad['build']['result'] = None
-        for needs, expected in ((bad, 1), (results(), 0)):
-            proc = subprocess.run(['python3', str(ROOT / 'scripts/ci_plan.py'), 'require'],
-                                  env={**os.environ, 'RESULTS': json.dumps(needs)},
-                                  capture_output=True, text=True)
-            self.assertEqual(proc.returncode, expected, proc.stderr)
-
-    def test_workflow_dependency_contract(self):
-        workflow = (ROOT / '.github/workflows/ci.yml').read_text()
-        self.assertNotIn('paths-ignore:', workflow)
-        self.assertIn('    name: CI passed\n', workflow)
-        gate = workflow.split('\n  required:\n')[1]
-        self.assertIn('if: always()', gate)
-        self.assertIn('needs: [plan, quality, security, sast, sca, test, build, extension]', gate)
-        self.assertIn('python3 scripts/ci_plan.py require', gate)
-        self.assertFalse((ROOT / '.github/workflows/ci-required.yml').exists())
-        self.assertFalse((ROOT / '.github/workflows/extension.yml').exists())
-        release = (ROOT / '.github/workflows/release.yml').read_text()
-        self.assertNotIn('gh workflow run ci-required.yml', release)
-
-    def test_sast_is_complete_and_required_for_every_pr(self):
-        workflow = (ROOT / '.github/workflows/ci.yml').read_text()
-        sast = workflow.split('\n  sast:\n', 1)[1].split('\n  sca:\n', 1)[0]
-        self.assertIn('    if: always()\n', sast)
-        self.assertIn("      CODEQL_ACTION_DIFF_INFORMED_QUERIES: 'false'\n", sast)
+    def test_sast_remains_complete_and_blocking(self):
+        sast = self.jobs['sast']
+        self.assertIn("CODEQL_ACTION_DIFF_INFORMED_QUERIES: 'false'", sast)
         self.assertIn('python3 scripts/check_sarif.py artifacts/codeql', sast)
-        for server, extension in ((False, False), (False, True), (True, True)):
-            for state in ('skipped', 'failure', 'cancelled'):
-                bad = results(server, extension)
-                bad['sast']['result'] = state
-                with self.subTest(server=server, extension=extension, state=state), self.assertRaises(ValueError):
-                    require_results(bad)
+        self.assertIn('GOFLAGS=-a make build', sast)
 
-    def test_selector_browser_regressions_are_in_selected_jobs(self):
-        workflow = (ROOT / '.github/workflows/ci.yml').read_text()
-        tests = workflow.split('\n  test:\n', 1)[1].split('\n  build:\n', 1)[0]
-        extension = workflow.split('\n  extension:\n', 1)[1].split('\n  required:\n', 1)[0]
-        install = 'npm ci --prefix e2e --ignore-scripts --no-audit --no-fund'
-        browser = './e2e/node_modules/.bin/playwright install --with-deps chromium'
-        for job in (tests, extension):
-            self.assertIn(install, job)
-            self.assertIn(browser, job)
-            self.assertNotIn('continue-on-error', job)
-        self.assertIn("- name: Test web selectors in Chromium\n        if: matrix.arch == 'amd64'\n        run: node e2e/selectors.mjs", tests)
-        self.assertIn("- name: Install selector browser tooling\n        if: matrix.arch == 'amd64'", tests)
-        self.assertIn('- name: Test extension selectors in Chromium\n        run: node e2e/extension-selectors.mjs', extension)
-        self.assertIn("if: needs.plan.outputs.server == 'true'", tests)
-        self.assertIn("if: needs.plan.outputs.extension == 'true'", extension)
+    def test_security_includes_all_dependency_inventories_and_embedded_bundle(self):
+        security = self.jobs['security']
+        self.assertIn('gitleaks/gitleaks-action@', security)
+        self.assertIn('govulncheck@', security)
+        for inventory in ('tools/security', 'tools/quality', 'e2e'):
+            self.assertIn(f'npm audit --prefix {inventory} --audit-level=high', security)
+        self.assertIn('python3 scripts/check_swagger_vendor.py', security)
+        self.assertIn('retire --path internal/webui/static/api-docs/vendor --severity high', security)
 
-    def test_git_diff_includes_both_sides_of_renames(self):
-        with tempfile.TemporaryDirectory() as directory:
-            def git(*args):
-                return subprocess.check_output(['git', '-C', directory, *args], text=True).strip()
-            git('init', '-q')
-            git('config', 'user.email', 'test@example.invalid')
-            git('config', 'user.name', 'Test')
-            Path(directory, 'code.go').write_text('package test\n')
-            git('add', '.')
-            git('commit', '-qm', 'base')
-            base = git('rev-parse', 'HEAD')
-            git('mv', 'code.go', 'README.md')
-            git('commit', '-qm', 'rename')
-            head = git('rev-parse', 'HEAD')
-            event = Path(directory, 'event.json')
-            event.write_text(json.dumps({'pull_request': {'base': {'sha': base}, 'head': {'sha': head}}}))
-            output = Path(directory, 'output')
-            subprocess.run(['python3', str(ROOT / 'scripts/ci_plan.py'), 'select'], cwd=directory,
-                           env={**os.environ, 'GITHUB_EVENT_NAME': 'pull_request',
-                                'GITHUB_EVENT_PATH': str(event), 'GITHUB_OUTPUT': str(output)}, check=True)
-            self.assertIn('server=true', output.read_text())
+    def test_browser_regressions_remain_in_tests_and_extension(self):
+        for job in ('test', 'extension'):
+            self.assertIn('npm ci --prefix e2e --ignore-scripts --no-audit --no-fund', self.jobs[job])
+            self.assertIn('playwright install --with-deps chromium', self.jobs[job])
+        self.assertIn('node e2e/selectors.mjs', self.jobs['test'])
+        self.assertIn('node e2e/extension-selectors.mjs', self.jobs['extension'])
 
 
 if __name__ == '__main__':

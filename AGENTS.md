@@ -96,7 +96,7 @@ For every task, including documentation, follow the detailed
    validation, review outcome and concrete reasons for any rejected recommendations.
 5. Keep the branch current and resolve conflicts while preserving both sides' intent.
    Repeat review and checks after corrections or conflict resolution; monitor CI
-   until every required check, including `CI passed`, succeeds at the latest head.
+   until every required check succeeds at the latest head.
 6. Verify the reviewed head is current and conflict-free, then automatically
    squash-merge with the validated PR title, respecting branch protection.
    Verify the merged state and report the PR link, review outcome and CI result;
