@@ -4,6 +4,22 @@ import argparse
 import json
 from pathlib import Path
 
+# Reviewed false positives, identified by rule, source file and CodeQL's line
+# fingerprint. A new finding or a changed sink must be reviewed independently.
+REVIEWED = {
+    ('go/weak-sensitive-data-hashing', 'internal/server/authorization.go', '961ba0bcbc447c16:1'),
+    ('go/weak-sensitive-data-hashing', 'internal/server/server.go', 'd4926a6247ad80f2:1'),
+}
+
+
+def reviewed_suppression(result):
+    locations = result.get('locations', [])
+    if result.get('suppressions') != [{'kind': 'inSource'}] or len(locations) != 1:
+        return False
+    uri = locations[0].get('physicalLocation', {}).get('artifactLocation', {}).get('uri')
+    fingerprint = result.get('partialFingerprints', {}).get('primaryLocationLineHash')
+    return (result.get('ruleId'), uri, fingerprint) in REVIEWED
+
 
 def check(directory):
     files = sorted(Path(directory).glob('*.sarif'))
@@ -28,6 +44,9 @@ def check(directory):
             if not isinstance(results, list):
                 raise ValueError(f'{path.name}: missing analysis results')
             for result in results:
+                # CodeQL retains source-suppressed results in SARIF.
+                if reviewed_suppression(result):
+                    continue
                 findings.append(f'{path.name}: {result.get("ruleId", "unknown rule")}')
     if findings:
         raise ValueError('SAST findings require review and correction:\n' + '\n'.join(findings))

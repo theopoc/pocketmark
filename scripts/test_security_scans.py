@@ -17,6 +17,32 @@ class SarifTests(unittest.TestCase):
                 'tool': {'driver': {'name': 'CodeQL'}}, 'results': []}]}
             path.write_text(json.dumps(good))
             check(directory)
+            suppressed = json.loads(json.dumps(good))
+            suppressed['runs'][0]['results'] = [{
+                'ruleId': 'go/weak-sensitive-data-hashing',
+                'locations': [{'physicalLocation': {'artifactLocation': {'uri': 'internal/server/server.go'}}}],
+                'partialFingerprints': {'primaryLocationLineHash': 'd4926a6247ad80f2:1'},
+                'suppressions': [{'kind': 'inSource'}],
+            }]
+            path.write_text(json.dumps(suppressed))
+            check(directory)
+            for suppression in ([], [{'kind': 'external'}], [{'kind': 'inSource'}, {'kind': 'external'}]):
+                suppressed['runs'][0]['results'][0]['suppressions'] = suppression
+                path.write_text(json.dumps(suppressed))
+                with self.subTest(suppression=suppression), self.assertRaises(ValueError):
+                    check(directory)
+            for field, value in (
+                ('ruleId', 'go/sql-injection'),
+                ('locations', [{'physicalLocation': {'artifactLocation': {'uri': 'elsewhere.go'}}}]),
+                ('locations', []),
+                ('partialFingerprints', {'primaryLocationLineHash': 'different:1'}),
+            ):
+                changed = json.loads(json.dumps(suppressed))
+                changed['runs'][0]['results'][0]['suppressions'] = [{'kind': 'inSource'}]
+                changed['runs'][0]['results'][0][field] = value
+                path.write_text(json.dumps(changed))
+                with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                    check(directory)
             for change in ({'results': [{}]}, {'results': None},
                            {'invocations': [{'executionSuccessful': False}]},
                            {'invocations': [{'toolExecutionNotifications': [{'level': 'error'}]}]}):
