@@ -19,6 +19,26 @@ import (
 	"pocketmark/internal/store"
 )
 
+func TestSecretEqual(t *testing.T) {
+	// Use the production KDF fixture, including mismatched and truncated verifiers.
+	for _, tc := range []struct {
+		x, y string
+		want bool
+	}{
+		{routeFixtureHash, routeFixtureHash, true},
+		{routeFixtureHash, strings.Repeat("0", len(routeFixtureHash)), false},
+		{routeFixtureHash, routeFixtureHash[:len(routeFixtureHash)-1], false},
+		{"reader", "reader", true},
+		{"reader", "Reader", false},
+		{"reader", "readers", false},
+		{"", "", true},
+	} {
+		if got := secretEqual(tc.x, tc.y); got != tc.want {
+			t.Errorf("secretEqual lengths %d/%d = %v, want %v", len(tc.x), len(tc.y), got, tc.want)
+		}
+	}
+}
+
 func TestSessionRevocationAcrossRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.db")
 	s, err := store.Open(path)

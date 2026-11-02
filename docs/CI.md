@@ -11,7 +11,7 @@ binaries at the exact source revision. Scheduled runs never publish a release.
 | Plan | Conventional Commit PR title and fail-closed source selection. |
 | Quality | Formatting/vet, module checksums/tidy, syntax, actionlint and GoReleaser config. |
 | Security | Full-history redacted Gitleaks for every change; reachable Go vulnerabilities when server checks are selected. |
-| SAST | CodeQL security-extended for Go and JavaScript, including extension-only changes; findings or missing results fail CI, except two reviewed, fingerprint-bound in-source suppressions for random API keys and constant-time comparisons. |
+| SAST | Full CodeQL security-extended for Go and JavaScript on every PR, including documentation-only changes; unreviewed findings or missing/incremental results fail CI. |
 | JavaScript SCA | npm audit for test/scanner dependencies and the Swagger package; byte equality with vendored assets; Retire.js scans the embedded bundle. High/critical findings block. |
 | Tests, AMD64 and ARM64 | Native race tests and atomic coverage, with at most two packages built/tested concurrently. UI regressions remain on both; Python/release-expression regressions and Chromium selector checks run once on AMD64. |
 | Extension | Syntax, regressions, Chromium selector checks and installable ZIP validation in a separate job. |
@@ -19,8 +19,8 @@ binaries at the exact source revision. Scheduled runs never publish a release.
 | CI passed | Final `needs` + `always()` job; no polling or runner occupied during other jobs. |
 | Docker release | Incorporate validated native executables; test candidate digests with Compose/Chromium before publishing and qualifying the tag. |
 
-Documentation-only PRs (root Markdown and `docs/`) run the plan, secrets and final
-gate. Extension-only PRs also run the extension, SAST and JavaScript SCA jobs. Everything else, including
+Documentation-only PRs (root Markdown and `docs/`) run the plan, secrets, full SAST
+and final gate. Extension-only PRs also run the extension and JavaScript SCA jobs. Everything else, including
 unknown paths, embedded Markdown, workflows, local actions, Makefile and tooling,
 selects the full suite. Renames include deleted and added paths; filenames are
 NUL-delimited. Empty diffs conservatively select the full suite. No API pagination
@@ -64,12 +64,27 @@ The deterministic container smoke test does not depend on public websites. The s
 ## Security analysis boundaries
 
 CodeQL actions are SHA-pinned and run the bundled `security-extended` queries for
-Go and JavaScript. The Go build uses the production SQLite tags with compilation
+Go and JavaScript. `CODEQL_ACTION_DIFF_INFORMED_QUERIES: 'false'` disables automatic
+PR diff filtering so the pre-merge gate evaluates the same complete source as
+main. Both language jobs run on every PR, independently of path selection, and
+remain required by `CI passed`. The SARIF gate also rejects reports declaring an
+incremental mode, even if they have no findings. The Go build uses the production SQLite tags with compilation
 forced for extraction. JavaScript excludes test harnesses and upstream minified
 vendor assets; the latter are covered by dependency scanning. Reports stay in
 short-lived artifacts, without uploading databases or requiring code-scanning
-write permissions. `check_sarif.py` makes findings and absent/failed analyses
-blocking dependencies of `CI passed`; there is no suppressed baseline.
+write permissions. `check_sarif.py` makes unreviewed findings and absent/failed
+analyses blocking dependencies of `CI passed`.
+
+One reviewed false positive is accepted: `go/weak-sensitive-data-hashing` at the
+API-key SHA256 verifier in `internal/server/authorization.go`. WebDAV transports
+the server-generated 256-bit random key in the Basic password field; it is not a
+human password. The exception matches the exact rule, source path and CodeQL line
+fingerprint, plus SHA256 digests of the reviewed authentication and key-generation
+source files. Any change to that context requires review before updating those
+digests; other findings, locations or suppressions still fail. There is no blanket
+rule exclusion or generated baseline. Existing API-key verifiers stay compatible.
+Human passwords continue to use PBKDF2-SHA256 with 600,000 iterations; their
+fixed-length outputs are compared directly in constant time.
 
 The CI-only npm inventory under `tools/security/` pins Retire.js and Swagger UI.
 The lockfile is audited, and `check_swagger_vendor.py` compares all five vendored

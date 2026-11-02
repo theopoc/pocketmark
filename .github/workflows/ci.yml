@@ -106,9 +106,12 @@ jobs:
   sast:
     name: SAST (${{ matrix.language }})
     needs: plan
-    if: needs.plan.outputs.server == 'true' || needs.plan.outputs.extension == 'true'
+    if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    env:
+      # PRs must enforce the same complete findings gate as main.
+      CODEQL_ACTION_DIFF_INFORMED_QUERIES: 'false'
     strategy:
       fail-fast: false
       matrix:

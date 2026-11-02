@@ -1,24 +1,35 @@
 #!/usr/bin/env python3
 """Fail the SAST job on findings or missing/failed CodeQL analysis, without write permissions."""
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
-# Reviewed false positives, identified by rule, source file and CodeQL's line
-# fingerprint. A new finding or a changed sink must be reviewed independently.
-REVIEWED = {
-    ('go/weak-sensitive-data-hashing', 'internal/server/authorization.go', '961ba0bcbc447c16:1'),
-    ('go/weak-sensitive-data-hashing', 'internal/server/server.go', 'd4926a6247ad80f2:1'),
+# BasicAuth carries a random 256-bit API key, not a human password. SHA256 is
+# appropriate for this verifier and preserves existing keys. Bind the exception
+# to the exact finding AND the reviewed generation/authentication code. Changes
+# to either source require review again; no rule-wide suppression is allowed.
+ROOT = Path(__file__).resolve().parents[1]
+REVIEWED_API_KEY_SOURCES = {
+    'internal/server/authorization.go': '8ed287ba729aebc34319b209a6aa0a8570e23ef5a59fc0ea87a5287ce1f23499',
+    'internal/server/account.go': '71e876e100888caf09575182ef721bae1288197e5a0c9c860ea61d2844c83822',
 }
 
 
-def reviewed_suppression(result):
+def reviewed_api_key_finding(result):
     locations = result.get('locations', [])
-    if result.get('suppressions') != [{'kind': 'inSource'}] or len(locations) != 1:
+    if result.get('suppressions') or len(locations) != 1:
         return False
     uri = locations[0].get('physicalLocation', {}).get('artifactLocation', {}).get('uri')
     fingerprint = result.get('partialFingerprints', {}).get('primaryLocationLineHash')
-    return (result.get('ruleId'), uri, fingerprint) in REVIEWED
+    if (result.get('ruleId'), uri, fingerprint) != (
+            'go/weak-sensitive-data-hashing', 'internal/server/authorization.go', '961ba0bcbc447c16:1'):
+        return False
+    try:
+        return all(hashlib.sha256((ROOT / path).read_bytes()).hexdigest() == digest
+                   for path, digest in REVIEWED_API_KEY_SOURCES.items())
+    except OSError:
+        return False
 
 
 def check(directory):
@@ -34,6 +45,8 @@ def check(directory):
         for run in runs:
             if run.get('tool', {}).get('driver', {}).get('name') != 'CodeQL':
                 raise ValueError(f'{path.name}: unexpected analyzer')
+            if run.get('properties', {}).get('incrementalMode') is not None:
+                raise ValueError(f'{path.name}: full analysis required')
             invocations = run.get('invocations', [])
             if any(invocation.get('executionSuccessful') is False or any(
                     notice.get('level') == 'error'
@@ -44,8 +57,7 @@ def check(directory):
             if not isinstance(results, list):
                 raise ValueError(f'{path.name}: missing analysis results')
             for result in results:
-                # CodeQL retains source-suppressed results in SARIF.
-                if reviewed_suppression(result):
+                if reviewed_api_key_finding(result):
                     continue
                 findings.append(f'{path.name}: {result.get("ruleId", "unknown rule")}')
     if findings:

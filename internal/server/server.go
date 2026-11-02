@@ -195,13 +195,9 @@ func (a *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func secretEqual(x, y string) bool {
-	// These digests only provide fixed-length inputs for constant-time comparison;
-	// password storage uses PBKDF2 in passwordHash, not this helper.
-	// codeql[go/weak-sensitive-data-hashing]
-	a := sha256.Sum256([]byte(x))
-	// codeql[go/weak-sensitive-data-hashing]
-	b := sha256.Sum256([]byte(y))
-	return subtle.ConstantTimeCompare(a[:], b[:]) == 1
+	// Password verifiers are fixed-length PBKDF2 outputs. Usernames are not secrets;
+	// returning early for unequal lengths does not expose password contents.
+	return subtle.ConstantTimeCompare([]byte(x), []byte(y)) == 1
 }
 func (a *Server) sessionHash(value string) string {
 	h := hmac.New(sha256.New, []byte(a.token))

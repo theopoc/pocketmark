@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def results(server=True, extension=True):
     return {name: {'result': state, 'outputs': {}} for name, state in {
         'plan': 'success', 'security': 'success',
-        'sast': 'success' if server or extension else 'skipped',
+        'sast': 'success',
         'sca': 'success' if server or extension else 'skipped',
         'quality': 'success' if server else 'skipped',
         'test': 'success' if server else 'skipped',
@@ -93,6 +93,19 @@ class WorkflowGateTests(unittest.TestCase):
         self.assertFalse((ROOT / '.github/workflows/extension.yml').exists())
         release = (ROOT / '.github/workflows/release.yml').read_text()
         self.assertNotIn('gh workflow run ci-required.yml', release)
+
+    def test_sast_is_complete_and_required_for_every_pr(self):
+        workflow = (ROOT / '.github/workflows/ci.yml').read_text()
+        sast = workflow.split('\n  sast:\n', 1)[1].split('\n  sca:\n', 1)[0]
+        self.assertIn('    if: always()\n', sast)
+        self.assertIn("      CODEQL_ACTION_DIFF_INFORMED_QUERIES: 'false'\n", sast)
+        self.assertIn('python3 scripts/check_sarif.py artifacts/codeql', sast)
+        for server, extension in ((False, False), (False, True), (True, True)):
+            for state in ('skipped', 'failure', 'cancelled'):
+                bad = results(server, extension)
+                bad['sast']['result'] = state
+                with self.subTest(server=server, extension=extension, state=state), self.assertRaises(ValueError):
+                    require_results(bad)
 
     def test_selector_browser_regressions_are_in_selected_jobs(self):
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()

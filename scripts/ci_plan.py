@@ -33,8 +33,8 @@ def require_results(needs):
     if any(outputs.get(key) not in ('true', 'false') for key in ('server', 'extension')):
         raise ValueError('Missing or invalid CI selection')
     for name in expected:
-        selected = (name in ('plan', 'security') or
-                    (name in ('sast', 'sca') and 'true' in outputs.values()) or
+        selected = (name in ('plan', 'security', 'sast') or
+                    (name == 'sca' and 'true' in outputs.values()) or
                     outputs['extension' if name == 'extension' else 'server'] == 'true')
         required = 'success' if selected else 'skipped'
         if needs[name].get('result') != required:

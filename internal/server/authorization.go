@@ -99,7 +99,7 @@ func (a *Server) authenticate(r *http.Request, dav bool) (principal, bool) {
 			return principal{}, false
 		}
 		// API keys are 256-bit random secrets, not user-chosen passwords.
-		// codeql[go/weak-sensitive-data-hashing]
+		// Preserve the SHA256 verifier used when these keys are created or rotated.
 		sum := sha256.Sum256([]byte(key))
 		profile, err := a.Store.AuthenticateAPIKeyProfile(r.Context(), hex.EncodeToString(sum[:]))
 		return principal{profile: profile}, err == nil
