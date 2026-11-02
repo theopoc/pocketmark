@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 )
 
@@ -51,6 +52,40 @@ func TestBulkAtomicAndSearchSort(t *testing.T) {
 	}
 	if _, e := s.Get(ctx, a); e != nil {
 		t.Fatal("rolled back delete lost link")
+	}
+}
+
+func TestBulkBooleanActionsRejectUnknownColumn(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "library.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	id := createLink(t, s, Link{URL: "https://example.com/bulk"})
+	for _, action := range []string{"favorite", "read"} {
+		if err := s.Bulk(ctx, BulkChange{IDs: []int64{id}, Action: action, Value: true}); err != nil {
+			t.Fatalf("%s: %v", action, err)
+		}
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	link := getLink(t, s, id)
+	if !link.Favorite || !link.Read {
+		t.Fatal("boolean bulk actions did not update both fields")
+	}
+	if err := s.Bulk(ctx, BulkChange{IDs: []int64{id}, Action: "read=0 WHERE 1=1 --", Value: false}); err == nil {
+		t.Fatal("unknown bulk action accepted")
+	}
+	link = getLink(t, s, id)
+	if !link.Favorite || !link.Read {
+		t.Fatal("invalid bulk action modified the bookmark")
 	}
 }
 func TestAnnotationsAnchorUnicodeStaleAndCascade(t *testing.T) {
