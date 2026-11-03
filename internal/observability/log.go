@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"pocketmark/internal/capture"
 
 	"github.com/mattn/go-sqlite3"
 )
@@ -39,12 +40,13 @@ func Logger(ctx context.Context) *slog.Logger {
 }
 
 // ErrorAttrs deliberately excludes error messages: wrapped HTTP errors can contain
-// bookmark URLs, query strings or credentials. SQLite codes remain actionable.
+// bookmark URLs, query strings or credentials. Numeric codes remain actionable.
 func ErrorAttrs(err error) []any {
 	kind := "internal"
 	var dns *net.DNSError
 	var network net.Error
 	var sqlite sqlite3.Error
+	var status *capture.HTTPStatusError
 	switch {
 	case errors.Is(err, context.Canceled):
 		kind = "canceled"
@@ -58,6 +60,8 @@ func ErrorAttrs(err error) []any {
 		kind = "not_found"
 	case errors.As(err, &sqlite):
 		return []any{"error_kind", "database", "sqlite_code", int(sqlite.Code), "sqlite_extended_code", int(sqlite.ExtendedCode)}
+	case errors.As(err, &status):
+		return []any{"error_kind", "http", "http_status", status.StatusCode, "http_status_text", http.StatusText(status.StatusCode)}
 	case errors.As(err, &dns):
 		kind = "dns"
 	case errors.As(err, &network):

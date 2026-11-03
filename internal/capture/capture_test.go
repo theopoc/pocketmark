@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -154,6 +155,19 @@ func TestResponseLimitsAndContentType(t *testing.T) {
 	} {
 		if _, err := fetch(context.Background(), "https://example.com", fixtureClient(tc.body, tc.kind, tc.encoding, tc.status)); err == nil {
 			t.Fatalf("accepted invalid response: %s/%s/%d", tc.kind, tc.encoding, tc.status)
+		}
+	}
+}
+
+func TestFetchHTTPStatusDiagnostic(t *testing.T) {
+	for _, status := range []int{403, 429, 503} {
+		_, err := fetch(context.Background(), "https://example.com/private?token=secret", fixtureClient([]byte("private response"), "text/html", "", status))
+		if err == nil || err.Error() != fmt.Sprintf("capture HTTP status %d", status) {
+			t.Fatalf("status %d: %v", status, err)
+		}
+		var diagnostic *HTTPStatusError
+		if !errors.As(err, &diagnostic) || diagnostic.StatusCode != status {
+			t.Fatalf("HTTP %d lost its diagnostic: %T %v", status, err, err)
 		}
 	}
 }

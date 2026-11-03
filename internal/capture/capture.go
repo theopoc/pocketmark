@@ -36,6 +36,16 @@ type Result struct {
 	Thumbnail                   []byte
 }
 
+// HTTPStatusError reports a rejected document response without retaining its URL,
+// headers or body. Error preserves the message stored with failed captures.
+type HTTPStatusError struct {
+	StatusCode int
+}
+
+func (e *HTTPStatusError) Error() string {
+	return fmt.Sprintf("capture HTTP status %d", e.StatusCode)
+}
+
 // Fetch captures a single document. HTML is untrusted and must never be served
 // inline on the application's origin; Content is plain text, not HTML.
 func Fetch(ctx context.Context, rawURL string) (Result, error) {
@@ -160,7 +170,7 @@ func fetch(ctx context.Context, rawURL string, client *http.Client) (Result, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return Result{}, fmt.Errorf("capture HTTP status %d", resp.StatusCode)
+		return Result{}, &HTTPStatusError{StatusCode: resp.StatusCode}
 	}
 	if resp.ContentLength > maxBody {
 		return Result{}, errors.New("capture response exceeds 2 MiB")
