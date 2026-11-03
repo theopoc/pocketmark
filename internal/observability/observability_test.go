@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"pocketmark/internal/capture"
 	"strings"
 	"sync"
 	"testing"
@@ -240,6 +241,27 @@ func TestCaptureOutcomesAndTraceErrors(t *testing.T) {
 	}
 	if spans[0].Attributes[0] != attribute.String("capture.outcome", "ready") {
 		t.Fatal("unexpected capture attributes")
+	}
+}
+
+func TestCaptureHTTPStatusLogging(t *testing.T) {
+	for _, status := range []int{403, 429, 503, 599} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			var logs bytes.Buffer
+			o := testObserver(&logs)
+			_, done := o.Capture(context.Background(), 123)
+			// Wrapping must preserve numeric diagnostics without exposing any of
+			// the URL or arbitrary error text that generic network errors carry.
+			err := &url.Error{Op: "Get", URL: "https://user:private-password@site.test/private-path?token=private-query", Err: fmt.Errorf("private-error: %w", &capture.HTTPStatusError{StatusCode: status})}
+			done(err, nil)
+			if strings.Contains(logs.String(), "private-") {
+				t.Fatalf("capture data leaked: %s", logs.String())
+			}
+			entries := records(t, &logs)
+			if len(entries) != 1 || entries[0]["outcome"] != "failed" || entries[0]["level"] != "WARN" || entries[0]["error_kind"] != "http" || entries[0]["http_status"] != float64(status) || entries[0]["http_status_text"] != http.StatusText(status) {
+				t.Fatalf("missing HTTP diagnostic: %v", entries)
+			}
+		})
 	}
 }
 

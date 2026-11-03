@@ -24,11 +24,17 @@ emit a separate error event, including when the existing API contract returns 40
 Automatic captures log their numeric `link_id`, duration and outcome: `ready`,
 `failed`, `save_failed`, or `canceled`. A failed fetch is logged even when SQLite
 successfully saves the failure. Capture details remain available in the library.
+Rejected HTTP responses include `error_kind:"http"`, numeric `http_status` and
+`http_status_text` from Go's standard status table (for example, `403` and
+`Forbidden`). These fields survive error wrapping and never copy response text.
+A 403 alone does not identify an anti-bot challenge; it reports the site's refusal.
+For sites requiring browser JavaScript or sign-in, capture the page in the browser
+with the extension instead of retrying the automatic server capture.
 
 Logs, metrics and spans exclude raw paths, query strings, bookmark URLs, headers,
 cookies, passwords, request/response bodies, capture content and panic values.
-Errors expose a bounded category/type, or SQLite numeric codes, rather than raw
-messages that could contain private URLs or collector response bodies. The
+Errors expose a bounded category/type, HTTP status or SQLite numeric codes,
+rather than raw messages that could contain private URLs or collector response bodies. The
 low-level HTTP server error event is similarly sanitized. No application log file
 or in-memory log queue is maintained; container/runtime log rotation and retention
 belong to the deployment.
