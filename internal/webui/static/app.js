@@ -1118,8 +1118,6 @@
       if (state.page > lastPage) { state.page = lastPage; commitRoute(true); return refresh(quiet); }
       state.collections = collections || [];
       $("total-count").textContent = stats.links;
-      $("capture-label").textContent = [stats.pending ? `${stats.pending} in progress` : "", stats.failed ? `${stats.failed} failed` : ""].filter(Boolean).join(" · ");
-      if ($("capture-label").textContent) $("capture-label").textContent = `Library captures: ${$("capture-label").textContent}`;
       updateHeading();
       renderCollections();
       renderTags(tags || []);

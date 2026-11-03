@@ -164,9 +164,7 @@ input[type=checkbox] { width: 15px; height: 15px; padding: 0; flex-shrink: 0; ac
 .view-button:hover { background: #eceef4; }
 .view-button[aria-pressed=true] { background: #fff; color: var(--accent); box-shadow: 0 1px 3px #20232c20; }
 .results-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px 20px; padding: 16px 0; min-height: 68px; }
-.results-tools > .capture-summary:empty { display: none; }
 .operation-progress { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); font-size: 13px; }
-.capture-summary { font-size: 12px; color: #8c5818; }
 /* The same bookmark structure supports both dense rows and a reading grid. */
 .bookmark-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(100%,260px),1fr)); gap: 16px; padding-top: 16px; }
 .bookmark-card { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--line); border-radius: 12px; background: #fff; transition: background-color 160ms ease-out, border-color 160ms ease-out; }
@@ -551,7 +549,7 @@ body:has(dialog[open]) { overflow: hidden; }
 [data-theme="dark"] .card-action:is(:hover, :focus-visible) { color: #d0caff; background: var(--accent-soft); }
 [data-theme="dark"] .card-state.ready, [data-theme="dark"] .card-action.read { color: var(--success); }
 [data-theme="dark"] .card-state.failed { color: var(--danger); }
-[data-theme="dark"] .capture-summary, [data-theme="dark"] .card-state.pending, [data-theme="dark"] .card-state.processing { color: #d9b87c; }
+[data-theme="dark"] .card-state.pending, [data-theme="dark"] .card-state.processing { color: #d9b87c; }
 [data-theme="dark"] .favorite-button.is-favorite { color: #e2c17b; }
 [data-theme="dark"] .favorite-button.is-favorite .icon { fill: #604b24; }
 [data-theme="dark"] .card-action[title="Delete bookmark"]:is(:hover, :focus-visible) { color: var(--danger); background: #422631; }
@@ -615,7 +613,6 @@ body:has(dialog[open]) { overflow: hidden; }
   .inline-check { min-height: 32px; }
   .results-bar { padding: 12px 0; gap: 8px; }
   .results-tools { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-  .results-tools > .capture-summary:not(:empty) { order: 3; flex-basis: 100%; text-align: right; }
   .view-list .bookmark-card { grid-template-columns: minmax(0,1fr); padding: 16px 12px; column-gap: 9px; row-gap: 12px; }
   .view-list .card-top { padding-top: 3px; }
   .view-list .card-footer { grid-column: 1; flex-direction: row; padding: 0; align-items: center; gap: 8px; }
@@ -969,7 +966,7 @@ body:has(dialog[open]) { overflow: hidden; }
 @media (max-width: 900px) {
   .collection-row .delete-collection { min-width: 44px; width: 44px; min-height: 44px; flex: none; }
 }
-@media (max-width: 600px) { .card-domain, .card-tag, .card-state, .view-list .card-state, .capture-summary { font-size: 12px; } }
+@media (max-width: 600px) { .card-domain, .card-tag, .card-state, .view-list .card-state { font-size: 12px; } }
 
 /* Selection actions float independently of the library's result controls. */
 .bulk-bar { position: fixed; z-index: 30; bottom: max(20px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; width: max-content; max-width: calc(100% - 32px); padding: 8px; border-radius: 12px; background: color-mix(in srgb, var(--accent) 75%, #000); color: #fff; box-shadow: 0 6px 24px #20232c40; }
