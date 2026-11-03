@@ -3,7 +3,7 @@ import argparse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = ("name-limit.js", "theme-switch.js")
+FILES = ("name-limit.js", "theme-switch.js", "icon.svg")
 
 
 def sync(write=False):

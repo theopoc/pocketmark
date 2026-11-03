@@ -46,6 +46,7 @@ archives:
       - {src: extension/common.js, dst: common.js}
       - {src: extension/capture.js, dst: capture.js}
       - {src: extension/job-store.js, dst: job-store.js}
+      - {src: extension/icon.svg, dst: icon.svg}
 
 checksum:
   name_template: SHA256SUMS

@@ -32,7 +32,7 @@ html[data-theme="dark"] body.api-docs { --secondary-link: var(--focus); color-sc
 .showing-api-keys #settings-page [data-settings-panel="api-keys"] { margin: 0; padding: 0; border: 0; }
 .showing-api-keys .api-key-topbar { display: flex; align-items: center; gap: 24px; min-height: 72px; padding: 16px 32px; border-bottom: 1px solid var(--line); }
 .showing-api-keys .api-key-topbar .brand { font-size: 22px; gap: 16px; }
-.showing-api-keys .api-key-topbar .brand-mark { width: 40px; height: 40px; font: 700 30px/1 Georgia, serif; letter-spacing: -1px; }
+.showing-api-keys .api-key-topbar .brand-mark { width: 40px; height: 40px; }
 .showing-api-keys .api-key-topbar > .muted { border-left: 1px solid var(--line); padding-left: 24px; font-size: 14px; }
 .showing-api-keys .api-key-topbar .theme-toggle { margin-left: auto; }
 .showing-api-keys .api-key-layout { display: grid; grid-template-columns: 316px minmax(0, 1fr); min-height: calc(100dvh - 72px); }

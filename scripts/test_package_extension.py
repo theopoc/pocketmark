@@ -26,6 +26,8 @@ class PopupAssets(HTMLParser):
         values = dict(attributes)
         if tag == "script" and values.get("src"):
             self.names.add(values["src"])
+        if tag == "img" and values.get("src"):
+            self.names.add(values["src"])
         if tag == "link" and values.get("rel") == "stylesheet":
             self.names.add(values["href"])
 

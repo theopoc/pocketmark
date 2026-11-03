@@ -27,7 +27,7 @@
   <div id="toast" role="status" aria-live="polite" hidden></div>
   <section id="login-view" class="login-view" hidden>
     <div class="login-intro">
-      <div class="login-brand-row"><a class="brand" href="/" aria-label="Pocketmark home"><span class="brand-mark" data-icon="bookmark" aria-hidden="true"></span><span>Pocketmark</span></a><button class="button subtle theme-toggle" data-theme-toggle aria-label="Dark mode" aria-pressed="true" title="Switch to light mode"><span data-theme-icon aria-hidden="true"></span><span data-theme-label>Dark</span></button></div>
+      <div class="login-brand-row"><a class="brand" href="/" aria-label="Pocketmark home"><img class="brand-mark" src="/icon.svg" width="29" height="32" alt=""><span>Pocketmark</span></a><button class="button subtle theme-toggle" data-theme-toggle aria-label="Dark mode" aria-pressed="true" title="Switch to light mode"><span data-theme-icon aria-hidden="true"></span><span data-theme-label>Dark</span></button></div>
       <div class="login-message"><h1>Your library.<br>Always within reach.</h1><p>Save a page. Find an idea. Pick up where you left off.</p></div>
       <p class="login-footnote">Your personal bookmark workspace.</p>
     </div>
@@ -92,7 +92,7 @@
     <form id="session-idle-form"><label for="session-idle">Sign out this browser after inactivity</label><select id="session-idle"><option value="15">15 minutes</option><option value="60">1 hour</option><option value="1440">24 hours</option><option value="0">Only at the seven-day expiry</option></select><p class="small muted">Requests from an open library count as activity. Changing this setting requires recent password confirmation.</p><button class="button subtle" type="submit">Save timeout</button></form>
     <p id="sessions-feedback" class="small muted" role="status"></p><p id="sessions-error" class="form-error" role="alert"></p>
   </section>        <section class="settings-section" data-settings-panel="api-keys" aria-labelledby="api-keys-title" hidden>
-    <header class="api-key-topbar"><a class="brand" href="/" aria-label="Pocketmark home"><span class="brand-mark" aria-hidden="true">p.</span><span>Pocketmark</span></a><span class="muted">Personal library</span><button class="button subtle theme-toggle" data-theme-toggle aria-label="Dark mode" aria-pressed="true" title="Switch to light mode"><span data-theme-icon aria-hidden="true"></span><span data-theme-label>Dark</span></button></header>
+    <header class="api-key-topbar"><a class="brand" href="/" aria-label="Pocketmark home"><img class="brand-mark" src="/icon.svg" width="29" height="32" alt=""><span>Pocketmark</span></a><span class="muted">Personal library</span><button class="button subtle theme-toggle" data-theme-toggle aria-label="Dark mode" aria-pressed="true" title="Switch to light mode"><span data-theme-icon aria-hidden="true"></span><span data-theme-label>Dark</span></button></header>
     <div class="api-key-layout">
       <nav class="api-key-navigation" aria-label="API key settings navigation">
         <button type="button" class="nav-item active" data-api-key-section="api-keys" aria-current="page"><span data-icon="key" aria-hidden="true"></span>API keys</button>
@@ -216,7 +216,7 @@
   </div>
   <dialog id="navigation-dialog" class="navigation-dialog" aria-label="Library navigation">
     <aside id="sidebar" class="sidebar" aria-label="Library navigation">
-      <div class="sidebar-brand"><a class="brand" href="/" aria-label="Pocketmark home"><span class="brand-mark" aria-hidden="true">p.</span><span>Pocketmark</span></a><button id="sidebar-mode" type="button" class="icon-button" aria-pressed="false" aria-label="Keep navigation open" title="Keep navigation open"><span id="sidebar-mode-icon" aria-hidden="true"></span></button><button id="close-navigation" class="icon-button" aria-label="Close navigation"><span data-icon="close" aria-hidden="true"></span></button></div>
+      <div class="sidebar-brand"><a class="brand" href="/" aria-label="Pocketmark home"><img class="brand-mark" src="/icon.svg" width="29" height="32" alt=""><span>Pocketmark</span></a><button id="sidebar-mode" type="button" class="icon-button" aria-pressed="false" aria-label="Keep navigation open" title="Keep navigation open"><span id="sidebar-mode-icon" aria-hidden="true"></span></button><button id="close-navigation" class="icon-button" aria-label="Close navigation"><span data-icon="close" aria-hidden="true"></span></button></div>
       <div id="library-navigation">
       <button id="workspace-button" type="button" class="workspace-label" popovertarget="workspace-popover" aria-expanded="false" aria-controls="workspace-popover" data-keep-navigation><span class="workspace-avatar" aria-hidden="true">P</span><span class="workspace-name">Library tools<span class="workspace-subtitle">Import, export &amp; sign out</span></span><span class="workspace-chevron" data-icon="chevron-right" aria-hidden="true"></span></button>
       <div id="workspace-popover" class="workspace-popover" popover aria-label="Workspace actions">
