@@ -43,6 +43,13 @@ against the RAM goal.
   a change affects the library page shown in the README, refresh
   `docs/pocketmark-dark-preview.jpg` from the current rendered page with disposable
   data, and verify the image matches the updated interface.
+- Branding: use `internal/webui/static/icon.svg` as the canonical Pocketmark mark.
+  Reuse it for product identity rather than recreating it as text or a UI icon;
+  synchronize the extension copy with `scripts/sync_ui_assets.py --write`.
+  For branding changes, inventory and verify initialization, sign-in/MFA,
+  library/navigation, settings, API documentation, favicon/installable app,
+  extension and README in both themes and desktop/phone layouts where applicable.
+  Check packaged assets and shared-asset validation before delivery.
 
 ## Verification and delivery
 

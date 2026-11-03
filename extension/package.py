@@ -5,7 +5,7 @@ from pathlib import Path
 import zipfile
 
 FILES = ("theme-switch.js", "name-limit.js", "ui-theme.js", "manifest.json", "popup.html", "popup.js", "popup.css", "selectors.js", "README.md",
-         "background.js", "common.js", "capture.js", "job-store.js")
+         "background.js", "common.js", "capture.js", "job-store.js", "icon.svg")
 
 
 def package(output):
