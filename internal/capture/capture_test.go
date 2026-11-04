@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"pocketmark/internal/fault"
 	"strings"
 	"testing"
 )
@@ -169,6 +170,26 @@ func TestFetchHTTPStatusDiagnostic(t *testing.T) {
 		if !errors.As(err, &diagnostic) || diagnostic.StatusCode != status {
 			t.Fatalf("HTTP %d lost its diagnostic: %T %v", status, err, err)
 		}
+	}
+}
+
+func TestCaptureRejectionsHaveDistinctSafeCodes(t *testing.T) {
+	for _, tc := range []struct {
+		name, url, media string
+		body             []byte
+		code             string
+	}{
+		{"policy", "http://127.0.0.1/private", "text/html", nil, "destination_blocked"},
+		{"size", "https://example.com/private", "text/html", bytes.Repeat([]byte("x"), maxBody+1), "response_too_large"},
+		{"content", "https://example.com/private", "application/pdf", []byte("%PDF-private"), "unsupported_content"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := fetch(context.Background(), tc.url, fixtureClient(tc.body, tc.media, "", 200))
+			var diagnostic *fault.Error
+			if !errors.As(err, &diagnostic) || diagnostic.Code != tc.code || fault.Operation(err) == "" {
+				t.Fatalf("missing diagnostic: %v", err)
+			}
+		})
 	}
 }
 

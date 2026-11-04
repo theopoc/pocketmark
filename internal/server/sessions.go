@@ -41,10 +41,16 @@ func (a *Server) reauthenticate(w http.ResponseWriter, r *http.Request) {
 	defer a.passwordMu.Unlock()
 	account, err := a.Store.Account(r.Context())
 	if err != nil || !secretEqual(passwordHash(body.Password, account.Salt), account.Hash) {
+		if authFailure(w, "sessions_operation_failed", err) {
+			return
+		}
 		fail(w, 403, "Incorrect password. Try again.")
 		return
 	}
 	if err = a.Store.ConfirmSession(r.Context(), p.session, account.Salt); err != nil {
+		if authFailure(w, "sessions_operation_failed", err) {
+			return
+		}
 		fail(w, 401, "session changed; sign in again")
 		return
 	}

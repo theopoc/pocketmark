@@ -79,7 +79,7 @@ func (a *Server) uploadAsset(w http.ResponseWriter, r *http.Request) {
 	}
 	asset, e := a.Store.SaveAsset(r.Context(), store.Asset{LinkID: id(r), Name: name, MediaType: upload.mediaType, Kind: upload.kind}, upload.file)
 	if e != nil {
-		fail(w, 400, e.Error())
+		handleError(w, e)
 		return
 	}
 	if upload.kind == "html" {
@@ -213,7 +213,7 @@ func (a *Server) preserveOffline(w http.ResponseWriter, r *http.Request) {
 	defer f.Close()
 	report, e := capture.Offline(r.Context(), link.URL, f)
 	if e != nil {
-		fail(w, 400, e.Error())
+		handleError(w, e)
 		return
 	}
 	if _, e = f.Seek(0, io.SeekStart); e != nil {
@@ -252,7 +252,7 @@ func (a *Server) richReader(w http.ResponseWriter, r *http.Request) {
 	}
 	var output bytes.Buffer
 	if e = capture.Reader(bytes.NewReader(body), &output, link.URL); e != nil {
-		fail(w, 400, e.Error())
+		handleError(w, e)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

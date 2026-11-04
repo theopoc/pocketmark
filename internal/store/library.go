@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
+	"pocketmark/internal/fault"
 	"strings"
 	"time"
 	"unicode"
@@ -65,10 +65,10 @@ func oneEdit(a, b string) bool {
 func (s *Store) UpdateCollection(ctx context.Context, id int64, c Collection) error {
 	c.Name = strings.TrimSpace(c.Name)
 	if c.Name == "" || len(c.Name) > 120 {
-		return errors.New("invalid collection name")
+		return fault.Invalid("invalid collection name")
 	}
 	if c.Description != nil && len(*c.Description) > 8192 {
-		return errors.New("collection description exceeds 8 KiB")
+		return fault.Invalid("collection description exceeds 8 KiB")
 	}
 	if c.ParentID != nil && *c.ParentID <= 0 {
 		c.ParentID = nil
@@ -85,7 +85,7 @@ func (s *Store) UpdateCollection(ctx context.Context, id int64, c Collection) er
 			return e
 		}
 		if n > 0 {
-			return errors.New("cyclic collection hierarchy")
+			return fault.Invalid("cyclic collection hierarchy")
 		}
 	}
 	r, e := tx.ExecContext(ctx, "UPDATE collections SET name=?,parent_id=?,description=COALESCE(?,description) WHERE id=?", c.Name, c.ParentID, c.Description, id)
@@ -105,7 +105,7 @@ type BulkChange struct {
 
 func (s *Store) Bulk(ctx context.Context, b BulkChange) error {
 	if len(b.IDs) < 1 || len(b.IDs) > 500 {
-		return errors.New("select 1–500 bookmarks")
+		return fault.Invalid("select 1–500 bookmarks")
 	}
 	var query string
 	var args []any
@@ -135,7 +135,7 @@ func (s *Store) Bulk(ctx context.Context, b BulkChange) error {
 	case "capture":
 		query = "UPDATE links SET status='pending',error='' WHERE id=? AND status<>'processing' AND url NOT LIKE 'pocketmark-file:%'"
 	default:
-		return errors.New("invalid bulk action")
+		return fault.Invalid("invalid bulk action")
 	}
 	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
@@ -145,7 +145,7 @@ func (s *Store) Bulk(ctx context.Context, b BulkChange) error {
 	seen := map[int64]bool{}
 	for _, id := range b.IDs {
 		if id <= 0 || seen[id] {
-			return errors.New("invalid or duplicate bookmark id")
+			return fault.Invalid("invalid or duplicate bookmark id")
 		}
 		seen[id] = true
 		r, e := tx.ExecContext(ctx, query, append(args, id)...)
@@ -211,13 +211,13 @@ func (s *Store) Annotations(ctx context.Context, linkID int64) ([]Annotation, er
 }
 func (s *Store) SaveAnnotation(ctx context.Context, linkID, id int64, a Annotation) (int64, error) {
 	if len(a.Quote) > 16384 || len(a.Note) > 8192 {
-		return 0, errors.New("annotation field limit exceeded")
+		return 0, fault.Invalid("annotation field limit exceeded")
 	}
 	if a.Color == "" {
 		a.Color = "yellow"
 	}
 	if a.Color != "yellow" && a.Color != "green" && a.Color != "blue" && a.Color != "pink" {
-		return 0, errors.New("invalid highlight color")
+		return 0, fault.Invalid("invalid highlight color")
 	}
 	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
@@ -229,7 +229,7 @@ func (s *Store) SaveAnnotation(ctx context.Context, linkID, id int64, a Annotati
 		return 0, e
 	}
 	if !annotationValid(a, content) {
-		return 0, errors.New("highlight no longer matches captured text")
+		return 0, fault.Invalid("highlight no longer matches captured text")
 	}
 	var r sql.Result
 	if id == 0 {
@@ -238,7 +238,7 @@ func (s *Store) SaveAnnotation(ctx context.Context, linkID, id int64, a Annotati
 			return 0, e
 		}
 		if count >= 200 {
-			return 0, errors.New("limit of 200 annotations per page")
+			return 0, fault.Invalid("limit of 200 annotations per page")
 		}
 		r, e = tx.ExecContext(ctx, "INSERT INTO annotations(link_id,quote,start_offset,end_offset,note,color,created_at) VALUES(?,?,?,?,?,?,?)", linkID, a.Quote, a.Start, a.End, a.Note, a.Color, time.Now().UTC().Format(time.RFC3339Nano))
 		if e == nil {

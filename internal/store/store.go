@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"pocketmark/internal/fault"
 	"strings"
 	"time"
 
@@ -113,12 +114,12 @@ func Normalize(l *Link) error {
 	l.URL = strings.TrimSpace(l.URL)
 	u, err := url.Parse(l.URL)
 	if !IsFileURL(l.URL) && (err != nil || u.Hostname() == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || len(l.URL) > 4096) {
-		return errors.New("URL must be an http(s) address without credentials (maximum 4096 bytes)")
+		return fault.Invalid("URL must be an http(s) address without credentials (maximum 4096 bytes)")
 	}
 	// A URL used as the automatic title is bounded by the URL limit above.
 	// Accept it on edits/import too, so long URLs can round-trip losslessly.
 	if (len(l.Title) > 1024 && l.Title != l.URL) || len(l.Description) > 8192 || len(l.Notes) > 65536 || len(l.Tags) > 32 {
-		return errors.New("field limit exceeded: title 1 KiB, description 8 KiB, notes 64 KiB, 32 tags")
+		return fault.Invalid("field limit exceeded: title 1 KiB, description 8 KiB, notes 64 KiB, 32 tags")
 	}
 	l.Type = "url"
 	if IsFileURL(l.URL) {
@@ -133,7 +134,7 @@ func Normalize(l *Link) error {
 	for _, t := range l.Tags {
 		t = strings.TrimSpace(t)
 		if len(t) > 80 {
-			return errors.New("tag exceeds 80 bytes")
+			return fault.Invalid("tag exceeds 80 bytes")
 		}
 		if t != "" && !seen[t] {
 			seen[t] = true
@@ -174,7 +175,7 @@ func (s *Store) Update(ctx context.Context, id int64, l Link) error {
 		return e
 	}
 	if (IsFileURL(oldURL) || IsFileURL(l.URL)) && oldURL != l.URL {
-		return errors.New("a file document identifier cannot be changed")
+		return fault.Invalid("a file document identifier cannot be changed")
 	}
 
 	if err := Normalize(&l); err != nil {
@@ -238,7 +239,7 @@ func (s *Store) List(ctx context.Context, f Filter) (Page, error) {
 	args := []any{}
 	ftsQuery := ""
 	if len(f.Query) > 512 {
-		return p, errors.New("query exceeds 512 bytes")
+		return p, fault.Invalid("query exceeds 512 bytes")
 	}
 	if f.Query != "" {
 		terms := strings.Fields(f.Query)
@@ -278,7 +279,7 @@ func (s *Store) List(ctx context.Context, f Filter) (Page, error) {
 	args = append(args, p.PageSize, (f.Page-1)*p.PageSize)
 	order := map[string]string{"": "l.id DESC", "newest": "julianday(l.created_at) DESC,l.id DESC", "oldest": "julianday(l.created_at),l.id", "title": "l.title COLLATE NOCASE,l.id", "title_desc": "l.title COLLATE NOCASE DESC,l.id", "updated": "julianday(l.updated_at) DESC,l.id DESC"}[f.Sort]
 	if order == "" {
-		return p, errors.New("invalid sort")
+		return p, fault.Invalid("invalid sort")
 	}
 	// Only search results carry an excerpt, bounded to 24 tokens and 600
 	// characters. Never send the captured document in a library response.
@@ -325,10 +326,10 @@ func (s *Store) Collections(ctx context.Context) ([]Collection, error) {
 func (s *Store) AddCollection(ctx context.Context, c Collection) (int64, error) {
 	c.Name = strings.TrimSpace(c.Name)
 	if c.Name == "" || len(c.Name) > 120 {
-		return 0, errors.New("collection name must be 1–120 bytes")
+		return 0, fault.Invalid("collection name must be 1–120 bytes")
 	}
 	if c.Description != nil && len(*c.Description) > 8192 {
-		return 0, errors.New("collection description exceeds 8 KiB")
+		return 0, fault.Invalid("collection description exceeds 8 KiB")
 	}
 	r, e := s.db.ExecContext(ctx, "INSERT INTO collections(name,parent_id,description) VALUES(?,?,COALESCE(?,''))", c.Name, c.ParentID, c.Description)
 	if e != nil {

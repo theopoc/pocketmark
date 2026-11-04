@@ -9,12 +9,24 @@ import (
 	"os"
 	"strings"
 
+	"pocketmark/internal/fault"
+	"pocketmark/internal/observability"
 	"pocketmark/internal/store"
 )
 
 type stagedUpload struct {
 	file            *os.File
 	mediaType, kind string
+}
+
+type inputReader struct{ io.Reader }
+
+func (r inputReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	if err != nil && err != io.EOF {
+		err = fault.Input(err)
+	}
+	return n, err
 }
 
 func (u *stagedUpload) cleanup() {
@@ -27,9 +39,10 @@ func (u *stagedUpload) cleanup() {
 // the existing error messages for attachments and standalone files.
 func (a *Server) stageUpload(w http.ResponseWriter, r *http.Request, noun string) (*stagedUpload, bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, store.MaxAssetSize)
-	reader := bufio.NewReaderSize(r.Body, 512)
+	reader := bufio.NewReaderSize(inputReader{r.Body}, 512)
 	prefix, err := reader.Peek(512)
 	if err != nil && err != io.EOF {
+		observability.Error(r.Context(), "upload_read_failed", err)
 		fail(w, 400, "cannot read "+noun)
 		return nil, false
 	}
@@ -66,7 +79,12 @@ func (a *Server) stageUpload(w http.ResponseWriter, r *http.Request, noun string
 	upload := &stagedUpload{file: f, mediaType: media, kind: kind}
 	if _, err = io.Copy(f, reader); err != nil {
 		upload.cleanup()
-		fail(w, 400, noun+" exceeds 20 MiB or upload was interrupted")
+		observability.Error(r.Context(), "upload_stage_failed", err)
+		status := observability.HTTPStatus(err)
+		if status == 413 {
+			status = 400
+		}
+		fail(w, status, noun+" could not be uploaded; check size and retry")
 		return nil, false
 	}
 	if _, err = f.Seek(0, io.SeekStart); err != nil {

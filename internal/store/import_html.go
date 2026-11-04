@@ -8,6 +8,7 @@ import (
 	"html"
 	"io"
 	"os"
+	"pocketmark/internal/fault"
 	"strconv"
 	"strings"
 	"time"
@@ -47,7 +48,7 @@ func (s *Store) ImportHTML(ctx context.Context, r io.Reader) (ImportResult, erro
 		}
 		links++
 		if links > 10000 {
-			return errors.New("import supports at most 10000 bookmarks")
+			return fault.Invalid("import supports at most 10000 bookmarks")
 		}
 		if !strings.HasPrefix(current.URL, "http://") && !strings.HasPrefix(current.URL, "https://") {
 			result.Skipped++
@@ -79,16 +80,19 @@ func (s *Store) ImportHTML(ctx context.Context, r io.Reader) (ImportResult, erro
 		switch tt {
 		case nethtml.ErrorToken:
 			if z.Err() != io.EOF {
+				if errors.Is(z.Err(), nethtml.ErrBufferExceeded) {
+					return ImportResult{}, fault.Invalid("bookmark HTML token exceeds 128 KiB")
+				}
 				return ImportResult{}, z.Err()
 			}
 			if limited.N <= 0 {
-				return ImportResult{}, errors.New("bookmark file exceeds 8 MiB")
+				return ImportResult{}, fault.Invalid("bookmark file exceeds 8 MiB")
 			}
 			if e = flush(); e != nil {
 				return ImportResult{}, e
 			}
 			if !seenDL {
-				return ImportResult{}, errors.New("expected a Netscape bookmarks HTML file")
+				return ImportResult{}, fault.Invalid("expected a Netscape bookmarks HTML file")
 			}
 			if e = tx.Commit(); e != nil {
 				return ImportResult{}, e
@@ -103,7 +107,7 @@ func (s *Store) ImportHTML(ctx context.Context, r io.Reader) (ImportResult, erro
 				}
 				seenDL = true
 				if len(stack) >= 100 {
-					return ImportResult{}, errors.New("folder nesting exceeds 100")
+					return ImportResult{}, fault.Invalid("folder nesting exceeds 100")
 				}
 				stack = append(stack, parent)
 				if pending != nil {
@@ -149,7 +153,7 @@ func (s *Store) ImportHTML(ctx context.Context, r io.Reader) (ImportResult, erro
 			if mode != "" {
 				tokenText := z.Text()
 				if text.Len()+len(tokenText) > 65536 {
-					return ImportResult{}, errors.New("bookmark text too large")
+					return ImportResult{}, fault.Invalid("bookmark text too large")
 				}
 				text.Write(tokenText)
 				if mode == "description" && current != nil {
@@ -163,7 +167,7 @@ func (s *Store) ImportHTML(ctx context.Context, r io.Reader) (ImportResult, erro
 				if mode == "folder" {
 					folders++
 					if folders > 2000 {
-						return ImportResult{}, errors.New("import supports at most 2000 folders")
+						return ImportResult{}, fault.Invalid("import supports at most 2000 folders")
 					}
 					id, e := findOrAddCollection(ctx, tx, text.String(), parent)
 					if e != nil {
@@ -227,7 +231,7 @@ func (s *Store) ExportHTML(ctx context.Context, w io.Writer) error {
 	var folder func(*int64, int) error
 	folder = func(parent *int64, depth int) error {
 		if depth > 100 {
-			return errors.New("folder nesting exceeds 100")
+			return fault.New("export", "hierarchy_limit", "folder nesting exceeds 100")
 		}
 		rows, e := tx.QueryContext(ctx, "SELECT url,title,description,tags,created_at FROM links WHERE collection_id IS ? AND url NOT LIKE 'pocketmark-file:%' ORDER BY id", parent)
 		if e != nil {

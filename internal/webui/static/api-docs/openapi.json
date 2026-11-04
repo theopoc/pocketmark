@@ -3,7 +3,7 @@
   "info": {
     "title": "Pocketmark HTTP API",
     "version": "1.0.0",
-    "description": "Native API for your personal bookmark library. JSON errors have an error field. Browser requests use the existing owner session automatically; integrations send `Authorization: Bearer <key>`. Named keys cannot manage the account, API keys or full backups. First-run setup, login and health are public. Mutations enforce same-origin browser checks; configure POCKETMARK_ORIGIN to the exact public origin behind a reverse proxy. Limits measured in bytes are UTF-8 byte limits, not character counts. At most eight concurrent library requests; excess work returns 503. “Try it out” performs real operations on this instance. WebDAV /dav/ and removed Linkwarden compatibility routes are outside this reference. Public authentication has two separate slots and a five-second POST body deadline. /healthz has separate readiness slots; /livez checks process liveness independently. All HTTP requests except GET/HEAD health probes share a per-client token bucket: 10 requests/second, burst 100 by default (POCKETMARK_RATE_LIMIT and POCKETMARK_RATE_BURST). IPv6 clients share a /64. Rejection occurs before authentication/body reads and returns 429 with Retry-After. At most 256 sources are tracked; new sources fail closed at capacity. State resets on restart. Trusted forwarding requires POCKETMARK_TRUSTED_PROXIES. Security controls: owner-only actions, five-minute password confirmation, scoped expiring API keys, immediate key rotation and revocable browser sessions. WebDAV nonstandard methods are described by x-webdav-methods; they are not native OAS operations."
+    "description": "Native API for your personal bookmark library. JSON errors have an error field. Operational failures use 500, 503 (unavailable storage/authentication), or 502/504 (upstream failure/timeout). X-Request-ID correlates responses with server diagnostics. Invalid credentials remain 401; validation remains 4xx. Browser requests use the existing owner session automatically; integrations send `Authorization: Bearer <key>`. Named keys cannot manage the account, API keys or full backups. First-run setup, login and health are public. Mutations enforce same-origin browser checks; configure POCKETMARK_ORIGIN to the exact public origin behind a reverse proxy. Limits measured in bytes are UTF-8 byte limits, not character counts. At most eight concurrent library requests; excess work returns 503. “Try it out” performs real operations on this instance. WebDAV /dav/ and removed Linkwarden compatibility routes are outside this reference. Public authentication has two separate slots and a five-second POST body deadline. /healthz has separate readiness slots; /livez checks process liveness independently. All HTTP requests except GET/HEAD health probes share a per-client token bucket: 10 requests/second, burst 100 by default (POCKETMARK_RATE_LIMIT and POCKETMARK_RATE_BURST). IPv6 clients share a /64. Rejection occurs before authentication/body reads and returns 429 with Retry-After. At most 256 sources are tracked; new sources fail closed at capacity. State resets on restart. Trusted forwarding requires POCKETMARK_TRUSTED_PROXIES. Security controls: owner-only actions, five-minute password confirmation, scoped expiring API keys, immediate key rotation and revocable browser sessions. WebDAV nonstandard methods are described by x-webdav-methods; they are not native OAS operations."
   },
   "servers": [
     {
@@ -70,6 +70,9 @@
         ],
         "summary": "Check database health",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -107,6 +110,9 @@
         ],
         "summary": "Check first-run setup",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -133,6 +139,9 @@
         ],
         "summary": "Create the first owner account",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "201": {
             "description": "Account created",
             "content": {
@@ -193,6 +202,9 @@
         ],
         "summary": "Start password and TOTP sign-in",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -253,6 +265,9 @@
         ],
         "summary": "Sign out",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -293,6 +308,9 @@
         ],
         "summary": "Check authentication",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -333,6 +351,9 @@
         ],
         "summary": "Read account settings",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -371,6 +392,9 @@
         ],
         "summary": "Change owner credentials",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -437,6 +461,9 @@
         ],
         "summary": "List API keys",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -478,6 +505,9 @@
         ],
         "summary": "Create an API key",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "201": {
             "description": "Key created; secret is returned once",
             "content": {
@@ -539,6 +569,9 @@
         ],
         "summary": "Revoke an API key",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -597,6 +630,9 @@
         ],
         "summary": "Rename, disable or reactivate an API key",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -682,6 +718,9 @@
         ],
         "summary": "Read library counts",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -721,6 +760,9 @@
         ],
         "summary": "List frequent tags",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -764,6 +806,9 @@
         ],
         "summary": "Browse the tag directory",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -839,6 +884,9 @@
         ],
         "summary": "List collections",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -879,6 +927,9 @@
         ],
         "summary": "Create a collection",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "201": {
             "description": "Collection created",
             "content": {
@@ -934,6 +985,9 @@
         ],
         "summary": "Update a collection",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -989,6 +1043,9 @@
         ],
         "summary": "Delete a collection",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -1045,6 +1102,9 @@
         ],
         "summary": "Search bookmarks",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -1188,6 +1248,9 @@
         ],
         "summary": "Create a bookmark",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "201": {
             "description": "Bookmark created",
             "content": {
@@ -1243,6 +1306,9 @@
         ],
         "summary": "Read a bookmark",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -1286,6 +1352,9 @@
         ],
         "summary": "Replace bookmark fields",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -1342,6 +1411,9 @@
         ],
         "summary": "Delete a bookmark",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -1398,6 +1470,9 @@
         ],
         "summary": "Apply a bulk action",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -1465,6 +1540,9 @@
         ],
         "summary": "Queue or retry capture",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "202": {
             "description": "Capture queued",
             "content": {
@@ -1522,6 +1600,9 @@
         ],
         "summary": "Download captured HTML",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Original HTML as an attachment named page.html",
             "content": {
@@ -1588,6 +1669,9 @@
         ],
         "summary": "List highlights and notes",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -1634,6 +1718,9 @@
         ],
         "summary": "Create a highlight",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -1711,6 +1798,9 @@
         ],
         "summary": "Replace a highlight",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -1773,6 +1863,9 @@
         ],
         "summary": "Delete a highlight",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -1840,6 +1933,9 @@
         ],
         "summary": "Get cached page thumbnail",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Cached JPEG or PNG, at most 512 KiB; private revalidation cache",
             "content": {
@@ -1895,6 +1991,9 @@
         ],
         "summary": "List attachments",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -1942,6 +2041,9 @@
         ],
         "summary": "Attach a file",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "201": {
             "description": "Attachment saved",
             "content": {
@@ -2066,6 +2168,9 @@
         ],
         "summary": "Upload a standalone file",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "201": {
             "description": "File and bookmark created",
             "content": {
@@ -2184,6 +2289,9 @@
         ],
         "summary": "Download an attachment",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Original bytes, streamed as an attachment with restrictive CSP",
             "content": {
@@ -2235,6 +2343,9 @@
         ],
         "summary": "Delete an attachment",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -2292,6 +2403,9 @@
         "summary": "Preview a saved image, PDF or HTML capture",
         "description": "Authenticated inline preview. HTML retains embedded styles/images/fonts in an opaque sandbox; scripts and network resources are blocked, refresh and external links are disabled. Original downloads remain unchanged. PDF uses the browser native viewer. Preparation shares the archive work slot. Allowed API key profiles: read, full.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Inline image/PDF bytes or passive HTML preview (up to the 20 MiB attachment limit).",
             "content": {
@@ -2385,6 +2499,9 @@
         ],
         "summary": "Preserve an offline HTML copy",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "201": {
             "description": "Offline attachment created",
             "content": {
@@ -2445,6 +2562,9 @@
         ],
         "summary": "Read sandboxed HTML",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Sandboxed structural HTML reader",
             "content": {
@@ -2521,6 +2641,9 @@
         ],
         "summary": "Import bookmark JSON",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -2591,6 +2714,9 @@
         ],
         "summary": "Import browser bookmarks",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -2646,6 +2772,9 @@
         ],
         "summary": "Export bookmark metadata",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Pocketmark v1 JSON download; excludes assets and annotations",
             "content": {
@@ -2692,6 +2821,9 @@
         ],
         "summary": "Export browser bookmarks",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Netscape bookmark HTML download; excludes saved files and captures",
             "content": {
@@ -2738,6 +2870,9 @@
         ],
         "summary": "Download a full backup",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "ZIP stream containing a consistent SQLite snapshot and restore instructions",
             "content": {
@@ -2794,6 +2929,9 @@
         ],
         "summary": "Check process liveness",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -2829,6 +2967,9 @@
         "summary": "Confirm the current password",
         "description": "Browser cookie required. Confirmation is session-bound, persists across restart and lasts five minutes. A successful login also counts as confirmation. Shares the bounded login rate limiter and serialized password work. Wrong password is 403; revoked/expired session is 401. Body limit: 4 KiB. Owner session required; named keys are forbidden.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -2910,6 +3051,9 @@
         "summary": "List active browser sessions",
         "description": "At most 32 sessions, newest first. Omits expired and idle sessions. Contains no credentials or IP addresses. Legacy timestamps may be zero. Owner session required; named keys are forbidden.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -2960,6 +3104,9 @@
         "summary": "Set this browser’s inactivity timeout",
         "description": "Browser cookie required. Allowed minutes: 15, 60, 1440, or 0 to disable inactivity expiry. Seven-day absolute expiry remains. New sessions default to 1440; legacy sessions retain absolute expiry only. Each authenticated HTTP request counts as activity, including background refresh. Body limit: 1 KiB. Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -3035,6 +3182,9 @@
         "summary": "Sign out all other browsers",
         "description": "Requires a browser cookie; preserves its session. In-flight requests may finish. Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -3094,6 +3244,9 @@
         "summary": "Revoke one browser session",
         "description": "Revocation persists across restart. Revoking the current session makes its next request return 401. In-flight requests may finish. Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -3153,6 +3306,9 @@
         "summary": "Rotate an active API key",
         "description": "Atomically invalidates the previous secret and returns a new one once. Preserves ID, name, permissions and expiry; resets last use. Disabled, expired or missing keys return 404. Update the connected app immediately. In-flight requests may finish. Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -3211,6 +3367,9 @@
         "summary": "Read Prometheus metrics",
         "description": "Authenticated; read/full keys or owner. Bounded labels do not contain bookmark URLs or credential material. Allowed API key profiles: read, full.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Prometheus exposition text",
             "content": {
@@ -3255,6 +3414,9 @@
         "summary": "OPTIONS /dav/",
         "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
             "content": {
@@ -3327,6 +3489,9 @@
         "summary": "GET /dav/bookmarks.xbel",
         "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
             "content": {
@@ -3392,6 +3557,9 @@
         "summary": "HEAD /dav/bookmarks.xbel",
         "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
             "content": {
@@ -3457,6 +3625,9 @@
         "summary": "PUT /dav/bookmarks.xbel",
         "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
             "content": {
@@ -3532,6 +3703,9 @@
         "summary": "OPTIONS /dav/bookmarks.xbel",
         "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
             "content": {
@@ -3604,6 +3778,9 @@
         "summary": "GET /dav/bookmarks.xbel.temp",
         "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
             "content": {
@@ -3669,6 +3846,9 @@
         "summary": "HEAD /dav/bookmarks.xbel.temp",
         "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
             "content": {
@@ -3734,6 +3914,9 @@
         "summary": "PUT /dav/bookmarks.xbel.temp",
         "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
             "content": {
@@ -3809,6 +3992,9 @@
         "summary": "DELETE /dav/bookmarks.xbel.temp",
         "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
             "content": {
@@ -3874,6 +4060,9 @@
         "summary": "OPTIONS /dav/bookmarks.xbel.temp",
         "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
             "content": {
@@ -3949,6 +4138,9 @@
         "summary": "GET /dav/bookmarks.xbel.lock",
         "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
             "content": {
@@ -4014,6 +4206,9 @@
         "summary": "HEAD /dav/bookmarks.xbel.lock",
         "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
             "content": {
@@ -4079,6 +4274,9 @@
         "summary": "PUT /dav/bookmarks.xbel.lock",
         "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
             "content": {
@@ -4157,6 +4355,9 @@
         "summary": "DELETE /dav/bookmarks.xbel.lock",
         "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
             "content": {
@@ -4222,6 +4423,9 @@
         "summary": "OPTIONS /dav/bookmarks.xbel.lock",
         "description": "WebDAV/XBEL. Sync/full keys, owner cookie required. PUT/MOVE can replace the bookmark tree including deletions. 8 MiB XML limit, 10,000 bookmarks, 2,000 collections. Stale If-Match returns 412; competing locks return 423. Primary deletion and MKCOL/POST are unsupported (405). The lock body is limited to 4 KiB; XBEL bodies to 8 MiB.",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "XBEL content, temporary bytes or lock content according to resource",
             "content": {
@@ -4302,6 +4506,9 @@
           }
         },
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -4373,6 +4580,9 @@
           }
         },
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -4454,6 +4664,9 @@
           }
         },
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -4539,6 +4752,9 @@
           }
         },
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "Successful response",
             "content": {
@@ -4597,6 +4813,9 @@
         ],
         "summary": "Get a site icon",
         "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
           "200": {
             "description": "PNG, JPEG, GIF or ICO icon, up to 128 KiB; private one-hour browser cache"
           },
@@ -5598,6 +5817,21 @@
       }
     },
     "responses": {
+      "ServerError": {
+        "description": "Operational failure. Use X-Request-ID to locate the server diagnostic; authentication storage outages return 503 rather than 401.",
+        "headers": {
+          "X-Request-ID": {
+            "description": "Log ID",
+            "schema": {"type": "string"}
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {"$ref": "#/components/schemas/Error"},
+            "example": {"error": "server could not complete the request; try again later"}
+          }
+        }
+      },
       "400": {
         "description": "Invalid JSON, field limits, duplicate URL, invalid references or an interrupted/oversized upload.",
         "content": {

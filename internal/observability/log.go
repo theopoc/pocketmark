@@ -2,19 +2,15 @@
 package observability
 
 import (
+	"bytes"
 	"context"
-	"database/sql"
 	"errors"
-	"fmt"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"io"
 	"log"
 	"log/slog"
-	"net"
 	"net/http"
-	"os"
-	"pocketmark/internal/capture"
-
-	"github.com/mattn/go-sqlite3"
 )
 
 type loggerKey struct{}
@@ -39,42 +35,37 @@ func Logger(ctx context.Context) *slog.Logger {
 	return slog.Default()
 }
 
-// ErrorAttrs deliberately excludes error messages: wrapped HTTP errors can contain
-// bookmark URLs, query strings or credentials. Numeric codes remain actionable.
-func ErrorAttrs(err error) []any {
-	kind := "internal"
-	var dns *net.DNSError
-	var network net.Error
-	var sqlite sqlite3.Error
-	var status *capture.HTTPStatusError
-	switch {
-	case errors.Is(err, context.Canceled):
-		kind = "canceled"
-	case errors.Is(err, context.DeadlineExceeded):
-		kind = "timeout"
-	case errors.Is(err, sql.ErrNoRows):
-		kind = "not_found"
-	case errors.Is(err, os.ErrPermission):
-		kind = "permission"
-	case errors.Is(err, os.ErrNotExist):
-		kind = "not_found"
-	case errors.As(err, &sqlite):
-		return []any{"error_kind", "database", "sqlite_code", int(sqlite.Code), "sqlite_extended_code", int(sqlite.ExtendedCode)}
-	case errors.As(err, &status):
-		return []any{"error_kind", "http", "http_status", status.StatusCode, "http_status_text", http.StatusText(status.StatusCode)}
-	case errors.As(err, &dns):
-		kind = "dns"
-	case errors.As(err, &network):
-		kind = "network"
-		if network.Timeout() {
-			kind = "timeout"
-		}
-	}
-	return []any{"error_kind", kind, "error_type", fmt.Sprintf("%T", err)}
-}
-
+// Error logs a classified failure once at the boundary that handles it.
+// Message contents never cross this boundary; the owning operation and code do.
 func Error(ctx context.Context, event string, err error) {
-	Logger(ctx).ErrorContext(ctx, event, ErrorAttrs(err)...)
+	if err == nil {
+		return
+	}
+	var write *responseWriteError
+	if errors.As(err, &write) && write.reported.Swap(true) {
+		return
+	}
+	attrs := ErrorAttrs(err)
+	level := slog.LevelError
+	status := HTTPStatus(err)
+	if write != nil {
+		status = 500
+	}
+	if status < 500 {
+		level = slog.LevelWarn
+	}
+	if errors.Is(err, context.Canceled) {
+		level = slog.LevelInfo
+	}
+	if status >= 500 && !errors.Is(err, context.Canceled) {
+		span := trace.SpanFromContext(ctx)
+		span.SetStatus(codes.Error, "application failure")
+		if state, ok := ctx.Value(failureKey{}).(*requestFailure); ok {
+			state.failed.Store(true)
+		}
+		attrs = append(attrs, "source", stackFrames(3, 4))
+	}
+	Logger(ctx).Log(ctx, level, event, attrs...)
 }
 
 // ResponseContext keeps existing response helpers correlated without changing
@@ -93,6 +84,14 @@ func HTTPErrorLog() *log.Logger { return log.New(httpErrorWriter{}, "", 0) }
 type httpErrorWriter struct{}
 
 func (httpErrorWriter) Write(p []byte) (int, error) {
-	slog.Error("http_server_error")
+	kind := "server_protocol"
+	// Classify only known net/http prefixes; never emit the supplied text.
+	if bytes.HasPrefix(p, []byte("http: TLS handshake error")) {
+		kind = "tls_handshake"
+	}
+	if bytes.HasPrefix(p, []byte("http: panic serving")) {
+		kind = "panic"
+	}
+	slog.Error("http_server_error", "error_code", kind)
 	return len(p), nil
 }

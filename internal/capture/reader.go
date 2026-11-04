@@ -1,9 +1,9 @@
 package capture
 
 import (
-	"errors"
 	"io"
 	"net/url"
+	"pocketmark/internal/fault"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -46,7 +46,7 @@ func Reader(src io.Reader, dst io.Writer, rawURL string) error {
 			if skipped[t.Data] || t.Data == "head" || t.Data == "object" || t.Data == "form" || t.Data == "button" || t.Data == "select" || t.Data == "textarea" {
 				if kind != html.SelfClosingTagToken {
 					if len(excluded) > 256 {
-						return errors.New("reader nesting limit")
+						return fault.New("capture", "nesting_limit", "reader nesting limit")
 					}
 					excluded = append(excluded, t.Data)
 				}
@@ -106,7 +106,7 @@ type limitedWriter struct {
 
 func (w *limitedWriter) Write(p []byte) (int, error) {
 	if int64(len(p)) > w.remaining {
-		return 0, errors.New("archive output exceeds limit")
+		return 0, fault.New("capture", "output_too_large", "archive output exceeds limit")
 	}
 	n, err := w.dst.Write(p)
 	w.remaining -= int64(n)

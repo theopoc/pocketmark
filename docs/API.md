@@ -43,6 +43,13 @@ POCKETMARK_URL=http://127.0.0.1:8090
 curl --fail-with-body -H "Authorization: Bearer $POCKETMARK_ACCESS_TOKEN" "$POCKETMARK_URL/api/stats"
 ```
 
+Operational failures return 500 (internal), 503 (database contention or unavailable
+authentication), or 502/504 (upstream capture failure/timeout). Validation remains
+4xx; invalid credentials remain 401. A lost/canceled request may be recorded as
+499. Use `X-Request-ID` to locate the structured diagnostic; responses never expose
+internal SQL, filesystem paths or stack traces. If streaming has already started,
+its HTTP status cannot change: logs and failure metrics record the failed outcome.
+
 JSON mutation requests use `Content-Type: application/json`. Responses use JSON except archive downloads; errors have the shape `{"error":"message"}`. Unknown JSON fields are rejected for normal create/update/login requests; migration accepts extra source fields.
 
 ## Endpoints

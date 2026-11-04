@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"io"
+	"pocketmark/internal/fault"
 	"strings"
 	"time"
 )
@@ -24,7 +25,7 @@ type Asset struct {
 
 func (s *Store) SaveAsset(ctx context.Context, a Asset, src io.Reader) (Asset, error) {
 	if a.LinkID <= 0 || len(a.Name) == 0 || len(a.Name) > 240 || strings.ContainsAny(a.Name, "\r\n\x00/\\") {
-		return a, errors.New("invalid attachment name or bookmark")
+		return a, fault.Invalid("invalid attachment name or bookmark")
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -36,7 +37,7 @@ func (s *Store) SaveAsset(ctx context.Context, a Asset, src io.Reader) (Asset, e
 		return a, err
 	}
 	if count >= 32 {
-		return a, errors.New("a bookmark can have at most 32 attachments")
+		return a, fault.Invalid("a bookmark can have at most 32 attachments")
 	}
 	a, err = insertAsset(ctx, tx, a, src, "attachment")
 	if err != nil {
@@ -63,7 +64,7 @@ func insertAsset(ctx context.Context, tx *sql.Tx, a Asset, src io.Reader, noun s
 		if n > 0 {
 			a.Size += int64(n)
 			if a.Size > MaxAssetSize {
-				return a, errors.New(noun + " exceeds 20 MiB")
+				return a, fault.Invalid(noun + " exceeds 20 MiB")
 			}
 			if _, err = tx.ExecContext(ctx, `INSERT INTO asset_chunks VALUES(?,?,?)`, a.ID, ordinal, buf[:n]); err != nil {
 				return a, err
@@ -77,7 +78,7 @@ func insertAsset(ctx context.Context, tx *sql.Tx, a Asset, src io.Reader, noun s
 		}
 	}
 	if a.Size == 0 {
-		return a, errors.New("empty " + noun)
+		return a, fault.Invalid("empty " + noun)
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE assets SET size=? WHERE id=?`, a.Size, a.ID); err != nil {
 		return a, err

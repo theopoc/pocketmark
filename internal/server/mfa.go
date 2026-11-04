@@ -12,6 +12,8 @@ import (
 	"errors"
 	"image/png"
 	"net/http"
+	"pocketmark/internal/fault"
+	"pocketmark/internal/observability"
 	"strings"
 	"time"
 
@@ -269,12 +271,21 @@ func (a *Server) mfaEnroll(w http.ResponseWriter, r *http.Request) {
 	}
 	account, err := a.Store.Account(r.Context())
 	state, stateErr := a.Store.MFA(r.Context())
+	if authFailure(w, "mfa_state_failed", stateErr) {
+		return
+	}
 	if err != nil || stateErr != nil || account.Salt != challenge.salt || state.Generation != challenge.generation || len(state.Secret) != 0 {
+		if authFailure(w, "mfa_operation_failed", err) {
+			return
+		}
 		fail(w, 401, "account changed; sign in again")
 		return
 	}
 	secret, qr, err := enrollmentImage(challenge.username, challenge.secret)
 	if err != nil {
+		if authFailure(w, "mfa_operation_failed", err) {
+			return
+		}
 		fail(w, 503, "could not prepare authentication; try again")
 		return
 	}
@@ -307,7 +318,15 @@ func (a *Server) mfaVerify(w http.ResponseWriter, r *http.Request) {
 		}
 		if challenge.kind == "replace" {
 			cookie, err := r.Cookie("pocketmark")
-			if err != nil || a.sessionHash(cookie.Value) != challenge.session || !a.Store.SessionValid(r.Context(), challenge.session) {
+			if err != nil || a.sessionHash(cookie.Value) != challenge.session {
+				fail(w, 401, "session changed; sign in again")
+				return
+			}
+			valid, err := a.Store.CheckAndTouchSession(r.Context(), challenge.session)
+			if authFailure(w, "mfa_session_failed", err) {
+				return
+			}
+			if !valid {
 				fail(w, 401, "session changed; sign in again")
 				return
 			}
@@ -319,11 +338,17 @@ func (a *Server) mfaVerify(w http.ResponseWriter, r *http.Request) {
 		}
 		encrypted, err := a.encryptMFA(challenge.secret)
 		if err != nil {
+			if authFailure(w, "mfa_operation_failed", err) {
+				return
+			}
 			fail(w, 503, "could not save authentication")
 			return
 		}
 		codes, hashes := newRecoveryCodes()
 		if err = a.Store.ActivateMFA(r.Context(), challenge.salt, challenge.generation, counter, encrypted, hashes, challenge.session, a.sessionHash(value), expires, r.UserAgent(), challenge.recoveryGrant); err != nil {
+			if authFailure(w, "mfa_operation_failed", err) {
+				return
+			}
 			fail(w, 409, "account changed; start again")
 			return
 		}
@@ -341,6 +366,9 @@ func (a *Server) mfaVerify(w http.ResponseWriter, r *http.Request) {
 	}
 	state, err := a.Store.MFA(r.Context())
 	if err != nil || state.Generation != challenge.generation || len(state.Secret) == 0 {
+		if authFailure(w, "mfa_operation_failed", err) {
+			return
+		}
 		fail(w, 401, "account changed; sign in again")
 		return
 	}
@@ -349,7 +377,8 @@ func (a *Server) mfaVerify(w http.ResponseWriter, r *http.Request) {
 	if recoveryHash == "" {
 		secret, err := a.decryptMFA(state.Secret)
 		if err != nil {
-			fail(w, 401, "authentication unavailable; use a recovery code or local MFA reset")
+			observability.Error(r.Context(), "mfa_decrypt_failed", fault.Wrap("mfa.decrypt", err))
+			respond(w, 503, map[string]string{"error": "authentication unavailable; use a recovery code or local MFA reset", "code": "mfa_recovery_required"})
 			return
 		}
 		counter = matchTOTPCounter(secret, body.Code, a.totpNow())
@@ -359,6 +388,9 @@ func (a *Server) mfaVerify(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err = a.Store.SignInMFA(r.Context(), challenge.salt, challenge.generation, counter, recoveryHash, a.sessionHash(value), expires, r.UserAgent()); err != nil {
+		if authFailure(w, "mfa_operation_failed", err) {
+			return
+		}
 		fail(w, 401, "invalid or already used authentication code")
 		return
 	}
@@ -395,7 +427,13 @@ func (a *Server) authorizeMFAChange(w http.ResponseWriter, r *http.Request, allo
 	defer a.passwordMu.Unlock()
 	account, err := a.Store.Account(r.Context())
 	state, stateErr := a.Store.MFA(r.Context())
+	if authFailure(w, "mfa_state_failed", stateErr) {
+		return "", 0, false, false
+	}
 	if err != nil || stateErr != nil || !secretEqual(passwordHash(body.Password, account.Salt), account.Hash) || len(state.Secret) == 0 {
+		if authFailure(w, "mfa_operation_failed", err) {
+			return "", 0, false, false
+		}
 		fail(w, 403, "incorrect password or authentication unavailable")
 		return "", 0, false, false
 	}
@@ -403,6 +441,9 @@ func (a *Server) authorizeMFAChange(w http.ResponseWriter, r *http.Request, allo
 	counter := int64(-1)
 	if body.Code != "" && recoveryHash == "" {
 		secret, err := a.decryptMFA(state.Secret)
+		if authFailure(w, "mfa_decrypt_failed", err) {
+			return "", 0, false, false
+		}
 		if err == nil {
 			counter = matchTOTPCounter(secret, body.Code, a.totpNow())
 		}
@@ -412,6 +453,9 @@ func (a *Server) authorizeMFAChange(w http.ResponseWriter, r *http.Request, allo
 		}
 	}
 	if err = a.Store.AuthorizeMFAChange(r.Context(), account.Salt, state.Generation, counter, recoveryHash, requestPrincipal(r).session); err != nil {
+		if authFailure(w, "mfa_operation_failed", err) {
+			return "", 0, false, false
+		}
 		fail(w, 403, "invalid or already used authentication code")
 		return "", 0, false, false
 	}
@@ -425,11 +469,17 @@ func (a *Server) mfaReplace(w http.ResponseWriter, r *http.Request) {
 	}
 	account, err := a.Store.Account(r.Context())
 	if err != nil || account.Salt != salt {
+		if authFailure(w, "mfa_operation_failed", err) {
+			return
+		}
 		fail(w, 409, "account changed; start again")
 		return
 	}
 	secret, qr, err := enrollmentImage(account.Username, "")
 	if err != nil {
+		if authFailure(w, "mfa_operation_failed", err) {
+			return
+		}
 		fail(w, 503, "could not prepare authentication; try again")
 		return
 	}
@@ -446,6 +496,9 @@ func (a *Server) mfaRecoveryCodes(w http.ResponseWriter, r *http.Request) {
 	}
 	codes, hashes := newRecoveryCodes()
 	if err := a.Store.ReplaceRecoveryCodes(r.Context(), salt, generation, requestPrincipal(r).session, hashes); err != nil {
+		if authFailure(w, "mfa_recovery_save_failed", err) {
+			return
+		}
 		fail(w, 409, "account changed; try again")
 		return
 	}

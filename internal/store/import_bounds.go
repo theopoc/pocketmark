@@ -3,9 +3,9 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"os"
+	"pocketmark/internal/fault"
 	"strings"
 )
 
@@ -18,7 +18,7 @@ func (s *Store) stageImport(ctx context.Context, r io.Reader) (*os.File, error) 
 	}
 	n, err := io.Copy(f, io.LimitReader(r, (8<<20)+1))
 	if err == nil && n > 8<<20 {
-		err = errors.New("import exceeds 8 MiB")
+		err = fault.Invalid("import exceeds 8 MiB")
 	}
 	if err == nil {
 		err = ctx.Err()
@@ -44,7 +44,7 @@ func preflightImport(r io.Reader) error {
 	var value func(string, int, *int, int) error
 	value = func(shape string, depth int, count *int, limit int) error {
 		if depth > 64 {
-			return errors.New("JSON nesting exceeds 64")
+			return fault.Invalid("JSON nesting exceeds 64")
 		}
 		token, err := d.Token()
 		if err != nil {
@@ -60,7 +60,7 @@ func preflightImport(r io.Reader) error {
 				}
 				name, ok := key.(string)
 				if !ok {
-					return errors.New("expected JSON field name")
+					return fault.Invalid("expected JSON field name")
 				}
 				child, max := "", 0
 				var counter *int
@@ -85,7 +85,7 @@ func preflightImport(r io.Reader) error {
 				if count != nil {
 					*count++
 					if *count > limit {
-						return errors.New("import exceeds collection, link, pinned link or tag limit")
+						return fault.Invalid("import exceeds collection, link, pinned link or tag limit")
 					}
 				}
 				if err := value(shape, depth+1, nil, 0); err != nil {
@@ -98,10 +98,13 @@ func preflightImport(r io.Reader) error {
 		return nil
 	}
 	if err := value("root", 0, nil, 0); err != nil {
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			return fault.Invalid("incomplete JSON document")
+		}
 		return err
 	}
 	if _, err := d.Token(); err != io.EOF {
-		return errors.New("expected a single JSON document")
+		return fault.Invalid("expected a single JSON document")
 	}
 	return nil
 }

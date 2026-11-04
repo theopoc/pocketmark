@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"pocketmark/internal/capture"
+	"pocketmark/internal/fault"
 	"pocketmark/internal/observability"
 	"pocketmark/internal/server"
 	"pocketmark/internal/store"
@@ -44,7 +45,7 @@ func loadServerSecret(dir, configured string, allowNewForExisting bool) (string,
 			} else {
 				if !allowNewForExisting {
 					if _, err := os.Stat(filepath.Join(dir, "pocketmark.db")); err == nil {
-						return "", errors.New("server secret missing for existing database; restore it or use -reset-mfa")
+						return "", fault.New("configuration", "server_secret_missing", "server secret missing for existing database; restore it or use -reset-mfa")
 					} else if !errors.Is(err, os.ErrNotExist) {
 						return "", err
 					}
@@ -74,7 +75,7 @@ func loadServerSecret(dir, configured string, allowNewForExisting bool) (string,
 		}
 	}
 	if len(token) < 24 {
-		return "", errors.New("server secret must contain at least 24 characters")
+		return "", fault.New("configuration", "server_secret_too_short", "server secret must contain at least 24 characters")
 	}
 	return token, nil
 }
@@ -86,16 +87,16 @@ func resetAccountFromInput(s *store.Store, input io.Reader) error {
 	}
 	data, err := io.ReadAll(io.LimitReader(input, 4097))
 	if err != nil || len(data) > 4096 {
-		return errors.New("account JSON exceeds 4096 bytes or cannot be read")
+		return fault.New("configuration", "recovery_input_limit", "account JSON exceeds 4096 bytes or cannot be read")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&credentials); err != nil {
-		return errors.New("invalid account JSON")
+		return fault.New("configuration", "recovery_input_invalid", "invalid account JSON")
 	}
 	var extra any
 	if decoder.Decode(&extra) != io.EOF {
-		return errors.New("expected a single account JSON document")
+		return fault.New("configuration", "recovery_input_multiple", "expected a single account JSON document")
 	}
 	return server.ResetLocalAccount(context.Background(), s, credentials.Username, credentials.Password)
 }
@@ -111,7 +112,9 @@ func main() {
 		os.Exit(1)
 	}
 }
-func run() error {
+func run() (runErr error) {
+	operation := "process.configure"
+	defer func() { runErr = fault.Wrap(operation, runErr) }()
 	addr := flag.String("listen", env("POCKETMARK_LISTEN", "127.0.0.1:8090"), "HTTP listen address")
 	data := flag.String("data", env("POCKETMARK_DATA", "./data"), "data directory")
 	noCapture := flag.Bool("no-capture", os.Getenv("POCKETMARK_CAPTURE") == "false", "disable background page capture")
@@ -119,16 +122,19 @@ func run() error {
 	resetAccount := flag.Bool("reset-account", false, "read account credentials as JSON from stdin while the server is stopped")
 	flag.Parse()
 	if *resetMFA && *resetAccount {
-		return errors.New("choose only one recovery command")
+		return fault.New("configuration", "recovery_flags_conflict", "choose only one recovery command")
 	}
+	operation = "config.rate_limit"
 	rate, err := strconv.Atoi(env("POCKETMARK_RATE_LIMIT", "10"))
 	if err != nil {
-		return errors.New("POCKETMARK_RATE_LIMIT must be an integer")
+		return fault.New("configuration", "invalid_rate_limit", "POCKETMARK_RATE_LIMIT must be an integer")
 	}
+	operation = "config.rate_burst"
 	burst, err := strconv.Atoi(env("POCKETMARK_RATE_BURST", "100"))
 	if err != nil {
-		return errors.New("POCKETMARK_RATE_BURST must be an integer")
+		return fault.New("configuration", "invalid_rate_burst", "POCKETMARK_RATE_BURST must be an integer")
 	}
+	operation = "config.tracing"
 	traceConfig, err := observability.TraceConfigFromEnv()
 	if err != nil {
 		slog.Error("telemetry_configuration_failed", "error", err.Error())
@@ -139,6 +145,7 @@ func run() error {
 		debug.SetMemoryLimit(32 * 1024 * 1024)
 	}
 	debug.SetGCPercent(50)
+	operation = "storage.directory"
 	dir, e := filepath.Abs(*data)
 	if e != nil {
 		return e
@@ -146,20 +153,24 @@ func run() error {
 	if e = os.MkdirAll(dir, 0700); e != nil {
 		return e
 	}
+	operation = "config.server_secret"
 	token, e := loadServerSecret(dir, os.Getenv("POCKETMARK_TOKEN"), *resetMFA)
 	if e != nil {
 		return e
 	}
+	operation = "config.origin"
 	origin := os.Getenv("POCKETMARK_ORIGIN")
 	if e = server.ValidateOrigin(origin); e != nil {
 		return e
 	}
+	operation = "database.open"
 	s, e := store.Open(filepath.Join(dir, "pocketmark.db"))
 	if e != nil {
 		return e
 	}
 	defer s.Close()
 	if *resetAccount {
+		operation = "recovery.account"
 		if err := resetAccountFromInput(s, os.Stdin); err != nil {
 			return err
 		}
@@ -167,6 +178,7 @@ func run() error {
 		return nil
 	}
 	if *resetMFA {
+		operation = "recovery.mfa"
 		if err := s.ResetMFA(context.Background()); err != nil {
 			return err
 		}
@@ -176,6 +188,7 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	observer := observability.New(slog.Default(), nil)
+	operation = "tracing.initialize"
 	shutdownTracing, e := observer.EnableTracing(ctx, traceConfig)
 	if e != nil {
 		return e
@@ -194,12 +207,15 @@ func run() error {
 		close(done)
 	}
 	handler := server.New(s, token, origin, os.Getenv("POCKETMARK_SECURE_COOKIE") == "true" || strings.HasPrefix(origin, "https://"), observer)
+	operation = "config.rate_limit"
 	if e = handler.SetRateLimit(rate, burst); e != nil {
 		return e
 	}
+	operation = "config.trusted_proxies"
 	if e = handler.SetTrustedProxies(os.Getenv("POCKETMARK_TRUSTED_PROXIES")); e != nil {
 		return e
 	}
+	operation = "http.serve"
 	srv := &http.Server{Addr: *addr, Handler: handler, ErrorLog: observability.HTTPErrorLog(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 * 1024}
 	errCh := make(chan error, 1)
 	go func() {
@@ -213,16 +229,25 @@ func run() error {
 	}
 	shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(shutdown); err != nil {
-		srv.Close()
-	}
+	forced := shutdownHTTP(shutdown, srv)
 	<-done
-	slog.Info("server_stopped")
+	slog.Info("server_stopped", "forced", forced)
 	if e != nil && !errors.Is(e, http.ErrServerClosed) {
 		return fmt.Errorf("HTTP server: %w", e)
 	}
 	return nil
 }
+func shutdownHTTP(ctx context.Context, srv *http.Server) bool {
+	if err := srv.Shutdown(ctx); err != nil {
+		observability.Error(context.Background(), "server_shutdown_failed", fault.Wrap("http.shutdown", err))
+		if closeErr := srv.Close(); closeErr != nil {
+			observability.Error(context.Background(), "server_close_failed", fault.Wrap("http.close", closeErr))
+		}
+		return true
+	}
+	return false
+}
+
 func env(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
