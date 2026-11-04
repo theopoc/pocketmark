@@ -4,13 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"errors"
-	"fmt"
 	"io"
 	"mime"
 	"net"
 	"net/http"
 	"net/url"
+	"pocketmark/internal/fault"
 	"regexp"
 	"strings"
 	"time"
@@ -51,7 +50,7 @@ func (b *offlineBuilder) fetch(raw string) ([]byte, string, *url.URL, error) {
 		return nil, "", nil, err
 	}
 	if b.requests >= 25 || b.remaining <= 0 {
-		return nil, "", nil, errors.New("archive resource budget exhausted")
+		return nil, "", nil, fault.New("capture", "resource_budget", "archive resource budget exhausted")
 	}
 	b.requests++
 	req, err := http.NewRequestWithContext(b.ctx, "GET", u.String(), nil)
@@ -65,7 +64,7 @@ func (b *offlineBuilder) fetch(raw string) ([]byte, string, *url.URL, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, "", nil, fmt.Errorf("resource HTTP %d", resp.StatusCode)
+		return nil, "", nil, &HTTPStatusError{StatusCode: resp.StatusCode}
 	}
 	limit := maxBody
 	if b.remaining < limit {
@@ -76,7 +75,7 @@ func (b *offlineBuilder) fetch(raw string) ([]byte, string, *url.URL, error) {
 		return nil, "", nil, err
 	}
 	if len(rawBody) > limit {
-		return nil, "", nil, errors.New("resource exceeds capture budget")
+		return nil, "", nil, fault.New("capture", "resource_too_large", "resource exceeds capture budget")
 	}
 	b.remaining -= len(rawBody)
 	media, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))
@@ -141,7 +140,7 @@ func offline(ctx context.Context, rawURL string, dst io.Writer, client *http.Cli
 		return b.report, err
 	}
 	if media != "text/html" && media != "application/xhtml+xml" {
-		return b.report, errors.New("offline capture requires HTML")
+		return b.report, fault.New("capture", "unsupported_content", "offline capture requires HTML")
 	}
 	w := &limitedWriter{dst: dst, remaining: 20 << 20}
 	_, err = io.WriteString(w, `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"><!-- Pocketmark passive offline snapshot: scripts, forms, frames and CSS imports omitted. -->`)
@@ -166,7 +165,7 @@ func offline(ctx context.Context, rawURL string, dst io.Writer, client *http.Cli
 			if t.Data == "script" || t.Data == "iframe" || t.Data == "object" || t.Data == "embed" || t.Data == "template" || t.Data == "noscript" || t.Data == "svg" || t.Data == "audio" || t.Data == "video" {
 				if kind != html.SelfClosingTagToken && t.Data != "embed" {
 					if len(excluded) > 256 {
-						return b.report, errors.New("archive nesting limit")
+						return b.report, fault.New("capture", "nesting_limit", "archive nesting limit")
 					}
 					excluded = append(excluded, t.Data)
 				}

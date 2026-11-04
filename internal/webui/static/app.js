@@ -476,7 +476,7 @@
         showLogin();
         if (expired && !recoveryNotice) $("login-error").textContent = workspace.requestFailure(401);
       }
-      const message = response.status === 401 && loginPath ? (body?.error || "Check your credentials, then try again.") : workspace.requestFailure(response.status, body?.error);
+      const message = response.status === 401 && loginPath ? (body?.error || "Check your credentials, then try again.") : workspace.requestFailure(response.status, body?.error, loginPath ? body?.code : "");
       const error = new Error(message);
       error.status = response.status;
       throw error;

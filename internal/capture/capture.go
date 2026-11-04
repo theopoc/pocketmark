@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -13,6 +12,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"pocketmark/internal/fault"
 	"strings"
 	"time"
 	"unicode"
@@ -64,20 +64,20 @@ func Fetch(ctx context.Context, rawURL string) (Result, error) {
 
 func validateURL(u *url.URL) error {
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return errors.New("capture requires an HTTP or HTTPS URL")
+		return fault.New("capture", "invalid_scheme", "capture requires an HTTP or HTTPS URL")
 	}
 	if u.User != nil || u.Hostname() == "" || strings.Contains(u.Hostname(), "%") {
-		return errors.New("invalid capture host or credentials")
+		return fault.New("capture", "invalid_host", "invalid capture host or credentials")
 	}
 	if ip, err := netip.ParseAddr(u.Hostname()); err == nil && !isPublic(ip) {
-		return errors.New("capture destination is not public")
+		return fault.New("capture", "destination_blocked", "capture destination is not public")
 	}
 	return nil
 }
 
 func checkRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) > 5 {
-		return errors.New("capture exceeded five redirects")
+		return fault.New("capture", "redirect_limit", "capture exceeded five redirects")
 	}
 	return validateURL(req.URL)
 }
@@ -101,13 +101,13 @@ func publicDial(lookup lookupFunc, dial dialFunc) dialFunc {
 			}
 		}
 		if len(ips) == 0 {
-			return nil, errors.New("capture host has no addresses")
+			return nil, fault.New("capture", "dns_empty", "capture host has no addresses")
 		}
 		// Reject the entire answer if any destination is unsafe. Dial the checked
 		// numeric address, never the hostname, to avoid DNS rebinding.
 		for _, ip := range ips {
 			if !isPublic(ip) {
-				return nil, errors.New("capture destination is not public")
+				return nil, fault.New("capture", "destination_blocked", "capture destination is not public")
 			}
 		}
 		for _, ip := range ips {
@@ -149,7 +149,9 @@ func isPublic(ip netip.Addr) bool {
 	return true
 }
 
-func fetch(ctx context.Context, rawURL string, client *http.Client) (Result, error) {
+func fetch(ctx context.Context, rawURL string, client *http.Client) (captured Result, fetchErr error) {
+	stage := "capture.validate"
+	defer func() { fetchErr = fault.Wrap(stage, fetchErr) }()
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return Result{}, err
@@ -164,6 +166,7 @@ func fetch(ctx context.Context, rawURL string, client *http.Client) (Result, err
 	req.Header.Set("User-Agent", "Pocketmark/1.0 (+personal bookmark capture)")
 	req.Header.Set("Accept", "text/html, application/xhtml+xml")
 	req.Header.Set("Accept-Encoding", "gzip")
+	stage = "capture.http"
 	resp, err := client.Do(req)
 	if err != nil {
 		return Result{}, err
@@ -173,12 +176,14 @@ func fetch(ctx context.Context, rawURL string, client *http.Client) (Result, err
 		return Result{}, &HTTPStatusError{StatusCode: resp.StatusCode}
 	}
 	if resp.ContentLength > maxBody {
-		return Result{}, errors.New("capture response exceeds 2 MiB")
+		return Result{}, fault.New("capture", "response_too_large", "capture response exceeds 2 MiB")
 	}
+	stage = "capture.read"
 	body, err := readBounded(resp.Body)
 	if err != nil {
 		return Result{}, err
 	}
+	stage = "capture.decode"
 	switch strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Encoding"))) {
 	case "", "identity":
 	case "gzip":
@@ -192,16 +197,18 @@ func fetch(ctx context.Context, rawURL string, client *http.Client) (Result, err
 			return Result{}, err
 		}
 	default:
-		return Result{}, errors.New("unsupported capture content encoding")
+		return Result{}, fault.New("capture", "unsupported_encoding", "unsupported capture content encoding")
 	}
+	stage = "capture.content_type"
 	contentType := resp.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = http.DetectContentType(body)
 	}
 	mediaType, _, err := mime.ParseMediaType(contentType)
 	if err != nil || (mediaType != "text/html" && mediaType != "application/xhtml+xml") {
-		return Result{}, errors.New("capture requires HTML content")
+		return Result{}, fault.New("capture", "unsupported_content", "capture requires HTML content")
 	}
+	stage = "capture.parse"
 	result, err := extract(body)
 	if err != nil {
 		return Result{}, err
@@ -217,7 +224,7 @@ func readBounded(reader io.Reader) ([]byte, error) {
 		return nil, err
 	}
 	if len(body) > maxBody {
-		return nil, errors.New("capture response exceeds 2 MiB")
+		return nil, fault.New("capture", "response_too_large", "capture response exceeds 2 MiB")
 	}
 	return body, nil
 }
@@ -271,7 +278,7 @@ func extractReader(src io.Reader, tokenLimit int) (Result, error) {
 			}
 			if skipped[name] && typeOf != html.SelfClosingTagToken {
 				if len(excluded) >= 256 {
-					return Result{}, errors.New("capture HTML nesting exceeds limit")
+					return Result{}, fault.New("capture", "nesting_limit", "capture HTML nesting exceeds limit")
 				}
 				excluded = append(excluded, name)
 			}

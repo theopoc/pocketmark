@@ -128,6 +128,9 @@ func (a *Server) setup(w http.ResponseWriter, r *http.Request) {
 	}
 	mfaState, err := a.Store.MFA(r.Context())
 	if err != nil {
+		if authFailure(w, "account_operation_failed", err) {
+			return
+		}
 		fail(w, 503, "authentication unavailable; sign in again")
 		return
 	}
@@ -160,6 +163,9 @@ func (a *Server) setAccount(w http.ResponseWriter, r *http.Request) {
 	value := "v3." + randomSecret()
 	expires, err := a.Store.SaveAccountFromSession(r.Context(), account, requestPrincipal(r).session, a.sessionHash(value), r.UserAgent())
 	if err != nil {
+		if authFailure(w, "account_operation_failed", err) {
+			return
+		}
 		fail(w, 401, "session changed; sign in again")
 		return
 	}

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"pocketmark/internal/observability"
 	"pocketmark/internal/store"
 	"strings"
 )
@@ -38,7 +39,7 @@ func davError(w http.ResponseWriter, e error) {
 	case errors.Is(e, sql.ErrNoRows):
 		fail(w, 404, "DAV resource not found")
 	default:
-		fail(w, 400, e.Error())
+		handleError(w, e)
 	}
 }
 func (a *Server) dav(w http.ResponseWriter, r *http.Request) {
@@ -156,8 +157,9 @@ func (a *Server) davLock(w http.ResponseWriter, r *http.Request, owner string) {
 		http.ServeContent(w, r, "bookmarks.xbel.lock", modified, strings.NewReader("Pocketmark synchronization lock\n"))
 	case "PUT":
 		r.Body = http.MaxBytesReader(w, r.Body, 4096)
-		if _, e := io.Copy(io.Discard, r.Body); e != nil {
-			fail(w, 413, "lock body too large")
+		if _, e := io.Copy(io.Discard, inputReader{r.Body}); e != nil {
+			observability.Error(r.Context(), "dav_lock_read_failed", e)
+			fail(w, observability.HTTPStatus(e), "lock body could not be read")
 			return
 		}
 		modified, e := a.Store.DAVLock(r.Context(), owner, true)
@@ -224,8 +226,9 @@ func (a *Server) davWrite(w http.ResponseWriter, r *http.Request, owner string) 
 		tempETag = meta.ETag
 	} else {
 		r.Body = http.MaxBytesReader(w, r.Body, store.MaxDAVSize)
-		if _, e = io.Copy(f, r.Body); e != nil {
-			fail(w, 413, "XBEL exceeds 8 MiB or upload interrupted")
+		if _, e = io.Copy(f, inputReader{r.Body}); e != nil {
+			observability.Error(r.Context(), "dav_upload_failed", e)
+			fail(w, observability.HTTPStatus(e), "XBEL upload failed; check size and retry")
 			return
 		}
 	}

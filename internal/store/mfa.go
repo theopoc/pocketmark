@@ -72,7 +72,10 @@ func consumeFactorTx(ctx context.Context, tx *sql.Tx, salt string, generation, c
 		return err
 	}
 	n, err := result.RowsAffected()
-	if err != nil || n != 1 {
+	if err != nil {
+		return err
+	}
+	if n != 1 {
 		return ErrMFAChanged
 	}
 	return nil
@@ -104,6 +107,9 @@ func (s *Store) AuthorizeMFAChange(ctx context.Context, salt string, generation,
 	defer tx.Rollback()
 	var one int
 	if err = tx.QueryRowContext(ctx, "SELECT 1 FROM sessions WHERE hash=? AND "+liveSession, sessionHash).Scan(&one); err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
 		return ErrMFAChanged
 	}
 	if counter < 0 && recoveryHash == "" {
@@ -111,6 +117,9 @@ func (s *Store) AuthorizeMFAChange(ctx context.Context, salt string, generation,
  AND EXISTS(SELECT 1 FROM account WHERE id=1 AND salt=?)
 		 AND EXISTS(SELECT 1 FROM mfa WHERE id=1 AND generation=? AND length(secret)>0)`, sessionHash, salt, generation).Scan(&one)
 		if err != nil {
+			if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
 			return ErrMFAChanged
 		}
 	} else if err = consumeFactorTx(ctx, tx, salt, generation, counter, recoveryHash); err != nil {
@@ -152,6 +161,9 @@ func (s *Store) ActivateMFA(ctx context.Context, salt string, generation, counte
 	if keepSession != "" {
 		var one int
 		if err = tx.QueryRowContext(ctx, "SELECT 1 FROM sessions WHERE hash=? AND "+liveSession, keepSession).Scan(&one); err != nil {
+			if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
 			return ErrMFAChanged
 		}
 	}
@@ -161,7 +173,10 @@ func (s *Store) ActivateMFA(ctx context.Context, salt string, generation, counte
 			return e
 		}
 		n, e := r.RowsAffected()
-		if e != nil || n != 1 {
+		if e != nil {
+			return e
+		}
+		if n != 1 {
 			return ErrMFAChanged
 		}
 	}
@@ -199,6 +214,9 @@ func (s *Store) ReplaceRecoveryCodes(ctx context.Context, salt string, generatio
 	if err = tx.QueryRowContext(ctx, `SELECT 1 FROM sessions WHERE hash=? AND `+liveSession+`
  AND EXISTS(SELECT 1 FROM account WHERE id=1 AND salt=?)
  AND EXISTS(SELECT 1 FROM mfa WHERE id=1 AND generation=? AND length(secret)>0)`, sessionHash, salt, generation).Scan(&one); err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
 		return ErrMFAChanged
 	}
 	if err = insertRecoveryCodes(ctx, tx, hashes); err != nil {

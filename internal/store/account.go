@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"time"
 )
@@ -81,6 +82,9 @@ func (s *Store) SaveAccountFromSession(ctx context.Context, a Account, oldHash, 
 	var recoveryUntil int64
 	var idleMinutes int
 	if err = tx.QueryRowContext(ctx, "SELECT expires_at,idle_minutes,recovery_until FROM sessions WHERE hash=? AND "+liveSession+" AND EXISTS(SELECT 1 FROM mfa WHERE id=1 AND length(secret)>0)", oldHash).Scan(&expiry, &idleMinutes, &recoveryUntil); err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return time.Time{}, err
+		}
 		return time.Time{}, ErrMFAChanged
 	}
 	if _, err = tx.ExecContext(ctx, "UPDATE account SET username=?,salt=?,hash=? WHERE id=1", a.Username, a.Salt, a.Hash); err != nil {

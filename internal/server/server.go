@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"pocketmark/internal/fault"
 	"pocketmark/internal/observability"
 	"pocketmark/internal/store"
 	"pocketmark/internal/webui"
@@ -67,6 +68,7 @@ func New(s *store.Store, token, origin string, secure bool, observers ...*observ
 	a.mux.HandleFunc("POST /api/logout", func(w http.ResponseWriter, r *http.Request) {
 		if cookie, err := r.Cookie("pocketmark"); err == nil {
 			if err = a.Store.RevokeSession(r.Context(), a.sessionHash(cookie.Value)); err != nil {
+				observability.Error(r.Context(), "session_revoke_failed", fault.Wrap("session.revoke", err))
 				fail(w, 503, "session could not be revoked; retry signing out")
 				return
 			}
@@ -95,6 +97,7 @@ func New(s *store.Store, token, origin string, secure bool, observers ...*observ
 		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 		defer cancel()
 		if e := s.Ping(ctx); e != nil {
+			observability.Error(r.Context(), "health_check_failed", fault.Wrap("database.ping", e))
 			fail(w, 503, "database unavailable")
 			return
 		}
@@ -129,11 +132,11 @@ func (a *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Vary", "Origin")
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Expose-Headers", "Retry-After")
+		w.Header().Set("Access-Control-Expose-Headers", "Retry-After, X-Request-ID")
 		if isDAV {
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Depth, Destination, Overwrite, If-Match, If-None-Match")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, PUT, DELETE, OPTIONS, PROPFIND, MOVE, MKCOL")
-			w.Header().Set("Access-Control-Expose-Headers", "ETag, Last-Modified, Content-Length, Retry-After")
+			w.Header().Set("Access-Control-Expose-Headers", "ETag, Last-Modified, Content-Length, Retry-After, X-Request-ID")
 		}
 	}
 	if !a.admitRequest(w, r) {
@@ -229,6 +232,9 @@ func (a *Server) login(w http.ResponseWriter, r *http.Request) {
 	}
 	defer a.passwordMu.Unlock()
 	account, err := a.Store.Account(r.Context())
+	if authFailure(w, "login_account_failed", err) {
+		return
+	}
 	if err != nil || account.Hash == "" {
 		fail(w, 401, "invalid credentials")
 		return
@@ -240,7 +246,7 @@ func (a *Server) login(w http.ResponseWriter, r *http.Request) {
 	}
 	state, err := a.Store.MFA(r.Context())
 	if err != nil {
-		fail(w, 503, "authentication unavailable; try again")
+		authFailure(w, "login_mfa_failed", err)
 		return
 	}
 	kind := "verify"
@@ -282,13 +288,38 @@ func fail(w http.ResponseWriter, status int, message string) {
 	respond(w, status, map[string]string{"error": message})
 }
 func handleError(w http.ResponseWriter, e error) {
-	if errors.Is(e, sql.ErrNoRows) {
-		fail(w, 404, "not found or currently processing")
+	status := observability.HTTPStatus(e)
+	// Native import/upload size errors historically use 400.
+	if status == 413 {
+		status = 400
+	}
+	if status == 404 {
+		fail(w, status, "not found or currently processing")
 		return
 	}
 	observability.Error(observability.ResponseContext(w), "request_failed", e)
-	fail(w, 400, "request could not be saved; check field limits, collection, or duplicate URL")
+	message := "request could not be saved; check field limits, collection, or duplicate URL"
+	var input *fault.Error
+	if errors.As(e, &input) && (input.Kind == "validation" || input.Kind == "capture") {
+		message = input.Error()
+	}
+	if status >= 500 {
+		message = "server could not complete the request; try again later"
+	}
+	fail(w, status, message)
 }
+
+// Authentication keeps expected credential/proof failures private, while
+// distinguishing unavailable storage from invalid credentials.
+func authFailure(w http.ResponseWriter, event string, err error) bool {
+	if err == nil || errors.Is(err, sql.ErrNoRows) || errors.Is(err, store.ErrMFAChanged) {
+		return false
+	}
+	observability.Error(observability.ResponseContext(w), event, err)
+	fail(w, 503, "authentication unavailable; try again")
+	return true
+}
+
 func id(r *http.Request) int64 { v, _ := strconv.ParseInt(r.PathValue("id"), 10, 64); return v }
 func (a *Server) collections(w http.ResponseWriter, r *http.Request) {
 	v, e := a.Store.Collections(r.Context())
@@ -368,6 +399,9 @@ func (a *Server) createLink(w http.ResponseWriter, r *http.Request) {
 		handleError(w, e)
 		return
 	}
+	if link.Status == "pending" {
+		observability.Logger(r.Context()).InfoContext(r.Context(), "capture_queued", "link_id", v, "operation", "link.create")
+	}
 	respond(w, 201, link)
 }
 func (a *Server) getLink(w http.ResponseWriter, r *http.Request) {
@@ -387,6 +421,7 @@ func (a *Server) updateLink(w http.ResponseWriter, r *http.Request) {
 		handleError(w, e)
 		return
 	}
+	observability.Logger(r.Context()).InfoContext(r.Context(), "link_updated", "link_id", id(r))
 	a.getLink(w, r)
 }
 func (a *Server) deleteLink(w http.ResponseWriter, r *http.Request) {
@@ -401,6 +436,7 @@ func (a *Server) captureLink(w http.ResponseWriter, r *http.Request) {
 		handleError(w, e)
 		return
 	}
+	observability.Logger(r.Context()).InfoContext(r.Context(), "capture_queued", "link_id", id(r), "operation", "capture.queue")
 	respond(w, 202, map[string]bool{"ok": true})
 }
 func (a *Server) stats(w http.ResponseWriter, r *http.Request) {
@@ -428,7 +464,9 @@ func (a *Server) archive(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", `attachment; filename="page.html"`)
-	w.Write(raw)
+	if _, e := w.Write(raw); e != nil {
+		observability.Error(r.Context(), "archive_write_failed", e)
+	}
 }
 func (a *Server) importData(w http.ResponseWriter, r *http.Request) {
 	select {
@@ -439,9 +477,9 @@ func (a *Server) importData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 8*1024*1024)
-	v, e := a.Store.Import(r.Context(), r.Body)
+	v, e := a.Store.Import(r.Context(), inputReader{r.Body})
 	if e != nil {
-		fail(w, 400, e.Error())
+		handleError(w, e)
 		return
 	}
 	respond(w, 200, v)

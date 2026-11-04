@@ -3,7 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
-	"fmt"
+	"pocketmark/internal/fault"
 )
 
 // Open owns the entire schema lifecycle. Commit eligibility and feature schemas
@@ -50,7 +50,7 @@ UPDATE links SET status='pending' WHERE status='processing';
 PRAGMA user_version=1;
 `)
 	if err != nil {
-		return fmt.Errorf("initialize SQLite (build with -tags sqlite_fts5): %w", err)
+		return fault.Wrap("schema.sqlite", err)
 	}
 	// Check legacy eligibility before creating account or token tables.
 	if _, err = tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS account_setup(id INTEGER PRIMARY KEY CHECK(id=1), allowed INTEGER NOT NULL);
@@ -61,25 +61,25 @@ PRAGMA user_version=1;
  CREATE TABLE IF NOT EXISTS account(id INTEGER PRIMARY KEY CHECK(id=1),username TEXT NOT NULL,salt TEXT NOT NULL,hash TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS sessions(id INTEGER PRIMARY KEY AUTOINCREMENT,hash TEXT NOT NULL UNIQUE,expires_at INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS api_tokens(id INTEGER PRIMARY KEY,name TEXT NOT NULL,hash TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL);`); err != nil {
-		return fmt.Errorf("initialize account schema: %w", err)
+		return fault.Wrap("schema.account", err)
 	}
 	if err = initLibraryTimestamps(ctx, tx); err != nil {
 		return err
 	}
 	if err = initAPIKeyActivity(ctx, tx); err != nil {
-		return fmt.Errorf("initialize API key activity: %w", err)
+		return fault.Wrap("schema.api_keys", err)
 	}
 	if err = initSessionSecurity(ctx, tx); err != nil {
-		return fmt.Errorf("initialize session security: %w", err)
+		return fault.Wrap("schema.sessions", err)
 	}
 	if err = initMFA(ctx, tx); err != nil {
-		return fmt.Errorf("initialize multifactor authentication: %w", err)
+		return fault.Wrap("schema.mfa", err)
 	}
 	if err = initAssets(ctx, tx); err != nil {
-		return fmt.Errorf("initialize attachments: %w", err)
+		return fault.Wrap("schema.attachments", err)
 	}
 	if err = initDAV(ctx, tx); err != nil {
-		return fmt.Errorf("initialize WebDAV: %w", err)
+		return fault.Wrap("schema.webdav", err)
 	}
 	return tx.Commit()
 }
@@ -181,7 +181,7 @@ CREATE TRIGGER IF NOT EXISTS link_tags_updated AFTER UPDATE OF tags ON links BEG
  INSERT OR IGNORE INTO compat_tags(name) SELECT value FROM json_each(new.tags);
 END;`)
 	if err != nil {
-		return fmt.Errorf("initialize library creation timestamps: %w", err)
+		return fault.Wrap("schema.timestamps", err)
 	}
 	return nil
 }

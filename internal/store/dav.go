@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"pocketmark/internal/fault"
 	"time"
 )
 
@@ -71,7 +72,7 @@ func saveDAVFile(ctx context.Context, tx *sql.Tx, name, owner string, rev int64,
 		if n > 0 {
 			f.Size += int64(n)
 			if f.Size > MaxDAVSize {
-				return f, errors.New("XBEL exceeds 8 MiB")
+				return f, fault.Invalid("XBEL exceeds 8 MiB")
 			}
 			h.Write(buf[:n])
 			if _, e := tx.ExecContext(ctx, "INSERT INTO dav_chunks VALUES(?,?,?)", name, i, buf[:n]); e != nil {
@@ -127,7 +128,7 @@ type davCountingWriter struct {
 
 func (w *davCountingWriter) Write(p []byte) (int, error) {
 	if w.n+int64(len(p)) > MaxDAVSize {
-		return 0, errors.New("XBEL exceeds 8 MiB")
+		return 0, fault.Invalid("XBEL exceeds 8 MiB")
 	}
 	n, e := w.w.Write(p)
 	w.n += int64(n)

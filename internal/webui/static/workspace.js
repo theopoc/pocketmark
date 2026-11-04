@@ -128,7 +128,8 @@
     else if (tags.some((tag) => bytes(tag) > 80)) issues.tags = "Shorten each tag to 80 bytes or less. Accented characters and emoji can use several bytes.";
     return issues;
   }
-  function requestFailure(status, message = "") {
+  function requestFailure(status, message = "", code = "") {
+    if (status === 503 && code === "mfa_recovery_required") return "Authentication is unavailable. Use a recovery code, or ask the server administrator to reset MFA.";
     if (!status) return "Could not reach Pocketmark. Check your connection and that the server is running, then try again. Unsaved changes stay in this tab.";
     if (status === 401) return "Your sign-in has expired. Sign in again to continue. Your drafts are kept in this tab.";
     if (status === 404) return "This item is no longer available. Refresh the library before trying again.";

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"pocketmark/internal/fault"
 	"strings"
 	"time"
 
@@ -63,23 +64,26 @@ func (s *Store) Import(ctx context.Context, r io.Reader) (ImportResult, error) {
 	var data importData
 	d := json.NewDecoder(f)
 	if e := d.Decode(&data); e != nil {
+		if e == io.EOF || e == io.ErrUnexpectedEOF {
+			return result, fault.Invalid("incomplete JSON document")
+		}
 		return result, e
 	}
 	if data.Format != "" && (data.Format != "pocketmark" || data.Version != 1) {
-		return result, errors.New("unsupported export format or version")
+		return result, fault.Invalid("unsupported export format or version")
 	}
 	if data.Collections == nil && data.Links == nil {
-		return result, errors.New("expected a Pocketmark or compatible JSON export with collections or links")
+		return result, fault.Invalid("expected a Pocketmark or compatible JSON export with collections or links")
 	}
 	if len(data.Collections) > 2000 {
-		return result, errors.New("import supports at most 2000 collections")
+		return result, fault.Invalid("import supports at most 2000 collections")
 	}
 	n := len(data.Links)
 	for _, c := range data.Collections {
 		n += len(c.Links)
 	}
 	if n > 10000 {
-		return result, errors.New("import supports at most 10000 links per file")
+		return result, fault.Invalid("import supports at most 10000 links per file")
 	}
 	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
@@ -90,7 +94,7 @@ func (s *Store) Import(ctx context.Context, r io.Reader) (ImportResult, error) {
 	byID := map[int64]importCollection{}
 	for _, c := range data.Collections {
 		if _, ok := byID[c.ID]; ok {
-			return result, fmt.Errorf("duplicate collection id %d", c.ID)
+			return result, fault.Invalid(fmt.Sprintf("duplicate collection id %d", c.ID))
 		}
 		byID[c.ID] = c
 	}
@@ -101,11 +105,11 @@ func (s *Store) Import(ctx context.Context, r io.Reader) (ImportResult, error) {
 			return id, nil
 		}
 		if visiting[old] {
-			return 0, errors.New("cyclic collection hierarchy")
+			return 0, fault.Invalid("cyclic collection hierarchy")
 		}
 		c, ok := byID[old]
 		if !ok {
-			return 0, fmt.Errorf("missing parent collection %d", old)
+			return 0, fault.Invalid(fmt.Sprintf("missing parent collection %d", old))
 		}
 		visiting[old] = true
 		var parent *int64
@@ -149,7 +153,7 @@ func (s *Store) Import(ctx context.Context, r io.Reader) (ImportResult, error) {
 					Name string `json:"name"`
 				}
 				if e = json.Unmarshal(raw, &obj); e != nil {
-					return errors.New("invalid tag")
+					return fault.Invalid("invalid tag")
 				}
 				tag = obj.Name
 			}
@@ -199,7 +203,7 @@ func (s *Store) Import(ctx context.Context, r io.Reader) (ImportResult, error) {
 		if l.CollectionID != nil {
 			v, ok := ids[*l.CollectionID]
 			if !ok {
-				return ImportResult{}, errors.New("bookmark references a missing collection")
+				return ImportResult{}, fault.Invalid("bookmark references a missing collection")
 			}
 			id = &v
 		}
@@ -291,7 +295,7 @@ func importTime(raw string) (string, error) {
 	}
 	t, e := time.Parse(time.RFC3339Nano, raw)
 	if e != nil {
-		return "", errors.New("invalid imported timestamp")
+		return "", fault.Invalid("invalid imported timestamp")
 	}
 	return t.UTC().Format(time.RFC3339Nano), nil
 }
@@ -301,10 +305,10 @@ func findOrAddCollection(ctx context.Context, tx *sql.Tx, name string, parent *i
 func findOrAddDescribedCollection(ctx context.Context, tx *sql.Tx, name string, parent *int64, description *string) (int64, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || len(name) > 120 {
-		return 0, errors.New("invalid collection name")
+		return 0, fault.Invalid("invalid collection name")
 	}
 	if description != nil && len(*description) > 8192 {
-		return 0, errors.New("collection description exceeds 8 KiB")
+		return 0, fault.Invalid("collection description exceeds 8 KiB")
 	}
 	var id int64
 	e := tx.QueryRowContext(ctx, "SELECT id FROM collections WHERE name=? AND parent_id IS ? ORDER BY id LIMIT 1", name, parent).Scan(&id)

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"pocketmark/internal/fault"
 	"strconv"
 	"strings"
 	"time"
@@ -36,7 +37,7 @@ func readXBEL(r io.Reader) (*xbelNode, error) {
 		tok, e := d.Token()
 		if e == io.EOF {
 			if !opened || !closed || len(stack) != 1 {
-				return nil, errors.New("incomplete XBEL")
+				return nil, fault.Invalid("incomplete XBEL")
 			}
 			return root, nil
 		}
@@ -51,7 +52,7 @@ func readXBEL(r io.Reader) (*xbelNode, error) {
 				if end := strings.IndexByte(tail, ':'); end >= 0 {
 					value, e := strconv.ParseInt(strings.TrimSpace(tail[:end]), 10, 64)
 					if e != nil || value < 0 || value > 9007199254740991 {
-						return nil, errors.New("invalid XBEL highestId")
+						return nil, fault.Invalid("invalid XBEL highestId")
 					}
 					if value > root.HighestID {
 						root.HighestID = value
@@ -60,11 +61,11 @@ func readXBEL(r io.Reader) (*xbelNode, error) {
 			}
 		case xml.StartElement:
 			if closed {
-				return nil, errors.New("multiple XML documents")
+				return nil, fault.Invalid("multiple XML documents")
 			}
 			if !opened {
 				if t.Name.Local != "xbel" {
-					return nil, errors.New("expected xbel root")
+					return nil, fault.Invalid("expected xbel root")
 				}
 				opened = true
 				continue
@@ -72,11 +73,11 @@ func readXBEL(r io.Reader) (*xbelNode, error) {
 			switch t.Name.Local {
 			case "folder", "bookmark":
 				if stack[len(stack)-1].Kind == "bookmark" || len(stack) > 64 {
-					return nil, errors.New("invalid or deeply nested XBEL")
+					return nil, fault.Invalid("invalid or deeply nested XBEL")
 				}
 				count++
 				if count > 12000 {
-					return nil, errors.New("XBEL has too many entries")
+					return nil, fault.Invalid("XBEL has too many entries")
 				}
 				n := &xbelNode{Kind: t.Name.Local}
 				for _, a := range t.Attr {
@@ -89,13 +90,13 @@ func readXBEL(r io.Reader) (*xbelNode, error) {
 				}
 				if n.ID != "" {
 					if len(n.ID) > 128 || ids[n.ID] {
-						return nil, errors.New("invalid or duplicate XBEL ID")
+						return nil, fault.Invalid("invalid or duplicate XBEL ID")
 					}
 					ids[n.ID] = true
 					if n.ID[0] >= '0' && n.ID[0] <= '9' {
 						parsed, e := strconv.ParseInt(n.ID, 10, 64)
 						if e != nil || parsed <= 0 || parsed > 9007199254740991 || strconv.FormatInt(parsed, 10) != n.ID {
-							return nil, errors.New("invalid numeric XBEL ID")
+							return nil, fault.Invalid("invalid numeric XBEL ID")
 						}
 					}
 					if strings.HasPrefix(n.ID, "b-") || strings.HasPrefix(n.ID, "c-") {
@@ -105,7 +106,7 @@ func readXBEL(r io.Reader) (*xbelNode, error) {
 						}
 						parsed, e := strconv.ParseInt(strings.TrimPrefix(n.ID, prefix), 10, 64)
 						if e != nil || parsed <= 0 || n.ID != prefix+strconv.FormatInt(parsed, 10) {
-							return nil, errors.New("invalid Pocketmark XBEL ID")
+							return nil, fault.Invalid("invalid Pocketmark XBEL ID")
 						}
 					}
 				}
@@ -118,7 +119,7 @@ func readXBEL(r io.Reader) (*xbelNode, error) {
 					return nil, e
 				}
 				if len(value) > 8192 {
-					return nil, errors.New("XBEL text too long")
+					return nil, fault.Invalid("XBEL text too long")
 				}
 				n := stack[len(stack)-1]
 				if t.Name.Local == "title" {
@@ -137,7 +138,7 @@ func readXBEL(r io.Reader) (*xbelNode, error) {
 				closed = true
 			} else if t.Name.Local == "folder" || t.Name.Local == "bookmark" {
 				if len(stack) < 2 {
-					return nil, errors.New("invalid XBEL structure")
+					return nil, fault.Invalid("invalid XBEL structure")
 				}
 				stack = stack[:len(stack)-1]
 			}
@@ -173,7 +174,7 @@ func exportXBEL(ctx context.Context, tx *sql.Tx, w io.Writer) error {
 	var emit func(*int64, int) error
 	emit = func(parent *int64, depth int) error {
 		if depth > 64 {
-			return errors.New("collection hierarchy too deep for XBEL")
+			return fault.New("export", "representation_limit", "collection hierarchy too deep for XBEL")
 		}
 		type entry struct {
 			id, local int64
@@ -195,7 +196,7 @@ UNION ALL SELECT d.id,d.local_id,d.kind,d.position FROM dav_ids d JOIN links l O
 			entries = append(entries, item)
 			if len(entries) > 12000 {
 				rows.Close()
-				return errors.New("XBEL entry limit")
+				return fault.New("export", "representation_limit", "XBEL entry limit")
 			}
 		}
 		e = rows.Err()
@@ -209,13 +210,13 @@ UNION ALL SELECT d.id,d.local_id,d.kind,d.position FROM dav_ids d JOIN links l O
 			if item.kind == "folder" {
 				folders++
 				if folders > 2000 {
-					return errors.New("XBEL supports at most 2000 collections")
+					return fault.New("export", "representation_limit", "XBEL supports at most 2000 collections")
 				}
 				e = tx.QueryRowContext(ctx, "SELECT name FROM collections WHERE id=?", item.local).Scan(&title)
 			} else {
 				count++
 				if count > 10000 {
-					return errors.New("XBEL supports at most 10000 links")
+					return fault.New("export", "representation_limit", "XBEL supports at most 10000 links")
 				}
 				e = tx.QueryRowContext(ctx, "SELECT title,description,url FROM links WHERE id=?", item.local).Scan(&title, &desc, &rawURL)
 				tag.Attr = append(tag.Attr, xml.Attr{Name: xml.Name{Local: "href"}, Value: rawURL})
@@ -313,18 +314,23 @@ func replaceXBELTree(ctx context.Context, tx *sql.Tx, root *xbelNode) error {
 				folders++
 				name := strings.TrimSpace(child.Title)
 				if folders > 2000 || name == "" || len(name) > 120 {
-					return errors.New("invalid folder or collection limit")
+					return fault.Invalid("invalid folder or collection limit")
 				}
 				var cid int64
 				// Our stable IDs survive renames/moves. Foreign clients get path-based matching.
 				own, _ := strconv.ParseInt(strings.TrimPrefix(child.ID, "c-"), 10, 64)
 				if strings.HasPrefix(child.ID, "c-") && own > 0 {
 					if e := tx.QueryRowContext(ctx, "SELECT id FROM collections WHERE id=? AND id NOT IN(SELECT id FROM sync_collections)", own).Scan(&cid); e != nil {
-						return errors.New("unknown or repeated collection ID; download and merge first")
+						if !errors.Is(e, sql.ErrNoRows) {
+							return e
+						}
+						return fault.Invalid("unknown or repeated collection ID; download and merge first")
 					}
 				}
 				if cid == 0 {
-					_ = tx.QueryRowContext(ctx, "SELECT id FROM collections WHERE name=? AND parent_id IS ? AND id NOT IN(SELECT id FROM sync_collections) ORDER BY id LIMIT 1", name, parent).Scan(&cid)
+					if err := tx.QueryRowContext(ctx, "SELECT id FROM collections WHERE name=? AND parent_id IS ? AND id NOT IN(SELECT id FROM sync_collections) ORDER BY id LIMIT 1", name, parent).Scan(&cid); err != nil && !errors.Is(err, sql.ErrNoRows) {
+						return err
+					}
 				}
 				if cid == 0 {
 					res, e := tx.ExecContext(ctx, "INSERT INTO collections(name,parent_id) VALUES(?,?)", name, parent)
@@ -353,16 +359,16 @@ func replaceXBELTree(ctx context.Context, tx *sql.Tx, root *xbelNode) error {
 				links++
 				l := Link{URL: child.URL, Title: child.Title, Description: child.Description, CollectionID: parent}
 				if links > 10000 {
-					return errors.New("XBEL supports at most 10000 links")
+					return fault.Invalid("XBEL supports at most 10000 links")
 				}
 				if e := Normalize(&l); e != nil {
 					return e
 				}
 				if !strings.HasPrefix(l.URL, "http://") && !strings.HasPrefix(l.URL, "https://") {
-					return errors.New("XBEL bookmarks require an HTTP or HTTPS URL")
+					return fault.Invalid("XBEL bookmarks require an HTTP or HTTPS URL")
 				}
 				if seen[l.URL] {
-					return errors.New("duplicate URLs cannot be represented in this library")
+					return fault.Invalid("duplicate URLs cannot be represented in this library")
 				}
 				seen[l.URL] = true
 				var lid int64
@@ -370,11 +376,14 @@ func replaceXBELTree(ctx context.Context, tx *sql.Tx, root *xbelNode) error {
 				if strings.HasPrefix(child.ID, "b-") {
 					own, _ := strconv.ParseInt(strings.TrimPrefix(child.ID, "b-"), 10, 64)
 					if e = tx.QueryRowContext(ctx, "SELECT id FROM links WHERE id=? AND id NOT IN(SELECT id FROM sync_links) AND (url LIKE 'http://%' OR url LIKE 'https://%')", own).Scan(&lid); e != nil {
-						return errors.New("unknown or repeated bookmark ID; download and merge first")
+						if !errors.Is(e, sql.ErrNoRows) {
+							return e
+						}
+						return fault.Invalid("unknown or repeated bookmark ID; download and merge first")
 					}
 					var conflict int64
 					if e = tx.QueryRowContext(ctx, "SELECT id FROM links WHERE url=? AND id<>?", l.URL, lid).Scan(&conflict); e == nil {
-						return errors.New("bookmark ID and URL refer to different records")
+						return fault.Invalid("bookmark ID and URL refer to different records")
 					}
 					if e != sql.ErrNoRows {
 						return e
@@ -437,7 +446,7 @@ func resolveDAVNodeID(ctx context.Context, tx *sql.Tx, n *xbelNode) (int64, erro
 		return 0, e
 	}
 	if kind != n.Kind {
-		return 0, errors.New("XBEL ID changes its node type")
+		return 0, fault.Invalid("XBEL ID changes its node type")
 	}
 	prefix := "b-"
 	if kind == "folder" {
@@ -451,7 +460,7 @@ func mapDAVNode(ctx context.Context, tx *sql.Tx, kind string, local, requested i
 	e := tx.QueryRowContext(ctx, "SELECT id FROM dav_ids WHERE kind=? AND local_id=?", kind, local).Scan(&existing)
 	if e == nil {
 		if requested > 0 && requested != existing {
-			return errors.New("XBEL ID conflicts with an existing record")
+			return fault.Invalid("XBEL ID conflicts with an existing record")
 		}
 		_, e = tx.ExecContext(ctx, "UPDATE dav_ids SET position=? WHERE id=?", position, existing)
 		return e

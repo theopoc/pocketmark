@@ -45,6 +45,7 @@ type measurements struct {
 	overflow     histogram
 	captures     [4]histogram
 	inflight     atomic.Int64
+	httpErrors   atomic.Uint64
 	queueErrors  atomic.Uint64
 	exportErrors atomic.Uint64
 }
@@ -111,6 +112,8 @@ func (o *Observer) Metrics(w http.ResponseWriter, _ *http.Request) {
 		writeHistogram(w, "pocketmark_capture_duration_seconds", fmt.Sprintf("outcome=%q,", outcome), captures[i])
 	}
 	fmt.Fprintf(w, "# TYPE pocketmark_http_in_flight gauge\npocketmark_http_in_flight %d\n# TYPE pocketmark_capture_queue_errors_total counter\npocketmark_capture_queue_errors_total %d\n# TYPE pocketmark_trace_export_errors_total counter\npocketmark_trace_export_errors_total %d\n", m.inflight.Load(), m.queueErrors.Load(), m.exportErrors.Load())
+	fmt.Fprintf(w, "# TYPE pocketmark_http_failures_total counter\npocketmark_http_failures_total %d\n", m.httpErrors.Load())
+
 	samples := []metrics.Sample{{Name: "/memory/classes/total:bytes"}, {Name: "/memory/classes/heap/released:bytes"}, {Name: "/gc/heap/live:bytes"}, {Name: "/sched/goroutines:goroutines"}}
 	metrics.Read(samples)
 	fmt.Fprintf(w, "# HELP pocketmark_go_managed_memory_bytes Go runtime memory excluding released heap; not RSS or SQLite memory.\n# TYPE pocketmark_go_managed_memory_bytes gauge\npocketmark_go_managed_memory_bytes %d\n# TYPE pocketmark_go_heap_live_bytes gauge\npocketmark_go_heap_live_bytes %d\n# TYPE pocketmark_go_goroutines gauge\npocketmark_go_goroutines %d\n", samples[0].Value.Uint64()-samples[1].Value.Uint64(), samples[2].Value.Uint64(), samples[3].Value.Uint64())

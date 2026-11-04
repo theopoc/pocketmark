@@ -18,12 +18,23 @@ HTTP events include a newly generated `request_id` (also returned as
 `duration_ms` and `bytes_written`. They cover authentication, origin and capacity
 rejections as well as handlers. Successful health probes and metric scrapes log
 only at `DEBUG`; failures still log at `WARN`/`ERROR`. HTTP 4xx uses `WARN`, 5xx
-uses `ERROR`, and other requests use `INFO`. Internal handler failures can also
-emit a separate error event, including when the existing API contract returns 400.
+uses `ERROR`, and other requests use `INFO`. Handled failures emit a separate, correlated diagnostic event. Validation and
+constraint failures remain 4xx/WARN; unexpected internal failures return 500,
+SQLite busy/locked returns 503, and upstream failures/timeouts return 502/504.
+Unavailable authentication storage returns 503, not an invalid-credential 401.
+Canceled requests use INFO diagnostics; their access record retains its HTTP status.
+A completed HTTP response can still have `outcome:"failed"` when a stream fails
+later. This increments `pocketmark_http_failures_total` and marks the span as an
+error even if response headers already committed a 2xx status.
 
-Automatic captures log their numeric `link_id`, duration and outcome: `ready`,
+Automatic captures log their numeric `link_id`, random per-attempt `capture_id`, duration and outcome: `ready`,
 `failed`, `save_failed`, or `canceled`. A failed fetch is logged even when SQLite
 successfully saves the failure. Capture details remain available in the library.
+`fetch_error` and `save_error` retain separate diagnostics when both phases fail;
+`canceled` does not overwrite them. Persistence failures use ERROR; ordinary fetch
+failures use WARN. `capture_queued` correlates direct create/retry requests with
+`link_id` and `request_id`; `link_updated` identifies edits that can requeue a URL.
+Bulk imports remain aggregate requests, not a per-link provenance journal.
 Rejected HTTP responses include `error_kind:"http"`, numeric `http_status` and
 `http_status_text` from Go's standard status table (for example, `403` and
 `Forbidden`). These fields survive error wrapping and never copy response text.
@@ -33,11 +44,41 @@ with the extension instead of retrying the automatic server capture.
 
 Logs, metrics and spans exclude raw paths, query strings, bookmark URLs, headers,
 cookies, passwords, request/response bodies, capture content and panic values.
-Errors expose a bounded category/type, HTTP status or SQLite numeric codes,
-rather than raw messages that could contain private URLs or collector response bodies. The
-low-level HTTP server error event is similarly sanitized. No application log file
+Errors expose `error_kind`, stable `error_code`, the underlying `error_type`,
+known `operation` when available, and numeric HTTP/SQLite/system codes. Codes
+separate blocked destinations, size/content/redirect limits, DNS failures,
+timeouts, permission errors and unexpected faults. They never copy raw messages.
+Unexpected errors include up to four code-location frames in `source`. Panics
+include up to 16 frames in `stack`: function names, basename and line only, without
+arguments, panic values, source text or absolute filesystem paths. The low-level
+HTTP server event classifies known protocol/TLS/panic prefixes without copying
+connection text. `process_failed` identifies the startup phase; configuration
+errors use safe codes. `server_shutdown_failed` records a failed drain, and
+`server_stopped.forced` distinguishes forced closure from a graceful stop.
+No application log file
 or in-memory log queue is maintained; container/runtime log rotation and retention
 belong to the deployment.
+
+## Investigating an incident
+
+1. Find `request_id` from the response's `X-Request-ID` header, then collect all
+   records with that ID. The extension CORS policy exposes this header too.
+2. Read the diagnostic event's `error_code`, `operation`, native codes and `source`;
+   use `http_request` for route, status, duration and final outcome. A 401/403 is
+   an expected authentication/policy refusal; authentication storage outages are 503.
+3. For background capture, join `capture_queued`/`link_updated` to
+   `capture_finished` by `link_id`, then distinguish attempts by `capture_id`.
+   Inspect both `fetch_error` and `save_error`; a save failure may leave no durable
+   failure detail in SQLite. Capture traces remain independent roots.
+4. Correlate `trace_id` when tracing is enabled, but keep logs as the diagnostic
+   source when spans are unsampled or lost. Alert on the failure counter's rate,
+   capture `save_failed` outcomes and queue errors; inspect latency alongside them.
+
+Store/domain code returns typed failures and does not log. The request, worker or
+process boundary logs the handled failure once; an HTTP completion event adds
+outcome context rather than another copy of the cause. Codes/operation names are
+owned by application code, never derived from bookmark input. Increasing verbosity
+must not enable raw secrets, bodies, URLs or SQL in logs.
 
 ## Prometheus metrics
 
@@ -66,6 +107,7 @@ scrape_configs:
 | Metric | Meaning |
 | --- | --- |
 | `pocketmark_http_request_duration_seconds` | Histogram by `method`, `route`, exact `status`; `_count` is the request counter and `_sum` the total duration. |
+| `pocketmark_http_failures_total` | HTTP 5xx, panics and logged operational stream failures, counted once per request even after a committed 2xx. |
 | `pocketmark_http_in_flight` | Requests currently being handled, including the scrape itself. |
 | `pocketmark_capture_duration_seconds` | Histogram/counter by capture `outcome`. |
 | `pocketmark_capture_queue_errors_total` | Failures to claim the next queued capture. |

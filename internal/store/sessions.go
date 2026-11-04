@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"pocketmark/internal/fault"
 	"time"
 )
 
@@ -35,7 +36,7 @@ func insertSessionTx(ctx context.Context, tx *sql.Tx, salt, hash string, expires
 		return err
 	}
 	if current != salt {
-		return errors.New("account changed during login")
+		return ErrMFAChanged
 	}
 	if _, err := tx.ExecContext(ctx, "DELETE FROM sessions WHERE expires_at<=?", time.Now().Unix()); err != nil {
 		return err
@@ -60,12 +61,18 @@ func (s *Store) SessionValid(ctx context.Context, hash string) bool {
 
 // A conditional write prevents expired sessions from being revived by activity.
 func (s *Store) TouchSession(ctx context.Context, hash string) bool {
+	valid, _ := s.CheckAndTouchSession(ctx, hash)
+	return valid
+}
+
+// CheckAndTouchSession distinguishes expired credentials from failed storage.
+func (s *Store) CheckAndTouchSession(ctx context.Context, hash string) (bool, error) {
 	r, err := s.db.ExecContext(ctx, "UPDATE sessions SET last_used_at=unixepoch() WHERE hash=? AND "+liveSession, hash)
 	if err != nil {
-		return false
+		return false, fault.Wrap("session.touch", err)
 	}
 	n, err := r.RowsAffected()
-	return err == nil && n == 1
+	return n == 1, fault.Wrap("session.touch", err)
 }
 
 type Session struct {
@@ -96,8 +103,16 @@ func (s *Store) Sessions(ctx context.Context, current string) ([]Session, error)
 }
 
 func (s *Store) SessionConfirmed(ctx context.Context, hash string) bool {
+	valid, _ := s.CheckSessionConfirmed(ctx, hash)
+	return valid
+}
+func (s *Store) CheckSessionConfirmed(ctx context.Context, hash string) (bool, error) {
 	var one int
-	return s.db.QueryRowContext(ctx, "SELECT 1 FROM sessions WHERE hash=? AND "+liveSession+" AND confirmed_at>unixepoch()-300", hash).Scan(&one) == nil
+	err := s.db.QueryRowContext(ctx, "SELECT 1 FROM sessions WHERE hash=? AND "+liveSession+" AND confirmed_at>unixepoch()-300", hash).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, fault.Wrap("session.confirmation", err)
 }
 
 func (s *Store) ConfirmSession(ctx context.Context, hash, salt string) error {

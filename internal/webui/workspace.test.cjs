@@ -202,3 +202,10 @@ test('settings section links retain library context and reject unknown sections'
   assert.equal(readRoute('?settings=unknown').settingsSection, 'api-keys');
   assert.equal(readRoute('').settingsSection, null);
 });
+
+
+test('MFA recovery guidance survives service-unavailable responses without exposing server errors', () => {
+  assert.match(requestFailure(503, 'private server error', 'mfa_recovery_required'), /Use a recovery code.*reset MFA/);
+  assert.doesNotMatch(requestFailure(503, 'private server error'), /private server error|recovery code/);
+  assert.doesNotMatch(requestFailure(500, 'private server error', 'mfa_recovery_required'), /private server error|recovery code/);
+});

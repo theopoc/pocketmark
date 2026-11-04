@@ -50,7 +50,7 @@ func (a *Server) registerLibrary(mux *http.ServeMux) {
 		}
 		v, e := a.Store.SaveAnnotation(r.Context(), id(r), aid, annotation)
 		if e != nil {
-			fail(w, 400, e.Error())
+			handleError(w, e)
 			return
 		}
 		respond(w, 200, map[string]int64{"id": v})
@@ -74,9 +74,9 @@ func (a *Server) registerLibrary(mux *http.ServeMux) {
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 8*1024*1024)
-		v, e := a.Store.ImportHTML(r.Context(), r.Body)
+		v, e := a.Store.ImportHTML(r.Context(), inputReader{r.Body})
 		if e != nil {
-			fail(w, 400, e.Error())
+			handleError(w, e)
 			return
 		}
 		respond(w, 200, v)

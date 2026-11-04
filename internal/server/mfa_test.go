@@ -397,7 +397,7 @@ func TestMFARotatedServerSecretCanRecoverWithBackupCode(t *testing.T) {
 	login := request(rotated, "POST", "/api/login", setupCredentials, false, nil)
 	pending := pendingCookie(t, login)
 	code, _ := totp.GenerateCode(secret, time.Now().Add(30*time.Second))
-	requireStatus(t, request(rotated, "POST", "/api/mfa/verify", `{"code":"`+code+`"}`, false, map[string]string{"Cookie": pending}), 401)
+	requireStatus(t, request(rotated, "POST", "/api/mfa/verify", `{"code":"`+code+`"}`, false, map[string]string{"Cookie": pending}), 503)
 	w := request(rotated, "POST", "/api/mfa/verify", `{"code":"`+codes[0]+`"}`, false, map[string]string{"Cookie": pending})
 	requireStatus(t, w, 200)
 	session := responseCookie(t, w, "pocketmark")

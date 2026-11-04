@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -128,3 +129,37 @@ func (w *captureLog) Write(p []byte) (int, error) {
 }
 
 var _ io.Writer = (*captureLog)(nil)
+
+func TestForcedShutdownIsDiagnosable(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	entered, release := make(chan struct{}), make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(entered)
+		<-release
+	}))
+	defer srv.Close()
+	defer close(release)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		response, err := srv.Client().Get(srv.URL)
+		if err == nil {
+			response.Body.Close()
+		}
+	}()
+	<-entered
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	if !shutdownHTTP(ctx, srv.Config) {
+		t.Fatal("active request was not forcibly closed")
+	}
+	<-done
+	for _, want := range []string{`"msg":"server_shutdown_failed"`, `"operation":"http.shutdown"`, `"error_code":"deadline_exceeded"`} {
+		if !strings.Contains(logs.String(), want) {
+			t.Fatalf("missing shutdown diagnostic: %s", logs.String())
+		}
+	}
+}

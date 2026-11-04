@@ -3,8 +3,11 @@ package server
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
+	"errors"
 	"net/http"
+	"pocketmark/internal/fault"
 	"strings"
 )
 
@@ -80,7 +83,7 @@ func requestPrincipal(r *http.Request) principal {
 	return p
 }
 
-func (a *Server) authenticate(r *http.Request, dav bool) (principal, bool) {
+func (a *Server) authenticate(r *http.Request, dav bool) (principal, bool, error) {
 	auth := r.Header.Get("Authorization")
 	if auth != "" {
 		key := ""
@@ -93,25 +96,29 @@ func (a *Server) authenticate(r *http.Request, dav bool) (principal, bool) {
 			}
 		}
 		if key == "" {
-			return principal{}, false
+			return principal{}, false, nil
 		}
 		if len(key) != 64 {
-			return principal{}, false
+			return principal{}, false, nil
 		}
 		// API keys are 256-bit random secrets, not user-chosen passwords.
 		// Preserve the SHA256 verifier used when these keys are created or rotated.
 		sum := sha256.Sum256([]byte(key))
 		profile, err := a.Store.AuthenticateAPIKeyProfile(r.Context(), hex.EncodeToString(sum[:]))
-		return principal{profile: profile}, err == nil
+		if errors.Is(err, sql.ErrNoRows) {
+			return principal{}, false, nil
+		}
+		return principal{profile: profile}, err == nil, fault.Wrap("auth.api_key", err)
 	}
 	cookie, err := r.Cookie("pocketmark")
 	// Versions before mandatory MFA issued v2 cookies after password-only login.
 	// The keyed digest covers the prefix, so changing it cannot upgrade a cookie.
 	if err != nil || len(cookie.Value) != 67 || !strings.HasPrefix(cookie.Value, "v3.") {
-		return principal{}, false
+		return principal{}, false, nil
 	}
 	hash := a.sessionHash(cookie.Value)
-	return principal{owner: true, session: hash}, a.Store.TouchSession(r.Context(), hash)
+	valid, err := a.Store.CheckAndTouchSession(r.Context(), hash)
+	return principal{owner: true, session: hash}, valid, err
 }
 
 func (a *Server) authorize(w http.ResponseWriter, r *http.Request) bool {
@@ -122,7 +129,10 @@ func (a *Server) authorize(w http.ResponseWriter, r *http.Request) bool {
 	if publicAuthPath(r.URL.Path) {
 		return true
 	}
-	p, ok := a.authenticate(r, dav)
+	p, ok, err := a.authenticate(r, dav)
+	if authFailure(w, "authentication_failed", err) {
+		return false
+	}
 	if !ok {
 		if dav {
 			w.Header().Set("WWW-Authenticate", `Basic realm="Pocketmark", charset="UTF-8"`)
@@ -141,9 +151,15 @@ func (a *Server) authorize(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	// Sensitive actions require recent password knowledge from the owner.
-	if policy.confirm && p.session != "" && !a.Store.SessionConfirmed(r.Context(), p.session) {
-		respond(w, 403, map[string]string{"error": "Confirm your password to continue.", "code": "reauth_required"})
-		return false
+	if policy.confirm && p.session != "" {
+		confirmed, err := a.Store.CheckSessionConfirmed(r.Context(), p.session)
+		if authFailure(w, "session_confirmation_failed", err) {
+			return false
+		}
+		if !confirmed {
+			respond(w, 403, map[string]string{"error": "Confirm your password to continue.", "code": "reauth_required"})
+			return false
+		}
 	}
 	return true
 }
