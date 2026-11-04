@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.3](https://github.com/theopoc/pocketmark/compare/v1.3.2...v1.3.3) (2026-11-04)
+
+
+### Bug Fixes
+
+* **capture:** log rejected HTTP status ([96bf36f](https://github.com/theopoc/pocketmark/commit/96bf36f32f8a81686130740f7d8d270d895ab44f))
+* **observability:** preserve actionable failure diagnostics ([ef989b4](https://github.com/theopoc/pocketmark/commit/ef989b4c4d9f190f1e2644fa495344c13eefd4b3))
+* **ui:** remove library capture summary ([2d05733](https://github.com/theopoc/pocketmark/commit/2d05733bf27ea7bebcf5c97d1572da56aa708924))
+* **ui:** share canonical Pocketmark icon ([92f847b](https://github.com/theopoc/pocketmark/commit/92f847b38a4dcc07a610946b52d72a88d6894a07))
+
 ## [1.3.2](https://github.com/theopoc/pocketmark/compare/v1.3.1...v1.3.2) (2026-11-02)
 
 
