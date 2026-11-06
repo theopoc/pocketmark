@@ -133,16 +133,56 @@ Use short-lived branches from current `main`, one focused PR per change, and a C
 
 The repository settings observed on 2026-10-23 allow only squash merges and delete merged branches. This audit set `squash_merge_commit_title` to `PR_TITLE`, so GitHub proposes the validated PR title even for a one-commit PR; the maintainer can still edit it at merge time. The active **Protect main** ruleset requires a PR, resolved review threads, linear history, and all nine CI job results listed above from the GitHub Actions app (integration ID 15368), with the branch up to date. It blocks deletion and force pushes, with no bypass actors. Zero required human approvals is intentional for personal maintenance; review the diff and evidence before merging. A repository setting, rather than workflow YAML, enforces this policy. Do not merge on an earlier commit's green checks. [GitHub required-check semantics](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks).
 
-Follow the [development workflow in AGENTS.md](../AGENTS.md#development-workflow) for every development task, including documentation changes. Before delivery, launch a code-review subagent on the complete task diff from its merge-base with refreshed `origin/main`, including uncommitted changes and newly added files. Apply its recommendations, rerun affected checks and have the corrections reviewed until no actionable findings remain. Record the review outcome, any rejected recommendation with its concrete rationale, resulting behavior, compatibility impact, checks and secret scanning in the PR.
+For every modification, including documentation, use this delivery procedure:
 
-Interface changes also require the project-local design review described in
-[AGENTS.md](../AGENTS.md#development-workflow), with rendered evidence and explicit
-coverage limits in the PR. Current design rules belong to [DESIGN.md](../DESIGN.md);
-generated evidence stays outside version control.
+1. Work on a dedicated branch with focused changes. Refresh `origin/main` and
+   inspect the complete task diff:
 
-Keep the branch up to date with `origin/main` and resolve merge conflicts autonomously, reading both sides to preserve intended behavior and unrelated changes. Verify that no conflict markers remain. Conflict resolutions and subsequent development changes require renewed subagent review and applicable local checks before pushing, followed by CI on the latest pushed commit. Fix CI failures and repeat these gates for corrections.
+   ```sh
+   git fetch origin main
+   git status --short
+   base=$(git merge-base HEAD origin/main)
+   git diff "$base"
+   git diff --cached "$base"
+   git ls-files --others --exclude-standard
+   ```
 
-Once subagent review is complete and every required check succeeds, the development agent verifies that the PR is conflict-free, up to date and still at the validated head, then squash-merges it automatically without asking for confirmation. Preserve the validated PR title and respect branch protection; a changed head requires renewed review, local validation and CI. Pending, failed, cancelled or skipped required checks do not authorize merge. Before reporting completion, verify the merged state and provide the PR link, review outcome and CI result; report any blocker explicitly. This is an agent delivery responsibility, not a new GitHub Actions merge workflow; eligible Dependabot PRs use the separate automation below.
+   Compare both the working tree and index against the merge-base so staged
+   changes remain visible even if undone only in the working tree.
+   Read the contents of every relevant new file listed by `git ls-files` too.
+2. Launch a code-review subagent with the request, repository instructions,
+   merge-base, complete diff and validation results. Apply actionable findings,
+   rerun affected checks and re-review corrections until none remain. Interface
+   changes also require the [design review](#design-review) below.
+3. Complete the [applicable local checks](../AGENTS.md#verification-and-delivery).
+   Stage only intended files, inspect them for generated evidence and scan the
+   staged changes for secrets with the pinned, redacted Gitleaks hook:
+
+   ```sh
+   git diff --cached
+   git diff --cached --check
+   pre-commit run gitleaks
+   ```
+
+   See [hook setup](#local-pre-commit-hooks) for prerequisites. Commit with a
+   Conventional Commit message, push and create/update a PR to `main`. Record
+   resulting behavior, compatibility impact, checks, secret scanning, review
+   outcome and any rejected recommendation with its concrete rationale in the PR.
+4. Keep the branch current with `origin/main`. Resolve conflicts autonomously,
+   reading both sides to preserve intended behavior and unrelated changes; verify
+   no conflict markers remain. Conflict resolutions, subsequent changes and CI
+   fixes require renewed subagent review and applicable local checks before
+   pushing, then CI on the latest pushed commit.
+5. Once review is complete and every required check succeeds, verify the PR is
+   conflict-free, up to date and still at the validated head. Squash-merge
+   automatically without asking for confirmation, using the validated PR title
+   and respecting branch protection. A changed head requires renewed review,
+   local validation and CI; pending, failed, cancelled or skipped required checks
+   do not authorize merge. Verify the merged state and report the PR link, review
+   outcome, CI result and any blocker.
+
+This procedure is an agent delivery responsibility, not a new GitHub Actions
+merge workflow; eligible Dependabot PRs use the separate automation below.
 
 For a normal PR, merging updates `main` and may update a Release Please PR. Release Please version PRs still require an explicit publication request before merging: merging one authorizes publication, so review its version and notes first. Release tags matching `v*` cannot be updated or deleted under the separate active tag ruleset.
 
@@ -163,6 +203,22 @@ intermediate commits are not checked. Dispatch, push and scheduled runs validate
 source rather than PR metadata. Metadata edits rerun the full suite and title
 validation together. For a future busy repository, consider an independent
 required metadata check and `merge_group` support before enabling a merge queue.
+
+### Design review
+
+For interface changes, launch the project-local `design_reviewer` defined in
+[.codex/agents/design_reviewer.toml](../.codex/agents/design_reviewer.toml). Supply
+the request, merge-base, complete diff, validation results and a disposable preview
+or before/after evidence. If named custom agents are unavailable, launch a subagent
+with that file's `developer_instructions`. Apply actionable findings and re-review
+corrections; record inspected surfaces, states and unverified coverage in the PR.
+Current design rules belong to [DESIGN.md](../DESIGN.md); generated evidence stays
+outside version control.
+
+For branding changes, inventory and verify initialization, sign-in/MFA,
+library/navigation, settings, API documentation, favicon/installable app, extension
+and README in both themes and desktop/phone layouts where applicable. Verify
+packaged assets and run `python3 scripts/sync_ui_assets.py` to check shared assets.
 
 ## Reproduce locally
 
