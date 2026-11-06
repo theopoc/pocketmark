@@ -24,10 +24,12 @@ the RAM goal.
 - Client compatibility or Floccus: read [feature coverage](docs/FEATURES.md) and
   [real-client evidence](docs/REAL_CLIENTS.md). Distinguish protocol tests from
   observed and untested clients; Android's prolonged-offline cache issue remains upstream.
-- Web UI, API documentation or extension UI: read [DESIGN.md](DESIGN.md). If the
-  library page shown in the README changes, refresh `docs/pocketmark-dark-preview.jpg`
-  from the rendered page with disposable data and verify it matches. Follow the
-  [design and branding review](docs/CI.md#design-review) requirements.
+- Every UI/UX change (web UI, API documentation or extension UI): read and follow
+  [DESIGN.md](DESIGN.md), the source of truth for current design conventions.
+  If the library page shown in the README changes, refresh
+  `docs/pocketmark-dark-preview.jpg` from the rendered page with disposable data
+  and verify it matches. Follow the [design and branding review](docs/CI.md#design-review)
+  requirements.
 - Branding: reuse the canonical `internal/webui/static/icon.svg` and synchronize
   shared UI assets with the command below.
 
