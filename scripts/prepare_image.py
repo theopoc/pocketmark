@@ -63,7 +63,7 @@ def main():
     parser.add_argument('--arch', choices=ARCHES, required=True)
     parser.add_argument('--revision', required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--dockerfile', type=Path, default=Path('Dockerfile.release'))
+    parser.add_argument('--dockerfile', type=Path, default=Path('Dockerfile'))
     args = parser.parse_args()
     prepare(args.directory, args.arch, args.revision, args.output, args.dockerfile)
 

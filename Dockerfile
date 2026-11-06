@@ -1,3 +1,5 @@
+ARG BINARY_SOURCE=build
+
 FROM golang:1.26.10-alpine AS build
 RUN apk add --no-cache gcc musl-dev
 WORKDIR /src
@@ -7,9 +9,15 @@ COPY cmd ./cmd
 COPY internal ./internal
 RUN CGO_ENABLED=1 go build -tags 'sqlite_fts5 sqlite_omit_load_extension' -trimpath -ldflags='-s -w -linkmode external -extldflags "-static"' -o /pocketmark ./cmd/pocketmark
 
-FROM alpine:3.24
+# Release CI supplies its validated executable in a minimal build context.
+FROM scratch AS prebuilt
+COPY --chmod=0755 pocketmark /pocketmark
+
+FROM ${BINARY_SOURCE} AS binary
+
+FROM alpine:3.24 AS runtime
 RUN apk add --no-cache ca-certificates && addgroup -g 10001 pocketmark && adduser -D -H -u 10001 -G pocketmark pocketmark && mkdir /data && chown pocketmark:pocketmark /data
-COPY --from=build /pocketmark /usr/local/bin/pocketmark
+COPY --from=binary /pocketmark /usr/local/bin/pocketmark
 USER 10001:10001
 ENV POCKETMARK_DATA=/data POCKETMARK_LISTEN=0.0.0.0:8090 GOMEMLIMIT=32MiB
 EXPOSE 8090
