@@ -298,22 +298,27 @@ successful main run; each build downloads that run's native artifact with digest
 validation. `scripts/prepare_image.py` verifies the actual ELF architecture, absence
 of a dynamic interpreter, embedded Go build metadata, clean revision, CGO and
 SQLite tags against the accompanying metadata. It copies the executable unchanged
-into a new minimal context with `Dockerfile.release`; no compiler runs in the image
-build. The runtime recipe comes from the executing workflow revision, including
+into a new minimal context with the single `Dockerfile`. The release build selects
+`BINARY_SOURCE=prebuilt` and the final `runtime` target; BuildKit skips the source
+compilation stage, so no compiler runs in the image build. The runtime recipe comes
+from the executing workflow revision, including
 manual recovery of older releases. The application bytes always come from the
-validated release revision. `Dockerfile` remains the local source-build recipe,
-with a Go baseline matching `go.mod`.
+validated release revision. A plain `docker build -t pocketmark:local .` uses
+`BINARY_SOURCE=build` by default, compiling sources with a Go baseline matching
+`go.mod` and packaging them in the same final runtime stage. Both paths require
+BuildKit, which only builds the selected dependencies.
 
 A local rehearsal with an extracted native CI artifact in `/tmp/image-input`:
 
 ```sh
 python3 scripts/prepare_image.py --directory /tmp/image-input --arch amd64 \
   --revision <validated-source-sha> --output /tmp/pocketmark-image-context
-docker build -t pocketmark:ci-release /tmp/pocketmark-image-context
+docker build --build-arg BINARY_SOURCE=prebuilt --target runtime \
+  -t pocketmark:ci-release /tmp/pocketmark-image-context
 python3 scripts/smoke_docker.py --image pocketmark:ci-release
 ```
 
-Both runtime recipes use the same user, healthcheck and memory settings. Native AMD64/ARM64 builders push untagged candidate digests. Fresh native test jobs pull those exact digests and run hardened Compose smoke tests plus Chromium journeys. Only when both pass does publication create `vMAJOR.MINOR.PATCH` from those tested digests. The published tag is then pulled and qualified on both architectures: exact index digest, platform, source revision, version label, health/authentication, FTS5, SSRF filtering, backup, restart persistence and anonymous-access denial. No `latest` or moving minor alias is published.
+The shared runtime stage defines the user, healthcheck and memory settings for both build paths. Native AMD64/ARM64 builders push untagged candidate digests. Fresh native test jobs pull those exact digests and run hardened Compose smoke tests plus Chromium journeys. Only when both pass does publication create `vMAJOR.MINOR.PATCH` from those tested digests. The published tag is then pulled and qualified on both architectures: exact index digest, platform, source revision, version label, health/authentication, FTS5, SSRF filtering, backup, restart persistence and anonymous-access denial. No `latest` or moving minor alias is published.
 
 The OCI revision is the release source SHA and the OCI version is `vMAJOR.MINOR.PATCH`. Images are built once per release attempt; no SHA-tag promotion or image evidence from main CI is involved. Existing version tags must already contain the same platform digests; differing content is never replaced. A retry that produces different bytes therefore fails safely instead of overwriting an existing version.
 

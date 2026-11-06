@@ -57,12 +57,15 @@ class ImageFlowTests(unittest.TestCase):
         self.assertIn("scripts/prepare_image.py", build)
         self.assertIn("context: release-image", build)
         self.assertNotIn("context: release-source", build)
-        recipe = (ROOT / "Dockerfile.release").read_text()
-        self.assertNotIn("go build", recipe)
-        self.assertNotIn("golang:", recipe)
-        self.assertIn("COPY --chmod=0755 pocketmark", recipe)
+        self.assertIn("target: runtime", build)
+        self.assertIn("BINARY_SOURCE=prebuilt", build)
+        self.assertFalse((ROOT / "Dockerfile.release").exists())
         source = (ROOT / "Dockerfile").read_text()
         baseline = re.search(r"^go (\S+)", (ROOT / "go.mod").read_text(), re.M)[1]
         self.assertIn(f"golang:{baseline}-alpine", source)
-        # Runtime behavior must remain identical for source and artifact builds.
-        self.assertEqual(source.split("USER 10001:10001", 1)[1], recipe.split("USER 10001:10001", 1)[1])
+        self.assertIn("ARG BINARY_SOURCE=build", source)
+        prebuilt = source.split("FROM scratch AS prebuilt\n", 1)[1].split("\nFROM ", 1)[0]
+        self.assertNotIn("RUN ", prebuilt)
+        self.assertIn("COPY --chmod=0755 pocketmark /pocketmark", prebuilt)
+        self.assertIn("FROM ${BINARY_SOURCE} AS binary", source)
+        self.assertIn("COPY --from=binary /pocketmark /usr/local/bin/pocketmark", source)

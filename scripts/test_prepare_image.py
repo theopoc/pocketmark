@@ -29,7 +29,7 @@ class PrepareImageTests(unittest.TestCase):
         self.binary.write_bytes(header)
         self.metadata = self.inputs / 'pocketmark-linux-amd64.buildinfo.txt'
         self.metadata.write_text(INFO)
-        self.recipe = self.root / 'Dockerfile.release'
+        self.recipe = self.root / 'Dockerfile'
         self.recipe.write_text('FROM scratch\nCOPY pocketmark /pocketmark\n')
         self.output = self.root / 'context'
 
@@ -41,6 +41,7 @@ class PrepareImageTests(unittest.TestCase):
         self.stage()
         self.assertEqual(self.binary.read_bytes(), (self.output / 'pocketmark').read_bytes())
         self.assertEqual({p.name for p in self.output.iterdir()}, {'pocketmark', 'Dockerfile'})
+        self.assertEqual(self.recipe.read_bytes(), (self.output / 'Dockerfile').read_bytes())
         self.assertEqual((self.output / 'pocketmark').stat().st_mode & 0o777, 0o755)
 
     def test_rejects_metadata_not_extracted_from_the_binary(self):
