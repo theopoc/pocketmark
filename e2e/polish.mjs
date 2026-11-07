@@ -196,9 +196,10 @@ for (const name of selected) {
       await audit(page, `${theme}-notes`, name);
       await page.getByRole('button', { name: 'Close reader', exact: true }).click();
       await clickNavigation(page, '#settings-button');
-      for (const section of ['password', 'api-keys', 'sync', 'mobile']) {
+      for (const section of ['api-keys', '2fa', 'sessions', 'password', 'backup', 'sync', 'mobile']) {
         await clickNavigation(page, `[data-settings-section="${section}"]`);
         await noOverflow(page, section); await audit(page, `${theme}-settings-${section}`, name);
+        await shot(page, `${theme}-settings-${section}`, name);
       }
       await shot(page, `${theme}-settings-mobile`, name);
       await page.setViewportSize({ width: 1280, height: 720 });

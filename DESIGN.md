@@ -235,16 +235,20 @@ Opening a bookmark shows its title, source URL and Saved formats before any arti
 
 ### Settings
 
-Settings is a workspace page. The drawer offers Account & security, its indented API keys destination, Backup & restore, Browser bookmark sync, and Mobile & browser. Account & security brings password, two-factor authentication and browser sessions together. API keys puts existing keys first and reveals the creation form on demand. A query parameter preserves the section across reload and browser history, including older links. Back to library restores filters and scroll position. Authentication changes block departure while pending; displayed recovery codes survive session expiration until explicitly dismissed by returning to the library. Leaving Settings clears credentials held in the page.
+Settings is a workspace page with one shared frame and navigation for every destination. Its menu always offers API keys, Two-factor authentication, Browser sessions, Password, Backup & restore, Browser bookmark sync, and Mobile & browser, in that order. Each destination displays only its own panel and identifies exactly one active menu entry; changing sections retains the same header, menu labels and positions. API keys puts existing keys first and reveals the creation form on demand. A query parameter preserves the section across reload and browser history, including older links. Back to library restores filters and scroll position. Authentication changes block departure while pending; displayed recovery codes survive session expiration until explicitly dismissed by returning to the library. Leaving Settings clears credentials held in the page.
 
-The API keys destination follows its approved expandable-list composition. It has a
-72px brand header and a visible settings rail (316px on wide desktops), with the
-API keys title and description at the left and Create API key and the active-key
-count at the right. The workspace fills the remaining width; it does not repeat
-the generic Settings heading. This frame is exclusive to the API keys destination.
-At 900px and below, its settings navigation becomes a horizontally scrollable row;
-on phones the heading, count and creation action stack without horizontal page
-overflow. Other Settings destinations retain their existing frame.
+Every Settings destination uses the 72px brand header and visible settings rail
+(316px on wide desktops) established by API keys. The header stays visible while
+scrolling. On desktop the rail stays below it, is bounded to the viewport and
+scrolls independently on short screens; long content never moves its entries. The workspace fills the remaining
+width without repeating the generic Settings heading. API keys retains its
+expandable-list composition, with the title and description at the left and Create
+API key and the active-key count at the right. At 900px and below, the shared
+navigation becomes a horizontally scrollable row and keeps the active destination
+in view, including after reload, browser history navigation or viewport changes. On phones the API
+keys heading, count and creation action stack without horizontal page overflow.
+The brand and Back to library return within the app, preserve library context and
+respect pending authentication changes.
 
 API key names use 24px semibold type on desktop (17px on phones), with status and
 permissions in each expandable summary. The expanded row shows three metadata

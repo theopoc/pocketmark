@@ -187,67 +187,6 @@ export function Sidebar() {
         {"\n      "}
       </div>
       {"\n      "}
-      <div id="settings-navigation" hidden>
-        {"\n        "}
-        <Button
-          type="button"
-          className="nav-item settings-back"
-          data-settings-back
-        >
-          <span data-icon="arrow-left" aria-hidden="true"></span>
-          {"Back to library"}
-        </Button>
-        {"\n        "}
-        <nav aria-label="Settings sections">
-          {"\n          "}
-          <Button
-            type="button"
-            className="nav-item"
-            data-settings-section="password"
-          >
-            <span data-icon="lock" aria-hidden="true"></span>
-            {"Account & security"}
-          </Button>
-          {"\n          "}
-          <Button
-            type="button"
-            className="nav-item settings-subitem"
-            data-settings-section="api-keys"
-          >
-            {"API keys"}
-          </Button>
-          {"\n          "}
-          <Button
-            type="button"
-            className="nav-item"
-            data-settings-section="backup"
-          >
-            <span data-icon="download" aria-hidden="true"></span>
-            {"Backup & restore"}
-          </Button>
-          {"\n          "}
-          <Button
-            type="button"
-            className="nav-item"
-            data-settings-section="sync"
-          >
-            <span data-icon="refresh" aria-hidden="true"></span>
-            {"Browser bookmark sync"}
-          </Button>
-          {"\n          "}
-          <Button
-            type="button"
-            className="nav-item"
-            data-settings-section="mobile"
-          >
-            <span data-icon="book" aria-hidden="true"></span>
-            {"Mobile & browser"}
-          </Button>
-          {"\n        "}
-        </nav>
-        {"\n      "}
-      </div>
-      {"\n    "}
     </aside>
   );
 }

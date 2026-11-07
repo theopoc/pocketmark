@@ -336,7 +336,9 @@ try {
     assert.equal(await page.locator('#settings-page [data-settings-back]:visible').isDisabled(), true);
     assert.equal(await page.locator('#breadcrumb button:disabled').count(), 2);
     assert.equal(await page.locator('[data-settings-section="backup"]').isDisabled(), true);
-    assert.equal(await page.locator('[data-settings-section="password"]').isEnabled(), true);
+    assert.equal(await page.locator('[data-settings-section="password"]').isDisabled(), true);
+    assert.equal(await page.locator('[data-settings-section="2fa"]').isEnabled(), true);
+    assert.equal(await page.locator('[data-settings-home]').isDisabled(), true);
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('#settings-page').isVisible(), true);
     await page.evaluate(() => history.pushState({}, '', '?test=mfa-pending'));

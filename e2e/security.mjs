@@ -96,8 +96,8 @@ export async function securityJourney({ browser, page, base, username, password,
     const createAction = await page.locator('#token-create > summary').boundingBox();
     assert.ok(createAction.x > apiTitle.x && Math.abs(createAction.y - apiTitle.y) < 8,
       'desktop creation action is aligned to the right of the API keys title');
-    assert.equal(await page.locator('#settings-title').isVisible(), false,
-      'API keys uses its own heading rather than a duplicate Settings heading');
+    assert.equal(await page.locator('#settings-title').evaluate(node => getComputedStyle(node).clip), 'rect(0px, 0px, 0px, 0px)',
+      'Settings retains an accessible heading without duplicating the visible page title');
     assert.equal(await keyRow.evaluate(node => node.open), true);
     await keySummary.press('Enter');
     assert.equal(await keyRow.evaluate(node => node.open), false);
