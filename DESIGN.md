@@ -237,25 +237,26 @@ Opening a bookmark shows its title, source URL and Saved formats before any arti
 
 Settings is a workspace page with one shared frame and navigation for every destination. Its menu always offers API keys, Two-factor authentication, Browser sessions, Password, Backup & restore, Browser bookmark sync, and Mobile & browser, in that order. Each destination displays only its own panel and identifies exactly one active menu entry; changing sections retains the same header, menu labels and positions. API keys puts existing keys first and reveals the creation form on demand. A query parameter preserves the section across reload and browser history, including older links. Back to library restores filters and scroll position. Authentication changes block departure while pending; displayed recovery codes survive session expiration until explicitly dismissed by returning to the library. Leaving Settings clears credentials held in the page.
 
-Every Settings destination uses the 72px brand header and visible settings rail
-(316px on wide desktops) established by API keys. The header stays visible while
-scrolling. On desktop the rail stays below it, is bounded to the viewport and
-scrolls independently on short screens; long content never moves its entries. The workspace fills the remaining
-width without repeating the generic Settings heading. API keys retains its
-expandable-list composition, with the title and description at the left and Create
-API key and the active-key count at the right. At 900px and below, the shared
-navigation becomes a horizontally scrollable row and keeps the active destination
-in view, including after reload, browser history navigation or viewport changes. On phones the API
-keys heading, count and creation action stack without horizontal page overflow.
-The brand and Back to library return within the app, preserve library context and
-respect pending authentication changes.
+Settings shares the library's compact typography and density: 13px navigation
+labels, 17px navigation icons, 38px minimum desktop entries and 44px phone targets.
+Reuse the base navigation and brand sizes rather than defining a larger Settings
+scale. The desktop header is 64px tall and the rail is 280px wide, matching the
+library; at 900px and below the header is 58px and the menu becomes a horizontally
+scrollable row. The header stays visible while scrolling. The desktop rail stays
+below it, is bounded to the viewport and scrolls independently on short screens;
+long content never moves its entries. Keep the active destination in view after
+navigation, reload, history or viewport changes.
 
-API key names use 24px semibold type on desktop (17px on phones), with status and
-permissions in each expandable summary. The expanded row shows three metadata
-columns with quiet separators, then labeled icon actions; Delete stays separated
-at the trailing edge. Phone metadata uses two columns and actions wrap with 44px
-targets. The page uses the existing theme tokens, system font and authored outline
-icons; its scoped rules live in `secondary.css`.
+Page titles match library headings: 26px on desktop and 24px on phones. Labels,
+hints and secondary copy use the existing 13px secondary-surface rule, with 14px
+body copy and 16px phone fields. API keys retains its expandable list and creation
+form, using 14px semibold key names, 13px permission/activity descriptions, 14px
+metadata values and the normal Settings buttons. Do not enlarge these on phones;
+increase target sizes instead. Desktop metadata has three columns and phone
+metadata two; actions wrap and Delete remains separate. The workspace does not
+repeat the generic Settings heading. The brand and Back to library preserve
+library context and respect pending authentication changes. Styles remain scoped
+to Settings in `secondary.css`; library controls and geometry remain unchanged.
 
 
 Entering Settings settles the workspace 12px from the right over 220ms with a light fade, paired with a 180ms navigation fade. Initial loads and section changes remain still; leaving cancels the entrance. Focus and controls update immediately. Reduced motion skips both effects.

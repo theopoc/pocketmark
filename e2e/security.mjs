@@ -92,6 +92,10 @@ export async function securityJourney({ browser, page, base, username, password,
     assert.equal(key.profile, 'capture'); assert.ok(key.expiresAt > Date.now() / 1000);
     const keyRow = page.locator('#token-list .token-accordion').filter({ hasText: 'Synthetic extension' });
     const keySummary = keyRow.locator('summary');
+    assert.equal(await keyRow.locator('.token-name').evaluate(n => getComputedStyle(n).fontSize), '14px', 'API key names use the shared compact title scale');
+    assert.equal(await keyRow.locator('.token-permissions').evaluate(n => getComputedStyle(n).fontSize), '13px');
+    assert.equal(await keyRow.locator('.token-metadata dd').first().evaluate(n => getComputedStyle(n).fontSize), '14px');
+    assert.equal(await keyRow.locator('.token-row-actions .button').first().evaluate(n => getComputedStyle(n).fontSize), '13px');
     const apiTitle = await page.locator('#api-keys-title').boundingBox();
     const createAction = await page.locator('#token-create > summary').boundingBox();
     assert.ok(createAction.x > apiTitle.x && Math.abs(createAction.y - apiTitle.y) < 8,
