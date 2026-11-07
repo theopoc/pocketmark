@@ -2,8 +2,8 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
-const { create } = require("./static/reader.js");
-const workspace = require("./static/workspace.js");
+const { create } = require("../../frontend/src/features/reader.js").default;
+const workspace = require("../../frontend/src/features/workspace.js").default;
 
 function deferred() {
   let resolve, reject;
@@ -583,13 +583,10 @@ for (const action of ["upload", "delete"]) test(`${action} remains successful wh
 
 test("the shipped script order and worker cache include the reader without private data", () => {
   const html = fs.readFileSync(`${__dirname}/static/index.html`, "utf8");
-  const scripts = [...html.matchAll(/<script src="([^"]+)"[^>]*>/g)].map(match => match[1]);
-  assert.ok(scripts.indexOf("/workspace.js") < scripts.indexOf("/reader.js"));
-  assert.ok(scripts.indexOf("/reader.js") < scripts.indexOf("/app.js"));
+  require("./bundle-helper.cjs").assertBundledModule("reader");
   const vm = require("node:vm"), handlers = new Map();
   const context = vm.createContext({ self: { addEventListener: (name, handler) => handlers.set(name, handler) }, URL });
   vm.runInContext(fs.readFileSync(`${__dirname}/static/sw.js`, "utf8"), context);
-  assert.equal(vm.runInContext('ASSETS.includes("/reader.js")', context), true);
   assert.equal(vm.runInContext('ASSETS.some(path => path.startsWith("/api/") || path === "/")', context), false);
   for (const pathname of ["/api/links/1", "/api/links/1/reader", "/"]) {
     let intercepted = false;

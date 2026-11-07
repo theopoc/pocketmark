@@ -1,5 +1,13 @@
 ARG BINARY_SOURCE=build
 
+FROM node:24.14.0-alpine AS frontend
+WORKDIR /src
+COPY frontend/package.json frontend/package-lock.json ./frontend/
+RUN npm ci --prefix frontend --ignore-scripts --no-audit --no-fund
+COPY frontend ./frontend
+COPY internal/webui/static ./internal/webui/static
+RUN npm run build --prefix frontend
+
 FROM golang:1.26.10-alpine AS build
 RUN apk add --no-cache gcc musl-dev
 WORKDIR /src
@@ -7,6 +15,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
+COPY --from=frontend /src/internal/webui/static ./internal/webui/static
 RUN CGO_ENABLED=1 go build -tags 'sqlite_fts5 sqlite_omit_load_extension' -trimpath -ldflags='-s -w -linkmode external -extldflags "-static"' -o /pocketmark ./cmd/pocketmark
 
 # Release CI supplies its validated executable in a minimal build context.

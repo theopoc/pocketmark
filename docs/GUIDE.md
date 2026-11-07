@@ -6,7 +6,7 @@ Pocketmark uses one process for storage and capture. Public HTML capture runs on
 
 ## Start locally
 
-Requirements: Go as declared in `go.mod` (1.26.10 or a newer patched toolchain), a C compiler and `make`. SQLite is compiled through CGO; `make build` enables FTS5. No Node.js runtime or external database is required.
+Requirements: Go as declared in `go.mod` (1.26.10 or a newer patched toolchain), a C compiler, Node.js 24 with npm and `make`. SQLite is compiled through CGO; `make build` enables FTS5. Node compiles frontend assets during the build; the installed binary needs no Node runtime or external database.
 
 ```sh
 make build
@@ -109,7 +109,7 @@ make test
 make check
 ```
 
-`make test` runs Go tests with the race detector. `make check` runs `go vet` and JavaScript syntax checking, which requires Node.js as a development tool. Build and runtime do not require Node.js. See `python3 scripts/benchmark.py --help` and the [measurement methodology](BENCHMARK.md) for the reproducible memory workload.
+`make test` runs Go tests with the race detector. `make check` runs `go vet` and JavaScript syntax checking, which requires Node.js as a development tool. The build compiles the React/shadcn frontend with Node.js; the runtime does not require Node.js. See `python3 scripts/benchmark.py --help` and the [measurement methodology](BENCHMARK.md) for the reproducible memory workload.
 
 GitHub Actions also checks formatting, dependency integrity, secrets, reachable vulnerabilities, extension tests and release packaging. Native Linux AMD64/ARM64 jobs run race tests, build static binaries and validate the hardened Docker/Compose runtime. GoReleaser OSS packages the tested binaries and extensions, generates SHA-256 checksums and publishes version tags; manual release runs exercise packaging and verification without publishing. See [CI and release](CI.md) and [contributor instructions](../AGENTS.md).
 

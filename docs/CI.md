@@ -59,7 +59,7 @@ PR diff filtering so the pre-merge gate evaluates the same complete source as
 main. Both language jobs run on every PR and are individually required by branch
 protection. The SARIF gate also rejects reports declaring an
 incremental mode, even if they have no findings. The Go build uses the production SQLite tags with compilation
-forced for extraction. JavaScript excludes test harnesses and upstream minified
+forced for extraction. JavaScript excludes test harnesses and compiled application bundles and upstream minified
 vendor assets; the latter are covered by dependency scanning. Reports stay in
 short-lived artifacts, without uploading databases or requiring code-scanning
 write permissions. `check_sarif.py` makes unreviewed findings and absent/failed
@@ -81,9 +81,9 @@ The lockfile is audited, and `check_swagger_vendor.py` compares all five vendore
 files with that exact installed package. Update the inventory and shipped files
 together. Retire.js reads current advisory data and checks embedded libraries
 that npm's top-level Swagger package metadata does not expose. `npm audit` also
-checks the `e2e/` and `tools/quality/` lockfiles, including Commitlint. High/critical
+checks the `frontend/`, `e2e/` and `tools/quality/` lockfiles, including Commitlint. High/critical
 findings and scanner errors block; lower severities remain visible for review.
-Dependabot watches all three npm inventories.
+Dependabot watches all four npm inventories.
 Neither scanner tools nor their node_modules are embedded in the application.
 
 Reproduce JavaScript SCA locally:
@@ -91,6 +91,7 @@ Reproduce JavaScript SCA locally:
 ```sh
 npm ci --prefix tools/security --ignore-scripts --no-audit --no-fund
 npm audit --prefix tools/security --audit-level=high
+npm audit --prefix frontend --audit-level=high
 npm audit --prefix e2e --audit-level=high
 npm audit --prefix tools/quality --audit-level=high
 python3 scripts/check_swagger_vendor.py
@@ -120,7 +121,7 @@ Hooks run on staged files before each commit. The first run creates isolated hoo
 | Merge and case conflicts | Reject unresolved merges and paths that collide on macOS/Linux. |
 | JSON, YAML and TOML syntax | Validate manifests, workflows and tooling configuration without reformatting them. |
 | Final newline and trailing whitespace | Keep diffs readable; preserve Markdown hard line breaks. |
-| Gofmt and JavaScript syntax | Fast checks for the Go server, embedded UI and extension, without new frontend dependencies. |
+| Gofmt and JavaScript syntax | Go checks, compiled React/shadcn assets, frontend ESLint/formatting and extension syntax. |
 | Gitleaks | Scan the staged diff for secrets with redacted output before they enter history. |
 
 Full Go vet/race tests, extension tests, builds, actionlint and container tests stay outside the hooks to keep commits fast and avoid requiring Docker or release tools for every edit. Run the applicable local checks required by [AGENTS.md](../AGENTS.md#verification-and-delivery); hooks complement local validation and CI rather than replacing them. Run `pre-commit autoupdate` deliberately and review version changes.
@@ -241,7 +242,7 @@ node e2e/extension-selectors.mjs
 python3 scripts/smoke_docker.py --image pocketmark:ci --browser
 ```
 
-The browser dependency is pinned and locked under `e2e/`; it is test tooling only and is not copied into the application image. The browser runs on the CI runner, outside the server's 128 MiB container limit. Selector checks cover the web UI and extension at desktop and narrow viewport sizes in both themes; the separate container browser journey exercises the running server. These Chromium checks do not qualify Firefox, Safari, native mobile clients or full accessibility.
+The browser dependency is pinned and locked under `e2e/`; it is test tooling only and is not copied into the application image. The browser runs on the CI runner, outside the server's 128 MiB container limit. Selector checks cover the web UI and extension at desktop and narrow viewport sizes in both themes; the separate container browser journey exercises the running server. The amd64 Build job also runs the complete browser journey against its actual compiled binary before uploading that binary. `python3 scripts/smoke_frontend.py --binary bin/pocketmark` reproduces that journey with disposable data. These Chromium checks do not qualify Firefox, Safari, native mobile clients or full accessibility.
 
 Extension regressions run once in their independent job on every run. Main, manual and scheduled runs always include it for complete release evidence. Selector Chromium checks run in ordinary source CI; the container journey runs during release, and ordinary source CI does not build containers.
 

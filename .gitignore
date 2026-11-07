@@ -45,6 +45,9 @@ access-token.*
 coverage*.out
 coverage*.html
 node_modules/
+/internal/webui/static/app/
+/internal/webui/static/index.html
+/internal/webui/static/sw.js
 __pycache__/
 *.py[cod]
 

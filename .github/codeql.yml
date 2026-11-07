@@ -6,3 +6,4 @@ paths-ignore:
   - e2e
   - tools
   - internal/webui/static/api-docs/vendor
+  - internal/webui/static/app

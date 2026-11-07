@@ -1,0 +1,9 @@
+/* Keep Tailwind utilities below the existing authored design, without preflight. */
+@layer theme, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@source "./";
+
+.react-root {
+  display: contents;
+}

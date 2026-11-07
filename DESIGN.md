@@ -94,7 +94,7 @@ artifacts outside version control as described in [AGENTS.md](AGENTS.md).
 
 A precise technology workspace for a strictly personal library. Cool white content, a slate-tinted navigation drawer and indigo controls keep attention on saved material and practical actions. The interface uses the operating system’s sans serif, authored outline SVG icons and restrained borders.
 
-Density serves finding and organizing; reading deliberately opens into a larger type size and generous measure. The embedded HTML, CSS and JavaScript need no frontend runtime or remote fonts.
+Density serves finding and organizing; reading deliberately opens into a larger type size and generous measure. The React interface uses locally compiled shadcn/ui primitives styled with Pocketmark’s semantic CSS tokens. Assets remain embedded in Go; fonts remain local to the operating system.
 
 **Key Characteristics:**
 - Compact library rows with visible actions and labeled capture states.
@@ -273,7 +273,7 @@ Dialogs use theme-matched panels, a dimmed backdrop, labeled headings and separa
 
 ### Don't:
 - Don’t add team or public-sharing visual concepts to this personal workspace.
-- Don’t add remote fonts, icon packages or frontend runtime dependencies.
+- Reuse the existing React/shadcn primitives and authored icons. Keep fonts local; justify additional runtime dependencies against the frontend guide.
 - Don’t use color alone to communicate capture status.
 
 ## Interface refinement — 31 October 2026

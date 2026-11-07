@@ -1,6 +1,6 @@
 "use strict";
 const { test } = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), vm = require("node:vm");
-const { create } = require("./static/bulk.js");
+const { create } = require("../../frontend/src/features/bulk.js").default;
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 class Element {
   constructor(document) { Object.assign(this, { document, value: "", textContent: "", hidden: false, disabled: false, open: false, children: [], events: new Map(), dataset: {}, style: { setProperty() {} } }); }
@@ -170,8 +170,5 @@ test("queued close events cannot invalidate a reopened dialog", async () => {
 test("the shipped shell exposes every desktop action and caches bulk without private data", () => {
   const html = fs.readFileSync(`${__dirname}/static/index.html`, "utf8");
   assert.ok(!html.includes('id="bulk-more"')); assert.ok(!html.includes('id="bulk-action"')); assert.ok(!html.includes('id="delete-selection-dialog"'));
-  const scripts = [...html.matchAll(/<script src="([^"]+)"/g)].map(m => m[1]); assert.ok(scripts.indexOf("/bulk.js") < scripts.indexOf("/app.js"));
-  const context = vm.createContext({ self: { addEventListener() {} } }); vm.runInContext(fs.readFileSync(`${__dirname}/static/sw.js`, "utf8"), context);
-  assert.equal(vm.runInContext('ASSETS.includes("/bulk.js")', context), true);
-  assert.equal(vm.runInContext('ASSETS.some(path => path === "/" || path.startsWith("/api/"))', context), false);
+  require("./bundle-helper.cjs").assertBundledModule("bulk");
 });

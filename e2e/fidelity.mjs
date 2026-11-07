@@ -31,13 +31,13 @@ try {
         if (reference && !bytes.equals(await readFile(join(reference, name)))) fullImageDifferences.push(name);
         const metrics = await page.locator('#bookmark-grid, .bookmark-card, .card-title, .card-action, #sort-toggle, .search-box').evaluateAll(nodes => nodes.map(n => {
           const r = n.getBoundingClientRect(), style = getComputedStyle(n);
-          return { class: n.className, x: r.x, y: r.y, width: r.width, height: r.height,
+          return { class: n.className.trim().split(/\s+/).sort().join(" "), x: r.x, y: r.y, width: r.width, height: r.height,
             font: style.font, color: style.color, background: style.backgroundColor,
             border: style.border, radius: style.borderRadius, padding: style.padding };
         }));
         const metricsName = name.replace('.png', '.json');
         await writeFile(join(output, metricsName), JSON.stringify(metrics));
-        if (reference) assert.deepEqual(metrics, JSON.parse(await readFile(join(reference, metricsName), 'utf8')), `Library layout/style changed: ${name}`);
+        if (reference) assert.deepEqual(metrics, JSON.parse(await readFile(join(reference, metricsName), 'utf8')).map(metric => ({ ...metric, class: metric.class.trim().split(/\s+/).sort().join(" ") })), `Library layout/style changed: ${name}`);
         const frozen = [page.locator('#sort-toggle')];
         if (await page.locator('#sort-menu').isVisible()) frozen.push(page.locator('#sort-menu'));
         for (const card of await page.locator('.bookmark-card').all()) frozen.push(card.locator('.card-actions'), card.locator('.favorite-button'));

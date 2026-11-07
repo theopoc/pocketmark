@@ -14,7 +14,7 @@
     }
     input.addEventListener("input", update);
     update();
-    return { update };
+    return { update, dispose() { input.removeEventListener?.("input", update); } };
   }
   const api = { describe, create };
   if (typeof module !== "undefined" && module.exports) module.exports = api;

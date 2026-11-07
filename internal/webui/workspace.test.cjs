@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { saveBookmark, readRoute, routeSearch, createDrafts, readerSnapshot, tagValues, searchExcerpt, captureFailure, bookmarkIssues, requestFailure } = require('./static/workspace.js');
+const { saveBookmark, readRoute, routeSearch, createDrafts, readerSnapshot, tagValues, searchExcerpt, captureFailure, bookmarkIssues, requestFailure } = require('../../frontend/src/features/workspace.js').default;
 
 test('search excerpts preserve untrusted HTML as literal text and truncated matches', () => {
   assert.deepEqual(searchExcerpt('<img src=x> before \x1ecafé\x1f after'), [
