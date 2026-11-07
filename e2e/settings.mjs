@@ -1,10 +1,73 @@
 export { openWorkspaceActions } from './navigation.mjs';
-import { clickNavigation } from './navigation.mjs';
+import { clickNavigation, openNavigation } from './navigation.mjs';
 import assert from 'node:assert/strict';
 
 export async function selectSettings(page, section) {
   await clickNavigation(page, `[data-settings-section="${section}"]`);
   await page.locator(`[data-settings-panel="${section}"]`).waitFor({ state: 'visible' });
+}
+
+// Compare Settings with the real library, so a separate oversized scale cannot return.
+export async function settingsDensityJourney(page) {
+  const viewport = page.viewportSize();
+  const initialTheme = await page.locator('html').getAttribute('data-theme');
+  const libraryURL = new URL(page.url());
+  libraryURL.searchParams.delete('settings');
+  const sections = ['api-keys', '2fa', 'sessions', 'password', 'backup', 'sync', 'mobile'];
+  for (const theme of ['dark', 'light']) for (const width of [1280, 1024, 901, 900, 390, 320]) {
+    await page.goto(libraryURL.href);
+    await page.locator('#library-content').waitFor({ state: 'visible' });
+    await page.setViewportSize({ width, height: 800 });
+    if (await page.locator('html').getAttribute('data-theme') !== theme)
+      await page.locator('.main-content > .topbar [data-theme-toggle]').click();
+    await openNavigation(page);
+    const reference = await page.evaluate(() => {
+      const item = document.querySelector('#library-navigation [data-filter].active') || document.querySelector('[data-filter="all"]');
+      const font = node => { const s = getComputedStyle(node); return [s.fontSize, s.fontFamily, s.fontWeight, s.lineHeight]; };
+      return {
+        menuFont: font(item), menuHeight: getComputedStyle(item).minHeight,
+        icon: item.querySelector('.icon').getBoundingClientRect().width,
+        brand: getComputedStyle(document.querySelector('#sidebar .brand')).fontSize,
+        mark: document.querySelector('#sidebar .brand-mark').getBoundingClientRect().toJSON(),
+        header: document.querySelector('.main-content > .topbar').getBoundingClientRect().height,
+        title: font(document.querySelector('#page-title')),
+        rail: document.querySelector('#sidebar').getBoundingClientRect().width,
+      };
+    });
+    await clickNavigation(page, '#settings-button');
+    for (const section of sections) {
+      await selectSettings(page, section);
+      const actual = await page.evaluate(section => {
+        const item = document.querySelector(`[data-settings-section="${section}"]`);
+        const font = node => { const s = getComputedStyle(node); return [s.fontSize, s.fontFamily, s.fontWeight, s.lineHeight]; };
+        return {
+          menuFont: font(item), menuHeight: getComputedStyle(item).minHeight,
+          icon: item.querySelector('.icon').getBoundingClientRect().width,
+          brand: getComputedStyle(document.querySelector('.settings-topbar .brand')).fontSize,
+          mark: document.querySelector('.settings-topbar .brand-mark').getBoundingClientRect().toJSON(),
+          header: document.querySelector('.settings-topbar').getBoundingClientRect().height,
+          title: font(document.querySelector(`[data-settings-panel="${section}"] h2`)),
+          rail: document.querySelector('#settings-navigation').getBoundingClientRect().width,
+        };
+      }, section);
+      assert.deepEqual(actual.menuFont, reference.menuFont, `${theme}/${width}/${section}: navigation typography matches the library`);
+      assert.equal(actual.icon, reference.icon);
+      assert.equal(actual.brand, reference.brand);
+      assert.equal(actual.mark.width, reference.mark.width);
+      assert.equal(actual.mark.height, reference.mark.height);
+      assert.equal(actual.header, reference.header);
+      assert.deepEqual(actual.title, reference.title, `${section}: page heading matches the library`);
+      if (width > 900) {
+        assert.equal(actual.menuHeight, reference.menuHeight);
+        assert.equal(actual.rail, reference.rail);
+      } else assert.ok(parseFloat(actual.menuHeight) >= 44, 'compact phone menus retain touch targets');
+    }
+  }
+  await page.goto(libraryURL.href);
+  await page.locator('#library-content').waitFor({ state: 'visible' });
+  await page.setViewportSize(viewport);
+  if (await page.locator('html').getAttribute('data-theme') !== initialTheme)
+    await page.locator('.main-content > .topbar [data-theme-toggle]').click();
 }
 
 export async function settingsNavigationJourney(page) {
@@ -16,6 +79,7 @@ export async function settingsNavigationJourney(page) {
   context.searchParams.set('sort', 'title');
   await page.goto(context.href);
   await page.locator('#library-content').waitFor({ state: 'visible' });
+  await settingsDensityJourney(page);
   await clickNavigation(page, '#settings-button');
   assert.equal(await page.locator('#settings-page').evaluate(node => node.tagName), 'SECTION');
   assert.equal(await page.locator('dialog[open]').count(), 0);
