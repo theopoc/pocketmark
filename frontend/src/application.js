@@ -580,7 +580,7 @@ export function createApplication() {
       renderSettings();
       if (!state.mfaManagementBusy) {
         document
-          .querySelectorAll("#settings-page > section")
+          .querySelectorAll("[data-settings-panel]")
           .forEach((section) => {
             if (
               section.getAttribute("aria-labelledby") !== "mfa-settings-title"

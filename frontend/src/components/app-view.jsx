@@ -1,6 +1,7 @@
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
+import { SettingsFrame } from "../features/settings/frame";
 
 export function AppView() {
   return (
@@ -55,647 +56,527 @@ export function AppView() {
           hidden
         >
           {"\n        "}
-          <Button
-            type="button"
-            className="button subtle settings-mobile-back"
-            data-settings-back
-          >
-            <span data-icon="arrow-left" aria-hidden="true"></span>
-            {"Back to library"}
-          </Button>
-          {"\n        "}
-          <h1 id="settings-title">{"Settings"}</h1>
-          {"\n"}
-          <section
-            className="settings-section"
-            data-settings-panel="password"
-            aria-labelledby="password-title"
-            hidden
-          >
-            <h2 id="password-title">{"Account & security"}</h2>
-            <p className="small muted">
-              {"Manage how you sign in and review browser access."}
-            </p>
-            <h3>{"Sign-in & password"}</h3>
-            <form id="account-form">
-              <p id="account-status" className="small muted"></p>
-              <label htmlFor="account-username">{"Username"}</label>
-              <Input id="account-username" autoComplete="username" required />
-              <label htmlFor="account-password">{"New password"}</label>
-              <Input
-                id="account-password"
-                type="password"
-                minLength="12"
-                autoComplete="new-password"
-                required
-              />
-              <p className="small muted">{"At least 12 characters."}</p>
-              <Button className="button primary" type="submit">
-                {"Save password"}
-              </Button>
-            </form>
-            <p id="settings-error" className="form-error" role="alert"></p>
-          </section>
-          <section
-            className="settings-section"
-            data-settings-panel="2fa"
-            aria-labelledby="mfa-settings-title"
-            hidden
-          >
-            {"\n    "}
-            <h2 id="mfa-settings-title">{"Two-factor authentication"}</h2>
-            {"\n    "}
-            <p className="small muted">
-              {
-                "Use an authenticator app when signing in. Replacing it signs out your other browsers."
-              }
-            </p>
-            {"\n    "}
-            <form id="mfa-manage-form">
-              {"\n      "}
-              <label htmlFor="mfa-manage-password">{"Current password"}</label>
-              <Input
-                id="mfa-manage-password"
-                type="password"
-                autoComplete="current-password"
-                required
-                maxLength="1024"
-              />
-              {"\n      "}
-              <label htmlFor="mfa-manage-code">
-                {"Authentication or recovery code"}
-              </label>
-              <Input
-                id="mfa-manage-code"
-                autoComplete="one-time-code"
-                spellCheck="false"
-              />
-              {"\n      "}
+          <SettingsFrame>
+            <section
+              className="settings-section"
+              data-settings-panel="password"
+              aria-labelledby="password-title"
+              hidden
+            >
+              <h2 id="password-title">{"Password"}</h2>
+              <p className="small muted">{"Manage your sign-in details."}</p>
+              <form id="account-form">
+                <p id="account-status" className="small muted"></p>
+                <label htmlFor="account-username">{"Username"}</label>
+                <Input id="account-username" autoComplete="username" required />
+                <label htmlFor="account-password">{"New password"}</label>
+                <Input
+                  id="account-password"
+                  type="password"
+                  minLength="12"
+                  autoComplete="new-password"
+                  required
+                />
+                <p className="small muted">{"At least 12 characters."}</p>
+                <Button className="button primary" type="submit">
+                  {"Save password"}
+                </Button>
+              </form>
+              <p id="settings-error" className="form-error" role="alert"></p>
+            </section>
+            <section
+              className="settings-section"
+              data-settings-panel="2fa"
+              aria-labelledby="mfa-settings-title"
+              hidden
+            >
+              {"\n    "}
+              <h2 id="mfa-settings-title">{"Two-factor authentication"}</h2>
+              {"\n    "}
               <p className="small muted">
                 {
-                  "For five minutes after signing in with a recovery code, you can leave the code field empty when replacing your authenticator."
+                  "Use an authenticator app when signing in. Replacing it signs out your other browsers."
                 }
               </p>
-              {"\n      "}
-              <p id="mfa-codes-warning" className="small muted">
+              {"\n    "}
+              <form id="mfa-manage-form">
+                {"\n      "}
+                <label htmlFor="mfa-manage-password">
+                  {"Current password"}
+                </label>
+                <Input
+                  id="mfa-manage-password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  maxLength="1024"
+                />
+                {"\n      "}
+                <label htmlFor="mfa-manage-code">
+                  {"Authentication or recovery code"}
+                </label>
+                <Input
+                  id="mfa-manage-code"
+                  autoComplete="one-time-code"
+                  spellCheck="false"
+                />
+                {"\n      "}
+                <p className="small muted">
+                  {
+                    "For five minutes after signing in with a recovery code, you can leave the code field empty when replacing your authenticator."
+                  }
+                </p>
+                {"\n      "}
+                <p id="mfa-codes-warning" className="small muted">
+                  {
+                    "Generating recovery codes invalidates all previous recovery codes."
+                  }
+                </p>
+                {"\n      "}
+                <div className="token-actions">
+                  <Button
+                    className="button subtle"
+                    type="submit"
+                    value="replace"
+                  >
+                    {"Replace authenticator"}
+                  </Button>
+                  <Button
+                    className="button subtle"
+                    type="submit"
+                    value="codes"
+                    aria-describedby="mfa-codes-warning"
+                  >
+                    {"Generate recovery codes"}
+                  </Button>
+                </div>
+                {"\n    "}
+              </form>
+              {"\n    "}
+              <div id="mfa-manage-enrollment" hidden>
+                <p className="small muted">
+                  {
+                    "Scan the new QR code or enter the setup key in your authenticator."
+                  }
+                </p>
+                <img
+                  id="mfa-manage-qr"
+                  className="mfa-qr"
+                  alt="New authenticator setup QR code"
+                  width="220"
+                  height="220"
+                />
+                <label htmlFor="mfa-manage-secret">{"Manual setup key"}</label>
+                <Textarea
+                  id="mfa-manage-secret"
+                  className="mfa-secret"
+                  rows="2"
+                  readOnly
+                  spellCheck="false"
+                ></Textarea>
+                <Button
+                  id="mfa-manage-secret-copy"
+                  type="button"
+                  className="button subtle"
+                >
+                  {"Copy setup key"}
+                </Button>
+                <form id="mfa-manage-verify">
+                  <label htmlFor="mfa-manage-new-code">
+                    {"Code from the new authenticator"}
+                  </label>
+                  <Input
+                    id="mfa-manage-new-code"
+                    autoComplete="one-time-code"
+                    inputMode="numeric"
+                    required
+                  />
+                  <Button className="button primary" type="submit">
+                    {"Confirm new authenticator"}
+                  </Button>
+                  <Button
+                    id="mfa-manage-cancel"
+                    className="button subtle"
+                    type="button"
+                  >
+                    {"Cancel replacement"}
+                  </Button>
+                </form>
+              </div>
+              {"\n    "}
+              <div id="mfa-manage-codes" hidden>
+                <p className="small muted">
+                  {
+                    "Save these single-use codes now. Previous codes no longer work."
+                  }
+                </p>
+                <pre
+                  id="mfa-manage-codes-value"
+                  className="mfa-codes"
+                  tabIndex="0"
+                ></pre>
+                <div className="token-actions">
+                  <Button
+                    id="mfa-manage-copy"
+                    className="button subtle"
+                    type="button"
+                  >
+                    {"Copy recovery codes"}
+                  </Button>
+                  <Button
+                    id="mfa-manage-download"
+                    className="button subtle"
+                    type="button"
+                  >
+                    {"Download recovery codes"}
+                  </Button>
+                </div>
+              </div>
+              {"\n    "}
+              <p
+                id="mfa-manage-feedback"
+                className="small muted"
+                role="status"
+              ></p>
+              <p id="mfa-manage-error" className="form-error" role="alert"></p>
+              {"\n  "}
+            </section>
+            <section
+              className="settings-section"
+              data-settings-panel="sessions"
+              aria-labelledby="sessions-title"
+              hidden
+            >
+              {"\n    "}
+              <h2 id="sessions-title">{"Browser sessions"}</h2>
+              {"\n    "}
+              <p className="small muted">
                 {
-                  "Generating recovery codes invalidates all previous recovery codes."
+                  "Review signed-in browsers and revoke access. All sessions expire after seven days. Browser details are reported by the device and may be unavailable or inaccurate."
                 }
               </p>
-              {"\n      "}
+              {"\n    "}
               <div className="token-actions">
-                <Button className="button subtle" type="submit" value="replace">
-                  {"Replace authenticator"}
+                <Button
+                  id="sessions-refresh"
+                  type="button"
+                  className="button subtle"
+                >
+                  {"Refresh sessions"}
                 </Button>
                 <Button
+                  id="sessions-others"
+                  type="button"
                   className="button subtle"
-                  type="submit"
-                  value="codes"
-                  aria-describedby="mfa-codes-warning"
                 >
-                  {"Generate recovery codes"}
+                  {"Sign out other browsers"}
                 </Button>
               </div>
               {"\n    "}
-            </form>
-            {"\n    "}
-            <div id="mfa-manage-enrollment" hidden>
-              <p className="small muted">
-                {
-                  "Scan the new QR code or enter the setup key in your authenticator."
-                }
-              </p>
-              <img
-                id="mfa-manage-qr"
-                className="mfa-qr"
-                alt="New authenticator setup QR code"
-                width="220"
-                height="220"
-              />
-              <label htmlFor="mfa-manage-secret">{"Manual setup key"}</label>
-              <Textarea
-                id="mfa-manage-secret"
-                className="mfa-secret"
-                rows="2"
-                readOnly
-                spellCheck="false"
-              ></Textarea>
-              <Button
-                id="mfa-manage-secret-copy"
-                type="button"
-                className="button subtle"
-              >
-                {"Copy setup key"}
-              </Button>
-              <form id="mfa-manage-verify">
-                <label htmlFor="mfa-manage-new-code">
-                  {"Code from the new authenticator"}
+              <ul id="sessions-list" aria-label="Browser sessions"></ul>
+              {"\n    "}
+              <form id="session-idle-form">
+                <label htmlFor="session-idle">
+                  {"Sign out this browser after inactivity"}
                 </label>
-                <Input
-                  id="mfa-manage-new-code"
-                  autoComplete="one-time-code"
-                  inputMode="numeric"
-                  required
-                />
-                <Button className="button primary" type="submit">
-                  {"Confirm new authenticator"}
-                </Button>
-                <Button
-                  id="mfa-manage-cancel"
-                  className="button subtle"
-                  type="button"
-                >
-                  {"Cancel replacement"}
+                <select id="session-idle">
+                  <option value="15">{"15 minutes"}</option>
+                  <option value="60">{"1 hour"}</option>
+                  <option value="1440">{"24 hours"}</option>
+                  <option value="0">{"Only at the seven-day expiry"}</option>
+                </select>
+                <p className="small muted">
+                  {
+                    "Requests from an open library count as activity. Changing this setting requires recent password confirmation."
+                  }
+                </p>
+                <Button className="button subtle" type="submit">
+                  {"Save timeout"}
                 </Button>
               </form>
-            </div>
-            {"\n    "}
-            <div id="mfa-manage-codes" hidden>
-              <p className="small muted">
-                {
-                  "Save these single-use codes now. Previous codes no longer work."
-                }
-              </p>
-              <pre
-                id="mfa-manage-codes-value"
-                className="mfa-codes"
-                tabIndex="0"
-              ></pre>
-              <div className="token-actions">
-                <Button
-                  id="mfa-manage-copy"
-                  className="button subtle"
-                  type="button"
-                >
-                  {"Copy recovery codes"}
-                </Button>
-                <Button
-                  id="mfa-manage-download"
-                  className="button subtle"
-                  type="button"
-                >
-                  {"Download recovery codes"}
-                </Button>
+              {"\n    "}
+              <p
+                id="sessions-feedback"
+                className="small muted"
+                role="status"
+              ></p>
+              <p id="sessions-error" className="form-error" role="alert"></p>
+              {"\n  "}
+            </section>
+            {"        "}
+            <section
+              className="settings-section"
+              data-settings-panel="api-keys"
+              aria-labelledby="api-keys-title"
+              hidden
+            >
+              {"\n    "}
+              <div className="token-heading">
+                <div>
+                  <h2 id="api-keys-title">{"API keys"}</h2>
+                  <p className="small muted">
+                    {"Connect each app with its own key."}
+                  </p>
+                </div>
+                <span id="token-count" className="small muted"></span>
               </div>
-            </div>
-            {"\n    "}
-            <p
-              id="mfa-manage-feedback"
-              className="small muted"
-              role="status"
-            ></p>
-            <p id="mfa-manage-error" className="form-error" role="alert"></p>
-            {"\n  "}
-          </section>
-          <section
-            className="settings-section"
-            data-settings-panel="sessions"
-            aria-labelledby="sessions-title"
-            hidden
-          >
-            {"\n    "}
-            <h2 id="sessions-title">{"Browser sessions"}</h2>
-            {"\n    "}
-            <p className="small muted">
-              {
-                "Review signed-in browsers and revoke access. All sessions expire after seven days. Browser details are reported by the device and may be unavailable or inaccurate."
-              }
-            </p>
-            {"\n    "}
-            <div className="token-actions">
-              <Button
-                id="sessions-refresh"
-                type="button"
-                className="button subtle"
-              >
-                {"Refresh sessions"}
-              </Button>
-              <Button
-                id="sessions-others"
-                type="button"
-                className="button subtle"
-              >
-                {"Sign out other browsers"}
-              </Button>
-            </div>
-            {"\n    "}
-            <ul id="sessions-list" aria-label="Browser sessions"></ul>
-            {"\n    "}
-            <form id="session-idle-form">
-              <label htmlFor="session-idle">
-                {"Sign out this browser after inactivity"}
-              </label>
-              <select id="session-idle">
-                <option value="15">{"15 minutes"}</option>
-                <option value="60">{"1 hour"}</option>
-                <option value="1440">{"24 hours"}</option>
-                <option value="0">{"Only at the seven-day expiry"}</option>
-              </select>
-              <p className="small muted">
-                {
-                  "Requests from an open library count as activity. Changing this setting requires recent password confirmation."
-                }
-              </p>
-              <Button className="button subtle" type="submit">
-                {"Save timeout"}
-              </Button>
-            </form>
-            {"\n    "}
-            <p id="sessions-feedback" className="small muted" role="status"></p>
-            <p id="sessions-error" className="form-error" role="alert"></p>
-            {"\n  "}
-          </section>
-          {"        "}
-          <section
-            className="settings-section"
-            data-settings-panel="api-keys"
-            aria-labelledby="api-keys-title"
-            hidden
-          >
-            {"\n    "}
-            <header className="api-key-topbar">
-              <a className="brand" href="/" aria-label="Pocketmark home">
-                <img
-                  className="brand-mark"
-                  src="/icon.svg"
-                  width="29"
-                  height="32"
-                  alt=""
+              {"\n    "}
+              <div id="new-token" hidden>
+                {"\n      "}
+                <label htmlFor="new-token-value">{"New API key"}</label>
+                {"\n      "}
+                <Input
+                  id="new-token-value"
+                  type="password"
+                  readOnly
+                  autoComplete="off"
+                  spellCheck="false"
+                  aria-describedby="new-token-help"
                 />
-                <span>{"Pocketmark"}</span>
-              </a>
-              <span className="muted">{"Personal library"}</span>
-              <Button
-                className="button subtle theme-toggle"
-                data-theme-toggle
-                aria-label="Dark mode"
-                aria-pressed="true"
-                title="Switch to light mode"
-              >
-                <span data-theme-icon aria-hidden="true"></span>
-                <span data-theme-label>{"Dark"}</span>
-              </Button>
-            </header>
-            {"\n    "}
-            <div className="api-key-layout">
-              {"\n      "}
-              <nav
-                className="api-key-navigation"
-                aria-label="API key settings navigation"
-              >
-                {"\n        "}
-                <Button
-                  type="button"
-                  className="nav-item active"
-                  data-api-key-section="api-keys"
-                  aria-current="page"
-                >
-                  <span data-icon="key" aria-hidden="true"></span>
-                  {"API keys"}
-                </Button>
-                {"\n        "}
-                <Button
-                  type="button"
-                  className="nav-item"
-                  data-api-key-section="2fa"
-                >
-                  <span data-icon="shield" aria-hidden="true"></span>
-                  {"Two-factor authentication"}
-                </Button>
-                {"\n        "}
-                <Button
-                  type="button"
-                  className="nav-item"
-                  data-api-key-section="sessions"
-                >
-                  <span data-icon="monitor" aria-hidden="true"></span>
-                  {"Browser sessions"}
-                </Button>
-                {"\n        "}
-                <Button
-                  type="button"
-                  className="nav-item"
-                  data-api-key-section="password"
-                >
-                  <span data-icon="lock" aria-hidden="true"></span>
-                  {"Password"}
-                </Button>
-                {"\n        "}
-                <Button
-                  type="button"
-                  className="nav-item"
-                  data-api-key-section="backup"
-                >
-                  <span data-icon="download" aria-hidden="true"></span>
-                  {"Backup & restore"}
-                </Button>
-                {"\n        "}
-                <div className="api-key-secondary-navigation">
-                  {"\n          "}
+                {"\n      "}
+                <p id="new-token-help" className="small muted">
+                  {
+                    "Copy this key now. You won’t be able to view it again after leaving Settings."
+                  }
+                </p>
+                {"\n      "}
+                <div className="token-actions">
+                  {"\n        "}
                   <Button
+                    id="toggle-token"
+                    className="button subtle"
                     type="button"
-                    className="nav-item"
-                    data-api-key-section="sync"
+                    aria-label="Show API key"
+                    aria-controls="new-token-value"
                   >
-                    <span data-icon="refresh" aria-hidden="true"></span>
-                    {"Browser bookmark sync"}
-                  </Button>
-                  {"\n          "}
-                  <Button
-                    type="button"
-                    className="nav-item"
-                    data-api-key-section="mobile"
-                  >
-                    <span data-icon="book" aria-hidden="true"></span>
-                    {"Mobile & browser"}
+                    {"Show key"}
                   </Button>
                   {"\n        "}
-                </div>
-                {"\n        "}
-                <Button
-                  type="button"
-                  className="nav-item api-key-library-back"
-                  data-settings-back
-                >
-                  <span data-icon="arrow-left" aria-hidden="true"></span>
-                  {"Back to library"}
-                </Button>
-                {"\n      "}
-              </nav>
-              {"\n      "}
-              <div className="api-key-workspace">
-                {"\n    "}
-                <div className="token-heading">
-                  <div>
-                    <h2 id="api-keys-title">{"API keys"}</h2>
-                    <p className="small muted">
-                      {"Connect each app with its own key."}
-                    </p>
-                  </div>
-                  <span id="token-count" className="small muted"></span>
-                </div>
-                {"\n    "}
-                <div id="new-token" hidden>
+                  <Button
+                    id="copy-token"
+                    className="button subtle"
+                    type="button"
+                  >
+                    {"Copy key"}
+                  </Button>
                   {"\n      "}
-                  <label htmlFor="new-token-value">{"New API key"}</label>
+                </div>
+                {"\n    "}
+              </div>
+              {"\n    "}
+              <p id="tokens-error" className="form-error" role="alert"></p>
+              {"\n    "}
+              <details id="token-create" className="token-create">
+                <summary className="button primary">
+                  <span data-icon="plus" aria-hidden="true"></span>
+                  {"Create API key"}
+                </summary>
+                {"    "}
+                <form id="token-form">
+                  {"\n      "}
+                  <p id="token-help" className="small muted">
+                    {"Choose a name and the access this app needs."}
+                  </p>
+                  {"\n      "}
+                  <label htmlFor="token-name">{"Key name"}</label>
                   {"\n      "}
                   <Input
-                    id="new-token-value"
-                    type="password"
-                    readOnly
-                    autoComplete="off"
-                    spellCheck="false"
-                    aria-describedby="new-token-help"
+                    id="token-name"
+                    required
+                    maxLength="100"
+                    placeholder="My browser extension"
+                    aria-describedby="token-help"
                   />
                   {"\n      "}
-                  <p id="new-token-help" className="small muted">
+                  <label htmlFor="token-profile">{"Permissions"}</label>
+                  {"\n      "}
+                  <select
+                    id="token-profile"
+                    aria-describedby="token-permissions-help"
+                  >
+                    <option value="read">{"Read only"}</option>
+                    <option value="capture">{"Add, edit & capture"}</option>
+                    <option value="sync">{"Floccus sync"}</option>
+                    <option value="full">{"Full library access"}</option>
+                  </select>
+                  {"\n      "}
+                  <p id="token-permissions-help" className="small muted">
                     {
-                      "Copy this key now. You won’t be able to view it again after leaving Settings."
+                      "Read only can read and export your library. No profile can manage your account, keys, sessions or full backups."
                     }
                   </p>
                   {"\n      "}
-                  <div className="token-actions">
-                    {"\n        "}
-                    <Button
-                      id="toggle-token"
-                      className="button subtle"
-                      type="button"
-                      aria-label="Show API key"
-                      aria-controls="new-token-value"
-                    >
-                      {"Show key"}
-                    </Button>
-                    {"\n        "}
-                    <Button
-                      id="copy-token"
-                      className="button subtle"
-                      type="button"
-                    >
-                      {"Copy key"}
-                    </Button>
-                    {"\n      "}
-                  </div>
+                  <label htmlFor="token-expiry">{"Expires after"}</label>
+                  <select id="token-expiry">
+                    <option value="30">{"30 days"}</option>
+                    <option value="90">{"90 days"}</option>
+                    <option value="365">{"1 year"}</option>
+                    <option value="0">{"Never"}</option>
+                  </select>
+                  {"\n      "}
+                  <Button className="button subtle" type="submit">
+                    {"Create key"}
+                  </Button>
                   {"\n    "}
-                </div>
+                </form>
                 {"\n    "}
-                <p id="tokens-error" className="form-error" role="alert"></p>
-                {"\n    "}
-                <details id="token-create" className="token-create">
-                  <summary className="button primary">
-                    <span data-icon="plus" aria-hidden="true"></span>
-                    {"Create API key"}
-                  </summary>
-                  {"    "}
-                  <form id="token-form">
-                    {"\n      "}
-                    <p id="token-help" className="small muted">
-                      {"Choose a name and the access this app needs."}
-                    </p>
-                    {"\n      "}
-                    <label htmlFor="token-name">{"Key name"}</label>
-                    {"\n      "}
-                    <Input
-                      id="token-name"
-                      required
-                      maxLength="100"
-                      placeholder="My browser extension"
-                      aria-describedby="token-help"
-                    />
-                    {"\n      "}
-                    <label htmlFor="token-profile">{"Permissions"}</label>
-                    {"\n      "}
-                    <select
-                      id="token-profile"
-                      aria-describedby="token-permissions-help"
-                    >
-                      <option value="read">{"Read only"}</option>
-                      <option value="capture">{"Add, edit & capture"}</option>
-                      <option value="sync">{"Floccus sync"}</option>
-                      <option value="full">{"Full library access"}</option>
-                    </select>
-                    {"\n      "}
-                    <p id="token-permissions-help" className="small muted">
-                      {
-                        "Read only can read and export your library. No profile can manage your account, keys, sessions or full backups."
-                      }
-                    </p>
-                    {"\n      "}
-                    <label htmlFor="token-expiry">{"Expires after"}</label>
-                    <select id="token-expiry">
-                      <option value="30">{"30 days"}</option>
-                      <option value="90">{"90 days"}</option>
-                      <option value="365">{"1 year"}</option>
-                      <option value="0">{"Never"}</option>
-                    </select>
-                    {"\n      "}
-                    <Button className="button subtle" type="submit">
-                      {"Create key"}
-                    </Button>
-                    {"\n    "}
-                  </form>
-                  {"\n    "}
-                </details>
-                {"\n    "}
-                <ul
-                  id="token-list"
-                  aria-label="API keys"
-                  aria-describedby="token-activity-help"
-                ></ul>
-                {"\n    "}
-                <p id="token-activity-help" className="small muted">
-                  {
-                    "Last used includes connected apps and bookmark sync. Earlier activity may be unavailable."
-                  }
-                </p>
-                {"\n    "}
-                <p
-                  id="tokens-feedback"
-                  className="small muted"
-                  role="status"
-                ></p>
-                {"\n      "}
-              </div>
+              </details>
               {"\n    "}
-            </div>
-            {"\n  "}
-          </section>
-          <section
-            className="settings-section"
-            data-settings-panel="backup"
-            aria-labelledby="backup-title"
-            hidden
-          >
-            <h2 id="backup-title">{"Backup & restore"}</h2>
-            <p className="small muted">
-              {
-                "A full backup keeps your bookmarks, captures, attachments, highlights and account settings together."
-              }
-            </p>
-            <a className="button subtle" href="/api/backup">
-              {"Download full backup"}
-            </a>
-            <details className="help-details">
-              <summary>{"How to restore a backup"}</summary>
-              <ol className="small muted">
-                <li>{"Stop Pocketmark before restoring."}</li>
-                <li>
-                  {
-                    "Unzip the backup and follow its RESTORE instructions. Use an empty data directory and keep your server-secret (or legacy access-token / POCKETMARK_TOKEN) separately."
-                  }
-                </li>
-                <li>
-                  {"Restore file ownership if needed, then restart Pocketmark."}
-                </li>
-              </ol>
-              <p className="small muted">
+              <ul
+                id="token-list"
+                aria-label="API keys"
+                aria-describedby="token-activity-help"
+              ></ul>
+              {"\n    "}
+              <p id="token-activity-help" className="small muted">
                 {
-                  "JSON and browser HTML exports contain bookmark metadata, not captures or attached files."
+                  "Last used includes connected apps and bookmark sync. Earlier activity may be unavailable."
                 }
               </p>
-            </details>
-          </section>
-          <section
-            className="settings-section"
-            data-settings-panel="sync"
-            aria-labelledby="sync-title"
-            hidden
-          >
-            {"\n    "}
-            <h2 id="sync-title">{"Browser bookmark sync"}</h2>
-            <p className="small muted">
-              {
-                "Use a dedicated Floccus API key to sync bookmarks and collection folders."
-              }
-            </p>
-            {"\n    "}
-            <ol className="setup-steps">
-              <li>
-                <a href="/?settings=api-keys">{"Create an API key"}</a>
-                {" with "}
-                <strong>{"Floccus sync"}</strong>
-                {" permissions."}
-              </li>
-              <li>
-                {"In Floccus, add a "}
-                <strong>{"WebDAV"}</strong>
-                {" account."}
-                <label htmlFor="sync-address">{"Server address"}</label>
-                <div className="copy-field">
-                  <Input id="sync-address" readOnly />
-                  <Button
-                    id="sync-copy"
-                    type="button"
-                    className="button subtle"
-                  >
-                    {"Copy address"}
-                  </Button>
-                </div>
-              </li>
-              <li>
-                {"Use "}
-                <code>{"bookmarks.xbel"}</code>
+              {"\n    "}
+              <p id="tokens-feedback" className="small muted" role="status"></p>
+              {"\n      "}
+            </section>
+            <section
+              className="settings-section"
+              data-settings-panel="backup"
+              aria-labelledby="backup-title"
+              hidden
+            >
+              <h2 id="backup-title">{"Backup & restore"}</h2>
+              <p className="small muted">
                 {
-                  " as the file name, any username, and your dedicated API key as the password."
+                  "A full backup keeps your bookmarks, captures, attachments, highlights and account settings together."
                 }
-              </li>
-            </ol>
-            {"\n    "}
-            <p className="small muted">
-              {
-                "Uploading a Floccus file replaces the synchronized bookmark tree. Deletions in that file remove matching bookmarks."
-              }
-            </p>
-            {"\n  "}
-          </section>
-          <section
-            className="settings-section"
-            data-settings-panel="mobile"
-            aria-labelledby="mobile-title"
-            hidden
-          >
-            {"\n    "}
-            <h2 id="mobile-title">{"Mobile & browser"}</h2>
-            {"\n    "}
-            <h3>{"Install on your phone"}</h3>
-            <p className="small muted">
-              {
-                "Open Pocketmark in your phone’s browser, then choose its install or Add to Home Screen command. Availability depends on your browser and operating system."
-              }
-            </p>
-            <p className="small muted">
-              {
-                "Where supported, share a link from another app to Pocketmark to save it."
-              }
-            </p>
-            {"\n    "}
-            <h3>{"Save from Chrome"}</h3>
-            <p className="small muted">
-              {
-                "The companion extension can save a link, rendered HTML, screenshots or a PDF. Connect it to this server with a dedicated API key using "
-              }
-              <strong>{"Add, edit & capture"}</strong>
-              {" permissions."}
-            </p>
-            <a className="button subtle" href="/?settings=api-keys">
-              {"Manage API keys"}
-            </a>
-            {"\n    "}
-            <h3>{"Keyboard shortcuts"}</h3>
-            <label className="inline-check">
-              <Input id="keyboard-shortcuts" type="checkbox" defaultChecked />
-              {" Enable single-key shortcuts"}
-            </label>
-            <p className="small muted">
-              {"Use "}
-              <kbd>{"N"}</kbd>
-              {" to add a bookmark and "}
-              <kbd>{"/"}</kbd>
-              {
-                " to search while browsing your library. Turn these off when using dictation or if they interrupt your work. This preference stays in this browser."
-              }
-            </p>
-            {"\n  "}
-          </section>
+              </p>
+              <a className="button subtle" href="/api/backup">
+                {"Download full backup"}
+              </a>
+              <details className="help-details">
+                <summary>{"How to restore a backup"}</summary>
+                <ol className="small muted">
+                  <li>{"Stop Pocketmark before restoring."}</li>
+                  <li>
+                    {
+                      "Unzip the backup and follow its RESTORE instructions. Use an empty data directory and keep your server-secret (or legacy access-token / POCKETMARK_TOKEN) separately."
+                    }
+                  </li>
+                  <li>
+                    {
+                      "Restore file ownership if needed, then restart Pocketmark."
+                    }
+                  </li>
+                </ol>
+                <p className="small muted">
+                  {
+                    "JSON and browser HTML exports contain bookmark metadata, not captures or attached files."
+                  }
+                </p>
+              </details>
+            </section>
+            <section
+              className="settings-section"
+              data-settings-panel="sync"
+              aria-labelledby="sync-title"
+              hidden
+            >
+              {"\n    "}
+              <h2 id="sync-title">{"Browser bookmark sync"}</h2>
+              <p className="small muted">
+                {
+                  "Use a dedicated Floccus API key to sync bookmarks and collection folders."
+                }
+              </p>
+              {"\n    "}
+              <ol className="setup-steps">
+                <li>
+                  <a href="/?settings=api-keys">{"Create an API key"}</a>
+                  {" with "}
+                  <strong>{"Floccus sync"}</strong>
+                  {" permissions."}
+                </li>
+                <li>
+                  {"In Floccus, add a "}
+                  <strong>{"WebDAV"}</strong>
+                  {" account."}
+                  <label htmlFor="sync-address">{"Server address"}</label>
+                  <div className="copy-field">
+                    <Input id="sync-address" readOnly />
+                    <Button
+                      id="sync-copy"
+                      type="button"
+                      className="button subtle"
+                    >
+                      {"Copy address"}
+                    </Button>
+                  </div>
+                </li>
+                <li>
+                  {"Use "}
+                  <code>{"bookmarks.xbel"}</code>
+                  {
+                    " as the file name, any username, and your dedicated API key as the password."
+                  }
+                </li>
+              </ol>
+              {"\n    "}
+              <p className="small muted">
+                {
+                  "Uploading a Floccus file replaces the synchronized bookmark tree. Deletions in that file remove matching bookmarks."
+                }
+              </p>
+              {"\n  "}
+            </section>
+            <section
+              className="settings-section"
+              data-settings-panel="mobile"
+              aria-labelledby="mobile-title"
+              hidden
+            >
+              {"\n    "}
+              <h2 id="mobile-title">{"Mobile & browser"}</h2>
+              {"\n    "}
+              <h3>{"Install on your phone"}</h3>
+              <p className="small muted">
+                {
+                  "Open Pocketmark in your phone’s browser, then choose its install or Add to Home Screen command. Availability depends on your browser and operating system."
+                }
+              </p>
+              <p className="small muted">
+                {
+                  "Where supported, share a link from another app to Pocketmark to save it."
+                }
+              </p>
+              {"\n    "}
+              <h3>{"Save from Chrome"}</h3>
+              <p className="small muted">
+                {
+                  "The companion extension can save a link, rendered HTML, screenshots or a PDF. Connect it to this server with a dedicated API key using "
+                }
+                <strong>{"Add, edit & capture"}</strong>
+                {" permissions."}
+              </p>
+              <a className="button subtle" href="/?settings=api-keys">
+                {"Manage API keys"}
+              </a>
+              {"\n    "}
+              <h3>{"Keyboard shortcuts"}</h3>
+              <label className="inline-check">
+                <Input id="keyboard-shortcuts" type="checkbox" defaultChecked />
+                {" Enable single-key shortcuts"}
+              </label>
+              <p className="small muted">
+                {"Use "}
+                <kbd>{"N"}</kbd>
+                {" to add a bookmark and "}
+                <kbd>{"/"}</kbd>
+                {
+                  " to search while browsing your library. Turn these off when using dictation or if they interrupt your work. This preference stays in this browser."
+                }
+              </p>
+              {"\n  "}
+            </section>
+          </SettingsFrame>
           {"\n      "}
         </section>
         {"\n      "}

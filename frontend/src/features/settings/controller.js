@@ -224,11 +224,13 @@ export function createSettings(
     document.querySelectorAll("[data-settings-section]").forEach((button) => {
       button.disabled =
         (state.mfaManagementBusy || state.deferredLogin) &&
-        button.dataset.settingsSection !== "password";
+        button.dataset.settingsSection !== state.settingsSection;
     });
-    document.querySelectorAll("[data-settings-back]").forEach((button) => {
-      button.disabled = state.mfaManagementBusy;
-    });
+    document
+      .querySelectorAll("[data-settings-back], [data-settings-home]")
+      .forEach((button) => {
+        button.disabled = state.mfaManagementBusy;
+      });
     $("breadcrumb")
       .querySelectorAll("button")
       .forEach((button) => {
@@ -242,35 +244,13 @@ export function createSettings(
     $("library-content").hidden = active;
     $("library-navigation").hidden = active;
     $("settings-navigation").hidden = !active;
-    $("sidebar").setAttribute(
-      "aria-label",
-      active ? "Settings navigation" : "Library navigation",
-    );
     $("app-view").classList.toggle("showing-settings", active);
-    $("app-view").classList.toggle(
-      "showing-api-keys",
-      state.settingsSection === "api-keys",
-    );
-    $("settings-page").setAttribute(
-      "aria-labelledby",
-      state.settingsSection === "api-keys"
-        ? "api-keys-title"
-        : "settings-title",
-    );
     renderBreadcrumb();
     document.querySelectorAll("[data-settings-panel]").forEach((panel) => {
-      panel.hidden =
-        panel.dataset.settingsPanel !== state.settingsSection &&
-        !(
-          ["password", "2fa", "sessions"].includes(state.settingsSection) &&
-          ["password", "2fa", "sessions"].includes(panel.dataset.settingsPanel)
-        );
+      panel.hidden = panel.dataset.settingsPanel !== state.settingsSection;
     });
     document.querySelectorAll("[data-settings-section]").forEach((button) => {
-      const selected =
-        button.dataset.settingsSection === state.settingsSection ||
-        (button.dataset.settingsSection === "password" &&
-          ["2fa", "sessions"].includes(state.settingsSection));
+      const selected = button.dataset.settingsSection === state.settingsSection;
       button.classList.toggle("active", selected);
       if (selected) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
@@ -293,15 +273,41 @@ export function createSettings(
       );
     }
   }
+  function revealSettingsSection() {
+    if (!state.settingsSection) return;
+    const navigation = $("settings-navigation");
+    const selected = navigation.querySelector('[aria-current="page"]');
+    if (!selected) return;
+    const panel = navigation.getBoundingClientRect();
+    const item = selected.getBoundingClientRect();
+    if (
+      navigation.scrollWidth > navigation.clientWidth &&
+      (item.left < panel.left || item.right > panel.right)
+    )
+      navigation.scrollLeft +=
+        item.left < panel.left
+          ? item.left - panel.left - 18
+          : item.right - panel.right + 18;
+    if (
+      navigation.scrollHeight > navigation.clientHeight &&
+      (item.top < panel.top || item.bottom > panel.bottom)
+    )
+      navigation.scrollTop +=
+        item.top < panel.top
+          ? item.top - panel.top - 18
+          : item.bottom - panel.bottom + 18;
+  }
+  lifecycle
+    .observe(new browser.ResizeObserver(revealSettingsSection))
+    .observe($("settings-navigation"));
   function focusSettings() {
     const heading = document.querySelector(
       `[data-settings-panel="${state.settingsSection}"] h2`,
     );
     heading.tabIndex = -1;
     heading.focus({ preventScroll: true });
-    if (["2fa", "sessions"].includes(state.settingsSection))
-      heading.scrollIntoView({ block: "start", behavior: "instant" });
-    else window.scrollTo({ top: 0, behavior: "instant" });
+    revealSettingsSection();
+    window.scrollTo({ top: 0, behavior: "instant" });
   }
   function navigateSettings(section) {
     if (state.mfaManagementBusy || state.deferredLogin) return;
@@ -318,13 +324,6 @@ export function createSettings(
     .forEach((button) =>
       lifecycle.listen(button, "click", () =>
         navigateSettings(button.dataset.settingsSection),
-      ),
-    );
-  document
-    .querySelectorAll("[data-api-key-section]")
-    .forEach((button) =>
-      lifecycle.listen(button, "click", () =>
-        navigateSettings(button.dataset.apiKeySection),
       ),
     );
   function leaveSettings(libraryRoot = false) {
@@ -349,7 +348,7 @@ export function createSettings(
     } else restoreRoute();
   }
   document
-    .querySelectorAll("[data-settings-back]")
+    .querySelectorAll("[data-settings-back], [data-settings-home]")
     .forEach((button) =>
       lifecycle.listen(button, "click", () => leaveSettings()),
     );
@@ -442,7 +441,7 @@ export function createSettings(
     state.mfaManagementBusy = busy;
     syncSettingsNavigation();
     $("mfa-manage-cancel").disabled = busy;
-    document.querySelectorAll("#settings-page > section").forEach((section) => {
+    document.querySelectorAll("[data-settings-panel]").forEach((section) => {
       if (section.getAttribute("aria-labelledby") !== "mfa-settings-title")
         section.inert = busy || state.deferredLogin;
     });
