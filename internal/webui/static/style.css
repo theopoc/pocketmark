@@ -686,7 +686,7 @@ body:has(dialog[open]) { overflow: hidden; }
   :root.theme-transition::view-transition-new(root) { animation: none !important; }
 }
 @media print {
-  body > .app-shell, body > #login-view, body > #toast, dialog:not(#reader-dialog) { display: none !important; }
+  body .app-shell, body #login-view, body #toast, dialog:not(#reader-dialog) { display: none !important; }
   #reader-dialog { position: static; display: block; width: 100%; height: auto; max-width: none; max-height: none; overflow: visible; border: 0; box-shadow: none; opacity: 1; transform: none; transition: none; }
   #reader-dialog .reader-actions, #reader-dialog .reader-tools, #reader-dialog .reader-assets, #reader-dialog .dialog-heading, #reader-dialog .reader-notes, #annotations-section { display: none; }
   #reader-dialog { color-scheme: light; color: #000; background: #fff; }
@@ -982,7 +982,7 @@ body:has(dialog[open]) { overflow: hidden; }
 .bulk-mobile-open { display: none; }
 body:has(#bulk-bar:not([hidden])) .main-content { padding-bottom: calc(var(--bulk-bar-height, 100px) + 40px); }
 html:has(#bulk-bar:not([hidden])) { scroll-padding-bottom: calc(var(--bulk-bar-height, 100px) + 40px); }
-body:has(#bulk-bar:not([hidden])) > #toast { bottom: calc(var(--bulk-bar-height, 100px) + 40px); }
+body:has(#bulk-bar:not([hidden])) > #toast-root #toast { bottom: calc(var(--bulk-bar-height, 100px) + 40px); }
 [data-theme="dark"] .bulk-bar { box-shadow: 0 6px 24px #0006; }
 [data-theme] .bulk-dialog { background: var(--paper); }
 .bulk-dialog { position: fixed; inset: auto auto var(--bulk-panel-bottom, 100px) var(--bulk-panel-left, 16px); margin: 0; width: 420px; max-width: calc(100% - 32px); max-height: calc(100dvh - var(--bulk-panel-bottom, 100px) - 16px); padding: 24px; background: var(--paper); color: var(--ink); border: 1px solid var(--line); }

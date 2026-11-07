@@ -1,6 +1,6 @@
 "use strict";
 const { test } = require("node:test"), assert = require("node:assert/strict"), fs = require("node:fs"), vm = require("node:vm");
-const { create } = require("./static/tag-picker.js"), workspace = require("./static/workspace.js");
+const { create } = require("../../frontend/src/features/tag-picker.js").default, workspace = require("../../frontend/src/features/workspace.js").default;
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 class Event {
   constructor(type, values = {}) { Object.assign(this, { type, bubbles: false, detail: 0 }, values); }
@@ -113,10 +113,7 @@ test('suggestion rendering stays bounded without truncating selected tags', asyn
   assert.equal(host.list.children.length, 13); assert.equal(host.field.querySelectorAll('.tag-picker-chip').length, 100); assert.equal(host.source.value, [...tags, 'query'].join(', '));
 });
 test('the shipped shell loads and caches the selector before app without private data', () => {
-  const html = fs.readFileSync(`${__dirname}/static/index.html`, 'utf8'), scripts = [...html.matchAll(/<script src="([^"]+)"/g)].map(match => match[1]);
-  assert.ok(scripts.includes('/tag-picker.js')); assert.ok(scripts.indexOf('/tag-picker.js') < scripts.indexOf('/app.js'));
-  const context = vm.createContext({ self: { addEventListener() {} } }); vm.runInContext(fs.readFileSync(`${__dirname}/static/sw.js`, 'utf8'), context);
-  assert.equal(vm.runInContext('ASSETS.includes("/tag-picker.js")', context), true); assert.equal(vm.runInContext('ASSETS.some(path => path === "/" || path.startsWith("/api/"))', context), false);
+  require('./bundle-helper.cjs').assertBundledModule('tag-picker');
 });
 
 test('suggestions use the scrolling form body rather than the larger dialog bounds', async () => {

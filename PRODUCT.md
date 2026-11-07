@@ -16,7 +16,7 @@ Provide a personal library for useful links and saved material, with collections
 
 ## Positioning
 
-A self-hosted bookmark library built around one Go process, SQLite/FTS5 and an embedded dependency-free web interface. Rendering JavaScript pages, screenshots and PDFs belongs in the owner's existing browser rather than a resident server browser. Low server RAM is the primary architectural constraint, not a universal memory guarantee.
+A self-hosted bookmark library built around one Go process, SQLite/FTS5 and an embedded React + shadcn/ui web interface. Rendering JavaScript pages, screenshots and PDFs belongs in the owner's existing browser rather than a resident server browser. Low server RAM is the primary architectural constraint, not a universal memory guarantee.
 
 ## Operating Context
 
@@ -30,7 +30,7 @@ A self-hosted bookmark library built around one Go process, SQLite/FTS5 and an e
 ## Capabilities and Constraints
 
 - Preserve existing library data, stable identities, notes, archives and unrelated work.
-- Retain Go, CGO-backed SQLite/FTS5 and the embedded HTML/CSS/JavaScript UI; no resident browser, database or search sidecars.
+- Retain Go, CGO-backed SQLite/FTS5 and the embedded, statically compiled React UI; no resident browser, database or search sidecars.
 - Prefer standard-library solutions, bounded queues and disk-backed or streamed work. Justify dependencies and caches against the RAM goal.
 - Keep origin checks, SSRF protections, request limits and archive boundaries intact.
 - Collaboration, public sharing, SSO/OIDC, RSS, AI automation, scheduled recapture and automatic backups are outside scope.
@@ -63,4 +63,4 @@ The product name is Pocketmark. Keep the interface in English. Desktop and mobil
 
 The owner chose a saved-format-first journey on 31 October 2026. Clicking a bookmark opens its title, source and only the saved formats that are available. Choosing a format opens its newest saved copy, with earlier copies accessible in the viewer. When no copy exists, explain how to save or attach one and keep Open original available for website bookmarks. Loading and failed checks must remain distinct from an empty archive. Extracted text and existing annotations remain secondary tools and never become the default opening destination.
 
-The library keeps a direct Settings destination. Import explains accepted metadata files before file selection and retains its result. Single-key shortcuts are optional in this browser and apply only while browsing the library. The product remains strictly personal, dependency-free and in English.
+The library keeps a direct Settings destination. Import explains accepted metadata files before file selection and retains its result. Single-key shortcuts are optional in this browser and apply only while browsing the library. The product remains strictly personal, served by one Go process and in English.

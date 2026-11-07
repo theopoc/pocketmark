@@ -3,8 +3,8 @@
 ## Project rules
 
 Pocketmark is a personal bookmark manager built for low server RAM: one Go process
-with standard-library HTTP routing, SQLite/FTS5 through CGO, embedded HTML/CSS/vanilla
-JavaScript without a frontend build step, a Chrome capture extension and
+with standard-library HTTP routing, SQLite/FTS5 through CGO, an embedded React + shadcn/ui frontend compiled
+with Vite, a Chrome capture extension and
 Floccus/WebDAV sync. Deploy with Docker Compose or a standalone Linux binary.
 Keep page rendering in the user's browser;
 collaboration, public sharing, SSO/OIDC and product automations are out of scope.
@@ -35,7 +35,9 @@ the RAM goal.
 
 ## Verification and delivery
 
-Requirements: Go from `go.mod`, a C compiler, Make, Node.js and Python 3.
+Requirements: Go from `go.mod`, a C compiler, Make, Node.js 24 with npm and Python 3.
+Frontend architecture, dependency updates and development: [frontend guide](docs/FRONTEND.md).
+Make installs locked frontend dependencies and compiles assets before Go checks, tests and builds.
 CGO is required; use Make targets for the SQLite build tags.
 
 For code changes, run all four commands:

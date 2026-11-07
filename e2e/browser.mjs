@@ -6,6 +6,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { selectionJourney } from './selection.mjs';
+import { reactJourney } from './react.mjs';
 import { securityJourney } from './security.mjs';
 import { openSettings, refreshSessionsBeforeMFA } from './settings.mjs';
 
@@ -126,6 +127,17 @@ try {
   page.setDefaultTimeout(15_000);
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (message.type() === 'error' && /Minified React error|hydration|flushSync was called/i.test(message.text())) errors.push(message.text());
+  });
+  await page.exposeBinding('__reportAppCSP', ({ frame }, violation) => {
+    if (frame === page.mainFrame()) errors.push(`Application CSP: ${violation}`);
+  });
+  await page.addInitScript(() => {
+    if (window === window.top) document.addEventListener('securitypolicyviolation', event => {
+      window.__reportAppCSP(`${event.effectiveDirective}: ${event.blockedURI}`);
+    });
+  });
   const username = 'ci-owner';
   const password = 'Synthetic-E2E-password-42';
   await page.goto(base.href);
@@ -172,6 +184,7 @@ try {
   await navigationJourney(page);
   await dialogDismissalJourney(page);
   await selectionJourney(page);
+  await reactJourney(page, base);
   const oldSession = (await page.context().cookies()).find(cookie => cookie.name === 'pocketmark');
   await clickNavigation(page, '#logout-button');
   await page.locator('#logout-confirm').click();

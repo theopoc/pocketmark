@@ -19,7 +19,7 @@ Download the OpenAPI 3.0.3 specification from the page or
 `/api-docs/openapi.json`. Its server URL is relative to the current instance, so it
 works behind a reverse proxy without hard-coded hosts. Swagger UI is version-pinned
 and embedded locally, with no CDN or external validator; it loads only on the docs
-page. The library remains dependency-free. WebDAV `/dav/` uses a separate protocol
+page, separately from the compiled React library interface. WebDAV `/dav/` uses a separate protocol
 and is not included in the OpenAPI reference.
 
 The canonical specification lives in

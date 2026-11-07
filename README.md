@@ -75,7 +75,7 @@ WebDAV was previously verified with unmodified **Floccus 5.11.1**, including syn
 
 ## Development
 
-Requires Go (see `go.mod`), a C compiler and Make. Node.js and Python 3 are also required for checks and tests.
+Requires Go (see `go.mod`), a C compiler and Make. Node.js 24 with npm is required to compile the React/shadcn frontend; Python 3 is required for checks and tests. Production runs only the Go binary. See the [frontend guide](docs/FRONTEND.md) for development and dependency updates.
 
 Build and run locally:
 

@@ -1,0 +1,35 @@
+{
+  "name": "pocketmark-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "vite --host 127.0.0.1",
+    "check": "eslint src test *.js *.mjs && prettier --check src test *.mjs *.js *.json",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "1.5.0",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "tailwind-merge": "3.7.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.5",
+    "@vitejs/plugin-react": "6.2.1",
+    "eslint": "10.14.0",
+    "globals": "17.14.0",
+    "prettier": "3.9.10",
+    "tailwindcss": "4.3.5",
+    "vite": "8.3.6"
+  },
+  "overrides": {
+    "minimatch": "11.0.5"
+  }
+}

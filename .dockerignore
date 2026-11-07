@@ -6,6 +6,11 @@
 !cmd/**
 !internal/
 !internal/**
+!frontend/
+!frontend/**
+**/node_modules
+internal/webui/static/app
+internal/webui/static/index.html
 **/*_test.go
 **/.DS_Store
 **/.env*

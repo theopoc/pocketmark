@@ -34,3 +34,10 @@ repos:
         entry: bash -c 'for source do node --check "$source" || exit; done' --
         language: system
         types: [javascript]
+        exclude: ^frontend/.*\.jsx$
+      - id: frontend
+        name: Check and compile the React frontend
+        entry: bash -c 'npm run check --prefix frontend && npm run build --prefix frontend'
+        language: system
+        files: ^frontend/
+        pass_filenames: false

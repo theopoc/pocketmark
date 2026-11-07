@@ -7,9 +7,9 @@ test("session settings replace stale feedback when saving succeeds or fails", as
     nodes.set(match[1], { value: "", textContent: "", disabled: false, events: {}, addEventListener(type, fn) { this.events[type] = fn; } });
   }
   const document = { getElementById: id => nodes.get(id), querySelectorAll: () => [] };
-  const context = { document }; vm.runInNewContext(fs.readFileSync(`${__dirname}/static/security.js`, "utf8"), context);
+  const context = { document, PocketmarkSecurity: require("../../frontend/src/features/security.js").default };
   let fail = false;
-  context.PocketmarkSecurity.create({ api: async () => { if (fail) throw Error("Save failed"); }, toast() {}, onSessionExpired() {} });
+  context.PocketmarkSecurity.create({ api: async () => { if (fail) throw Error("Save failed"); }, toast() {}, onSessionExpired() {} }, context);
   const form = nodes.get("session-idle-form"), submitter = { disabled: false };
   const submit = () => form.events.submit({ preventDefault() {}, submitter });
   await submit(); assert.match(nodes.get("sessions-feedback").textContent, /saved/);
@@ -28,9 +28,9 @@ test("leaving settings prevents an old session response from populating a reopen
     getElementById: id => nodes.get(id), querySelectorAll: () => [],
     createElement: () => ({ textContent: "", className: "" }),
   };
-  const context = { document }; vm.runInNewContext(fs.readFileSync(`${__dirname}/static/security.js`, "utf8"), context);
+  const context = { document, PocketmarkSecurity: require("../../frontend/src/features/security.js").default };
   let respond;
-  const security = context.PocketmarkSecurity.create({ api: () => new Promise(resolve => { respond = resolve; }), toast() {}, onSessionExpired() {} });
+  const security = context.PocketmarkSecurity.create({ api: () => new Promise(resolve => { respond = resolve; }), toast() {}, onSessionExpired() {} }, context);
   const loading = security.loadSessions();
   nodes.get("sessions-feedback").textContent = "Old feedback";
   security.clear();

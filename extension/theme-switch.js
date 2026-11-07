@@ -19,8 +19,9 @@
         });
       } catch { document.documentElement.classList.remove("theme-transition"); apply(requested); }
     }
-    reduced?.addEventListener?.("change", () => { if (reduced.matches) transition?.skipTransition(); });
-    return { set, get requested() { return requested; } };
+    const motionChanged = () => { if (reduced.matches) transition?.skipTransition(); };
+    reduced?.addEventListener?.("change", motionChanged);
+    return { set, get requested() { return requested; }, dispose() { reduced?.removeEventListener?.("change", motionChanged); transition?.skipTransition(); } };
   }
   if (typeof module !== "undefined" && module.exports) module.exports = { create };
   else root.PocketmarkThemeSwitch = { create };

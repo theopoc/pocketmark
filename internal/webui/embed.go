@@ -2,7 +2,7 @@ package webui
 
 import "embed"
 
-// Files contains the dependency-free browser application.
+// Files contains the compiled React application and standalone documentation.
 //
 //go:embed static/*
 var Files embed.FS

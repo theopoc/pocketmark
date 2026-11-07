@@ -94,6 +94,7 @@ jobs:
           node-version: '24'
       - run: npm ci --prefix tools/security --ignore-scripts --no-audit --no-fund
       - run: npm audit --prefix tools/security --audit-level=high
+      - run: npm audit --prefix frontend --audit-level=high
       - run: npm audit --prefix e2e --audit-level=high
       - run: npm audit --prefix tools/quality --audit-level=high
       - name: Verify vendored Swagger UI matches the scanned package
@@ -129,6 +130,9 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
           config-file: .github/codeql.yml
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
       - if: matrix.language == 'go'
         run: GOFLAGS=-a make build
       - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
@@ -225,11 +229,20 @@ jobs:
       - uses: ./.github/actions/go-cache
         with:
           mode: musl-static
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
       - name: Build the static release executable
         run: |
           CC=musl-gcc make build LDFLAGS='-s -w -linkmode external -extldflags "-static"'
           file bin/pocketmark | grep 'statically linked'
           ./bin/pocketmark -h
+      - name: Test the compiled React application with the real server
+        if: matrix.arch == 'amd64'
+        run: |
+          npm ci --prefix e2e --ignore-scripts --no-audit --no-fund
+          ./e2e/node_modules/.bin/playwright install --with-deps chromium
+          python3 scripts/smoke_frontend.py --binary bin/pocketmark
       - name: Preserve the tested executable and build metadata
         env:
           RELEASE_ARCH: ${{ matrix.arch }}

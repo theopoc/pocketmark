@@ -155,6 +155,9 @@ export async function securityJourney({ browser, page, base, username, password,
     await page.locator('#sessions-feedback').filter({ hasText: 'Inactivity timeout saved' }).waitFor();
     const sessions = await (await request.get(url('/api/sessions'))).json();
     assert.equal(sessions.find(session => session.current).idleTimeoutMinutes, 60);
+    await page.reload();
+    await page.waitForFunction(() => document.getElementById('session-idle').value === '60');
+    assert.equal((await page.locator('#session-idle-trigger').textContent()).trim(), '1 hour', 'programmatic session updates synchronize the visible selector after reload');
     const expiresAt = Math.floor(Date.now() / 1000) + 2;
     assert.equal((await request.post(url('/api/tokens'), { data: { name: 'Synthetic expired key', profile: 'read', expiresAt } })).status(), 201);
     await page.waitForFunction(expiry => Date.now() >= expiry * 1000, expiresAt);
