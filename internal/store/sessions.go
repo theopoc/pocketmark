@@ -8,25 +8,8 @@ import (
 	"time"
 )
 
-// CreateSession persists only a credential digest, keeping at most 32 sessions.
-// The salt comparison prevents a login racing a password change from issuing a
-// new session based on the old password. All pruning and insertion is atomic.
-func (s *Store) CreateSession(ctx context.Context, salt, hash string, expires time.Time, device ...string) error {
-	label := ""
-	if len(device) > 0 {
-		label = device[0]
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if err = insertSessionTx(ctx, tx, salt, hash, expires, label, false); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
+// insertSessionTx keeps at most 32 sessions and rejects a credential change
+// racing sign-in. The caller consumes MFA proof in the same transaction.
 func insertSessionTx(ctx context.Context, tx *sql.Tx, salt, hash string, expires time.Time, label string, recovery bool) error {
 	if len(label) > 256 {
 		label = label[:256]
@@ -53,17 +36,6 @@ func insertSessionTx(ctx context.Context, tx *sql.Tx, salt, hash string, expires
 }
 
 const liveSession = "expires_at>unixepoch() AND (idle_minutes=0 OR last_used_at>unixepoch()-idle_minutes*60)"
-
-func (s *Store) SessionValid(ctx context.Context, hash string) bool {
-	var one int
-	return s.db.QueryRowContext(ctx, "SELECT 1 FROM sessions WHERE hash=? AND "+liveSession, hash).Scan(&one) == nil
-}
-
-// A conditional write prevents expired sessions from being revived by activity.
-func (s *Store) TouchSession(ctx context.Context, hash string) bool {
-	valid, _ := s.CheckAndTouchSession(ctx, hash)
-	return valid
-}
 
 // CheckAndTouchSession distinguishes expired credentials from failed storage.
 func (s *Store) CheckAndTouchSession(ctx context.Context, hash string) (bool, error) {
@@ -102,10 +74,6 @@ func (s *Store) Sessions(ctx context.Context, current string) ([]Session, error)
 	return sessions, rows.Err()
 }
 
-func (s *Store) SessionConfirmed(ctx context.Context, hash string) bool {
-	valid, _ := s.CheckSessionConfirmed(ctx, hash)
-	return valid
-}
 func (s *Store) CheckSessionConfirmed(ctx context.Context, hash string) (bool, error) {
 	var one int
 	err := s.db.QueryRowContext(ctx, "SELECT 1 FROM sessions WHERE hash=? AND "+liveSession+" AND confirmed_at>unixepoch()-300", hash).Scan(&one)

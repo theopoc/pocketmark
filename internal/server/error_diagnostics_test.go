@@ -16,11 +16,11 @@ import (
 	"pocketmark/internal/store"
 )
 
-func diagnosticServer(t *testing.T) (*Server, *bytes.Buffer) {
+func diagnosticServer(t *testing.T) (*testServer, *bytes.Buffer) {
 	t.Helper()
 	a := newTestServer(t, "", false)
 	logs := &bytes.Buffer{}
-	return New(a.Store, testToken, "", false, observability.New(slog.New(slog.NewJSONHandler(logs, nil)), nil)), logs
+	return a.withServer(New(a.Store, testToken, "", false, observability.New(slog.New(slog.NewJSONHandler(logs, nil)), nil))), logs
 }
 
 func TestDatabaseFailureIsNotInvalidCredentials(t *testing.T) {

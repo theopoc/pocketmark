@@ -2,8 +2,10 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -38,8 +40,8 @@ func TestPasswordKeysAndRevocation(t *testing.T) {
 	if strings.Contains(w.Body.String(), key.Token) {
 		t.Fatal("listed raw key")
 	}
-	if a.Store.HasAPIKeyHash(context.Background(), key.Token) {
-		t.Fatal("key stored in plaintext")
+	if _, err := a.Store.AuthenticateAPIKeyProfile(context.Background(), key.Token); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("raw key must not authenticate as its stored verifier: %v", err)
 	}
 	requireStatus(t, request(a, "DELETE", "/api/tokens/1", "", true, nil), 200)
 	requireStatus(t, request(a, "GET", "/api/links", "", false, h), 401)

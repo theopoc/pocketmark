@@ -4,7 +4,6 @@ import (
 	"io"
 	"net/url"
 	"pocketmark/internal/fault"
-	"strings"
 
 	"golang.org/x/net/html"
 )
@@ -111,10 +110,4 @@ func (w *limitedWriter) Write(p []byte) (int, error) {
 	n, err := w.dst.Write(p)
 	w.remaining -= int64(n)
 	return n, err
-}
-
-// ExtractText is useful for client-produced SingleFile archives as well as HTTP captures.
-func ExtractText(body []byte) (string, error) {
-	r, e := extract(body)
-	return strings.TrimSpace(r.Content), e
 }

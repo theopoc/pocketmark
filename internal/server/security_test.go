@@ -46,7 +46,7 @@ func TestSessionRevocationAcrossRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { s.Close() }()
-	a := New(s, testToken, "", false)
+	a := wrapTestServer(t, New(s, testToken, "", false), path)
 	setup := request(a, "POST", "/api/setup", setupRequest, false, nil)
 	requireStatus(t, setup, 201)
 	_, _, codes, _, _ := enrollForTest(t, a, pendingCookie(t, setup), "")
@@ -77,18 +77,18 @@ func TestSessionRevocationAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a = New(s, testToken, "", false)
+	a = wrapTestServer(t, New(s, testToken, "", false), path)
 	requireStatus(t, request(a, "GET", "/api/account", "", false, firstHeaders), 401)
 	requireStatus(t, request(a, "GET", "/api/account", "", false, secondHeaders), 200)
 	// Recovery-key rotation also invalidates cookies without storing raw secrets.
-	rotated := New(s, testToken+"-rotated", "", false)
+	rotated := wrapTestServer(t, New(s, testToken+"-rotated", "", false), path)
 	requireStatus(t, request(rotated, "GET", "/api/account", "", false, secondHeaders), 401)
 	account, err := s.Account(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	expired := "v3." + strings.Repeat("a", 64)
-	if err = s.CreateSession(context.Background(), account.Salt, a.sessionHash(expired), time.Now().Add(-time.Second)); err != nil {
+	if err = a.insertSessionFixture(a.sessionHash(expired), time.Now().Add(-time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	requireStatus(t, request(a, "GET", "/api/account", "", false, map[string]string{"Cookie": "pocketmark=" + expired}), 401)

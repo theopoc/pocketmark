@@ -19,11 +19,12 @@ func TestMFAMigrationRevokesOnlyLegacySessions(t *testing.T) {
 	if err = s.SaveAccount(ctx, account); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.CreateSession(ctx, account.Salt, "legacy-session", time.Now().Add(time.Hour)); err != nil {
+	// An older binary persisted password-only sessions without enrolling MFA.
+	if _, err = s.db.Exec("INSERT INTO sessions(hash,expires_at) VALUES('legacy-session',unixepoch()+3600)"); err != nil {
 		t.Fatal(err)
 	}
 	link := createLink(t, s, Link{URL: "https://example.test/retained", Notes: "kept"})
-	if _, err = s.CreateAPIKey(ctx, "client", "client-hash"); err != nil {
+	if _, err = s.CreateScopedAPIKey(ctx, "client", "client-hash", "full", 0); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.db.Exec("DROP TABLE mfa_recovery; DROP TABLE mfa"); err != nil {
@@ -36,19 +37,19 @@ func TestMFAMigrationRevokesOnlyLegacySessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.SessionValid(ctx, "legacy-session") {
+	if sessionUsable(t, s, ctx, "legacy-session") {
 		t.Fatal("legacy session survived the MFA migration")
 	}
 	if got, err := s.Get(ctx, link); err != nil || got.Notes != "kept" {
 		t.Fatal("library changed during migration", err)
 	}
-	if !s.HasAPIKeyHash(ctx, "client-hash") {
+	if !apiKeyAuthenticates(t, s, ctx, "client-hash") {
 		t.Fatal("integration key changed during migration")
 	}
 	if _, err = s.db.Exec("UPDATE mfa SET secret=X'0102' WHERE id=1"); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.CreateSession(ctx, account.Salt, "new-session", time.Now().Add(time.Hour)); err != nil {
+	if err = signInSession(ctx, s, account.Salt, "new-session", time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.Close(); err != nil {
@@ -59,7 +60,7 @@ func TestMFAMigrationRevokesOnlyLegacySessions(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if !s.SessionValid(ctx, "new-session") {
+	if !sessionUsable(t, s, ctx, "new-session") {
 		t.Fatal("ordinary restart revoked a post-migration session")
 	}
 }

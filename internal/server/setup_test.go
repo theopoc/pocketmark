@@ -24,7 +24,7 @@ func TestSetupOnceAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(s, testToken, "", false)
+	a := wrapTestServer(t, New(s, testToken, "", false), path)
 	requireSetup(t, a, true, false)
 	// Eligibility persists even if the process restarts before setup.
 	if err := s.Close(); err != nil {
@@ -35,7 +35,7 @@ func TestSetupOnceAcrossRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	a = New(s, testToken, "", false)
+	a = wrapTestServer(t, New(s, testToken, "", false), path)
 	requireSetup(t, a, true, false)
 	requireStatus(t, request(a, "POST", "/api/setup", setupRequest, false, map[string]string{"Origin": "https://attacker.test"}), 403)
 	requireStatus(t, request(a, "POST", "/api/setup", setupRequest, false, map[string]string{"Origin": "chrome-extension://attacker", "Sec-Fetch-Site": "cross-site"}), 403)
@@ -47,7 +47,7 @@ func TestSetupOnceAcrossRestart(t *testing.T) {
 	cookie, _, _, _, _ := enrollForTest(t, a, pendingCookie(t, w), "")
 	requireStatus(t, request(a, "GET", "/api/account", "", false, map[string]string{"Cookie": cookie}), 200)
 	requireSetup(t, a, false, true)
-	a = New(s, testToken, "", false)
+	a = wrapTestServer(t, New(s, testToken, "", false), path)
 	requireSetup(t, a, false, true)
 	requireStatus(t, request(a, "POST", "/api/setup", setupRequest, false, nil), 409)
 	requireStatus(t, request(a, "POST", "/api/login", `{"token":"`+testToken+`"}`, false, nil), 400)
@@ -61,7 +61,7 @@ func TestInterruptedSetupCanResumeWithoutAdministratorKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(s, testToken, "", false)
+	a := wrapTestServer(t, New(s, testToken, "", false), path)
 	w := request(a, "POST", "/api/setup", setupCredentials, false, nil)
 	requireStatus(t, w, 201)
 	pending := pendingCookie(t, w)
@@ -74,7 +74,7 @@ func TestInterruptedSetupCanResumeWithoutAdministratorKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	a = New(s, testToken, "", false)
+	a = wrapTestServer(t, New(s, testToken, "", false), path)
 	requireStatus(t, request(a, "POST", "/api/setup", setupCredentials, false, nil), 409)
 	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Authorization": "Bearer " + testToken}), 401)
 	w = request(a, "POST", "/api/login", setupCredentials, false, nil)
@@ -83,7 +83,7 @@ func TestInterruptedSetupCanResumeWithoutAdministratorKey(t *testing.T) {
 	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": cookie}), 200)
 }
 
-func requireSetup(t *testing.T, a *Server, required, enabled bool) {
+func requireSetup(t *testing.T, a *testServer, required, enabled bool) {
 	t.Helper()
 	w := request(a, "GET", "/api/setup", "", false, nil)
 	requireStatus(t, w, 200)
@@ -148,7 +148,7 @@ func TestLegacySetupCannotClaimLibrary(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer s.Close()
-			a := New(s, testToken, "", false)
+			a := wrapTestServer(t, New(s, testToken, "", false), path)
 			requireSetup(t, a, false, password != "")
 			requireStatus(t, request(a, "GET", "/api/links", "", false, map[string]string{"Authorization": "Bearer " + key}), 200)
 			requireStatus(t, request(a, "POST", "/api/setup", setupRequest, false, map[string]string{"Authorization": "Bearer " + key}), 409)
@@ -161,7 +161,7 @@ func TestLegacySetupCannotClaimLibrary(t *testing.T) {
 			// The existing administrative API supports migration/recovery, without
 			// issuing a browser session from the master token login endpoint.
 			requireStatus(t, request(a, "PUT", "/api/account", setupCredentials, true, nil), 200)
-			a = New(s, testToken, "", false)
+			a = wrapTestServer(t, New(s, testToken, "", false), path)
 			requireSetup(t, a, false, true)
 			requireStatus(t, request(a, "POST", "/api/login", setupCredentials, false, nil), 200)
 			link, err := s.Get(context.Background(), id)
@@ -175,12 +175,12 @@ func TestLegacySetupCannotClaimLibrary(t *testing.T) {
 func TestConcurrentSetupHasOneOwner(t *testing.T) {
 	a := newTestServer(t, "", false)
 	// Two handlers simulate separate processes sharing one database.
-	b := New(a.Store, testToken, "", false)
+	b := a.withServer(New(a.Store, testToken, "", false))
 	var wg sync.WaitGroup
 	statuses := make(chan int, 2)
-	for _, server := range []*Server{a, b} {
+	for _, server := range []*testServer{a, b} {
 		wg.Add(1)
-		go func(a *Server) {
+		go func(a *testServer) {
 			defer wg.Done()
 			statuses <- request(a, "POST", "/api/setup", setupRequest, false, nil).Code
 		}(server)

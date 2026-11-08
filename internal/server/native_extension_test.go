@@ -44,7 +44,7 @@ func TestNativeLibraryRetainsLegacyDataAcrossRestart(t *testing.T) {
 	}
 	// Retain the legacy tables and their triggers; removing an HTTP adapter must
 	// not require rewriting or discarding the owner's existing library.
-	a := New(s, testToken, "", false)
+	a := wrapTestServer(t, New(s, testToken, "", false), path)
 	cid, err := s.AddCollection(context.Background(), store.Collection{Name: "Legacy folder"})
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +62,7 @@ func TestNativeLibraryRetainsLegacyDataAcrossRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	a = New(s, testToken, "", false)
+	a = wrapTestServer(t, New(s, testToken, "", false), path)
 	l, err := s.Get(context.Background(), lid)
 	if err != nil || l.Title != "Legacy title" || l.Notes != "Keep notes" || !l.Favorite || !l.Read || l.CollectionID == nil || *l.CollectionID != cid || len(l.Tags) != 1 || l.Tags[0] != "legacy-tag" || !l.ArchiveAvailable {
 		t.Fatalf("legacy data changed: %+v (%v)", l, err)

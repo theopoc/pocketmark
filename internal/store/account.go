@@ -106,26 +106,12 @@ func (s *Store) SaveAccountFromSession(ctx context.Context, a Account, oldHash, 
 	return expires, nil
 }
 
-func (s *Store) HasAPIKeyHash(ctx context.Context, hash string) bool {
-	var one int
-	return s.db.QueryRowContext(ctx, "SELECT 1 FROM api_tokens WHERE hash=? AND active=1 AND (expires_at=0 OR expires_at>unixepoch())", hash).Scan(&one) == nil
-}
-
-// AuthenticateAPIKey checks the current persisted state and records successful
-// credential use in one write. Disabled and unknown keys never change history.
-func (s *Store) AuthenticateAPIKey(ctx context.Context, hash string) bool {
-	_, err := s.AuthenticateAPIKeyProfile(ctx, hash)
-	return err == nil
-}
-
+// AuthenticateAPIKeyProfile checks persisted permissions and records successful
+// use in one write. Disabled and unknown keys never change usage history.
 func (s *Store) AuthenticateAPIKeyProfile(ctx context.Context, hash string) (string, error) {
 	var profile string
 	err := s.db.QueryRowContext(ctx, "UPDATE api_tokens SET last_used_at=? WHERE hash=? AND active=1 AND (expires_at=0 OR expires_at>unixepoch()) RETURNING profile", time.Now().UTC().Format(time.RFC3339Nano), hash).Scan(&profile)
 	return profile, err
-}
-
-func (s *Store) SetAPIKeyActive(ctx context.Context, id int64, active bool) error {
-	return s.UpdateAPIKey(ctx, id, nil, &active)
 }
 
 // UpdateAPIKey changes only supplied metadata; the credential and usage history
@@ -150,10 +136,6 @@ func (s *Store) APIKeys(ctx context.Context) ([]APIKey, error) {
 		keys = append(keys, key)
 	}
 	return keys, rows.Err()
-}
-
-func (s *Store) CreateAPIKey(ctx context.Context, name, hash string) (APIKey, error) {
-	return s.CreateScopedAPIKey(ctx, name, hash, "full", 0)
 }
 
 func (s *Store) CreateScopedAPIKey(ctx context.Context, name, hash, profile string, expires int64) (APIKey, error) {
