@@ -16,16 +16,18 @@ the RAM goal.
 
 ## Read before changing
 
-- Storage: inspect `internal/store/` migrations and add a legacy-database/restart
-  regression. `Store.Open` owns persistence initialization, not HTTP construction.
-- Authentication, fetching or archives: read [API limits](docs/API.md) and
+- For changes spanning modules, start with the [ownership map and tests](docs/ARCHITECTURE.md).
+- For persisted data, initialization or restart behavior, inspect `internal/store/`
+  migrations and add a legacy-database/restart regression. `Store.Open` owns
+  initialization. For other store edits, identify the affected behavior and its tests.
+- For authentication, fetching or archives, read [API limits](docs/API.md) and
   [archive boundaries](docs/ARCHIVES.md). Preserve origin checks, SSRF filtering,
-  request limits, bounded queues and streamed asset I/O.
-- Client compatibility or Floccus: read [feature coverage](docs/FEATURES.md) and
-  [real-client evidence](docs/REAL_CLIENTS.md). Distinguish protocol tests from
-  observed and untested clients; Android's prolonged-offline cache issue remains upstream.
-- Every UI/UX change (web UI, API documentation or extension UI): read and follow
-  [DESIGN.md](DESIGN.md), the source of truth for current design conventions.
+  request limits, bounded queues and streamed asset I/O. For failed requests or
+  capture diagnostics, use the [incident guide](docs/OBSERVABILITY.md#investigating-an-incident).
+- For client compatibility or Floccus, read [feature coverage](docs/FEATURES.md)
+  and [dated client evidence](docs/REAL_CLIENTS.md).
+- For interface changes to the web app, rendered API docs or extension, follow
+  [DESIGN.md](DESIGN.md). Written API reference edits use [the API guide](docs/API.md).
   If the library page shown in the README changes, refresh
   `docs/pocketmark-dark-preview.jpg` from the rendered page with disposable data
   and verify it matches. Follow the [design and branding review](docs/CI.md#design-review)
@@ -60,6 +62,7 @@ docker build -t pocketmark:ci .
 python3 scripts/smoke_docker.py --image pocketmark:ci
 ```
 
+For environment failures, see [local preflight and failure records](docs/CI.md#local-preflight-and-failure-records).
 Use `TEST_FLAGS` for focused runs, then run the relevant full suite. With limited
 disk, prefix Go/Make commands with `CGO_CFLAGS='-O2 -g0'`.
 For CI/release tooling changes, run the applicable [additional checks](docs/CI.md#reproduce-locally).
@@ -76,7 +79,8 @@ Review the diff and staged paths for generated evidence before committing.
 
 ## Development workflow
 
-For every modification, including documentation, follow the
+Local investigations end with their report in ignored `reports/` or outside the repo.
+For every tracked change, including documentation, follow the
 [development and merge policy](docs/CI.md#development-and-merge-policy): dedicated
 branch, complete-diff subagent review, applicable checks and redacted secret scan,
 Conventional Commit, PR to `main`, and required CI passing at the latest reviewed
@@ -93,6 +97,6 @@ image with authenticated pulls, or a release binary. Preserve `/data`, the serve
 secret, loopback binding, resource limits and security settings. Complete account/MFA
 setup before exposure; use HTTPS and the exact public `POCKETMARK_ORIGIN`.
 
-Before changing or publishing releases, read [CI and release instructions](docs/CI.md).
+Before changing or publishing releases, read [release instructions](docs/RELEASE.md).
 Merge version PRs or create version tags only on an explicit publication request.
 Workflows publish artifacts; server deployment is manual.

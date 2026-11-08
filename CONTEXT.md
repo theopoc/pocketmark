@@ -1,13 +1,11 @@
-# Pocketmark
-
-Pocketmark is a personal bookmark manager. The delivery vocabulary below describes the images distributed to its users.
+# Pocketmark vocabulary
 
 ## Language
 
+- **Basic capture** is the server’s bounded fetch of a bookmark’s public HTML and extracted text. Changing the bookmark URL queues a new capture.
+- **Attachment** is a saved file associated with a library record. A browser capture or manual offline snapshot can add one. [Archive formats and limits](docs/ARCHIVES.md).
+- **Full backup** is a consistent SQLite snapshot with library data, captures, attachments and account records. Keep the internal server secret separately. A metadata export contains bookmark metadata for transfer. [Backup and restore](docs/GUIDE.md#back-up-everything).
+
 ### Image delivery
 
-**Version image**:
-A Pocketmark image identified by a stable product version and the corresponding source revision, qualified on every supported platform before distribution.
-
-**Published-image qualification**:
-The checks establishing that a distributed Pocketmark image matches the expected image content, source revision and platform, works under the supported container configuration, and remains private.
+See [version images and published-image qualification](docs/RELEASE.md#ghcr-images).

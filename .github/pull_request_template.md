@@ -4,7 +4,7 @@ Describe the problem and the resulting behavior. Include any compatibility or da
 
 ## Validation
 
-List commands run and their results. State any checks not run and why.
+List commands run and their results. State any checks not run and why. For a failed check, include the [failure record](https://github.com/theopoc/pocketmark/blob/main/docs/CI.md#local-preflight-and-failure-records), its disposition and any rerun result.
 
 - [ ] Applicable local checks passed (see [CI instructions](https://github.com/theopoc/pocketmark/blob/main/docs/CI.md)).
 - [ ] Diff and staged paths reviewed; redacted secret scan passed.

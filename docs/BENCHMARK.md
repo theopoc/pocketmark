@@ -50,6 +50,8 @@ reports, screenshots and profiles outside version control, including summaries.
 Record the workload, source revision, platform, toolchain, image/binary identity,
 results and limitations in the PR, as required by [AGENTS.md](../AGENTS.md).
 
+To exercise hostile JSON input sizes, run `python3 scripts/security_import_probe.py --image pocketmark:validation --output reports/import-probe.json` after creating `reports/`. The probe starts a disposable, memory-limited local Docker container and checks rejection and server health. Its results describe those payloads and limits.
+
 ## Interpret measurements
 
 - `VmRSS` and `VmHWM` describe application PID 1. `memory.current` and

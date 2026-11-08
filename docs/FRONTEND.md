@@ -109,6 +109,10 @@ python3 scripts/smoke_frontend.py --binary bin/pocketmark
 npm audit --prefix frontend --audit-level=high
 ```
 
+The selection journey uses the platform’s additive click (Command on macOS, Control on Linux). A modified title click selects a bookmark and keeps the reader closed. A plain title click opens the reader. For a discrepancy, compare the branch and its base on the same host with the same pinned browser and disposable fixture.
+
+For visual comparisons, [the fidelity journey](../e2e/fidelity.mjs) reads `E2E_FIXTURE_FILE` with a populated disposable loopback instance and its browser storage state. Set `E2E_EVIDENCE_DIR` to a fresh directory for each build and `E2E_REFERENCE_DIR` to the completed base run when comparing. Check that the expected view is ready and its screenshot was written before recording a comparison.
+
 Quality, Tests, native Build and Go CodeQL extraction all compile frontend assets.
 The amd64 Build job exercises its compiled binary in Chromium before it becomes
 a release input. Security audits the locked frontend inventory; Dependabot checks
