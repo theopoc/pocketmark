@@ -56,10 +56,17 @@ func TestThumbnailLegacyRestartAndURLInvalidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
+	if err = s.Queue(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	l, err := s.Next(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err = s.db.Exec("UPDATE links SET url='https://other.example' WHERE id=?", id); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.SaveThumbnail(ctx, Link{ID: id, URL: "https://example.com"}, []byte("stale")); err != nil {
+	if err = s.Finish(ctx, l, "", "", "", nil, nil, []byte("stale")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.Thumbnail(ctx, id); err != sql.ErrNoRows {
@@ -90,11 +97,12 @@ func BenchmarkThumbnailCache(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				s.Finish(ctx, l, "", "", "", nil, nil)
+				var thumbnail []byte
 				if cached {
-					if err = s.SaveThumbnail(ctx, l, payload); err != nil {
-						b.Fatal(err)
-					}
+					thumbnail = payload
+				}
+				if err = s.Finish(ctx, l, "", "", "", nil, nil, thumbnail); err != nil {
+					b.Fatal(err)
 				}
 			}
 			payload = nil

@@ -9,7 +9,7 @@ func TestHTTPConstructionDoesNotInitializePersistence(t *testing.T) {
 	}
 	// Building routes must perform no schema work, even on an unavailable store.
 	// Storage failure is reported by Open or by the request, never a DDL panic.
-	b := New(a.Store, testToken, "", false)
+	b := a.withServer(New(a.Store, testToken, "", false))
 	requireStatus(t, request(b, "GET", "/healthz", "", false, nil), 503)
 	requireStatus(t, request(b, "GET", "/api-docs/", "", false, nil), 200)
 }

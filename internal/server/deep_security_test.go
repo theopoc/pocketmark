@@ -120,7 +120,7 @@ func TestBackupRestoreExcludesSessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	old := New(restored, testToken, "", false)
+	old := wrapTestServer(t, New(restored, testToken, "", false), path)
 	restoredResponse := request(old, "GET", "/api/account", "", false, headers)
 	requireStatus(t, restoredResponse, 401)
 	login := request(old, "POST", "/api/login", setupCredentials, false, nil)
@@ -143,7 +143,7 @@ func TestBackupRestoreExcludesSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer restarted.Close()
-	server := New(restarted, testToken, "", false)
+	server := wrapTestServer(t, New(restarted, testToken, "", false), path)
 	requireStatus(t, request(server, "GET", "/api/account", "", false, headers), 401)
 	requireStatus(t, request(server, "GET", "/api/account", "", false, fresh), 200)
 	links := request(server, "GET", "/api/links", "", false, map[string]string{"Authorization": "Bearer " + key})

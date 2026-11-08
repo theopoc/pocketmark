@@ -20,7 +20,7 @@ func TestSecurityXMLAndRollback(t *testing.T) {
 	}
 	for name, payload := range payloads {
 		t.Run(name, func(t *testing.T) {
-			if err := s.ReplaceXBEL(ctx, strings.NewReader(payload), ""); err == nil {
+			if err := s.ApplyDAV(ctx, "test-client", strings.NewReader(payload), "", ""); err == nil {
 				t.Fatal("malicious import accepted")
 			}
 			if got, err := s.Get(ctx, id); err != nil || got.Title != "keep" {

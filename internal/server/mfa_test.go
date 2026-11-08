@@ -35,15 +35,11 @@ func TestMFARejectsPasswordOnlySessionAfterRollbackAndRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(s, testToken, "", false)
+	a := wrapTestServer(t, New(s, testToken, "", false), path)
 	verified := responseCookie(t, passwordLogin(t, a), "pocketmark")
-	account, err := s.Account(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
 	// The older binary inserts the digest of a v2 cookie after password-only login.
 	legacy := "v2." + randomSecret()
-	if err = s.CreateSession(ctx, account.Salt, a.sessionHash(legacy), time.Now().Add(time.Hour)); err != nil {
+	if _, err = a.db.Exec("INSERT INTO sessions(hash,expires_at) VALUES(?,?)", a.sessionHash(legacy), time.Now().Add(time.Hour).Unix()); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.Close(); err != nil {
@@ -54,9 +50,9 @@ func TestMFARejectsPasswordOnlySessionAfterRollbackAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	a = New(s, testToken, "", false)
-	if !s.SessionValid(ctx, a.sessionHash(legacy)) {
-		t.Fatal("test did not preserve the rollback session")
+	a = wrapTestServer(t, New(s, testToken, "", false), path)
+	if valid, err := s.CheckAndTouchSession(ctx, a.sessionHash(legacy)); err != nil || !valid {
+		t.Fatalf("test did not preserve the rollback session: %v", err)
 	}
 	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": "pocketmark=" + legacy}), 401)
 	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": "pocketmark=v3." + strings.TrimPrefix(legacy, "v2.")}), 401)
@@ -70,7 +66,7 @@ func TestLegacyFactorAndLocalAccountRecoveryAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := New(s, testToken, "", false)
+	a := wrapTestServer(t, New(s, testToken, "", false), path)
 	w := request(a, "POST", "/api/setup", setupCredentials, false, nil)
 	_, secret, codes, _, _ := enrollForTest(t, a, pendingCookie(t, w), "")
 	if err = s.Close(); err != nil {
@@ -81,7 +77,7 @@ func TestLegacyFactorAndLocalAccountRecoveryAcrossRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	a = New(s, testToken, "", false)
+	a = wrapTestServer(t, New(s, testToken, "", false), path)
 	now := time.Now().Add(30 * time.Second)
 	a.totpNow = func() time.Time { return now }
 	requireStatus(t, request(a, "GET", "/api/stats", "", false, map[string]string{"Authorization": "Bearer " + testToken}), 401)
@@ -141,7 +137,7 @@ func TestMFAResetClearsPendingChallengesAndVerificationBudget(t *testing.T) {
 	if err := a.Store.ResetMFA(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	a = New(a.Store, testToken, "", false)
+	a = a.withServer(New(a.Store, testToken, "", false))
 	login := request(a, "POST", "/api/login", setupCredentials, false, nil)
 	requireStatus(t, login, 200)
 	session, _, _, _, _ := enrollForTest(t, a, pendingCookie(t, login), testToken)
@@ -158,7 +154,7 @@ func pendingCookie(t *testing.T, w *httptest.ResponseRecorder) string {
 	return responseCookie(t, w, "pocketmark_mfa")
 }
 
-func enrollForTest(t *testing.T, a *Server, pending string, setupKey string) (string, string, []string, *httptest.ResponseRecorder, string) {
+func enrollForTest(t *testing.T, a *testServer, pending string, setupKey string) (string, string, []string, *httptest.ResponseRecorder, string) {
 	t.Helper()
 	w := request(a, "POST", "/api/mfa/enroll", "{}", false, map[string]string{"Cookie": pending})
 	requireStatus(t, w, 200)
@@ -393,7 +389,7 @@ func TestMFARotatedServerSecretCanRecoverWithBackupCode(t *testing.T) {
 	a := newTestServer(t, "", false)
 	setup := request(a, "POST", "/api/setup", setupRequest, false, nil)
 	_, secret, codes, _, _ := enrollForTest(t, a, pendingCookie(t, setup), "")
-	rotated := New(a.Store, testToken+"-rotated", "", false)
+	rotated := a.withServer(New(a.Store, testToken+"-rotated", "", false))
 	login := request(rotated, "POST", "/api/login", setupCredentials, false, nil)
 	pending := pendingCookie(t, login)
 	code, _ := totp.GenerateCode(secret, time.Now().Add(30*time.Second))

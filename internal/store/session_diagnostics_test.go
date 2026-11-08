@@ -17,7 +17,7 @@ func TestSessionDiagnosticsAfterRestart(t *testing.T) {
 	if err := s.SaveAccount(ctx, Account{Username: "fixture", Salt: "fixture", Hash: "fixture"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateSession(ctx, "fixture", "test-session", time.Now().Add(time.Hour)); err != nil {
+	if err := signInSession(ctx, s, "fixture", "test-session", time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(); err != nil {

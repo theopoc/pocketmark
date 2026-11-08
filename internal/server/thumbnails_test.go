@@ -20,11 +20,8 @@ func TestThumbnailAuthenticationAndPrivateCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = a.Store.Finish(ctx, l, "title", "", "", nil, nil); err != nil {
-		t.Fatal(err)
-	}
 	png, _ := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6XcAAAAASUVORK5CYII=")
-	if err = a.Store.SaveThumbnail(ctx, l, png); err != nil {
+	if err = a.Store.Finish(ctx, l, "title", "", "", nil, nil, png); err != nil {
 		t.Fatal(err)
 	}
 	path := fmt.Sprintf("/api/links/%d/thumbnail", l.ID)

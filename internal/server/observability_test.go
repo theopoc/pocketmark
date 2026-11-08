@@ -15,7 +15,7 @@ func TestObservabilityProtectsMetricsAndCountsEarlyRejections(t *testing.T) {
 	var logs bytes.Buffer
 	a.observer = observability.New(slog.New(slog.NewJSONHandler(&logs, nil)), nil)
 	// Route registration retains the same observer as the middleware.
-	a = New(a.Store, testToken, "", false, a.observer)
+	a = a.withServer(New(a.Store, testToken, "", false, a.observer))
 	requireStatus(t, request(a, "GET", "/metrics", "", false, nil), 401)
 	requireStatus(t, request(a, "GET", "/metrics", "", true, nil), 200)
 	// A named key can scrape without sharing the recovery token.
@@ -44,7 +44,7 @@ func TestObservabilityProtectsMetricsAndCountsEarlyRejections(t *testing.T) {
 	}
 }
 
-func namedAPIKey(t *testing.T, a *Server) string {
+func namedAPIKey(t *testing.T, a *testServer) string {
 	t.Helper()
 	w := request(a, "POST", "/api/tokens", `{"name":"metrics-test"}`, true, nil)
 	requireStatus(t, w, 201)

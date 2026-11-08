@@ -2,9 +2,7 @@ package store
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -253,48 +251,9 @@ UNION ALL SELECT d.id,d.local_id,d.kind,d.position FROM dav_ids d JOIN links l O
 	}
 	return enc.Flush()
 }
-func (s *Store) ExportXBEL(ctx context.Context, w io.Writer) (string, error) {
-	tx, e := s.db.BeginTx(ctx, nil)
-	if e != nil {
-		return "", e
-	}
-	defer tx.Rollback()
-	h := sha256.New()
-	if e = exportXBEL(ctx, tx, io.MultiWriter(w, h)); e != nil {
-		return "", e
-	}
-	return `"` + hex.EncodeToString(h.Sum(nil)) + `"`, tx.Commit()
-}
 
 var ErrSyncConflict = errors.New("library changed; download and merge before uploading")
 
-func (s *Store) ReplaceXBEL(ctx context.Context, r io.Reader, expected string) error {
-	root, e := readXBEL(r)
-	if e != nil {
-		return e
-	}
-	tx, e := s.db.BeginTx(ctx, nil)
-	if e != nil {
-		return e
-	}
-	defer tx.Rollback()
-	if e = ensureDAVIDs(ctx, tx); e != nil {
-		return e
-	}
-	if expected != "" && expected != "*" {
-		h := sha256.New()
-		if e = exportXBEL(ctx, tx, h); e != nil {
-			return e
-		}
-		if `"`+hex.EncodeToString(h.Sum(nil))+`"` != expected {
-			return ErrSyncConflict
-		}
-	}
-	if e = replaceXBELTree(ctx, tx, root); e != nil {
-		return e
-	}
-	return tx.Commit()
-}
 func replaceXBELTree(ctx context.Context, tx *sql.Tx, root *xbelNode) error {
 	var e error
 	if _, e = tx.ExecContext(ctx, "CREATE TEMP TABLE IF NOT EXISTS sync_links(id INTEGER PRIMARY KEY);DELETE FROM sync_links;CREATE TEMP TABLE IF NOT EXISTS sync_collections(id INTEGER PRIMARY KEY);DELETE FROM sync_collections"); e != nil {

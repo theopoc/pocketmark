@@ -30,7 +30,7 @@ func TestOpenInitializesPersistenceAndPreservesAcrossRestart(t *testing.T) {
 	if created, err := s.CreateAccount(ctx, account); err != nil || !created {
 		t.Fatalf("setup: %t (%v)", created, err)
 	}
-	key, err := s.CreateAPIKey(ctx, "Floccus", strings.Repeat("a", 64))
+	key, err := s.CreateScopedAPIKey(ctx, "Floccus", strings.Repeat("a", 64), "full", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestOpenInitializesPersistenceAndPreservesAcrossRestart(t *testing.T) {
 		t.Fatalf("setup after restart: %+v (%v)", state, err)
 	}
 	keys, err := s.APIKeys(ctx)
-	if err != nil || len(keys) != 1 || keys[0] != key || !s.HasAPIKeyHash(ctx, strings.Repeat("a", 64)) {
+	if err != nil || len(keys) != 1 || keys[0] != key || !apiKeyAuthenticates(t, s, ctx, strings.Repeat("a", 64)) {
 		t.Fatalf("keys after restart: %+v (%v)", keys, err)
 	}
 	link, err := s.Get(ctx, id)
@@ -177,10 +177,11 @@ INSERT INTO api_tokens VALUES(7,'Legacy sync','legacy hash','2025-01-02T03:04:05
 			if keys[0].ID != 7 || keys[0].Name != "Legacy sync" || keys[0].CreatedAt != "2025-01-02T03:04:05Z" || !keys[0].Active || keys[0].LastUsedAt != "" {
 				t.Fatalf("legacy key changed: %+v", keys[0])
 			}
-			if !s.AuthenticateAPIKey(ctx, "legacy hash") {
+			if !apiKeyAuthenticates(t, s, ctx, "legacy hash") {
 				t.Fatal("legacy key rejected")
 			}
-			if err := s.SetAPIKeyActive(ctx, 7, false); err != nil {
+			active := false
+			if err := s.UpdateAPIKey(ctx, 7, nil, &active); err != nil {
 				t.Fatal(err)
 			}
 			keys, err = s.APIKeys(ctx)
@@ -188,14 +189,15 @@ INSERT INTO api_tokens VALUES(7,'Legacy sync','legacy hash','2025-01-02T03:04:05
 				t.Fatalf("activity: %+v (%v)", keys, err)
 			}
 			expected = keys[0]
-		} else if keys[0] != expected || s.AuthenticateAPIKey(ctx, "legacy hash") {
+		} else if keys[0] != expected || apiKeyAuthenticates(t, s, ctx, "legacy hash") {
 			t.Fatalf("disabled key changed after restart: %+v", keys[0])
 		}
 		if restart == 2 {
-			if err := s.SetAPIKeyActive(ctx, 7, true); err != nil {
+			active := true
+			if err := s.UpdateAPIKey(ctx, 7, nil, &active); err != nil {
 				t.Fatal(err)
 			}
-			if !s.AuthenticateAPIKey(ctx, "legacy hash") {
+			if !apiKeyAuthenticates(t, s, ctx, "legacy hash") {
 				t.Fatal("migrated key could not reactivate")
 			}
 		}

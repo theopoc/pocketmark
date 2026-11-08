@@ -16,7 +16,7 @@ import (
 	"pocketmark/internal/store"
 )
 
-func documentUploadPath(t *testing.T, a *Server, standalone bool) string {
+func documentUploadPath(t *testing.T, a *testServer, standalone bool) string {
 	t.Helper()
 	if standalone {
 		return "/api/files?name=document"
@@ -28,7 +28,7 @@ func documentUploadPath(t *testing.T, a *Server, standalone bool) string {
 	return fmt.Sprintf("/api/links/%d/assets?name=document", id)
 }
 
-func postDocument(a *Server, path, media string, body io.Reader) *httptest.ResponseRecorder {
+func postDocument(a *testServer, path, media string, body io.Reader) *httptest.ResponseRecorder {
 	r := httptest.NewRequest("POST", "http://pocketmark.test"+path, body)
 	r.AddCookie(fixtureOwnerCookie(a))
 	r.Header.Set("Content-Type", media)
@@ -54,7 +54,7 @@ func uploadedAsset(t *testing.T, w *httptest.ResponseRecorder, standalone bool) 
 	return asset
 }
 
-func requireNoStagedUploads(t *testing.T, a *Server) {
+func requireNoStagedUploads(t *testing.T, a *testServer) {
 	t.Helper()
 	f, err := a.Store.TemporaryFile(".inspect-*")
 	if err != nil {

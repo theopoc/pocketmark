@@ -27,12 +27,12 @@ func TestXBELSyncRetainsDataAndRollsBack(t *testing.T) {
 		t.Fatal(e)
 	}
 	var buf bytes.Buffer
-	etag, e := s.ExportXBEL(ctx, &buf)
+	etag, e := s.WriteDAVSnapshot(ctx, &buf)
 	if e != nil {
 		t.Fatal(e)
 	}
 	input := strings.ReplaceAll(buf.String(), "Title", "Renamed")
-	if e = s.ReplaceXBEL(ctx, strings.NewReader(input), etag); e != nil {
+	if e = s.ApplyDAV(ctx, "test-client", strings.NewReader(input), etag.ETag, ""); e != nil {
 		t.Fatal(e)
 	}
 	l, e := s.Get(ctx, id)
@@ -41,7 +41,7 @@ func TestXBELSyncRetainsDataAndRollsBack(t *testing.T) {
 	}
 	before := l
 	for _, bad := range []string{`<xbel><bookmark href="javascript:alert(1)"><title>bad</title></bookmark></xbel>`, `<xbel><folder>`, `<html/>`, `<xbel><bookmark href="https://example.org"/><bookmark href="https://example.org"/></xbel>`} {
-		if e = s.ReplaceXBEL(ctx, strings.NewReader(bad), ""); e == nil {
+		if e = s.ApplyDAV(ctx, "test-client", strings.NewReader(bad), "", ""); e == nil {
 			t.Fatalf("accepted %s", bad)
 		}
 	}
@@ -81,14 +81,14 @@ func TestXBELURLEditPreservesPersonalDataAndFiles(t *testing.T) {
 		t.Fatal(e)
 	}
 	var before bytes.Buffer
-	etag, e := s.ExportXBEL(ctx, &before)
+	etag, e := s.WriteDAVSnapshot(ctx, &before)
 	if e != nil {
 		t.Fatal(e)
 	}
 	if strings.Contains(before.String(), "pocketmark-file:") || strings.Contains(before.String(), "Local PDF") {
 		t.Fatal("standalone file exported to browser")
 	}
-	if e = s.ReplaceXBEL(ctx, strings.NewReader(strings.ReplaceAll(before.String(), "https://old.example", "https://new.example")), etag); e != nil {
+	if e = s.ApplyDAV(ctx, "test-client", strings.NewReader(strings.ReplaceAll(before.String(), "https://old.example", "https://new.example")), etag.ETag, ""); e != nil {
 		t.Fatal(e)
 	}
 	l, e := s.Get(ctx, id)
@@ -138,7 +138,7 @@ func TestXBELRejectsConflictingAndInvalidIDsAtomically(t *testing.T) {
 		`<xbel><bookmark id="foreign" href="https://one.example"/><bookmark id="foreign" href="https://two.example"/></xbel>`,
 	}
 	for _, input := range inputs {
-		if e = s.ReplaceXBEL(ctx, strings.NewReader(input), ""); e == nil {
+		if e = s.ApplyDAV(ctx, "test-client", strings.NewReader(input), "", ""); e == nil {
 			t.Fatalf("accepted ambiguous IDs %s", input)
 		}
 		l, e := s.Get(ctx, first)
@@ -163,11 +163,11 @@ func TestDAVHighestIDAndExpiredLeaseRequireFreshRead(t *testing.T) {
 		t.Fatal(e)
 	}
 	var initial bytes.Buffer
-	if _, e = s.ExportXBEL(ctx, &initial); e != nil {
+	if _, e = s.WriteDAVSnapshot(ctx, &initial); e != nil {
 		t.Fatal(e)
 	}
 	input := strings.Replace(initial.String(), "highestId :1:", "highestId :1000:", 1)
-	if e = s.ReplaceXBEL(ctx, strings.NewReader(input), ""); e != nil {
+	if e = s.ApplyDAV(ctx, "test-client", strings.NewReader(input), "", ""); e != nil {
 		t.Fatal(e)
 	}
 	l, e := s.Get(ctx, id)
@@ -179,7 +179,7 @@ func TestDAVHighestIDAndExpiredLeaseRequireFreshRead(t *testing.T) {
 		t.Fatal(e)
 	}
 	var canonical bytes.Buffer
-	if _, e = s.ExportXBEL(ctx, &canonical); e != nil {
+	if _, e = s.WriteDAVSnapshot(ctx, &canonical); e != nil {
 		t.Fatal(e)
 	}
 	if !strings.Contains(canonical.String(), "highestId :1000:") {

@@ -111,7 +111,6 @@ html[data-theme="dark"] body.api-docs { --secondary-link: var(--focus); color-sc
   #settings-page #token-list .token-metadata > div + div { padding-left: 0; border-left: 0; }
   #settings-page #token-list .token-revoke { margin-left: 0; border-left-color: transparent; }
 }
-#settings-page :is(.settings-panel, .settings-intro) > p { max-width: 72ch; }
 #help-topics summary:hover { background: var(--control-hover); }
 #help-topics .help-answer { max-width: 72ch; }
 .api-docs .swagger-ui :is(input, select, textarea) { border-color: var(--control-line); color: var(--ink); background: var(--paper); }

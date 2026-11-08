@@ -14,7 +14,7 @@ import (
 	"pocketmark/internal/store"
 )
 
-func securityServer(t *testing.T) (*Server, *sql.DB) {
+func securityServer(t *testing.T) (*testServer, *sql.DB) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "security.db")
 	s, err := store.Open(path)
@@ -27,7 +27,7 @@ func securityServer(t *testing.T) (*Server, *sql.DB) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	a := New(s, testToken, "", false)
+	a := &testServer{Server: New(s, testToken, "", false), db: db}
 	a.rateLimit = newRequestLimiter(100000, 100000)
 	return a, db
 }
@@ -37,7 +37,7 @@ func staleConfirmation(t *testing.T, db *sql.DB) {
 		t.Fatal(err)
 	}
 }
-func createProfileKey(t *testing.T, a *Server, profile string) string {
+func createProfileKey(t *testing.T, a *testServer, profile string) string {
 	t.Helper()
 	w := request(a, "POST", "/api/tokens", fmt.Sprintf(`{"name":"matrix","profile":%q}`, profile), true, nil)
 	requireStatus(t, w, 201)

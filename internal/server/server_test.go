@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -23,15 +24,44 @@ const testToken = "test-only-token-with-enough-entropy"
 const routeFixtureSalt = "route-fixture-salt-not-a-secret"
 const routeFixtureHash = "c6b86128dd256dc343cd9d40759ece8b0ef4f8e1204138b3fbd4a53072e9c104"
 
+// Session fixtures are test data, not sign-ins: installing one must not consume
+// a TOTP counter or recovery code, rotate the factor or revoke other sessions.
+type testServer struct {
+	*Server
+	db *sql.DB
+}
+
+func wrapTestServer(t *testing.T, a *Server, path string) *testServer {
+	t.Helper()
+	db, err := sql.Open("sqlite3", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return &testServer{Server: a, db: db}
+}
+
+func (a *testServer) withServer(server *Server) *testServer {
+	return &testServer{Server: server, db: a.db}
+}
+
+func (a *testServer) insertSessionFixture(hash string, expires time.Time) error {
+	_, err := a.db.Exec(`INSERT OR REPLACE INTO sessions
+ (hash,expires_at,created_at,last_used_at,confirmed_at,idle_minutes,device)
+ VALUES(?,?,unixepoch(),unixepoch(),unixepoch(),1440,'fixture')`, hash, expires.Unix())
+	return err
+}
+
 func TestRouteFixturePasswordHash(t *testing.T) {
 	if passwordHash("fixture-password", routeFixtureSalt) != routeFixtureHash {
 		t.Fatal("route fixture must use the production password derivation")
 	}
 }
 
-func newTestServer(t *testing.T, origin string, secure bool) *Server {
+func newTestServer(t *testing.T, origin string, secure bool) *testServer {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	path := filepath.Join(t.TempDir(), "test.db")
+	s, err := store.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,10 +70,10 @@ func newTestServer(t *testing.T, origin string, secure bool) *Server {
 			t.Error(err)
 		}
 	})
-	return New(s, testToken, origin, secure)
+	return wrapTestServer(t, New(s, testToken, origin, secure), path)
 }
 
-func passwordLogin(t *testing.T, a *Server) *httptest.ResponseRecorder {
+func passwordLogin(t *testing.T, a *testServer) *httptest.ResponseRecorder {
 	t.Helper()
 	salt := randomSecret()
 	if err := a.Store.SaveAccount(context.Background(), store.Account{Username: "me", Salt: salt, Hash: passwordHash("test-only-password", salt)}); err != nil {
@@ -62,20 +92,16 @@ func passwordLogin(t *testing.T, a *Server) *httptest.ResponseRecorder {
 
 // Tests of session management create an additional persisted session directly;
 // the MFA integration tests exercise the real two-step login separately.
-func additionalTestSession(t *testing.T, a *Server) *http.Cookie {
+func additionalTestSession(t *testing.T, a *testServer) *http.Cookie {
 	t.Helper()
-	account, err := a.Store.Account(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
 	value := "v3." + randomSecret()
-	if err = a.Store.CreateSession(context.Background(), account.Salt, a.sessionHash(value), time.Now().Add(time.Hour)); err != nil {
+	if err := a.insertSessionFixture(a.sessionHash(value), time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	return &http.Cookie{Name: "pocketmark", Value: value}
 }
 
-func fixtureOwnerCookie(a *Server) *http.Cookie {
+func fixtureOwnerCookie(a *testServer) *http.Cookie {
 	// Most route tests need an owner, not a recovery bearer. Construct a
 	// confirmed session in the disposable database; authentication flows
 	// themselves are exercised separately using real MFA challenges.
@@ -102,15 +128,19 @@ func fixtureOwnerCookie(a *Server) *http.Cookie {
 			panic(e)
 		}
 	}
-	if !a.Store.SessionValid(ctx, hash) {
-		if err = a.Store.CreateSession(ctx, account.Salt, hash, time.Now().Add(time.Hour)); err != nil {
+	valid, err := a.Store.CheckAndTouchSession(ctx, hash)
+	if err != nil {
+		panic(err)
+	}
+	if !valid {
+		if err = a.insertSessionFixture(hash, time.Now().Add(time.Hour)); err != nil {
 			panic(err)
 		}
 	}
 	return &http.Cookie{Name: "pocketmark", Value: value}
 }
 
-func request(a *Server, method, path, body string, bearer bool, headers map[string]string) *httptest.ResponseRecorder {
+func request(a *testServer, method, path, body string, bearer bool, headers map[string]string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(method, "http://pocketmark.test"+path, strings.NewReader(body))
 	if body != "" {
 		r.Header.Set("Content-Type", "application/json")

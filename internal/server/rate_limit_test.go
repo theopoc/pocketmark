@@ -82,7 +82,7 @@ func TestRequestLimiterConcurrentBudget(t *testing.T) {
 }
 
 func TestRateLimitConfiguration(t *testing.T) {
-	a := New(nil, testToken, "", false)
+	a := &testServer{Server: New(nil, testToken, "", false)}
 	for _, limits := range [][2]int{{0, 1}, {-1, 1}, {1001, 1}, {1, 0}, {1, -1}, {1, 10001}} {
 		before := a.rateLimit
 		if err := a.SetRateLimit(limits[0], limits[1]); err == nil || a.rateLimit != before {
@@ -156,7 +156,7 @@ func TestRateLimitClientIdentity(t *testing.T) {
 		{"unknown peers", "", "invalid", "also-invalid", "", 429},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			a := New(nil, testToken, "", false)
+			a := &testServer{Server: New(nil, testToken, "", false)}
 			if err := a.SetRateLimit(1, 1); err != nil {
 				t.Fatal(err)
 			}
