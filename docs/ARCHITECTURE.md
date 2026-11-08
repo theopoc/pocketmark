@@ -12,7 +12,7 @@ Pocketmark keeps one Go process, SQLite/FTS5 and an embedded React + shadcn/ui i
 | `internal/store/` | Atomic schema initialization/upgrades, account persistence, library mutations, queue transitions and chunked documents. | Fresh and legacy database tests, restart/rollback and concurrent access regressions. |
 | `store/import_json.go`, `store/import_html.go`, `store/xbel.go` | Format-specific metadata import/export, retaining each format's transaction and compatibility rules. | Format round-trips and rollback tests beside implementations. |
 
-The store owns SQLite access and initialization failures. Constructing the HTTP routes does not initialize the schema. Document ingestion shares HTTP staging and private chunk writing while attachment and standalone-file transactions retain their own rules. See [archive limits](ARCHIVES.md) and [format/file navigation](GUIDE.md#development-and-verification).
+The store owns SQLite access and initialization failures. Constructing the HTTP routes does not initialize the schema. Document ingestion shares HTTP staging and private chunk writing while attachment and standalone-file transactions retain their own rules. See [archive limits](ARCHIVES.md) and [import semantics](GUIDE.md#import-a-bookmark-library).
 
 ## Embedded browser modules
 

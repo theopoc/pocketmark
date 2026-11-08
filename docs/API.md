@@ -19,8 +19,7 @@ Download the OpenAPI 3.0.3 specification from the page or
 `/api-docs/openapi.json`. Its server URL is relative to the current instance, so it
 works behind a reverse proxy without hard-coded hosts. Swagger UI is version-pinned
 and embedded locally, with no CDN or external validator; it loads only on the docs
-page, separately from the compiled React library interface. WebDAV `/dav/` uses a separate protocol
-and is not included in the OpenAPI reference.
+page, separately from the compiled React library interface. The specification includes the WebDAV resources under `/dav/`; see [protocol details](CLIENT_FLOCCUS_NOTES.md).
 
 The canonical specification lives in
 `internal/webui/static/api-docs/openapi.json`. When changing routes or payloads,
@@ -33,8 +32,7 @@ Base URL: `http://127.0.0.1:8090`. API endpoints require an owner session or nam
 `GET /metrics` exposes Prometheus text metrics using the same session/bearer
 authentication. Responses include a server-generated `X-Request-ID` for log
 correlation. See [observability](OBSERVABILITY.md) for metrics, JSON log fields and
-optional OpenTelemetry tracing; `/metrics` is operational and outside the native
-JSON API specification.
+optional OpenTelemetry tracing; the specification also describes the metrics response.
 
 Create a dedicated API key in **Settings → API keys** and keep it private. Set `POCKETMARK_ACCESS_TOKEN` from a secure source before running the examples:
 
@@ -54,25 +52,7 @@ JSON mutation requests use `Content-Type: application/json`. Responses use JSON 
 
 ## Endpoints
 
-| Method and path | Request / result |
-| --- | --- |
-| `POST /api/login` | `{"username":"…","password":"…"}` → a five-minute MFA challenge; verify the second factor before a browser session is issued. |
-| `POST /api/logout` | Revokes the current session in SQLite (including after restart) and clears its cookie; returns `{"ok":true}`. Does not revoke the access token. |
-| `GET /api/session` | `{"authenticated":true}` or HTTP 401. |
-| `GET /api/stats` | Counts: `links`, `collections`, `pending` (includes processing), `failed`. |
-| `GET /api/tags` | Up to 200 `{"name":"go","count":3}` objects, ordered by count descending then name. |
-| `GET /api/collections` | Array of collections with `id`, `name`, `parentId` and optional `description`. |
-| `POST /api/collections` | `{"name":"Reading","parentId":null,"description":"Optional text"}` → collection, HTTP 201. Description: at most 8 KiB; JSON envelope: 64 KiB. |
-| `DELETE /api/collections/{id}` | Moves direct bookmarks to the inbox and makes child collections roots; `{"ok":true}`. |
-| `GET /api/links` | Paginated result; filters described below. |
-| `POST /api/links` | Bookmark fields below → created record, HTTP 201. |
-| `GET /api/links/{id}` | Bookmark record, including captured `content` when available. |
-| `PUT /api/links/{id}` | Replaces editable fields → updated record. Send every field you want to retain. |
-| `DELETE /api/links/{id}` | Deletes the bookmark and its capture; `{"ok":true}`. |
-| `POST /api/links/{id}/capture` | Queues/retries capture; `{"ok":true}`, HTTP 202. A processing record returns 404. |
-| `GET /api/links/{id}/archive` | Downloads original HTML as `page.html`; 404 if unavailable. |
-| `POST /api/import` | Raw export JSON → `{"imported":12,"skipped":2}`. |
-| `GET /api/export` | Downloads `pocketmark-export.json`. |
+See the [OpenAPI specification](../internal/webui/static/api-docs/openapi.json) for methods, request fields and responses. Deleting a collection moves its direct bookmarks to Inbox and promotes child collections to roots. Bookmark updates replace editable fields, so send all values to retain. Logging out revokes the browser session across restarts and leaves named API keys valid.
 
 New and imported links start with `status:"pending"`. The worker advances them through `processing` to `ready` or `failed`. Capture requests still queue work when the worker is disabled; they do not run until capture is enabled. A URL change clears the old capture and queues the new URL. Editing other fields preserves the capture.
 
@@ -132,25 +112,11 @@ Accepted inputs are legacy JSON exports (`collections[].links`, object tags, `pa
 
 ## Additional personal-library endpoints
 
-| Method and path | Contract |
-| --- | --- |
-| `PUT /api/collections/{id}` | `{name,parentId,description?}`; rejects self-parenting and cycles. Omitted description is preserved; empty string clears it. Description: 8 KiB; JSON envelope: 64 KiB. |
-| `POST /api/links/bulk` | `{ids:[...],action,collectionId,tags,value}`; max 500 IDs. Actions: `delete`, `move`, `tags` (replace), `favorite`, `read`, `capture`. Move uses nullable `collectionId`; flags use boolean `value`. One transaction; errors roll back all changes. |
-| `GET /api/links/{id}/annotations` | Annotation array with quote, Unicode offsets, note, color and `stale`. |
-| `POST /api/links/{id}/annotations` | `{quote,start,end,note,color}` → `{id}`. Offsets count Unicode code points, not UTF-16 code units. Quote must match the current content. |
-| `PUT /api/links/{id}/annotations/{annotationId}` | Same fields; replaces the annotation. |
-| `DELETE /api/links/{id}/annotations/{annotationId}` | Deletes one annotation. |
-| `POST /api/import/html` | Raw Netscape bookmark HTML, max 8 MiB, transactional nested import. |
-| `GET /api/export/html` | Browser bookmark HTML download. |
-| `GET /api/links/{id}/assets` | List attachments. |
-| `POST /api/files?name=filename&collection=id` | Raw PDF/image/HTML body → `{link,asset}`; optional collection, max 20 MiB. Creates a standalone file atomically, without a website URL. |
-| `POST /api/links/{id}/assets?name=filename` | Raw PDF/image/HTML body, max 20 MiB and 32 attachments per bookmark. Content is sniffed. HTML is indexed for reading/search. |
-| `GET /api/assets/{assetId}` | Streaming original-byte download, always an attachment with restrictive CSP. |
-| `GET /api/assets/{assetId}/view` | Authenticated inline image/PDF preview or HTML payload for the UI’s nested sandboxed blob viewer. Direct HTML navigation downloads (attachment disposition); fetch still returns the preview bytes. Preparation shares the archive work slot (409 if busy); 422 if HTML cannot be prepared. Original downloads are unchanged. |
-| `DELETE /api/assets/{assetId}` | Removes attachment chunks atomically. |
-| `POST /api/links/{id}/preserve` | Manual resource-embedded passive HTML capture; returns `{asset,embedded,omitted}`. |
-| `GET /api/links/{id}/reader?asset=id` | Sandboxed structural reader; optional HTML attachment ID, otherwise captured HTML. Max 2 MiB input, 1 MiB output. |
-| `GET /api/backup` | Owner-only ZIP stream with consistent SQLite snapshot and restore instructions. Five-minute overall deadline and renewable 30-second network-write deadline. |
+Collection edits reject cycles and self-parenting. Omitted descriptions are preserved, and an empty description clears the field. Descriptions allow 8 KiB in a 64 KiB JSON envelope.
+
+Bulk actions apply to at most 500 IDs in one transaction. Tags replace the selected bookmarks’ tags. Moving to a null collection moves them to Inbox. An error rolls back the entire operation.
+
+Annotation offsets count Unicode code points. The quote must match the current content. For standalone files, attachments, original downloads, sandboxed previews, passive capture and full backup, see [archive endpoints and boundaries](ARCHIVES.md).
 
 Annotation colors: `yellow`, `green`, `blue`, `pink`. Each bookmark supports up to 200 annotations. After content changes, old anchors are reported stale rather than being silently moved. See [archive limits](ARCHIVES.md) for network and resource budgets.
 
@@ -286,7 +252,7 @@ Public `/api/login`, `/api/setup` and MFA challenge endpoints use two separate r
 
 ## Security controls
 
-The local [OpenAPI reference](/api-docs/) and bundled `openapi.json` describe every
+Open `/api-docs/` on the running instance. The [bundled OpenAPI specification](../internal/webui/static/api-docs/openapi.json) describes every
 native endpoint, metrics, and WebDAV. The specification records allowed key profiles
 with `x-api-key-profiles`, owner restrictions with `x-owner-only`, and password
 confirmation with `x-reauthentication-required`. WebDAV PROPFIND/MOVE are documented

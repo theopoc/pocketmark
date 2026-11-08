@@ -31,7 +31,7 @@ docker compose up --build -d
 
 Open the same local URL. Compose stores data in a named volume and publishes port 8090 on host loopback only. The image runs as UID/GID `10001:10001`; a custom bind-mounted data directory must be writable by that user.
 
-Tagged releases also publish a private multiarchitecture image at `ghcr.io/theopoc/pocketmark:vMAJOR.MINOR.PATCH` for Linux AMD64/ARM64. After authenticating Docker with read access to the package, use that image in place of `build: .` in your Compose configuration. Keep the same volume, port binding and resource/security settings. See [GHCR publication and verification](CI.md#ghcr-images).
+Tagged releases also publish a private multiarchitecture image at `ghcr.io/theopoc/pocketmark:vMAJOR.MINOR.PATCH` for Linux AMD64/ARM64. After authenticating Docker with read access to the package, use that image in place of `build: .` in your Compose configuration. Keep the same volume, port binding and resource/security settings. See [GHCR publication and verification](RELEASE.md#ghcr-images).
 
 The supplied Compose configuration sets a **128 MiB container memory limit** and one CPU. This is a deployment limit, not a guarantee that every workload completes within it. See [memory measurement methodology](BENCHMARK.md) for workload boundaries.
 
@@ -50,11 +50,9 @@ The supplied Compose configuration sets a **128 MiB container memory limit** and
 - Personal password and TOTP login, named revocable API keys and an owner-only full ZIP backup while the app runs.
 - Installable mobile web interface, share target, and a small [browser extension](../extension/README.md). The Linkwarden compatibility API and third-party extension/mobile integration have been removed.
 
-Default capture fetches one HTML response, with a 20-second timeout, at most five redirects, a 2 MiB response/decompressed-body limit and up to 256 KiB of extracted text. When adding or editing a bookmark, select **Save an HTML copy** for bounded resource embedding, or use the extension for an already-rendered page and a visible-tab PNG screenshot. The same Chrome extension generates PDF and full-page screenshots on demand, using an explicit debugger permission; [installation and limits](../extension/README.md). Existing PDF, image and HTML files can be attached under **Reader → Files**. No Chromium instance runs on the server. Private, loopback and reserved network destinations can be bookmarked, but server capture refuses them. See [archive limits](ARCHIVES.md).
+Default capture fetches one HTML response, with a 20-second timeout, at most five redirects, a 2 MiB response/decompressed-body limit and up to 256 KiB of extracted text. When adding or editing a bookmark, select **Save an HTML copy** for bounded resource embedding, or use the extension for an already-rendered page and a visible-tab PNG screenshot. The same Chrome extension generates PDF and full-page screenshots on demand, using an explicit debugger permission; [installation and limits](../extension/README.md). Existing PDF, image and HTML files can be attached under **Saved formats → Manage files**. No Chromium instance runs on the server. Private, loopback and reserved network destinations can be bookmarked, but server capture refuses them. See [archive limits](ARCHIVES.md).
 
 Collaboration/public sharing, SSO/OIDC, RSS, AI automation, scheduled recapture and automatic backups are intentionally excluded. Screenshots and PDF rendering consume memory in the user's browser; their memory is not included in server measurements. See [client compatibility and verification](REAL_CLIENTS.md) for observed workflows and qualification limits. The supported integration paths are the Pocketmark Chrome extension and Floccus WebDAV; older Linkwarden client observations do not qualify the new extension.
-
-Third-party Android clients are outside the supported scope. The historical emulator run identified a prolonged-offline client-cache limitation; iOS and physical phones remain untested. See [client qualification limits](REAL_CLIENTS.md#observed-workflows-and-their-limits).
 
 ## Configuration
 
@@ -87,7 +85,7 @@ JSON import/export does not include captured HTML, extracted text or other archi
 
 ## Back up everything
 
-Choose **Settings → Full backup** to download a consistent ZIP while Pocketmark runs. It contains a SQLite snapshot including captures, uploaded files, highlights, account settings and hashed API keys. Keep your `server-secret` file (or legacy `access-token` / `POCKETMARK_TOKEN`) separately: the saved TOTP factor requires it. New ZIPs invalidate their recovery codes and the current TOTP window when restored; wait for up to two new authenticator codes, sign in and generate new recovery codes. Clock differences can add delay. Older ZIPs and raw copies cannot be detected automatically: reset MFA or regenerate codes manually after restore, and revoke restored sessions. The ZIP includes restore instructions; restore only while stopped into an empty data directory so stale WAL files cannot overwrite restored data. The operation uses temporary disk space approximately equal to the database size, not an in-memory copy.
+Choose **Settings → Backup & restore → Download full backup** to download a consistent ZIP while Pocketmark runs. It contains a SQLite snapshot including captures, uploaded files, highlights, account settings and hashed API keys. Keep your `server-secret` file (or legacy `access-token` / `POCKETMARK_TOKEN`) separately: the saved TOTP factor requires it. New ZIPs invalidate their recovery codes and the current TOTP window when restored; wait for up to two new authenticator codes, sign in and generate new recovery codes. Clock differences can add delay. Older ZIPs and raw copies cannot be detected automatically: reset MFA or regenerate codes manually after restore, and revoke restored sessions. The ZIP includes restore instructions; restore only while stopped into an empty data directory so stale WAL files cannot overwrite restored data. The operation uses temporary disk space approximately equal to the database size, not an in-memory copy.
 
 Alternatively, stop Pocketmark before copying its data directory. Preserve the complete directory, including any SQLite WAL files and the server secret; a live copy of only `pocketmark.db` can miss committed data.
 
@@ -103,45 +101,12 @@ To restore, stop the application, restore the complete backup into its data dire
 
 ## Development and verification
 
-```sh
-make build
-make test
-make check
-```
-
-`make test` runs Go tests with the race detector. `make check` runs `go vet` and JavaScript syntax checking, which requires Node.js as a development tool. The build compiles the React/shadcn frontend with Node.js; the runtime does not require Node.js. See `python3 scripts/benchmark.py --help` and the [measurement methodology](BENCHMARK.md) for the reproducible memory workload.
-
-GitHub Actions also checks formatting, dependency integrity, secrets, reachable vulnerabilities, extension tests and release packaging. Native Linux AMD64/ARM64 jobs run race tests, build static binaries and validate the hardened Docker/Compose runtime. GoReleaser OSS packages the tested binaries and extensions, generates SHA-256 checksums and publishes version tags; manual release runs exercise packaging and verification without publishing. See [CI and release](CI.md) and [contributor instructions](../AGENTS.md).
-
-For capture-enabled Docker validation, run `docker build -t pocketmark:validation .`, then `python3 scripts/benchmark_capture.py`. It captures six public documentation pages, measures process/container memory, checks restart persistence, and removes its isolated test deployment.
-
-For the extended feature workload, add `--features` and keep output in ignored `reports/`, for example `python3 scripts/benchmark_capture.py --features --image pocketmark:validation --output reports/benchmark-features.json`. It also exercises a 19 MiB upload/download, offline resource capture, annotations, bulk editing, HTML/XBEL round-trips, the staged Floccus DAV protocol and a full backup. See [measurement boundaries](BENCHMARK.md); record results in the PR rather than committing generated evidence.
-
-| Path | Contents |
-| --- | --- |
-| `cmd/pocketmark/` | Configuration, lifecycle and capture worker. |
-| `internal/capture/` | Bounded HTTP fetch, network checks and HTML text extraction. |
-| `internal/server/` | Authentication and HTTP API. |
-| `internal/store/` | SQLite persistence, schema upgrades, full-text search and bookmark import/export. |
-| `internal/webui/` | Embedded interface assets. |
-
-Within `internal/store/`, files are grouped by responsibility and import format; all remain in the same Go package.
-
-| Files | Responsibility |
-| --- | --- |
-| [schema.go](../internal/store/schema.go), `schema*_test.go` | Atomic schema initialization and legacy-database upgrades, including restart regressions. |
-| [import_json.go](../internal/store/import_json.go), `import_json_test.go` | JSON metadata import/export, hierarchy merging and rollback. |
-| [import_html.go](../internal/store/import_html.go), `import_html_test.go` | Netscape HTML bookmark import/export and format round-trip regressions. |
-
-| Documentation | Purpose |
-| --- | --- |
-| [API](API.md) | Endpoints, curl examples and request limits. |
-| [Benchmarks](BENCHMARK.md) | Reproducible measurements and their limits. |
+Use the [contributor checklist](../AGENTS.md#verification-and-delivery) for local checks and the [architecture map](ARCHITECTURE.md) to find the implementation and its tests. Native CI runs race tests and builds Linux AMD64 and ARM64 binaries. The [release workflow](RELEASE.md#ghcr-images) qualifies the container images. For optional RAM measurements, use the [benchmark workloads](BENCHMARK.md).
 
 ## Further reading
 
 - [Architecture and module ownership](ARCHITECTURE.md)
 
-- [Release installation](RELEASE_INSTALL.md) · [Container images](CI.md#ghcr-images)
+- [Release installation](RELEASE_INSTALL.md) · [Container images](RELEASE.md#ghcr-images)
 - [Archive limits](ARCHIVES.md) · [Feature coverage](FEATURES.md)
 - [Client compatibility](REAL_CLIENTS.md)

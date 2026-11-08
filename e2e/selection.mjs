@@ -62,7 +62,7 @@ export async function selectionJourney(page, screenshots) {
   await cards.nth(1).focus(); await page.keyboard.press('Space'); await count(1);
   assert.match(await cards.nth(1).getAttribute('aria-label'), /selected/);
   await page.keyboard.press('Escape'); await count(0);
-  await cards.nth(0).locator('.card-title button').click({ modifiers: ['Control'] }); await count(1);
+  await cards.nth(0).locator('.card-title button').click({ modifiers: ['ControlOrMeta'] }); await count(1);
   assert.equal(await page.locator('#reader-dialog').isVisible(), false);
   await page.keyboard.press('Escape');
   await cards.nth(0).locator('.card-title button').click();

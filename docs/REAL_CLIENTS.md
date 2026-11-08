@@ -41,6 +41,8 @@ for HTTP, WebDAV and persistence regressions. Protocol tests do not operate the
 actual Floccus UI. Browser checks under `e2e/` use disposable server data and
 profiles; emulated phone layouts do not qualify physical devices.
 
+For a manual client run, start a disposable Pocketmark instance on loopback port 18092, then run `python3 scripts/real_clients_fixture.py`. Port 18093 serves synthetic rendered content and port 18094 proxies to that instance. Use synthetic URLs and disposable profiles and keys. The fixture records request paths and writes local evidence under `/private/tmp/pocketmark-real-clients/`.
+
 When changing an integration, exercise its real client separately: capture and
 retry across popup/browser closure for the extension; download, edit, move,
 delete and restart synchronization for Floccus. Use a distinct API key for each

@@ -1,4 +1,4 @@
-.PHONY: build frontend test run check fmt-check test-extension release-check release-snapshot
+.PHONY: preflight build frontend test run check fmt-check test-extension release-check release-snapshot
 GO_TAGS := sqlite_fts5 sqlite_omit_load_extension
 LDFLAGS ?= -s -w
 TEST_FLAGS ?= -race -p 1
@@ -14,6 +14,8 @@ test: frontend
 	go test $(TEST_FLAGS) -tags '$(GO_TAGS)' ./...
 	node --test internal/webui/*.test.cjs
 	npm test --prefix frontend
+preflight:
+	python3 scripts/preflight.py
 test-extension:
 	node --test extension/*.test.cjs
 fmt-check:
