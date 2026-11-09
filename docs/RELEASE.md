@@ -90,9 +90,13 @@ when the selected tag is already published.
 ## GHCR images
 
 The existing Dockerfile's `BINARY_SOURCE=prebuilt` path copies the validated
-executable into the runtime stage; it does not run a compiler. Native image jobs
+executable into the runtime stage; it does not run a compiler. Recovery loads the
+Dockerfile from the executing workflow revision while preserving the published
+application binaries and the tagged source's smoke/browser tooling. Native image jobs
 push untagged candidate digests, generate CycloneDX inventories with Syft 1.55.0,
 and scan with Grype 0.121.0. High/critical findings block even without a fix.
+Docker layer cache exports are optional: a read-only cache token cannot block
+publication, while build failures, security findings and test failures still do.
 Compose tests cover authentication, FTS5, SSRF rejection, backup and restart
 persistence; Chromium journeys run once on AMD64. Build attestations remain
 disabled so the index contains exactly two runnable platforms; this pipeline does

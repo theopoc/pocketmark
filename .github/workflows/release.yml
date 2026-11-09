@@ -343,9 +343,15 @@ jobs:
           path: image-input
           digest-mismatch: error
       - name: Stage the same binary used by GoReleaser
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_REVISION: ${{ github.workflow_sha }}
         run: |
           mkdir release-image reports digests
-          cp image-input/pocketmark Dockerfile release-image/
+          cp image-input/pocketmark release-image/
+          # Recovery uses the executing runtime recipe with the published application bytes.
+          gh api "repos/$GITHUB_REPOSITORY/contents/Dockerfile?ref=$WORKFLOW_REVISION" \
+            -H 'Accept: application/vnd.github.raw+json' > release-image/Dockerfile
           chmod 0755 release-image/pocketmark
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
@@ -368,7 +374,8 @@ jobs:
             org.opencontainers.image.revision=${{ needs.source.outputs.revision }}
             org.opencontainers.image.version=${{ needs.source.outputs.tag }}
           cache-from: type=gha,scope=container-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=container-${{ matrix.arch }}
+          # Closed PR events have read-only cache scopes; export is only an optimization.
+          cache-to: type=gha,mode=max,scope=container-${{ matrix.arch }},ignore-error=true
         env:
           DOCKER_BUILD_RECORD_UPLOAD: 'false'
       - uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
