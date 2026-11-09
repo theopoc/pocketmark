@@ -159,6 +159,26 @@ class PipelineTests(unittest.TestCase):
                 self.assertEqual(result.returncode, expected, result.stderr)
                 self.assertEqual(self.outputs(), {'published': 'false'} if expected == 0 else {})
 
+    def test_image_recovery_uses_workflow_recipe_and_preserves_release_binary(self):
+        (self.root / 'image-input').mkdir()
+        binary = self.root / 'image-input/pocketmark'
+        binary.write_bytes(b'published release binary')
+        (self.root / 'Dockerfile').write_text('FROM vulnerable-tag-recipe\n')
+        self.tool('gh', '''
+            import json, sys
+            from pathlib import Path
+            Path('recipe-request').write_text(json.dumps(sys.argv[1:]))
+            print('FROM patched-workflow-recipe')
+        ''')
+        workflow_revision = 'e' * 40
+        result = self.execute(script('images', '- name: Stage the same binary'),
+                              WORKFLOW_REVISION=workflow_revision)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.root / 'release-image/pocketmark').read_bytes(), binary.read_bytes())
+        self.assertEqual((self.root / 'release-image/Dockerfile').read_text(), 'FROM patched-workflow-recipe\n')
+        request = json.loads((self.root / 'recipe-request').read_text())
+        self.assertIn(f'repos/Example/Pocketmark/contents/Dockerfile?ref={workflow_revision}', request)
+
     def publish_index(self, index=None, error=''):
         (self.root / 'index-fixture.json').write_text(json.dumps(INDEX if index is None else index))
         digests = self.root / 'digests'

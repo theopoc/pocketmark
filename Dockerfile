@@ -25,7 +25,8 @@ COPY --chmod=0755 pocketmark /pocketmark
 FROM ${BINARY_SOURCE} AS binary
 
 FROM alpine:3.24 AS runtime
-RUN apk add --no-cache ca-certificates && addgroup -g 10001 pocketmark && adduser -D -H -u 10001 -G pocketmark pocketmark && mkdir /data && chown pocketmark:pocketmark /data
+# CVE-2026-4738 is fixed in Alpine's zlib 1.4-r0.
+RUN apk add --no-cache --upgrade ca-certificates 'zlib>=1.4-r0' && addgroup -g 10001 pocketmark && adduser -D -H -u 10001 -G pocketmark pocketmark && mkdir /data && chown pocketmark:pocketmark /data
 COPY --from=binary /pocketmark /usr/local/bin/pocketmark
 USER 10001:10001
 ENV POCKETMARK_DATA=/data POCKETMARK_LISTEN=0.0.0.0:8090 GOMEMLIMIT=32MiB
