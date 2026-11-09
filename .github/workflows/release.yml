@@ -3,55 +3,50 @@ name: Release
 on:
   push:
     branches: [main]
-    tags: ['v*']
-    paths:
-      - '**'
-      - '!*.md'
-      - '!docs/**'
-      - '!.github/pull_request_template.md'
-      - 'CHANGELOG.md'
-      - 'docs/RELEASE_INSTALL.md'
+  pull_request:
+    branches: [main]
+    types: [closed]
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing stable tag to verify or resume (empty uses the selected ref)'
-        required: false
-        default: ''
+        description: 'Existing stable tag to verify or resume; empty verifies main'
         type: string
+        default: ''
       publish:
-        description: 'Publish the specified existing tag after all checks pass'
-        required: false
-        default: false
+        description: 'Publish the specified existing tag after validation'
         type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.repository }}
   cancel-in-progress: false
+  queue: max
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
-  release-please:
-    name: Prepare release PR and draft
+  prepare:
+    name: Prepare release PR
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
       pull-requests: write
       actions: write
-    outputs:
-      tag: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           target-branch: main
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-      # GITHUB_TOKEN-created PRs do not emit pull_request workflow runs.
-      # workflow_dispatch is an explicit exception and checks the PR's own SHA.
+          skip-github-release: true
       - name: Run CI on the release PR
         if: steps.release.outputs.pr != ''
         env:
@@ -62,167 +57,482 @@ jobs:
           branch=$(gh pr view "$PR_NUMBER" --json headRefName --jq .headRefName)
           gh workflow run ci.yml --ref "$branch"
 
-  validate:
-    name: Validate release ref
-    needs: release-please
-    if: >-
-      always() && (needs.release-please.outputs.tag != '' ||
-      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
-      github.event_name == 'workflow_dispatch')
+  source:
+    name: Select immutable source
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(github.event.pull_request.labels.*.name, 'autorelease: pending'))
     outputs:
       revision: ${{ steps.source.outputs.revision }}
       tag: ${{ steps.source.outputs.tag }}
+      pr: ${{ steps.source.outputs.pr }}
       publish: ${{ steps.source.outputs.publish }}
+      image: ${{ steps.source.outputs.image }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.release-please.outputs.tag || inputs.tag || github.sha }}
+          ref: ${{ inputs.tag || github.event.pull_request.merge_commit_sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Require a version tag on main, or a manual dry run
-        id: source
+      - id: source
         env:
-          RELEASE_REF: ${{ needs.release-please.outputs.tag || inputs.tag || github.ref_name }}
+          EVENT: ${{ github.event_name }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           REQUESTED_TAG: ${{ inputs.tag }}
-          PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
-        shell: bash
+          PUBLISH: ${{ github.event_name == 'pull_request' || inputs.publish }}
         run: |
-          if [[ "$PUBLISH" == true || -n "$REQUESTED_TAG" ]]; then
-            [[ "$RELEASE_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-            echo "tag=$RELEASE_REF" >> "$GITHUB_OUTPUT"
+          revision=$(git rev-parse HEAD)
+          git merge-base --is-ancestor "$revision" origin/main
+          tag=$REQUESTED_TAG
+          if [[ "$EVENT" == pull_request ]]; then
+            [[ "$revision" == "$MERGE_SHA" ]]
+            tag="v$(cat version.txt)"
+          elif [[ "$PUBLISH" == true ]]; then
+            [[ -n "$tag" ]]
           fi
-          if [[ "$PUBLISH" != true ]]; then
-            echo 'Manual dry run: assemble and verify packages without publishing a release.'
+          if [[ -n "$tag" ]]; then
+            [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+            [[ "$tag" == "v$(cat version.txt)" ]]
           fi
-          git merge-base --is-ancestor HEAD origin/main
-          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+          image=$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')
+          printf 'revision=%s\ntag=%s\npr=%s\npublish=%s\nimage=ghcr.io/%s\n' \
+            "$revision" "$tag" "$PR_NUMBER" "$PUBLISH" "$image" >> "$GITHUB_OUTPUT"
 
-  verify:
-    name: Require validated main binaries
-    needs: validate
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    permissions:
-      contents: read
-      actions: read
-    outputs:
-      run_id: ${{ steps.ci.outputs.run_id }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - id: ci
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REVISION: ${{ needs.validate.outputs.revision }}
-        run: python3 scripts/validated_ci.py --revision "$REVISION"
+  checks:
+    name: Validate source
+    needs: source
+    uses: ./.github/workflows/ci.yml
+    with:
+      revision: ${{ needs.source.outputs.revision }}
 
-  assemble:
-    name: Package and verify with GoReleaser
-    needs: [validate, verify]
+  tag:
+    name: Tag tested release with Release Please
+    needs: [source, checks]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
-      contents: read
-      actions: read
+      contents: write
+      pull-requests: write
+      issues: write
+    outputs:
+      published: ${{ steps.state.outputs.published }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.validate.outputs.revision }}
+          ref: ${{ needs.source.outputs.revision }}
           fetch-depth: 0
           persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Create only the tested PR's tag and draft
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REVISION: ${{ needs.source.outputs.revision }}
+          RELEASE_TAG: ${{ needs.source.outputs.tag }}
+          PR_NUMBER: ${{ needs.source.outputs.pr }}
+        run: |
+          if ! git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            # Use Release Please's native label filter to prevent concurrent
+            # merges from causing it to tag a different, untested release PR.
+            label="tested:$REVISION"
+            gh label create "$label" --force
+            gh pr edit "$PR_NUMBER" --add-label "$label"
+            npx --yes --ignore-scripts --package=release-please@17.3.0 release-please github-release \
+              --repo-url "$GITHUB_REPOSITORY" --target-branch main \
+              --config-file release-please-config.json --manifest-file .release-please-manifest.json \
+              --label "autorelease: pending,$label" --draft --force-tag-creation --token "$GH_TOKEN"
+            gh label delete "$label" --yes
+          fi
+      - name: Verify the tested tag and inspect recovery state
+        id: state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REVISION: ${{ needs.source.outputs.revision }}
+          RELEASE_TAG: ${{ needs.source.outputs.tag }}
+        run: |
+          published=false
+          if [[ -n "$RELEASE_TAG" ]]; then
+            gh auth setup-git
+            git fetch origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+            [[ "$(git rev-parse "$RELEASE_TAG^{commit}")" == "$REVISION" ]]
+            if gh release view "$RELEASE_TAG" --json tagName,isDraft,isPrerelease > state.json 2> state-error.txt; then
+              jq -e --arg tag "$RELEASE_TAG" '.tagName == $tag and .isPrerelease == false' state.json
+              if [[ "$(jq -r .isDraft state.json)" == false ]]; then published=true; fi
+            else
+              # Only a genuinely missing release permits draft creation on recovery.
+              grep -Fxq 'release not found' state-error.txt || { cat state-error.txt >&2; exit 1; }
+            fi
+          fi
+          printf 'published=%s\n' "$published" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build release (${{ matrix.arch }})
+    needs: [source, tag]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.revision }}
+          persist-credentials: false
+      - name: Install native static toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends musl-tools
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+          cache-dependency-path: go.sum
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          github-token: ${{ github.token }}
-          run-id: ${{ needs.verify.outputs.run_id }}
+          node-version: '24'
+      - name: Build distribution binary or recover published bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ARCH: ${{ matrix.arch }}
+          REVISION: ${{ needs.source.outputs.revision }}
+          RELEASE_TAG: ${{ needs.source.outputs.tag }}
+          PUBLISHED: ${{ needs.tag.outputs.published }}
+        run: |
+          mkdir -p "artifacts/linux-$ARCH" bin
+          if [[ "$PUBLISHED" == true ]]; then
+            mkdir -p "$RUNNER_TEMP/published"
+            gh release download "$RELEASE_TAG" --dir "$RUNNER_TEMP/published" \
+              --pattern "pocketmark-linux-$ARCH.tar.gz" \
+              --pattern "pocketmark-linux-$ARCH.buildinfo.txt" --pattern SHA256SUMS
+            (cd "$RUNNER_TEMP/published"; grep -E "  pocketmark-linux-$ARCH\\.(tar.gz|buildinfo.txt)$" SHA256SUMS | sha256sum --check --strict)
+            tar -xzf "$RUNNER_TEMP/published/pocketmark-linux-$ARCH.tar.gz" -C bin pocketmark
+            cp "$RUNNER_TEMP/published/pocketmark-linux-$ARCH.buildinfo.txt" "artifacts/linux-$ARCH/"
+          else
+            # Recompile CGO against the installed musl toolchain, keeping the native module cache.
+            CC=musl-gcc GOFLAGS=-a make build LDFLAGS='-s -w -linkmode external -extldflags "-static"'
+          fi
+          file bin/pocketmark | grep 'statically linked'
+          go version -m bin/pocketmark > "$RUNNER_TEMP/buildinfo"
+          tail -n +2 "$RUNNER_TEMP/buildinfo" > "$RUNNER_TEMP/actual-buildinfo"
+          if [[ "$PUBLISHED" == true ]]; then
+            tail -n +2 "artifacts/linux-$ARCH/pocketmark-linux-$ARCH.buildinfo.txt" > "$RUNNER_TEMP/expected-buildinfo"
+            diff -u "$RUNNER_TEMP/expected-buildinfo" "$RUNNER_TEMP/actual-buildinfo"
+          else
+            cp "$RUNNER_TEMP/buildinfo" "artifacts/linux-$ARCH/pocketmark-linux-$ARCH.buildinfo.txt"
+          fi
+          for setting in "vcs.revision=$REVISION" vcs.modified=false "GOARCH=$ARCH" GOOS=linux CGO_ENABLED=1; do
+            grep -Fx "$(printf '\tbuild\t%s' "$setting")" "$RUNNER_TEMP/actual-buildinfo"
+          done
+          grep -E 'sqlite_fts5.*sqlite_omit_load_extension|sqlite_omit_load_extension.*sqlite_fts5' "$RUNNER_TEMP/actual-buildinfo"
+          ./bin/pocketmark -h
+          cp bin/pocketmark "artifacts/linux-$ARCH/pocketmark"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-${{ matrix.arch }}
+          path: artifacts/linux-${{ matrix.arch }}/*
+          if-no-files-found: error
+          retention-days: 7
+
+  github:
+    name: Package and publish GitHub release
+    needs: [source, tag, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.revision }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: needs.tag.outputs.published != 'true' || needs.source.outputs.publish != 'true'
+        with:
           pattern: linux-*
           path: artifacts
           digest-mismatch: error
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        if: needs.tag.outputs.published != 'true' || needs.source.outputs.publish != 'true'
         with:
           version: v2.18.3
           install-only: true
-      - name: Package tested binaries and allowlisted extension files
+      - name: Package into the draft, verify, then publish
+        if: needs.tag.outputs.published != 'true' || needs.source.outputs.publish != 'true'
         env:
-          PUBLISH: ${{ needs.validate.outputs.publish }}
-          REVISION: ${{ needs.validate.outputs.revision }}
-        shell: bash
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PUBLISH: ${{ needs.source.outputs.publish }}
+          REVISION: ${{ needs.source.outputs.revision }}
+          RELEASE_TAG: ${{ needs.source.outputs.tag }}
+          WORKFLOW_REVISION: ${{ github.workflow_sha }}
         run: |
-          if [[ "$PUBLISH" != true ]]; then
-            goreleaser release --snapshot --clean --config .goreleaser.yaml
+          # Recovery may target older source; use the executing packaging recipe.
+          gh auth setup-git
+          git fetch origin "$WORKFLOW_REVISION"
+          git show "$WORKFLOW_REVISION:.goreleaser.yaml" > "$RUNNER_TEMP/goreleaser.yaml"
+          if [[ "$PUBLISH" == true ]]; then
+            if gh release view "$RELEASE_TAG" --json tagName,isDraft,isPrerelease,targetCommitish,assets > "$RUNNER_TEMP/release.json" 2> "$RUNNER_TEMP/release-error.txt"; then
+              # Preserve the verifier interface used by older tagged application revisions.
+              jq '[[{tag_name:.tagName,draft:.isDraft,prerelease:.isPrerelease,
+                target_commitish:.targetCommitish,assets:.assets}]]' "$RUNNER_TEMP/release.json" > "$RUNNER_TEMP/releases.json"
+            else
+              grep -Fxq 'release not found' "$RUNNER_TEMP/release-error.txt" || { cat "$RUNNER_TEMP/release-error.txt" >&2; exit 1; }
+              printf '[[]]\n' > "$RUNNER_TEMP/releases.json"
+            fi
+            python3 - "$RUNNER_TEMP/releases.json" "$RELEASE_TAG" "$REVISION" <<'PY'
+          import json, sys
+          from scripts.verify_release import verify_release_state
+          verify_release_state(json.load(open(sys.argv[1])), sys.argv[2], sys.argv[3])
+          PY
+            goreleaser release --clean --config "$RUNNER_TEMP/goreleaser.yaml"
           else
-            goreleaser release --skip=publish --clean --config .goreleaser.yaml
+            goreleaser release --snapshot --clean --config "$RUNNER_TEMP/goreleaser.yaml"
           fi
           python3 scripts/verify_release.py --directory dist --metadata artifacts \
             --commit "$REVISION" --output artifacts/verified
-      - name: Exercise publication configuration without publishing
-        run: goreleaser release --snapshot --skip=archive --clean --config .goreleaser-publish.yaml
+          if [[ "$PUBLISH" == true ]]; then gh release edit "$RELEASE_TAG" --draft=false; fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: needs.tag.outputs.published != 'true' || needs.source.outputs.publish != 'true'
         with:
           name: verified-release
           path: artifacts/verified/*
           if-no-files-found: error
           retention-days: 7
 
-  publish:
-    name: Publish GitHub release
-    if: needs.validate.outputs.publish == 'true'
-    needs: [validate, assemble]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
+  images:
+    name: Build and test image (${{ matrix.arch }})
+    needs: [source, build]
+    if: needs.source.outputs.publish == 'true'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     permissions:
-      contents: write
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.validate.outputs.revision }}
-          fetch-depth: 0
+          ref: ${{ needs.source.outputs.revision }}
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: verified-release
-          path: artifacts/verified
+          name: linux-${{ matrix.arch }}
+          path: image-input
           digest-mismatch: error
-      - name: Recheck assets and require an unpublished version
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
-          REVISION: ${{ needs.validate.outputs.revision }}
-        shell: bash
+      - name: Stage the same binary used by GoReleaser
         run: |
-          python3 scripts/verify_release.py --directory artifacts/verified --commit "$REVISION"
-          # Listing with write access includes drafts; the tag endpoint is for published releases.
-          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RUNNER_TEMP/release-state.json"
-          python3 - "$RUNNER_TEMP/release-state.json" "$RELEASE_TAG" "$REVISION" <<'PY'
-          import json, sys
-          from scripts.verify_release import verify_release_state
-          verify_release_state(json.load(open(sys.argv[1])), sys.argv[2], sys.argv[3])
-          PY
-      - name: Publish exactly the verified artifacts with GoReleaser
-        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+          mkdir release-image reports digests
+          cp image-input/pocketmark Dockerfile release-image/
+          chmod 0755 release-image/pocketmark
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
-          version: v2.18.3
-          args: release --config .goreleaser-publish.yaml --skip=archive --clean
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        id: candidate
+        with:
+          context: release-image
+          target: runtime
+          build-args: BINARY_SOURCE=prebuilt
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=${{ needs.source.outputs.image }},push-by-digest=true,name-canonical=true,push=true,oci-mediatypes=true
+          provenance: false
+          sbom: false
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.source.outputs.revision }}
+            org.opencontainers.image.version=${{ needs.source.outputs.tag }}
+          cache-from: type=gha,scope=container-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=container-${{ matrix.arch }}
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          DOCKER_BUILD_RECORD_UPLOAD: 'false'
+      - uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ${{ needs.source.outputs.image }}@${{ steps.candidate.outputs.digest }}
+          syft-version: v1.55.0
+          format: cyclonedx-json
+          output-file: reports/sbom.json
+          upload-artifact: false
+          upload-release-assets: false
+      - uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          sbom: reports/sbom.json
+          grype-version: v0.121.0
+          severity-cutoff: high
+          fail-build: true
+          only-fixed: false
+          output-format: json
+          output-file: reports/vulnerabilities.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: matrix.arch == 'amd64'
+        with:
+          node-version: '24'
+      - name: Install browser tooling once
+        if: matrix.arch == 'amd64'
+        run: |
+          npm ci --prefix e2e --ignore-scripts --no-audit --no-fund
+          ./e2e/node_modules/.bin/playwright install --with-deps chromium
+      - name: Test exact candidate and retain its digest only on success
+        env:
+          IMAGE: ${{ needs.source.outputs.image }}
+          DIGEST: ${{ steps.candidate.outputs.digest }}
+          ARCH: ${{ matrix.arch }}
+          REVISION: ${{ needs.source.outputs.revision }}
+          RELEASE_TAG: ${{ needs.source.outputs.tag }}
+        run: |
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          browser=()
+          if [[ "$ARCH" == amd64 ]]; then browser=(--browser); fi
+          docker pull --platform "linux/$ARCH" "$IMAGE@$DIGEST"
+          python3 scripts/smoke_docker.py --image "$IMAGE@$DIGEST" --platform "linux/$ARCH" \
+            --revision "$REVISION" --version "$RELEASE_TAG" "${browser[@]}" --output reports/smoke.json
+          printf '%s\n' "$DIGEST" > "digests/$ARCH"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ matrix.arch }}
+          path: digests/*
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: image-evidence-${{ matrix.arch }}
+          path: reports/*.json
+          retention-days: 7
 
-  container:
-    name: Publish and verify GHCR image
-    needs: [validate, publish]
-    if: needs.validate.outputs.publish == 'true'
-    uses: ./.github/workflows/container-release.yml
-    with:
-      tag: ${{ needs.validate.outputs.tag }}
+  index:
+    name: Publish tested GHCR index
+    needs: [source, images, github]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: read
-      actions: read
       packages: write
+    outputs:
+      digest: ${{ steps.publish.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*
+          merge-multiple: true
+          path: digests
+          digest-mismatch: error
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: publish
+        env:
+          IMAGE: ${{ needs.source.outputs.image }}
+          RELEASE_TAG: ${{ needs.source.outputs.tag }}
+          REVISION: ${{ needs.source.outputs.revision }}
+        run: |
+          amd64=$(cat digests/amd64)
+          arm64=$(cat digests/arm64)
+          [[ "$amd64" =~ ^sha256:[0-9a-f]{64}$ && "$arm64" =~ ^sha256:[0-9a-f]{64}$ ]]
+          expected=$(jq -n --arg amd64 "$amd64" --arg arm64 "$arm64" '{amd64:$amd64,arm64:$arm64}')
+          ref="$IMAGE:$RELEASE_TAG"
+          if ! docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' > index.json 2> inspect-error.txt; then
+            if grep -Eiq 'unauthorized|denied|forbidden|failed to authorize' inspect-error.txt; then
+              cat inspect-error.txt >&2
+              exit 1
+            fi
+            grep -Eiq 'manifest unknown|not found|404' inspect-error.txt
+            docker buildx imagetools create --tag "$ref" \
+              --annotation "index:org.opencontainers.image.version=$RELEASE_TAG" \
+              --annotation "index:org.opencontainers.image.revision=$REVISION" \
+              "$IMAGE@$amd64" "$IMAGE@$arm64"
+          fi
+          # Never replace existing version bytes, including on recovery runs.
+          docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' > index.json
+          jq -e --argjson expected "$expected" '.schemaVersion == 2 and
+            (.digest | test("^sha256:[0-9a-f]{64}$")) and (.manifests | length == 2) and
+            all(.manifests[]; .platform.os == "linux") and
+            ([.manifests[] | {key:.platform.architecture,value:.digest}] | from_entries) == $expected' index.json
+          printf 'digest=%s\n' "$(jq -r .digest index.json)" >> "$GITHUB_OUTPUT"
+      - name: Require anonymous access denial once for the published index
+        env:
+          IMAGE: ${{ needs.source.outputs.image }}
+          RELEASE_TAG: ${{ needs.source.outputs.tag }}
+        run: |
+          python3 - <<'PY'
+          import os, sys
+          sys.path.insert(0, 'scripts')
+          from qualify_image import require_private
+          require_private(os.environ['IMAGE'], os.environ['RELEASE_TAG'])
+          PY
+
+  qualify:
+    name: Qualify published image (${{ matrix.arch }})
+    needs: [source, index]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Verify the actual published tag on its native platform
+        env:
+          IMAGE: ${{ needs.source.outputs.image }}
+          RELEASE_TAG: ${{ needs.source.outputs.tag }}
+          REVISION: ${{ needs.source.outputs.revision }}
+          DIGEST: ${{ needs.index.outputs.digest }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          python3 scripts/qualify_image.py --image "$IMAGE:$RELEASE_TAG" --digest "$DIGEST" \
+            --revision "$REVISION" --platform "linux/$ARCH" --report reports/published.json --skip-privacy
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: published-image-${{ matrix.arch }}
+          path: reports/published.json
+          retention-days: 7

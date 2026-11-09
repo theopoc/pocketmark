@@ -45,7 +45,6 @@ check: frontend fmt-check
 	python3 -m py_compile scripts/*.py extension/package.py
 release-check:
 	goreleaser check --config .goreleaser.yaml
-	goreleaser check --config .goreleaser-publish.yaml
 release-snapshot:
 	goreleaser release --snapshot --clean --config .goreleaser.yaml
 run: build

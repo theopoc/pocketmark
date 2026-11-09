@@ -36,5 +36,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_URL: ${{ github.event.pull_request.html_url }}
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
-        # Protect main requires all nine CI checks on an up-to-date branch.
+        # Protect main requires the aggregate CI gate on an up-to-date branch.
         run: gh pr merge --auto --squash --match-head-commit "$PR_HEAD" "$PR_URL"

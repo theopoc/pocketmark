@@ -32,3 +32,44 @@ test('an opened release PR retains its number for CI dispatch', () => {
 test('malformed non-empty output fails rather than selecting a PR', () => {
   assert.throws(() => evaluate('invalid-json'));
 });
+
+const sourceCondition = workflow.match(/^  source:\n[\s\S]*?^    if: >-\n((?:      .+\n)+)/m)?.[1].trim();
+assert.ok(sourceCondition, 'release source selection must use an event condition');
+
+function actionData(value) {
+  if (value === null || value === undefined) return new data.Null();
+  if (typeof value === 'string') return new data.StringData(value);
+  if (typeof value === 'boolean') return new data.BooleanData(value);
+  if (typeof value === 'number') return new data.NumberData(value);
+  if (Array.isArray(value)) return new data.Array(...value.map(actionData));
+  return new data.Dictionary(...Object.entries(value).map(([key, item]) => ({ key, value: actionData(item) })));
+}
+
+function selectsRelease(eventName, changes = {}) {
+  const pullRequest = {
+    merged: true,
+    head: { repo: { full_name: 'example/pocketmark' } },
+    labels: [{ name: 'autorelease: pending' }],
+    ...changes,
+  };
+  const context = actionData({ github: {
+    event_name: eventName,
+    repository: 'example/pocketmark',
+    event: { pull_request: pullRequest },
+  } });
+  const parsed = new Parser(new Lexer(sourceCondition).lex().tokens, ['github'], []).parse();
+  return new Evaluator(parsed, context).evaluate().value;
+}
+
+test('only a merged release PR from this repository starts release validation', () => {
+  assert.equal(selectsRelease('pull_request'), true);
+  assert.equal(selectsRelease('pull_request', { merged: false }), false);
+  assert.equal(selectsRelease('pull_request', { labels: [] }), false);
+  assert.equal(selectsRelease('pull_request', { head: { repo: { full_name: 'other/fork' } } }), false);
+  assert.equal(selectsRelease('pull_request', { head: { repo: null } }), false);
+});
+
+test('ordinary pushes only prepare a PR; explicit dispatch can verify or resume', () => {
+  assert.equal(selectsRelease('push'), false);
+  assert.equal(selectsRelease('workflow_dispatch'), true);
+});

@@ -6,18 +6,15 @@ from pathlib import Path
 import re
 import subprocess
 import sys
-import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 
-ROOT = Path(__file__).resolve().parents[1]
 DIGEST = r"sha256:[0-9a-f]{64}"
 REVISION = r"[0-9a-f]{40}"
 VERSION = r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
 IMAGE = rf"(ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+):({VERSION})"
-SMOKE_CHECKS = ("health_auth_hardening_limits", "sqlite_fts5_and_capture_ssrf_rejection",
-                "full_backup", "restart_persistence_and_no_oom")
 
 
 class QualificationError(ValueError):
@@ -53,8 +50,32 @@ def require_private(image, tag):
     raise QualificationError("published image is anonymously readable")
 
 
-def qualify(image, digest, revision, platform, report_path):
-    result = {"schema_version": 1, "status": "failed", "stage": "input", "checks": {}}
+def health(image_id, platform):
+    """Exercise the image's own HEALTHCHECK without repeating candidate journeys."""
+    container = command('docker', 'run', '--detach', '--pull=never', '--network=none',
+                        '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges',
+                        '--memory=128m', '--cpus=1', '--pids-limit=64',
+                        '--tmpfs=/data:rw,noexec,nosuid,size=16m,uid=10001,gid=10001,mode=0700',
+                        '--health-interval=1s', '--health-timeout=2s', '--health-start-period=2s',
+                        '--health-retries=30', '--platform', platform, image_id).strip()
+    require(re.fullmatch('[0-9a-f]{64}', container), 'missing qualification container ID')
+    try:
+        deadline = time.monotonic() + 45
+        while True:
+            state = json.loads(command('docker', 'inspect', container, '--format', '{{json .State}}'))
+            require(state.get('Running') is True, 'qualification container stopped')
+            status = state.get('Health', {}).get('Status')
+            require(status in ('starting', 'healthy'), 'qualification healthcheck failed or missing')
+            if status == 'healthy':
+                return
+            require(time.monotonic() < deadline, 'qualification healthcheck timed out')
+            time.sleep(0.5)
+    finally:
+        command('docker', 'rm', '--force', '--volumes', container)
+
+
+def qualify(image, digest, revision, platform, report_path, check_privacy=True):
+    result = {"schema_version": 2, "status": "failed", "stage": "input", "checks": {}}
     try:
         reference = re.fullmatch(IMAGE, image)
         require(reference is not None, "expected a GHCR stable version image")
@@ -91,23 +112,15 @@ def qualify(image, digest, revision, platform, report_path):
         require(labels.get("org.opencontainers.image.version") == version, "wrong image OCI version")
         result["checks"]["labels"] = True
 
-        result["stage"] = "smoke"
-        with tempfile.TemporaryDirectory(prefix="pocketmark-qualification-") as directory:
-            smoke_path = Path(directory) / "smoke.json"
-            # The tag can move after inspection; execute only the already-verified local bytes.
-            command(sys.executable, str(ROOT / "scripts/smoke_docker.py"), "--image", image_id,
-                    "--platform", platform, "--revision", revision, "--version", version,
-                    "--output", str(smoke_path), timeout=360)
-            smoke = json.loads(smoke_path.read_text())
-            require(smoke.get("image_id") == image_id, "smoke test used a different image")
-            checks = smoke.get("checks", {})
-            require(all(checks.get(name) is True for name in SMOKE_CHECKS), "incomplete smoke test evidence")
-            result["smoke_checks"] = {name: True for name in SMOKE_CHECKS}
-        result["checks"]["smoke"] = True
+        result["stage"] = "health"
+        # Execute only the local bytes whose digest, architecture and labels matched.
+        health(image_id, platform)
+        result["checks"]["health"] = True
 
-        result["stage"] = "privacy"
-        require_private(repository, tag)
-        result["checks"]["privacy"] = True
+        if check_privacy:
+            result["stage"] = "privacy"
+            require_private(repository, tag)
+            result["checks"]["privacy"] = True
         result["status"] = "passed"
         result["stage"] = "complete"
     except Exception as error:
@@ -124,8 +137,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("image", "digest", "revision", "platform", "report"):
         parser.add_argument("--" + name, required=True)
+    parser.add_argument('--skip-privacy', action='store_true',
+                        help='The workflow already checked privacy once for the whole index')
     args = parser.parse_args()
-    result = qualify(args.image, args.digest, args.revision, args.platform, args.report)
+    result = qualify(args.image, args.digest, args.revision, args.platform, args.report,
+                     check_privacy=not args.skip_privacy)
     print(json.dumps(result, indent=2))
     return 0 if result["status"] == "passed" else 1
 
