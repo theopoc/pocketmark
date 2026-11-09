@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.4](https://github.com/theopoc/pocketmark/compare/v1.3.3...v1.3.4) (2026-11-09)
+
+
+### Bug Fixes
+
+* **ui:** align settings typography and density with the library ([bda1c6d](https://github.com/theopoc/pocketmark/commit/bda1c6d47f7a037d9fea6a50854c611a78a18e7c))
+* **ui:** keep settings navigation consistent across sections ([08abdde](https://github.com/theopoc/pocketmark/commit/08abdde41a748ffae2f0420318a330b6c649e47b))
+
 ## [1.3.3](https://github.com/theopoc/pocketmark/compare/v1.3.2...v1.3.3) (2026-11-04)
 
 
