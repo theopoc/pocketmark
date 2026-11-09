@@ -1,8 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, edited, ready_for_review]
@@ -10,12 +8,17 @@ on:
     # Recheck advisories and runner/tool drift even when main has no new commits.
     - cron: '23 5 * * 1'
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      revision:
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ inputs.revision || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
 
 defaults:
@@ -33,11 +36,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ inputs.revision || github.sha }}
           persist-credentials: false
-      - uses: ./.github/actions/go-cache
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          mode: quality
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
@@ -56,7 +60,11 @@ jobs:
       - run: go mod tidy -diff
       - run: make check
       - name: Validate workflow syntax and shell commands
-        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
+        # GitHub supports queue:max; actionlint 1.7.12 and current upstream do not.
+        # Ignore only that unknown-key diagnostic, retaining all other lint checks.
+        run: >-
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          -ignore '^unexpected key "queue" for "concurrency" section\.' -color
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           version: v2.18.3
@@ -70,12 +78,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ inputs.revision || github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: ./.github/actions/go-cache
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          mode: security
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       - name: Scan the complete history for secrets
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
@@ -120,17 +129,20 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.revision || github.sha }}
           persist-credentials: false
-      - uses: ./.github/actions/go-cache
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         if: matrix.language == 'go'
         with:
-          mode: quality
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
           config-file: .github/codeql.yml
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: matrix.language == 'go'
         with:
           node-version: '24'
       - if: matrix.language == 'go'
@@ -164,31 +176,26 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ inputs.revision || github.sha }}
           persist-credentials: false
-      - uses: ./.github/actions/go-cache
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          mode: race-cover
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
       - name: Race tests and coverage
         run: |
-          make test TEST_FLAGS='-json -race -p 2 -count=1 -covermode=atomic -coverprofile=coverage.out' | tee test-results.log
+          make frontend
+          go test -json -race -p 2 -count=1 -covermode=atomic -coverprofile=coverage.out \
+            -tags 'sqlite_fts5 sqlite_omit_load_extension' ./... | tee test-results.log
       - name: Summarize test timings
         if: always()
         run: python3 scripts/test_timings.py test-results.log >> "$GITHUB_STEP_SUMMARY"
       - name: Test release packaging
         if: matrix.arch == 'amd64'
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
-      - name: Install selector browser tooling
-        if: matrix.arch == 'amd64'
-        run: |
-          npm ci --prefix e2e --ignore-scripts --no-audit --no-fund
-          ./e2e/node_modules/.bin/playwright install --with-deps chromium
-      - name: Test web selectors in Chromium
-        if: matrix.arch == 'amd64'
-        run: node e2e/selectors.mjs
       - name: Test workflow expressions
         if: matrix.arch == 'amd64'
         run: |
@@ -205,81 +212,45 @@ jobs:
           path: coverage.out
           retention-days: 7
 
-  build:
-    name: Build (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Install the static C toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends musl-tools
-      - uses: ./.github/actions/go-cache
-        with:
-          mode: musl-static
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
-      - name: Build the static release executable
-        run: |
-          CC=musl-gcc make build LDFLAGS='-s -w -linkmode external -extldflags "-static"'
-          file bin/pocketmark | grep 'statically linked'
-          ./bin/pocketmark -h
-      - name: Test the compiled React application with the real server
-        if: matrix.arch == 'amd64'
-        run: |
-          npm ci --prefix e2e --ignore-scripts --no-audit --no-fund
-          ./e2e/node_modules/.bin/playwright install --with-deps chromium
-          python3 scripts/smoke_frontend.py --binary bin/pocketmark
-      - name: Preserve the tested executable and build metadata
-        env:
-          RELEASE_ARCH: ${{ matrix.arch }}
-        run: |
-          mkdir -p "artifacts/linux-$RELEASE_ARCH"
-          cp bin/pocketmark "artifacts/linux-$RELEASE_ARCH/pocketmark"
-          go version -m bin/pocketmark > "artifacts/linux-$RELEASE_ARCH/pocketmark-linux-$RELEASE_ARCH.buildinfo.txt"
-          python3 scripts/prepare_image.py --directory "artifacts/linux-$RELEASE_ARCH" \
-            --arch "$RELEASE_ARCH" --revision "$GITHUB_SHA" --output "$RUNNER_TEMP/image-context"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: linux-${{ matrix.arch }}
-          path: artifacts/linux-${{ matrix.arch }}/*
-          if-no-files-found: error
-          retention-days: 90
-
   extension:
-    name: Extension
+    name: Web and extension
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.revision || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
-      - name: Validate extension syntax
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Build test server and run JavaScript regressions once
         run: |
-          for source in extension/*.js; do node --check "$source"; done
-          python3 -m py_compile extension/package.py
-      - run: make test-extension
+          make build test-extension
+          node --test internal/webui/*.test.cjs
+          npm test --prefix frontend
       - name: Install selector browser tooling
         run: |
           npm ci --prefix e2e --ignore-scripts --no-audit --no-fund
           ./e2e/node_modules/.bin/playwright install --with-deps chromium
-      - name: Test extension selectors in Chromium
-        run: node e2e/extension-selectors.mjs
-      - name: Validate the installable extension package
-        run: python3 -m unittest discover -s scripts -p 'test_package_extension.py' -v
+      - name: Test browser and extension journeys
+        run: |
+          node e2e/selectors.mjs
+          node e2e/extension-selectors.mjs
+          python3 scripts/smoke_frontend.py --binary bin/pocketmark
+
+  gate:
+    name: CI
+    needs: [quality, security, sast, test, extension]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require every validation job to succeed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: jq -e 'all(.[]; .result == "success")' <<< "$RESULTS"

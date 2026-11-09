@@ -4,7 +4,7 @@
 
 Use short-lived branches from current `main`, one focused PR per change, and a Conventional Commit title such as `fix(api): reject invalid tokens`. CI validates the title on PR creation, new commits, reopening and metadata edits. The squash commit drives Release Please, so preserve that validated title when merging. A `!` requests a breaking release. Avoid long-lived `develop` or release branches for this single-maintainer project.
 
-Repository settings observed on 2026-10-23 allowed only squash merges, used the PR title for the squash commit and deleted merged branches. Check live repository settings for enforcement and [the CI workflow](../.github/workflows/ci.yml) for job definitions. The project requires a PR, resolved review threads, linear history, and all nine [CI job results](#ci-jobs) from the GitHub Actions app (integration ID 15368), with the branch up to date. It blocks deletion and force pushes, with no bypass actors. Zero required human approvals is intentional for personal maintenance; review the diff and evidence before merging. A repository setting, rather than workflow YAML, enforces this policy. Do not merge on an earlier commit's green checks. [GitHub required-check semantics](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks).
+Repository settings observed on 2026-10-23 allowed only squash merges, used the PR title for the squash commit and deleted merged branches. Check live repository settings for enforcement and [the CI workflow](../.github/workflows/ci.yml) for job definitions. The project requires a PR, resolved review threads, linear history, and the aggregate [CI result](#ci-jobs) from the GitHub Actions app (integration ID 15368), with the branch up to date. It blocks deletion and force pushes, with no bypass actors. Zero required human approvals is intentional for personal maintenance; review the diff and evidence before merging. A repository setting, rather than workflow YAML, enforces this policy. Do not merge on an earlier commit's green checks. [GitHub required-check semantics](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks).
 
 For every tracked change, including documentation, use this delivery procedure:
 
@@ -87,41 +87,36 @@ Review the next ten changes that exercise these checks. Count recurring signatur
 
 ## CI jobs
 
-One unfiltered `ci.yml` workflow runs on PR creation, source changes, reopening,
-title edits and readiness changes; on every main push; on manual dispatch; and
-on Mondays at 05:23 UTC. Every run executes the full suite, including
-PRs that change only documentation or the extension. Independent jobs start in
-parallel; there is no path-selection job or final aggregation job. Main runs
-retain native binaries at the exact source revision. Scheduled runs never publish
-a release.
+`ci.yml` validates pull requests, manual dispatches and the weekly schedule. It is
+also reusable through `workflow_call`, with an explicit source revision. Ordinary
+main pushes run `release.yml`: Release Please prepares a version PR without
+creating a tag. A merged version PR starts the full validation workflow before
+any tag or distribution build is created.
 
-| Phase | Checks and outputs |
+| Validation | Checks |
 | --- | --- |
-| Quality | Commitlint validates the PR title; formatting/vet, module checksums/tidy, syntax, actionlint and GoReleaser config. |
-| Security | Full-history redacted Gitleaks, reachable Go vulnerabilities, npm audits, vendored Swagger byte equality and Retire.js bundle scanning. High/critical vulnerabilities block. |
-| SAST | Separate parallel CodeQL security-extended jobs for Go and JavaScript; unreviewed findings or missing/incremental results fail CI. |
-| Tests, AMD64 and ARM64 | Native race tests and atomic coverage, with at most two packages built/tested concurrently. UI regressions remain on both; Python/release-expression regressions and Chromium selector checks run once on AMD64. |
-| Extension | Syntax, regressions, Chromium selector checks and installable ZIP validation. |
-| Build, AMD64 and ARM64 | Native musl static binaries and build metadata, retained for 90 days. |
-| Docker release | Incorporate validated native executables; test candidate digests with Compose/Chromium before publishing and qualifying the tag. |
+| Quality | PR title, formatting/vet, checksums/tidy, syntax, actionlint and GoReleaser configuration. |
+| Security | Redacted Gitleaks, reachable Go vulnerabilities, npm audits, Swagger vendor equality and Retire.js. |
+| SAST | Parallel full CodeQL analysis for Go and JavaScript; findings or incomplete results block. |
+| Tests | Native Go race tests on AMD64 and ARM64; Python and expression regressions run once on AMD64. |
+| Web and extension | JavaScript tests, production frontend with a disposable server, Chromium selectors and extension ZIP validation, once on AMD64. |
 
-The project requires the **Protect main** ruleset to enforce all nine job results from GitHub Actions:
-`Quality`, `Security`, `SAST (go)`, `SAST (javascript-typescript)`, `Tests (amd64)`,
-`Tests (arm64)`, `Build (amd64)`, `Build (arm64)` and `Extension`. These jobs have no
-job-level conditions or dependencies that could skip them. Matrices use
-`fail-fast: false`. Keep the ruleset synchronized when renaming jobs or changing
-matrix entries. The obsolete `CI passed` check is no longer required.
+The final **CI** job depends on every validation job and rejects failed, cancelled
+or skipped results. Configure the **Protect main** ruleset to require this stable
+`CI` check from GitHub Actions with strict branch updates. Migrating an existing
+ruleset requires replacing the previous nine check names, including the removed
+`Build (amd64)`, `Build (arm64)` and `Extension` checks. Workflow YAML does not
+update repository rulesets. Architecture matrices use `fail-fast: false`.
 
 ### Go caches and timings
 
-The local `go-cache` action disables setup-go's combined automatic cache. Modules
-use a dependency-hash cache. Compiled packages use distinct quality, security,
-race/coverage and musl modes, keyed by OS, architecture, Go/C toolchain, dependencies,
-Makefile and cache-action revision. Each source SHA can save an enriched cache;
-compatible earlier entries are restored by prefix. GitHub scopes PR caches to
-their refs and applies its cache quota/eviction policy; they are disposable
-accelerators, never release artifacts. No cache hit skips tests: `-count=1` stays.
-Watch cache sizes and restore/save overhead as well as hit rates.
+Go toolchain setup uses `actions/setup-go` with its native module/build cache,
+keyed from `go.sum`. Go handles compilation settings such as race instrumentation.
+Static distribution builds use `GOFLAGS=-a` to rebuild against the installed musl
+compiler and C libraries rather than trusting cached CGO objects. This keeps the
+module download cache without custom cache keys, compiler fingerprinting or a
+project-local cache action. Caches are disposable accelerators, never release
+artifacts; no cache hit skips tests, and `-count=1` remains enabled.
 
 Each native test job emits package execution times and the twenty slowest tests
 to its Actions summary. These exclude compilation, and parent/subtest times
@@ -130,7 +125,7 @@ Route-only fixtures reuse a precalculated synthetic password hash, checked once
 against the production KDF; actual authentication tests still use the real KDF.
 Databases and session state remain disposable and independent per test.
 
-Actions use full commit SHAs; tool modules, pre-commit hooks and the Gitleaks engine are version-pinned. PR/main CI has read-only permissions and never builds or publishes Docker images. Superseded branch runs are cancelled; main runs are retained because a release may need their binaries. Coverage, container evidence and release bundles are retained for seven days.
+Actions use full commit SHAs; tool modules, pre-commit hooks and the Gitleaks engine are version-pinned. PR/main CI has read-only permissions and never builds or publishes Docker images. Superseded branch runs are cancelled; release validations are not cancelled by later merges. Coverage, container evidence and release bundles are retained for seven days.
 
 The separate Dependabot workflow only reads verified PR metadata before enabling auto-merge; it never executes PR code. Release Please can maintain version PRs/drafts and dispatch CI on its branch. GitHub publication receives `contents:write`; only release image build/index jobs receive `packages:write`. Publication uses the short-lived `GITHUB_TOKEN` and needs no personal token or additional registry secret.
 
@@ -221,7 +216,7 @@ Dependabot checks Actions, Go modules and Docker base images weekly, with at mos
 
 Enable the repository's **Allow auto-merge** setting while retaining the active **Protect main** ruleset above. `dependabot-auto-merge.yml` handles PR creation, new commits, reopening and readiness for review. It only accepts non-draft PRs opened by `dependabot[bot]` from this repository. The SHA-pinned official `dependabot/fetch-metadata` action verifies Dependabot's signed commits; verification is never disabled. Its `update-type` is the highest semver change across the PR, so any major update in a group prevents automatic merge. Only explicit `version-update:semver-minor` and `version-update:semver-patch` metadata enable squash auto-merge; unknown or missing metadata fails closed. [Fetch Metadata documentation](https://github.com/dependabot/fetch-metadata/tree/v3.1.0).
 
-The workflow uses `gh pr merge --auto --squash --match-head-commit` with the event's head SHA. GitHub waits for all nine required CI checks, an up-to-date branch and resolved review threads; it has no ruleset bypass. Failed, skipped, cancelled or pending CI cannot authorize merge. Keep all nine CI job results required from the GitHub Actions app with strict branch updates and no bypass actors: the workflow relies on this server-side enforcement. Existing open PRs are evaluated on their next supported PR event after the workflow reaches `main`. As with other operations performed using `GITHUB_TOKEN`, the resulting merge does not trigger push-based CI or Release Please; subsequent eligible pushes to `main` pick up the dependency commits. The PR's complete CI still gates its merge. CI regression tests evaluate the actual eligibility expressions; the independent required jobs provide the merge gate.
+The workflow uses `gh pr merge --auto --squash --match-head-commit` with the event's head SHA. GitHub waits for the aggregate required `CI` check, an up-to-date branch and resolved review threads; it has no ruleset bypass. Failed, skipped, cancelled or pending CI cannot authorize merge. Keep the aggregate `CI` check required from the GitHub Actions app with strict branch updates and no bypass actors: the workflow relies on this server-side enforcement. Existing open PRs are evaluated on their next supported PR event after the workflow reaches `main`. As with other operations performed using `GITHUB_TOKEN`, the resulting merge does not trigger push-based CI or Release Please; subsequent eligible pushes to `main` pick up the dependency commits. The PR's complete CI still gates its merge. CI regression tests evaluate the actual eligibility expressions; the aggregate `CI` check provides the merge gate.
 
 Commitlint runs in Quality with the conventional configuration and a locked
 CI-only dependency inventory under `tools/quality/`. PR titles reach the CLI via
@@ -256,9 +251,9 @@ node e2e/extension-selectors.mjs
 python3 scripts/smoke_docker.py --image pocketmark:ci --browser
 ```
 
-The browser dependency is pinned and locked under `e2e/`; it is test tooling only and is not copied into the application image. The browser runs on the CI runner, outside the server's 128 MiB container limit. Selector checks cover the web UI and extension at desktop and narrow viewport sizes in both themes; the separate container browser journey exercises the running server. The amd64 Build job also runs the complete browser journey against its actual compiled binary before uploading that binary. `python3 scripts/smoke_frontend.py --binary bin/pocketmark` reproduces that journey with disposable data. These Chromium checks do not qualify Firefox, Safari, native mobile clients or full accessibility.
+The browser dependency is pinned and locked under `e2e/`; it is test tooling only and is not copied into the application image. The browser runs on the CI runner, outside the server's 128 MiB container limit. Selector checks cover the web UI and extension at desktop and narrow viewport sizes in both themes; the separate container browser journey exercises the running server. The Web and extension job runs the complete browser journey against a compiled temporary server before release tagging. `python3 scripts/smoke_frontend.py --binary bin/pocketmark` reproduces that journey with disposable data. These Chromium checks do not qualify Firefox, Safari, native mobile clients or full accessibility.
 
-Extension regressions run once in their independent job on every run. Main, manual and scheduled runs always include it for complete release evidence. Selector Chromium checks run in ordinary source CI; the container journey runs during release, and ordinary source CI does not build containers.
+Frontend and extension regressions run once in the Web and extension job on every validation run. Selector Chromium checks run in ordinary source CI; the container journey runs during release, and ordinary source CI does not build containers.
 
 The release expression regression checks use `@actions/expressions` only as a temporary CI/test tool; it is not an application or frontend dependency. They read the expression directly from the workflow and cover missing/empty PR outputs after a version PR is merged, ordinary opened PRs, and malformed output. Reproduce them locally with:
 
@@ -277,7 +272,7 @@ For local release packaging, see the [release rehearsal](RELEASE.md#rehearse-pac
 
 ## GHCR images
 
-[Container build, qualification and backfill](RELEASE.md#ghcr-images).
+[Container build, qualification and recovery](RELEASE.md#ghcr-images).
 
 ### Development and publication flow
 

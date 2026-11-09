@@ -55,8 +55,17 @@ checksum:
     - glob: artifacts/linux-amd64/pocketmark-linux-amd64.buildinfo.txt
     - glob: artifacts/linux-arm64/pocketmark-linux-arm64.buildinfo.txt
 
-# Packaging is read-only; a separate config publishes the verified bundle.
+# Upload into the existing draft; the workflow publishes only after verification.
 release:
-  disable: true
+  github:
+    owner: theopoc
+    name: pocketmark
+  draft: true
+  use_existing_draft: true
+  mode: keep-existing
+  replace_existing_artifacts: false
+  extra_files:
+    - glob: artifacts/linux-amd64/pocketmark-linux-amd64.buildinfo.txt
+    - glob: artifacts/linux-arm64/pocketmark-linux-arm64.buildinfo.txt
 changelog:
   disable: true
