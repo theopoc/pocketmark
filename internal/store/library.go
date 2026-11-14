@@ -7,61 +7,8 @@ import (
 	"pocketmark/internal/fault"
 	"strings"
 	"time"
-	"unicode"
 )
 
-// fuzzyMatch processes only one bounded metadata record at a time. It never
-// builds a resident search index or loads captured page bodies.
-func fuzzyMatch(query, metadata string) bool {
-	terms := strings.FieldsFunc(strings.ToLower(query), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
-	words := strings.FieldsFunc(strings.ToLower(metadata), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
-	if len(terms) > 16 {
-		return false
-	}
-	for _, term := range terms {
-		found := false
-		for _, word := range words {
-			if strings.HasPrefix(word, term) || oneEdit(term, word) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	return len(terms) > 0
-}
-func oneEdit(a, b string) bool {
-	x, y := []rune(a), []rune(b)
-	if len(x) < 4 || len(x) > 80 || len(y) > 80 || len(x)-len(y) > 1 || len(y)-len(x) > 1 {
-		return false
-	}
-	i, j, edits := 0, 0, 0
-	for i < len(x) && j < len(y) {
-		if x[i] == y[j] {
-			i++
-			j++
-			continue
-		}
-		edits++
-		if edits > 1 {
-			return false
-		}
-		if len(x) > len(y) {
-			i++
-		} else if len(y) > len(x) {
-			j++
-		} else {
-			i++
-			j++
-		}
-	}
-	if i < len(x) || j < len(y) {
-		edits++
-	}
-	return edits <= 1
-}
 func (s *Store) UpdateCollection(ctx context.Context, id int64, c Collection) error {
 	c.Name = strings.TrimSpace(c.Name)
 	if c.Name == "" || len(c.Name) > 120 {
@@ -78,9 +25,12 @@ func (s *Store) UpdateCollection(ctx context.Context, id int64, c Collection) er
 		return e
 	}
 	defer tx.Rollback()
+	if _, e = tx.ExecContext(ctx, "LOCK TABLE collections IN SHARE ROW EXCLUSIVE MODE"); e != nil {
+		return e
+	}
 	if c.ParentID != nil {
 		var n int
-		e = tx.QueryRowContext(ctx, `WITH RECURSIVE ancestors(id,parent_id) AS (SELECT id,parent_id FROM collections WHERE id=? UNION SELECT c.id,c.parent_id FROM collections c JOIN ancestors a ON c.id=a.parent_id) SELECT count(*) FROM ancestors WHERE id=?`, *c.ParentID, id).Scan(&n)
+		e = tx.QueryRowContext(ctx, `WITH RECURSIVE ancestors(id,parent_id) AS (SELECT id,parent_id FROM collections WHERE id=$1 UNION SELECT c.id,c.parent_id FROM collections c JOIN ancestors a ON c.id=a.parent_id) SELECT count(*) FROM ancestors WHERE id=$2`, *c.ParentID, id).Scan(&n)
 		if e != nil {
 			return e
 		}
@@ -88,7 +38,7 @@ func (s *Store) UpdateCollection(ctx context.Context, id int64, c Collection) er
 			return fault.Invalid("cyclic collection hierarchy")
 		}
 	}
-	r, e := tx.ExecContext(ctx, "UPDATE collections SET name=?,parent_id=?,description=COALESCE(?,description) WHERE id=?", c.Name, c.ParentID, c.Description, id)
+	r, e := tx.ExecContext(ctx, "UPDATE collections SET name=$1,parent_id=$2,description=COALESCE($3,description) WHERE id=$4", c.Name, c.ParentID, c.Description, id)
 	if e = affected(r, e); e != nil {
 		return e
 	}
@@ -111,9 +61,9 @@ func (s *Store) Bulk(ctx context.Context, b BulkChange) error {
 	var args []any
 	switch b.Action {
 	case "delete":
-		query = "DELETE FROM links WHERE id=?"
+		query = "DELETE FROM links WHERE id=$1"
 	case "move":
-		query = "UPDATE links SET collection_id=?,updated_at=? WHERE id=?"
+		query = "UPDATE links SET collection_id=$1,updated_at=$2 WHERE id=$3"
 		if b.CollectionID != nil && *b.CollectionID <= 0 {
 			b.CollectionID = nil
 		}
@@ -124,16 +74,16 @@ func (s *Store) Bulk(ctx context.Context, b BulkChange) error {
 			return e
 		}
 		tags, _ := json.Marshal(l.Tags)
-		query = "UPDATE links SET tags=?,updated_at=? WHERE id=?"
+		query = "UPDATE links SET tags=$1,updated_at=$2 WHERE id=$3"
 		args = []any{string(tags), time.Now().UTC().Format(time.RFC3339Nano)}
 	case "favorite":
-		query = "UPDATE links SET favorite=?,updated_at=? WHERE id=?"
+		query = "UPDATE links SET favorite=$1,updated_at=$2 WHERE id=$3"
 		args = []any{b.Value, time.Now().UTC().Format(time.RFC3339Nano)}
 	case "read":
-		query = "UPDATE links SET read=?,updated_at=? WHERE id=?"
+		query = "UPDATE links SET read=$1,updated_at=$2 WHERE id=$3"
 		args = []any{b.Value, time.Now().UTC().Format(time.RFC3339Nano)}
 	case "capture":
-		query = "UPDATE links SET status='pending',error='' WHERE id=? AND status<>'processing' AND url NOT LIKE 'pocketmark-file:%'"
+		query = "UPDATE links SET status='pending',error='' WHERE id=$1 AND status<>'processing' AND url NOT LIKE 'pocketmark-file:%'"
 	default:
 		return fault.Invalid("invalid bulk action")
 	}
@@ -193,7 +143,7 @@ func (s *Store) Annotations(ctx context.Context, linkID int64) ([]Annotation, er
 	if e != nil {
 		return nil, e
 	}
-	rows, e := s.db.QueryContext(ctx, "SELECT id,link_id,quote,start_offset,end_offset,note,color,created_at FROM annotations WHERE link_id=? ORDER BY start_offset,id", linkID)
+	rows, e := s.db.QueryContext(ctx, "SELECT id,link_id,quote,start_offset,end_offset,note,color,created_at FROM annotations WHERE link_id=$1 ORDER BY start_offset,id", linkID)
 	if e != nil {
 		return nil, e
 	}
@@ -225,7 +175,7 @@ func (s *Store) SaveAnnotation(ctx context.Context, linkID, id int64, a Annotati
 	}
 	defer tx.Rollback()
 	var content string
-	if e = tx.QueryRowContext(ctx, "SELECT content FROM links WHERE id=?", linkID).Scan(&content); e != nil {
+	if e = tx.QueryRowContext(ctx, "SELECT content FROM links WHERE id=$1 FOR UPDATE", linkID).Scan(&content); e != nil {
 		return 0, e
 	}
 	if !annotationValid(a, content) {
@@ -234,18 +184,15 @@ func (s *Store) SaveAnnotation(ctx context.Context, linkID, id int64, a Annotati
 	var r sql.Result
 	if id == 0 {
 		var count int
-		if e = tx.QueryRowContext(ctx, "SELECT count(*) FROM annotations WHERE link_id=?", linkID).Scan(&count); e != nil {
+		if e = tx.QueryRowContext(ctx, "SELECT count(*) FROM annotations WHERE link_id=$1", linkID).Scan(&count); e != nil {
 			return 0, e
 		}
 		if count >= 200 {
 			return 0, fault.Invalid("limit of 200 annotations per page")
 		}
-		r, e = tx.ExecContext(ctx, "INSERT INTO annotations(link_id,quote,start_offset,end_offset,note,color,created_at) VALUES(?,?,?,?,?,?,?)", linkID, a.Quote, a.Start, a.End, a.Note, a.Color, time.Now().UTC().Format(time.RFC3339Nano))
-		if e == nil {
-			id, e = r.LastInsertId()
-		}
+		e = tx.QueryRowContext(ctx, "INSERT INTO annotations(link_id,quote,start_offset,end_offset,note,color,created_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id", linkID, a.Quote, a.Start, a.End, a.Note, a.Color, time.Now().UTC().Format(time.RFC3339Nano)).Scan(&id)
 	} else {
-		r, e = tx.ExecContext(ctx, "UPDATE annotations SET quote=?,start_offset=?,end_offset=?,note=?,color=? WHERE id=? AND link_id=?", a.Quote, a.Start, a.End, a.Note, a.Color, id, linkID)
+		r, e = tx.ExecContext(ctx, "UPDATE annotations SET quote=$1,start_offset=$2,end_offset=$3,note=$4,color=$5 WHERE id=$6 AND link_id=$7", a.Quote, a.Start, a.End, a.Note, a.Color, id, linkID)
 		e = affected(r, e)
 	}
 	if e != nil {
@@ -254,6 +201,6 @@ func (s *Store) SaveAnnotation(ctx context.Context, linkID, id int64, a Annotati
 	return id, tx.Commit()
 }
 func (s *Store) DeleteAnnotation(ctx context.Context, linkID, id int64) error {
-	r, e := s.db.ExecContext(ctx, "DELETE FROM annotations WHERE id=? AND link_id=?", id, linkID)
+	r, e := s.db.ExecContext(ctx, "DELETE FROM annotations WHERE id=$1 AND link_id=$2", id, linkID)
 	return affected(r, e)
 }

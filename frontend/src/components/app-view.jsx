@@ -458,7 +458,7 @@ export function AppView() {
                   <li>{"Stop Pocketmark before restoring."}</li>
                   <li>
                     {
-                      "Unzip the backup and follow its RESTORE instructions. Use an empty data directory and keep your server-secret (or legacy access-token / POCKETMARK_TOKEN) separately."
+                      "Unzip the backup and follow its RESTORE instructions. Use an empty PostgreSQL database and keep your server-secret (or legacy access-token / POCKETMARK_TOKEN) separately."
                     }
                   </li>
                   <li>

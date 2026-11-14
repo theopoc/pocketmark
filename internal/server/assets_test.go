@@ -181,7 +181,7 @@ func TestAssetsUploadReaderDownloadBackupAndDelete(t *testing.T) {
 	}
 	var dbBody []byte
 	for _, entry := range z.File {
-		if entry.Name == "pocketmark.db" {
+		if entry.Name == "pocketmark.sql" {
 			f, e := entry.Open()
 			if e != nil {
 				t.Fatal(e)
@@ -200,7 +200,7 @@ func TestAssetsUploadReaderDownloadBackupAndDelete(t *testing.T) {
 	if err = os.WriteFile(copyPath, dbBody, 0600); err != nil {
 		t.Fatal(err)
 	}
-	restored, err := store.Open(copyPath)
+	restored, err := restoreTestStore(t, copyPath)
 	if err != nil {
 		t.Fatal(err)
 	}

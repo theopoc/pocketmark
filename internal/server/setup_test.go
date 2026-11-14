@@ -3,10 +3,11 @@ package server
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
+	"pocketmark/internal/pgtest"
 	"strings"
 	"sync"
 	"testing"
@@ -20,7 +21,7 @@ const setupCredentials = `{"username":"reader","password":"a good personal passw
 
 func TestSetupOnceAcrossRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "setup.db")
-	s, err := store.Open(path)
+	s, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +31,7 @@ func TestSetupOnceAcrossRestart(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = store.Open(path)
+	s, err = openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +58,7 @@ func TestSetupOnceAcrossRestart(t *testing.T) {
 
 func TestInterruptedSetupCanResumeWithoutAdministratorKey(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "restart.db")
-	s, err := store.Open(path)
+	s, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +70,7 @@ func TestInterruptedSetupCanResumeWithoutAdministratorKey(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = store.Open(path)
+	s, err = openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,39 +101,14 @@ func TestLegacySetupCannotClaimLibrary(t *testing.T) {
 	for _, password := range []string{"", "legacy personal password"} {
 		t.Run(password, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "legacy.db")
-			s, err := store.Open(path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err = s.Close(); err != nil {
-				t.Fatal(err)
-			}
-			legacy, err := sql.Open("pocketmark-sqlite3", path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer legacy.Close()
-			// Reproduce the old account schema without the persisted setup decision.
-			_, err = legacy.Exec(`DROP TABLE account_setup; DROP TABLE account; DROP TABLE api_tokens; CREATE TABLE account(id INTEGER PRIMARY KEY CHECK(id=1),username TEXT NOT NULL,salt TEXT NOT NULL,hash TEXT NOT NULL);
- CREATE TABLE api_tokens(id INTEGER PRIMARY KEY,name TEXT NOT NULL,hash TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL);`)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if password != "" {
-				_, err = legacy.Exec("INSERT INTO account VALUES(1,?,?,?)", "legacy", "salt", passwordHash(password, "salt"))
-				if err != nil {
-					t.Fatal(err)
-				}
-			}
 			key := strings.Repeat("a", 64)
 			digest := sha256.Sum256([]byte(key))
-			if _, err := legacy.Exec("INSERT INTO api_tokens VALUES(1,'legacy client',?,'2026-01-01')", hex.EncodeToString(digest[:])); err != nil {
-				t.Fatal(err)
+			fixture := fmt.Sprintf("INSERT INTO api_tokens(id,name,hash,created_at) VALUES(1,'legacy client','%s','2026-01-01');", hex.EncodeToString(digest[:]))
+			if password != "" {
+				fixture += fmt.Sprintf("INSERT INTO account VALUES(1,'legacy','salt','%s');", passwordHash(password, "salt"))
 			}
-			if err = legacy.Close(); err != nil {
-				t.Fatal(err)
-			}
-			s, err = store.Open(path)
+			pgtest.Migrate(t, path, fixture)
+			s, err := openTestStore(t, path)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -143,7 +119,7 @@ func TestLegacySetupCannotClaimLibrary(t *testing.T) {
 			if err := s.Close(); err != nil {
 				t.Fatal(err)
 			}
-			s, err = store.Open(path)
+			s, err = openTestStore(t, path)
 			if err != nil {
 				t.Fatal(err)
 			}

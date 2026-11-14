@@ -31,7 +31,7 @@ func responseCookie(t *testing.T, w *httptest.ResponseRecorder, name string) str
 func TestMFARejectsPasswordOnlySessionAfterRollbackAndRestart(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "rollback.db")
-	s, err := store.Open(path)
+	s, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,13 +39,13 @@ func TestMFARejectsPasswordOnlySessionAfterRollbackAndRestart(t *testing.T) {
 	verified := responseCookie(t, passwordLogin(t, a), "pocketmark")
 	// The older binary inserts the digest of a v2 cookie after password-only login.
 	legacy := "v2." + randomSecret()
-	if _, err = a.db.Exec("INSERT INTO sessions(hash,expires_at) VALUES(?,?)", a.sessionHash(legacy), time.Now().Add(time.Hour).Unix()); err != nil {
+	if _, err = a.db.Exec("INSERT INTO sessions(hash,expires_at) VALUES($1,$2)", a.sessionHash(legacy), time.Now().Add(time.Hour).Unix()); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = store.Open(path)
+	s, err = openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestMFARejectsPasswordOnlySessionAfterRollbackAndRestart(t *testing.T) {
 func TestLegacyFactorAndLocalAccountRecoveryAcrossRestart(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "legacy-factor.db")
-	s, err := store.Open(path)
+	s, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestLegacyFactorAndLocalAccountRecoveryAcrossRestart(t *testing.T) {
 	if err = s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = store.Open(path)
+	s, err = openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +278,7 @@ func TestMFARecoveryGrantOnlyAllowsAuthenticatorReplacement(t *testing.T) {
 	requireStatus(t, verify, 200)
 	session := responseCookie(t, verify, "pocketmark")
 	var originalUntil int64
-	if err := db.QueryRow("SELECT recovery_until FROM sessions WHERE hash=?", a.sessionHash(strings.TrimPrefix(session, "pocketmark="))).Scan(&originalUntil); err != nil {
+	if err := db.QueryRow("SELECT recovery_until FROM sessions WHERE hash=$1", a.sessionHash(strings.TrimPrefix(session, "pocketmark="))).Scan(&originalUntil); err != nil {
 		t.Fatal(err)
 	}
 	body := `{"password":"a good personal password","code":""}`
@@ -288,7 +288,7 @@ func TestMFARecoveryGrantOnlyAllowsAuthenticatorReplacement(t *testing.T) {
 	requireStatus(t, changed, 200)
 	session = responseCookie(t, changed, "pocketmark")
 	var retainedUntil int64
-	if err := db.QueryRow("SELECT recovery_until FROM sessions WHERE hash=?", a.sessionHash(strings.TrimPrefix(session, "pocketmark="))).Scan(&retainedUntil); err != nil || retainedUntil != originalUntil {
+	if err := db.QueryRow("SELECT recovery_until FROM sessions WHERE hash=$1", a.sessionHash(strings.TrimPrefix(session, "pocketmark="))).Scan(&retainedUntil); err != nil || retainedUntil != originalUntil {
 		t.Fatal("account change altered the recovery grant deadline", err)
 	}
 	// A full challenge queue must not consume the grant before retrying.
@@ -350,7 +350,7 @@ func TestMFARecoveryGrantMustStillBeValidAtConfirmation(t *testing.T) {
 	if err := json.Unmarshal(replacement.Body.Bytes(), &enrollment); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("UPDATE sessions SET recovery_until=unixepoch()-1 WHERE hash=?", a.sessionHash(strings.TrimPrefix(session, "pocketmark="))); err != nil {
+	if _, err := db.Exec("UPDATE sessions SET recovery_until=epoch_seconds()-1 WHERE hash=$1", a.sessionHash(strings.TrimPrefix(session, "pocketmark="))); err != nil {
 		t.Fatal(err)
 	}
 	before, err := a.Store.MFA(t.Context())

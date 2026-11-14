@@ -1,17 +1,17 @@
 # Personal feature coverage
 
-This implementation retains Go + SQLite and no resident browser/database/search sidecars. Collaboration, public sharing, SSO/OIDC and automations (RSS/AI, recurring captures and scheduled backups) are excluded by request.
+This implementation uses a Go server and PostgreSQL for storage and search. Collaboration, public sharing, SSO/OIDC and automations (RSS/AI, recurring captures and scheduled backups) are excluded by request.
 
 | Feature | Implementation and limits |
 | --- | --- |
 | Collection management | Create, rename, move, delete; optional 8 KiB description, stable creation date and cycle prevention. Deleting a collection retains bookmarks in Inbox. |
 | Bulk operations | Up to 500 selected IDs per atomic request: move, replace tags, read/unread, favorite/unfavorite, recapture, delete. |
-| Search and sorting | FTS5 full text; newest/oldest/title/updated sorting. The web UI includes typo matches automatically alongside full-text results. Typo matching scans bounded metadata per row, rather than keeping a second search index in RAM. It is slower on a large library and does not fuzzy-scan archive bodies. |
+| Search and sorting | PostgreSQL full-text search; newest/oldest/title/updated sorting. The web UI includes typo matches automatically alongside full-text results. Typo matching scans bounded metadata per row, rather than keeping a second search index in RAM. It is slower on a large library and does not fuzzy-scan archive bodies. |
 | Highlights | Selected quote, Unicode position, color and note. A digest identifies stale anchors after recapture; stale quotes are retained without painting the wrong text. |
 | Reader | Plain text with highlights; separate sandboxed structural HTML reader with tables/headings/code. No script execution or remote resources. |
 | Browser import | Streaming Netscape HTML import/export, nested folders, transactional validation and duplicate URL skipping. |
 | JSON migration | Pocketmark and legacy JSON metadata, nested collections, source timestamps, existing hierarchy reuse. Archives/annotations are preserved by full backup, not metadata JSON. |
-| File archive | PDF/raster image/HTML/SingleFile uploads, standalone or attached to a bookmark, 20 MiB each, 32 per record. Original bytes stream in 64 KiB SQLite chunks. Upload HTML becomes searchable. Standalone files use internal opaque identifiers and never enter the network capture queue. |
+| File archive | PDF/raster image/HTML/SingleFile uploads, standalone or attached to a bookmark, 20 MiB each, 32 per record. Original bytes stream in 64 KiB PostgreSQL chunks. Upload HTML becomes searchable. Standalone files use internal opaque identifiers and never enter the network capture queue. |
 | Capture viewer | Bookmarks open on available HTML, Screenshot and PDF shortcuts only, with an explicit empty/loading/error message and no automatic article text. Each shortcut opens the newest copy with earlier copies selectable and original download available. Images include uploaded images, not only screenshots. HTML attachments keep embedded styles/resources in an opaque sandbox; scripts and network resources are blocked. Basic HTML archives use the simplified sandboxed reader. |
 | Offline page | Manual passive server snapshot with bounded CSS/image/font embedding. Limits and omissions: [ARCHIVES.md](ARCHIVES.md). |
 | JavaScript page | The included MV3 extension captures the page after JavaScript has run in the user's browser. It uploads passive rendered HTML. Cross-origin images/styles may be unavailable for embedding. |
@@ -19,7 +19,7 @@ This implementation retains Go + SQLite and no resident browser/database/search 
 | PDF | The Chrome extension generates and uploads PDF from the current rendered page, using a bounded stream. Other browsers can use Print → Save as PDF followed by upload. No server PDF renderer. |
 | Personal authentication | One account with mandatory password (PBKDF2-SHA256, 600,000 iterations) and TOTP or a single-use recovery code. Local QR enrollment; seven-day revocable cookie with configurable inactivity expiry. Anyone who can reach an eligible empty instance can create the account. Finish account and MFA setup before exposure. For existing libraries, see [local account recovery](API.md#existing-installations-and-account-recovery). API keys remain separate. |
 | API keys | Up to 32 named keys, revealed once, stored hashed, individually revocable. Read/capture/sync/full permission profiles, optional expiry and rotation. Account/key/session management and full backups require the owner; sensitive browser actions require recent password confirmation. |
-| Backup | Manual, owner-only ZIP of a transactionally consistent SQLite snapshot, streamed from disk. Includes archives, attachments, annotations and credential hashes; preserve the private `server-secret` separately. Follow the [backup and restore guide](GUIDE.md#back-up-everything). |
+| Backup | Manual, owner-only ZIP of a transactionally consistent PostgreSQL dump, streamed from disk. Includes archives, attachments, annotations and credential hashes; preserve the private `server-secret` separately. Follow the [backup and restore guide](GUIDE.md#back-up-everything). |
 | Mobile web | Responsive installable manifest, minimal static-only service worker, share target. Installation/share support depends on browser/OS. Private pages and API data are never cached by the service worker. |
 | Floccus | WebDAV/XBEL; previously verified with Floccus 5.11.1. The Linkwarden API backend has been removed. DAV includes API-key authentication, lock/temp/MOVE, exact bytes, stable numeric IDs and ordering. No recurring server sync process. |
 

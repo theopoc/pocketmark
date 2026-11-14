@@ -19,9 +19,9 @@ export async function securityJourney({ browser, page, base, username, password,
   const request = page.request;
   const settle = async () => { await page.evaluate(async () => { await Promise.all(document.getAnimations().filter(a => a.effect?.getTiming().iterations !== Infinity).map(a => a.finished.catch(() => {}))); }); };
   const expireConfirmation = () => {
-    if (!process.env.E2E_DB_PATH) return false;
+    if (!process.env.E2E_DATABASE_URL) return false;
     assert.equal(base.hostname, '127.0.0.1');
-    execFileSync('python3', ['-c', 'import sqlite3,sys; db=sqlite3.connect(sys.argv[1]); db.execute("UPDATE sessions SET confirmed_at=0"); db.commit(); db.close()', process.env.E2E_DB_PATH]);
+    execFileSync('psql', ['-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', process.env.E2E_DATABASE_URL, '-c', 'UPDATE sessions SET confirmed_at=0']);
     return true;
   };
   const peer = await browser.newContext({ userAgent: 'Synthetic second browser / security regression' });

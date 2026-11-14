@@ -32,8 +32,11 @@ func (s *Store) SaveAsset(ctx context.Context, a Asset, src io.Reader) (Asset, e
 		return a, err
 	}
 	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, "SELECT id FROM links WHERE id=$1 FOR UPDATE", a.LinkID); err != nil {
+		return a, err
+	}
 	var count int
-	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM assets WHERE link_id=?`, a.LinkID).Scan(&count); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM assets WHERE link_id=$1`, a.LinkID).Scan(&count); err != nil {
 		return a, err
 	}
 	if count >= 32 {
@@ -50,11 +53,7 @@ func (s *Store) SaveAsset(ctx context.Context, a Asset, src io.Reader) (Asset, e
 // It never commits: standalone files must commit their bookmark and bytes together.
 func insertAsset(ctx context.Context, tx *sql.Tx, a Asset, src io.Reader, noun string) (Asset, error) {
 	a.CreatedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	result, err := tx.ExecContext(ctx, `INSERT INTO assets(link_id,name,media_type,kind,created_at) VALUES(?,?,?,?,?)`, a.LinkID, a.Name, a.MediaType, a.Kind, a.CreatedAt)
-	if err != nil {
-		return a, err
-	}
-	a.ID, err = result.LastInsertId()
+	err := tx.QueryRowContext(ctx, `INSERT INTO assets(link_id,name,media_type,kind,created_at) VALUES($1,$2,$3,$4,$5) RETURNING id`, a.LinkID, a.Name, a.MediaType, a.Kind, a.CreatedAt).Scan(&a.ID)
 	if err != nil {
 		return a, err
 	}
@@ -66,7 +65,7 @@ func insertAsset(ctx context.Context, tx *sql.Tx, a Asset, src io.Reader, noun s
 			if a.Size > MaxAssetSize {
 				return a, fault.Invalid(noun + " exceeds 20 MiB")
 			}
-			if _, err = tx.ExecContext(ctx, `INSERT INTO asset_chunks VALUES(?,?,?)`, a.ID, ordinal, buf[:n]); err != nil {
+			if _, err = tx.ExecContext(ctx, `INSERT INTO asset_chunks VALUES($1,$2,$3)`, a.ID, ordinal, buf[:n]); err != nil {
 				return a, err
 			}
 		}
@@ -80,14 +79,14 @@ func insertAsset(ctx context.Context, tx *sql.Tx, a Asset, src io.Reader, noun s
 	if a.Size == 0 {
 		return a, fault.Invalid("empty " + noun)
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE assets SET size=? WHERE id=?`, a.Size, a.ID); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE assets SET size=$1 WHERE id=$2`, a.Size, a.ID); err != nil {
 		return a, err
 	}
 	return a, nil
 }
 
 func (s *Store) Assets(ctx context.Context, linkID int64) ([]Asset, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,link_id,name,media_type,kind,size,created_at FROM assets WHERE link_id=? ORDER BY id DESC`, linkID)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,link_id,name,media_type,kind,size,created_at FROM assets WHERE link_id=$1 ORDER BY id DESC`, linkID)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +103,7 @@ func (s *Store) Assets(ctx context.Context, linkID int64) ([]Asset, error) {
 }
 func (s *Store) Asset(ctx context.Context, assetID int64) (Asset, error) {
 	var a Asset
-	err := s.db.QueryRowContext(ctx, `SELECT id,link_id,name,media_type,kind,size,created_at FROM assets WHERE id=?`, assetID).Scan(&a.ID, &a.LinkID, &a.Name, &a.MediaType, &a.Kind, &a.Size, &a.CreatedAt)
+	err := s.db.QueryRowContext(ctx, `SELECT id,link_id,name,media_type,kind,size,created_at FROM assets WHERE id=$1`, assetID).Scan(&a.ID, &a.LinkID, &a.Name, &a.MediaType, &a.Kind, &a.Size, &a.CreatedAt)
 	return a, err
 }
 func (s *Store) WriteAsset(ctx context.Context, assetID int64, dst io.Writer) error {
@@ -112,12 +111,12 @@ func (s *Store) WriteAsset(ctx context.Context, assetID int64, dst io.Writer) er
 	if err != nil {
 		return err
 	}
-	// Release the sole SQLite connection before every potentially slow network
+	// Release the database connection before every potentially slow network
 	// write, otherwise a download could block all requests and capture jobs.
 	remaining := a.Size
 	for ordinal := 0; remaining > 0; ordinal++ {
 		var data []byte
-		if err = s.db.QueryRowContext(ctx, `SELECT data FROM asset_chunks WHERE asset_id=? AND ordinal=?`, assetID, ordinal).Scan(&data); err != nil {
+		if err = s.db.QueryRowContext(ctx, `SELECT data FROM asset_chunks WHERE asset_id=$1 AND ordinal=$2`, assetID, ordinal).Scan(&data); err != nil {
 			return err
 		}
 		n, writeErr := dst.Write(data)
@@ -138,6 +137,6 @@ func (s *Store) WriteAsset(ctx context.Context, assetID int64, dst io.Writer) er
 	return nil
 }
 func (s *Store) DeleteAsset(ctx context.Context, assetID int64) error {
-	r, err := s.db.ExecContext(ctx, `DELETE FROM assets WHERE id=?`, assetID)
+	r, err := s.db.ExecContext(ctx, `DELETE FROM assets WHERE id=$1`, assetID)
 	return affected(r, err)
 }

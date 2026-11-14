@@ -8,15 +8,14 @@ COPY frontend ./frontend
 COPY internal/webui/static ./internal/webui/static
 RUN npm run build --prefix frontend
 
-FROM golang:1.26.10-alpine AS build
-RUN apk add --no-cache gcc musl-dev
+FROM golang:1.26.11-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
 COPY --from=frontend /src/internal/webui/static ./internal/webui/static
-RUN CGO_ENABLED=1 go build -tags 'sqlite_fts5 sqlite_omit_load_extension' -trimpath -ldflags='-s -w -linkmode external -extldflags "-static"' -o /pocketmark ./cmd/pocketmark
+RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /pocketmark ./cmd/pocketmark
 
 # Release CI supplies its validated executable in a minimal build context.
 FROM scratch AS prebuilt
@@ -26,7 +25,7 @@ FROM ${BINARY_SOURCE} AS binary
 
 FROM alpine:3.24 AS runtime
 # CVE-2026-4738 is fixed in Alpine's zlib 1.4-r0.
-RUN apk add --no-cache --upgrade ca-certificates 'zlib>=1.4-r0' && addgroup -g 10001 pocketmark && adduser -D -H -u 10001 -G pocketmark pocketmark && mkdir /data && chown pocketmark:pocketmark /data
+RUN apk add --no-cache --upgrade ca-certificates postgresql18-client 'zlib>=1.4-r0' && addgroup -g 10001 pocketmark && adduser -D -H -u 10001 -G pocketmark pocketmark && mkdir /data && chown pocketmark:pocketmark /data
 COPY --from=binary /pocketmark /usr/local/bin/pocketmark
 USER 10001:10001
 ENV POCKETMARK_DATA=/data POCKETMARK_LISTEN=0.0.0.0:8090 GOMEMLIMIT=32MiB

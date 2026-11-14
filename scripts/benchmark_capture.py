@@ -10,6 +10,7 @@ import concurrent.futures
 import datetime
 import hashlib
 import json
+import os
 import platform
 import secrets
 import subprocess
@@ -75,6 +76,7 @@ def main():
     parser.add_argument("--features", action="store_true", help="also exercise offline archives, 19 MiB upload, annotations, bulk, WebDAV and full backup")
     args = parser.parse_args()
     project = "pocketmark-validation-" + secrets.token_hex(5)
+    os.environ["POCKETMARK_DB_PASSWORD"] = secrets.token_hex(32)
     image = json.loads(docker("image", "inspect", args.image))[0]
     config = json.loads(docker("compose", "-f", str(ROOT / "compose.yaml"), "config", "--format", "json"))
     config.pop("name", None)
@@ -255,7 +257,7 @@ def main():
                     while block := response.read(64 * 1024):
                         target.write(block)
                 with zipfile.ZipFile(backup_path) as backup:
-                    require(backup.testzip() is None and "pocketmark.db" in backup.namelist(), "invalid backup ZIP")
+                    require(backup.testzip() is None and "pocketmark.sql" in backup.namelist(), "invalid backup ZIP")
                 features["backup_zip_bytes"] = backup_path.stat().st_size
                 features["full_backup_valid"] = True
                 stats = call("/api/stats")

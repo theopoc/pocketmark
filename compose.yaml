@@ -1,11 +1,32 @@
 services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: pocketmark
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POCKETMARK_DB_PASSWORD:?Set POCKETMARK_DB_PASSWORD in .env}
+    volumes:
+      - pocketmark-postgres:/var/lib/postgresql
+      - ./scripts/init_postgres.sql:/docker-entrypoint-initdb.d/10-pocketmark.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "pocketmark", "-d", "pocketmark"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
   pocketmark:
-    image: ghcr.io/theopoc/pocketmark
+    depends_on:
+      postgres:
+        condition: service_healthy
+    build: .
+    image: ${POCKETMARK_IMAGE:-pocketmark:local}
     ports:
       - "127.0.0.1:8090:8090"
     volumes:
-      - pocketmark-data:/data
+      - pocketmark-state:/data
     environment:
+      POCKETMARK_DATABASE_URL: postgresql://pocketmark@postgres/pocketmark?sslmode=disable
+      PGPASSWORD: ${POCKETMARK_DB_PASSWORD:?Set POCKETMARK_DB_PASSWORD in .env}
       GOMEMLIMIT: 32MiB
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8090/healthz"]
@@ -24,4 +45,5 @@ services:
       - ALL
     restart: unless-stopped
 volumes:
-  pocketmark-data:
+  pocketmark-postgres:
+  pocketmark-state:

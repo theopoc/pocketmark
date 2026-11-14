@@ -32,7 +32,7 @@ Floccus also requires the exact UTF-8 XML declaration produced by its serializer
 
 ## Implemented protocol and regression coverage
 
-Pocketmark supports the lock, temporary upload and MOVE sequence above. Temporary and committed XML are stored as bounded SQLite chunks; parsing and HTTP response staging use temporary files beside the database. The XML limit is 8 MiB. One heavy mutation runs at a time. No additional process or resident browser is introduced.
+Pocketmark supports the lock, temporary upload and MOVE sequence above. Temporary and committed XML are stored as bounded PostgreSQL chunks; parsing and HTTP response staging use temporary files in the application work directory. The XML limit is 8 MiB. One heavy mutation runs at a time. No additional process or resident browser is introduced.
 
 Each client should use its own API key. An active lease belongs to that credential, and a competing writer receives HTTP 423. A newly acquired or reacquired lease requires a fresh GET of the primary XML before uploading. Metadata edits made through Pocketmark during synchronization invalidate the client's snapshot; committing it receives HTTP 412. An expired lease remains a tombstone until reacquisition, so merely observing its absence cannot authorize a stale upload. The client must retry synchronization from a fresh server read.
 

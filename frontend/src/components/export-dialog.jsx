@@ -17,11 +17,7 @@ export function ExportDialog() {
           <span data-icon="close" aria-hidden="true"></span>
         </Button>
       </div>
-      <p className="muted">
-        {
-          "Choose a portable format. Saved files and captures are stored in your data directory and are not included in these metadata exports."
-        }
-      </p>
+      <p className="muted">{"Choose a portable format for your bookmarks."}</p>
       <p className="small muted">
         {"To keep captures, files and account settings, "}
         <a href="/api/backup">{"download a full backup"}</a>

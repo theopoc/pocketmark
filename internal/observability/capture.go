@@ -15,7 +15,7 @@ import (
 
 var captureOutcomes = [...]string{"ready", "failed", "save_failed", "canceled"}
 
-// Capture starts a background root span; no request context is persisted to SQLite.
+// Capture starts a background root span; no request context is persisted to the database.
 // IDs stay in logs only, and URLs/content never enter logs, labels or spans.
 func (o *Observer) Capture(ctx context.Context, id int64) (context.Context, func(error, error)) {
 	ctx, span := o.tracer.Start(ctx, "capture", trace.WithSpanKind(trace.SpanKindInternal))

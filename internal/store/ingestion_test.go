@@ -82,7 +82,7 @@ func TestDocumentStorageStreamingAndRollback(t *testing.T) {
 
 func TestDocumentStorageExistingDatabaseAndRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "existing.db")
-	s, err := Open(path)
+	s, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,14 +97,16 @@ func TestDocumentStorageExistingDatabaseAndRestart(t *testing.T) {
 	id := createLink(t, s, Link{URL: "https://example.com/existing", Notes: "Keep notes", Tags: []string{"reference"}})
 	// Seed the pre-refactor asset schema directly, without either ingestion path.
 	const legacyBody = "%PDF-1.7\nExisting attachment"
-	if _, err := s.db.Exec(`INSERT INTO assets(id,link_id,name,media_type,kind,size,created_at) VALUES(41,?,'old.pdf','application/pdf','pdf',?,'2026-01-01T00:00:00Z');
-INSERT INTO asset_chunks(asset_id,ordinal,data) VALUES(41,0,?)`, id, len(legacyBody), []byte(legacyBody)); err != nil {
+	if _, err := s.db.Exec(`INSERT INTO assets(id,link_id,name,media_type,kind,size,created_at) VALUES(41,$1,'old.pdf','application/pdf','pdf',$2,'2026-01-01T00:00:00Z')`, id, len(legacyBody)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`INSERT INTO asset_chunks(asset_id,ordinal,data) VALUES(41,0,$1)`, []byte(legacyBody)); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = Open(path)
+	s, err = openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +121,7 @@ INSERT INTO asset_chunks(asset_id,ordinal,data) VALUES(41,0,?)`, id, len(legacyB
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = Open(path)
+	s, err = openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}

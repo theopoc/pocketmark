@@ -1,5 +1,5 @@
 import { clickNavigation, openNavigation, navigationJourney, dialogDismissalJourney, breadcrumbJourney } from './navigation.mjs';
-// Real Chromium, real HTTP and SQLite. Run only against the disposable smoke instance.
+// Real Chromium, real HTTP and PostgreSQL. Run only against the disposable smoke instance.
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
@@ -786,7 +786,7 @@ try {
   assert.equal(await page.locator('#bookmark-notes').inputValue(), 'Persisted browser notes');
   await page.locator('#bookmark-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
 
-  // Preserve synthetic files through real HTTP/SQLite and view them without a
+  // Preserve synthetic files through real HTTP/PostgreSQL and view them without a
   // download. The HTML intentionally tries scripts, refresh and remote loads.
   const links = await (await page.request.get(new URL('/api/links', base).href)).json();
   const saved = links.links.find(link => link.title === revised);

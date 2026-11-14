@@ -40,8 +40,12 @@ class QualificationTests(unittest.TestCase):
                     return json.dumps({"digest": registry_digest})
                 return json.dumps([details])
             if args[:2] == ("docker", "run"):
+                if args[-1] == "postgres:18-alpine":
+                    self.assertIn("--network-alias", args)
+                    return "d" * 64
                 self.assertEqual(args[-1], IMAGE_ID)
-                self.assertIn('--network=none', args)
+                self.assertIn('--network', args)
+                self.assertIn('POCKETMARK_DATABASE_URL=postgresql://postgres@db/postgres?sslmode=disable', args)
                 self.assertIn('--read-only', args)
                 return 'f' * 64
             if args[:2] == ("docker", "inspect"):

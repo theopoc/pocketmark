@@ -22,7 +22,7 @@ func (repeatedByteReader) Read(p []byte) (int, error) {
 }
 
 func TestAssetStreamingRollbackAndCascade(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "assets.db"))
+	s, err := openTestStore(t, filepath.Join(t.TempDir(), "assets.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestAssetStreamingRollbackAndCascade(t *testing.T) {
 }
 
 func TestAssetCountLimit(t *testing.T) {
-	s, e := Open(filepath.Join(t.TempDir(), "assets.db"))
+	s, e := openTestStore(t, filepath.Join(t.TempDir(), "assets.db"))
 	if e != nil {
 		t.Fatal(e)
 	}

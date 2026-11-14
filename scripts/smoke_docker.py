@@ -37,6 +37,7 @@ def main():
     parser.add_argument("--browser", action="store_true", help="Run essential Chromium journeys on this disposable instance")
     args = parser.parse_args()
     project = "pocketmark-smoke-" + secrets.token_hex(6)
+    os.environ["POCKETMARK_DB_PASSWORD"] = secrets.token_hex(32)
     config = json.loads(docker("compose", "-f", str(ROOT / "compose.yaml"), "config", "--format", "json"))
     config.pop("name", None)
     service = config["services"]["pocketmark"]
@@ -127,8 +128,8 @@ def main():
                     break
                 time.sleep(0.1)
             require(saved["status"] == "failed", "capture worker did not reject the private destination")
-            require(call("/api/links?q=Smoke")["total"] == 1, "FTS5 search failed")
-            checks["sqlite_fts5_and_capture_ssrf_rejection"] = True
+            require(call("/api/links?q=Smoke")["total"] == 1, "PostgreSQL search failed")
+            checks["search_and_capture_ssrf_rejection"] = True
             # A full backup must be a valid ZIP and exclude the server secret.
             call("/api/reauth", {"password": password}, owner=True)
             backup = call("/api/backup", raw=True, owner=True)
@@ -140,7 +141,8 @@ def main():
             events = dict(line.split() for line in docker("exec", cid, "cat", "/sys/fs/cgroup/memory.events").splitlines())
             require(all(events.get(k) == "0" for k in ("max", "oom", "oom_kill")), "memory-limit or OOM event")
             require(not json.loads(docker("inspect", cid))[0]["State"]["OOMKilled"], "container was OOM killed")
-            docker(*compose, "restart")
+            docker(*compose, "stop")
+            docker(*compose, "up", "-d", "--wait", "--wait-timeout", "90")
             # An ephemeral host port may be reassigned during a Docker restart.
             restarted = json.loads(docker("inspect", cid))[0]
             port = restarted["NetworkSettings"]["Ports"]["8090/tcp"][0]["HostPort"]

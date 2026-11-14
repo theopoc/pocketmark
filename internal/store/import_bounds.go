@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// Finish receiving untrusted imports before acquiring SQLite's single connection.
+// Finish receiving untrusted imports before acquiring a database connection.
 // Staging also permits a bounded JSON preflight before decoding typed slices.
 func (s *Store) stageImport(ctx context.Context, r io.Reader) (*os.File, error) {
 	f, err := s.TemporaryFile(".import-*")

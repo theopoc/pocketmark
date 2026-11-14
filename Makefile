@@ -1,17 +1,15 @@
 .PHONY: preflight build frontend test run check fmt-check test-extension release-check release-snapshot
-GO_TAGS := sqlite_fts5 sqlite_omit_load_extension
 LDFLAGS ?= -s -w
 TEST_FLAGS ?= -race -p 1
-export CGO_ENABLED := 1
 
 frontend/node_modules/.package-lock.json: frontend/package.json frontend/package-lock.json
 	npm ci --prefix frontend --ignore-scripts --no-audit --no-fund
 frontend: frontend/node_modules/.package-lock.json
 	npm run build --prefix frontend
 build: frontend
-	go build -tags '$(GO_TAGS)' -trimpath -ldflags='$(LDFLAGS)' -o bin/pocketmark ./cmd/pocketmark
+	go build -trimpath -ldflags='$(LDFLAGS)' -o bin/pocketmark ./cmd/pocketmark
 test: frontend
-	go test $(TEST_FLAGS) -tags '$(GO_TAGS)' ./...
+	go test $(TEST_FLAGS) ./...
 	node --test internal/webui/*.test.cjs
 	npm test --prefix frontend
 preflight:
@@ -23,7 +21,7 @@ fmt-check:
 check: frontend fmt-check
 	npm run check --prefix frontend
 	python3 scripts/sync_ui_assets.py
-	go vet -tags '$(GO_TAGS)' ./...
+	go vet ./...
 	node --check internal/webui/static/name-limit.js
 	node --check internal/webui/static/theme-switch.js
 	node --check internal/webui/static/theme.js

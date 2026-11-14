@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"database/sql"
+
 	"errors"
 	"io"
 	"os"
@@ -113,12 +113,12 @@ func TestSnapshotIncludesWALAndCleansFailedWork(t *testing.T) {
 	if err != nil || info.Mode().Perm() != 0600 {
 		t.Fatalf("snapshot permissions: %v (%v)", info, err)
 	}
-	copy, err := sql.Open("pocketmark-sqlite3", f.Name())
+	copy, err := restoreTestStore(t, f.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
 	var notes string
-	err = copy.QueryRow("SELECT notes FROM links WHERE id=?", id).Scan(&notes)
+	err = copy.db.QueryRow("SELECT notes FROM links WHERE id=$1", id).Scan(&notes)
 	copy.Close()
 	if err != nil || notes != "Committed in WAL" {
 		t.Fatalf("snapshot lost committed data: %q (%v)", notes, err)
@@ -128,7 +128,7 @@ func TestSnapshotIncludesWALAndCleansFailedWork(t *testing.T) {
 	if failed, err := s.Snapshot(ctx); !errors.Is(err, context.Canceled) || failed != nil {
 		t.Fatalf("cancelled snapshot: %v (%v)", failed, err)
 	}
-	paths, err := filepath.Glob(filepath.Join(s.directory, ".backup-*.db"))
+	paths, err := filepath.Glob(filepath.Join(s.directory, ".backup-*.sql"))
 	if err != nil || len(paths) != 1 || paths[0] != f.Name() {
 		t.Fatalf("failed snapshot left temporary files: %v (%v)", paths, err)
 	}
@@ -152,13 +152,13 @@ func TestSnapshotDoesNotWaitForApplicationConnection(t *testing.T) {
 	}
 	defer os.Remove(f.Name())
 	defer f.Close()
-	copy, err := sql.Open("pocketmark-sqlite3", f.Name())
+	copy, err := restoreTestStore(t, f.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer copy.Close()
 	var notes string
-	if err := copy.QueryRow("SELECT notes FROM links WHERE id=?", id).Scan(&notes); err != nil || notes != "Committed in WAL" {
+	if err := copy.db.QueryRow("SELECT notes FROM links WHERE id=$1", id).Scan(&notes); err != nil || notes != "Committed in WAL" {
 		t.Fatalf("snapshot lost WAL data: %q (%v)", notes, err)
 	}
 }
@@ -178,7 +178,7 @@ func TestSnapshotLargeAssetRestoresOriginalBytes(t *testing.T) {
 	}
 	defer os.Remove(f.Name())
 	defer f.Close()
-	restored, err := Open(f.Name())
+	restored, err := restoreTestStore(t, f.Name())
 	if err != nil {
 		t.Fatal(err)
 	}

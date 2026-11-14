@@ -96,6 +96,7 @@ func readXBEL(r io.Reader) (*xbelNode, error) {
 						if e != nil || parsed <= 0 || parsed > 9007199254740991 || strconv.FormatInt(parsed, 10) != n.ID {
 							return nil, fault.Invalid("invalid numeric XBEL ID")
 						}
+						root.HighestID = max(root.HighestID, parsed)
 					}
 					if strings.HasPrefix(n.ID, "b-") || strings.HasPrefix(n.ID, "c-") {
 						prefix := "b-"
@@ -148,7 +149,7 @@ func exportXBEL(ctx context.Context, tx *sql.Tx, w io.Writer) error {
 		return e
 	}
 	var highest int64
-	if e := tx.QueryRowContext(ctx, "SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name='dav_ids'),0)").Scan(&highest); e != nil {
+	if e := tx.QueryRowContext(ctx, "SELECT CASE WHEN is_called THEN last_value ELSE last_value-1 END FROM dav_ids_id_seq").Scan(&highest); e != nil {
 		return e
 	}
 	enc := xml.NewEncoder(w)
@@ -178,8 +179,8 @@ func exportXBEL(ctx context.Context, tx *sql.Tx, w io.Writer) error {
 			id, local int64
 			kind      string
 		}
-		rows, e := tx.QueryContext(ctx, `SELECT d.id,d.local_id,d.kind,d.position FROM dav_ids d JOIN collections c ON d.kind='folder' AND d.local_id=c.id WHERE c.parent_id IS ?
-UNION ALL SELECT d.id,d.local_id,d.kind,d.position FROM dav_ids d JOIN links l ON d.kind='bookmark' AND d.local_id=l.id WHERE l.collection_id IS ? AND (l.url LIKE 'http://%' OR l.url LIKE 'https://%') ORDER BY 4,1`, parent, parent)
+		rows, e := tx.QueryContext(ctx, `SELECT d.id,d.local_id,d.kind,d.position FROM dav_ids d JOIN collections c ON d.kind='folder' AND d.local_id=c.id WHERE c.parent_id IS NOT DISTINCT FROM $1
+UNION ALL SELECT d.id,d.local_id,d.kind,d.position FROM dav_ids d JOIN links l ON d.kind='bookmark' AND d.local_id=l.id WHERE l.collection_id IS NOT DISTINCT FROM $2 AND (l.url LIKE 'http://%' OR l.url LIKE 'https://%') ORDER BY 4,1`, parent, parent)
 		if e != nil {
 			return e
 		}
@@ -210,13 +211,13 @@ UNION ALL SELECT d.id,d.local_id,d.kind,d.position FROM dav_ids d JOIN links l O
 				if folders > 2000 {
 					return fault.New("export", "representation_limit", "XBEL supports at most 2000 collections")
 				}
-				e = tx.QueryRowContext(ctx, "SELECT name FROM collections WHERE id=?", item.local).Scan(&title)
+				e = tx.QueryRowContext(ctx, "SELECT name FROM collections WHERE id=$1", item.local).Scan(&title)
 			} else {
 				count++
 				if count > 10000 {
 					return fault.New("export", "representation_limit", "XBEL supports at most 10000 links")
 				}
-				e = tx.QueryRowContext(ctx, "SELECT title,description,url FROM links WHERE id=?", item.local).Scan(&title, &desc, &rawURL)
+				e = tx.QueryRowContext(ctx, "SELECT title,description,url FROM links WHERE id=$1", item.local).Scan(&title, &desc, &rawURL)
 				tag.Attr = append(tag.Attr, xml.Attr{Name: xml.Name{Local: "href"}, Value: rawURL})
 			}
 			if e != nil {
@@ -256,7 +257,7 @@ var ErrSyncConflict = errors.New("library changed; download and merge before upl
 
 func replaceXBELTree(ctx context.Context, tx *sql.Tx, root *xbelNode) error {
 	var e error
-	if _, e = tx.ExecContext(ctx, "CREATE TEMP TABLE IF NOT EXISTS sync_links(id INTEGER PRIMARY KEY);DELETE FROM sync_links;CREATE TEMP TABLE IF NOT EXISTS sync_collections(id INTEGER PRIMARY KEY);DELETE FROM sync_collections"); e != nil {
+	if _, e = tx.ExecContext(ctx, "CREATE TEMP TABLE IF NOT EXISTS sync_links(id bigint PRIMARY KEY);DELETE FROM sync_links;CREATE TEMP TABLE IF NOT EXISTS sync_collections(id bigint PRIMARY KEY);DELETE FROM sync_collections"); e != nil {
 		return e
 	}
 	seen := map[string]bool{}
@@ -279,7 +280,7 @@ func replaceXBELTree(ctx context.Context, tx *sql.Tx, root *xbelNode) error {
 				// Our stable IDs survive renames/moves. Foreign clients get path-based matching.
 				own, _ := strconv.ParseInt(strings.TrimPrefix(child.ID, "c-"), 10, 64)
 				if strings.HasPrefix(child.ID, "c-") && own > 0 {
-					if e := tx.QueryRowContext(ctx, "SELECT id FROM collections WHERE id=? AND id NOT IN(SELECT id FROM sync_collections)", own).Scan(&cid); e != nil {
+					if e := tx.QueryRowContext(ctx, "SELECT id FROM collections WHERE id=$1 AND id NOT IN(SELECT id FROM sync_collections)", own).Scan(&cid); e != nil {
 						if !errors.Is(e, sql.ErrNoRows) {
 							return e
 						}
@@ -287,25 +288,21 @@ func replaceXBELTree(ctx context.Context, tx *sql.Tx, root *xbelNode) error {
 					}
 				}
 				if cid == 0 {
-					if err := tx.QueryRowContext(ctx, "SELECT id FROM collections WHERE name=? AND parent_id IS ? AND id NOT IN(SELECT id FROM sync_collections) ORDER BY id LIMIT 1", name, parent).Scan(&cid); err != nil && !errors.Is(err, sql.ErrNoRows) {
+					if err := tx.QueryRowContext(ctx, "SELECT id FROM collections WHERE name=$1 AND parent_id IS NOT DISTINCT FROM $2 AND id NOT IN(SELECT id FROM sync_collections) ORDER BY id LIMIT 1", name, parent).Scan(&cid); err != nil && !errors.Is(err, sql.ErrNoRows) {
 						return err
 					}
 				}
 				if cid == 0 {
-					res, e := tx.ExecContext(ctx, "INSERT INTO collections(name,parent_id) VALUES(?,?)", name, parent)
-					if e != nil {
-						return e
-					}
-					cid, e = res.LastInsertId()
+					e := tx.QueryRowContext(ctx, "INSERT INTO collections(name,parent_id) VALUES($1,$2) RETURNING id", name, parent).Scan(&cid)
 					if e != nil {
 						return e
 					}
 				} else {
-					if _, e := tx.ExecContext(ctx, "UPDATE collections SET name=?,parent_id=? WHERE id=?", name, parent, cid); e != nil {
+					if _, e := tx.ExecContext(ctx, "UPDATE collections SET name=$1,parent_id=$2 WHERE id=$3", name, parent, cid); e != nil {
 						return e
 					}
 				}
-				if _, e := tx.ExecContext(ctx, "INSERT INTO sync_collections(id) VALUES(?)", cid); e != nil {
+				if _, e := tx.ExecContext(ctx, "INSERT INTO sync_collections(id) VALUES($1)", cid); e != nil {
 					return e
 				}
 				if e := mapDAVNode(ctx, tx, "folder", cid, numericID, position); e != nil {
@@ -334,14 +331,14 @@ func replaceXBELTree(ctx context.Context, tx *sql.Tx, root *xbelNode) error {
 				var e error
 				if strings.HasPrefix(child.ID, "b-") {
 					own, _ := strconv.ParseInt(strings.TrimPrefix(child.ID, "b-"), 10, 64)
-					if e = tx.QueryRowContext(ctx, "SELECT id FROM links WHERE id=? AND id NOT IN(SELECT id FROM sync_links) AND (url LIKE 'http://%' OR url LIKE 'https://%')", own).Scan(&lid); e != nil {
+					if e = tx.QueryRowContext(ctx, "SELECT id FROM links WHERE id=$1 AND id NOT IN(SELECT id FROM sync_links) AND (url LIKE 'http://%' OR url LIKE 'https://%')", own).Scan(&lid); e != nil {
 						if !errors.Is(e, sql.ErrNoRows) {
 							return e
 						}
 						return fault.Invalid("unknown or repeated bookmark ID; download and merge first")
 					}
 					var conflict int64
-					if e = tx.QueryRowContext(ctx, "SELECT id FROM links WHERE url=? AND id<>?", l.URL, lid).Scan(&conflict); e == nil {
+					if e = tx.QueryRowContext(ctx, "SELECT id FROM links WHERE url_digest(url)=url_digest($1) AND url=$1 AND id<>$2", l.URL, lid).Scan(&conflict); e == nil {
 						return fault.Invalid("bookmark ID and URL refer to different records")
 					}
 					if e != sql.ErrNoRows {
@@ -349,19 +346,19 @@ func replaceXBELTree(ctx context.Context, tx *sql.Tx, root *xbelNode) error {
 					}
 					e = nil
 				} else {
-					e = tx.QueryRowContext(ctx, "SELECT id FROM links WHERE url=?", l.URL).Scan(&lid)
+					e = tx.QueryRowContext(ctx, "SELECT id FROM links WHERE url_digest(url)=url_digest($1) AND url=$1", l.URL).Scan(&lid)
 				}
 				if e == sql.ErrNoRows {
 					lid, e = Insert(ctx, tx, l)
 				} else if e == nil {
-					_, e = tx.ExecContext(ctx, `UPDATE links SET title=?,description=CASE WHEN ? THEN ? ELSE description END,collection_id=?,updated_at=?,
-status=CASE WHEN url<>? THEN 'pending' ELSE status END,error=CASE WHEN url<>? THEN '' ELSE error END,
-content=CASE WHEN url<>? THEN '' ELSE content END,archive=CASE WHEN url<>? THEN NULL ELSE archive END,url=? WHERE id=?`, l.Title, child.HasDescription, l.Description, parent, now, l.URL, l.URL, l.URL, l.URL, l.URL, lid)
+					_, e = tx.ExecContext(ctx, `UPDATE links SET title=$1,description=CASE WHEN $2 THEN $3 ELSE description END,collection_id=$4,updated_at=$5,
+status=CASE WHEN url<>$6 THEN 'pending' ELSE status END,error=CASE WHEN url<>$7 THEN '' ELSE error END,
+content=CASE WHEN url<>$8 THEN '' ELSE content END,archive=CASE WHEN url<>$9 THEN NULL ELSE archive END,url=$10 WHERE id=$11`, l.Title, child.HasDescription, l.Description, parent, now, l.URL, l.URL, l.URL, l.URL, l.URL, lid)
 				}
 				if e != nil {
 					return e
 				}
-				if _, e = tx.ExecContext(ctx, "INSERT INTO sync_links(id) VALUES(?)", lid); e != nil {
+				if _, e = tx.ExecContext(ctx, "INSERT INTO sync_links(id) VALUES($1)", lid); e != nil {
 					return e
 				}
 				if e = mapDAVNode(ctx, tx, "bookmark", lid, numericID, position); e != nil {
@@ -378,12 +375,8 @@ content=CASE WHEN url<>? THEN '' ELSE content END,archive=CASE WHEN url<>? THEN 
 		return e
 	}
 	// Ordering-only imports must invalidate any previously uploaded snapshot too.
-	if root.HighestID > 0 {
-		if _, e = tx.ExecContext(ctx, "INSERT INTO sqlite_sequence(name,seq) SELECT 'dav_ids',? WHERE NOT EXISTS(SELECT 1 FROM sqlite_sequence WHERE name='dav_ids');UPDATE sqlite_sequence SET seq=MAX(seq,?) WHERE name='dav_ids'", root.HighestID, root.HighestID); e != nil {
-			return e
-		}
-	}
-	if _, e = tx.ExecContext(ctx, "UPDATE dav_revision SET value=value+1,modified=unixepoch() WHERE id=1"); e != nil {
+
+	if _, e = tx.ExecContext(ctx, "UPDATE dav_revision SET value=value+1,modified=epoch_seconds() WHERE id=1"); e != nil {
 		return e
 	}
 	return nil
@@ -396,7 +389,7 @@ func resolveDAVNodeID(ctx context.Context, tx *sql.Tx, n *xbelNode) (int64, erro
 	}
 	var kind string
 	var local int64
-	e = tx.QueryRowContext(ctx, "SELECT kind,local_id FROM dav_ids WHERE id=?", id).Scan(&kind, &local)
+	e = tx.QueryRowContext(ctx, "SELECT kind,local_id FROM dav_ids WHERE id=$1", id).Scan(&kind, &local)
 	if e == sql.ErrNoRows {
 		n.ID = ""
 		return id, nil
@@ -416,21 +409,21 @@ func resolveDAVNodeID(ctx context.Context, tx *sql.Tx, n *xbelNode) (int64, erro
 }
 func mapDAVNode(ctx context.Context, tx *sql.Tx, kind string, local, requested int64, position int) error {
 	var existing int64
-	e := tx.QueryRowContext(ctx, "SELECT id FROM dav_ids WHERE kind=? AND local_id=?", kind, local).Scan(&existing)
+	e := tx.QueryRowContext(ctx, "SELECT id FROM dav_ids WHERE kind=$1 AND local_id=$2", kind, local).Scan(&existing)
 	if e == nil {
 		if requested > 0 && requested != existing {
 			return fault.Invalid("XBEL ID conflicts with an existing record")
 		}
-		_, e = tx.ExecContext(ctx, "UPDATE dav_ids SET position=? WHERE id=?", position, existing)
+		_, e = tx.ExecContext(ctx, "UPDATE dav_ids SET position=$1 WHERE id=$2", position, existing)
 		return e
 	}
 	if e != sql.ErrNoRows {
 		return e
 	}
 	if requested > 0 {
-		_, e = tx.ExecContext(ctx, "INSERT INTO dav_ids(id,kind,local_id,position) VALUES(?,?,?,?)", requested, kind, local, position)
+		_, e = tx.ExecContext(ctx, "INSERT INTO dav_ids(id,kind,local_id,position) VALUES($1,$2,$3,$4)", requested, kind, local, position)
 	} else {
-		_, e = tx.ExecContext(ctx, "INSERT INTO dav_ids(kind,local_id,position) VALUES(?,?,?)", kind, local, position)
+		_, e = tx.ExecContext(ctx, "INSERT INTO dav_ids(kind,local_id,position) VALUES($1,$2,$3)", kind, local, position)
 	}
 	return e
 }

@@ -7,7 +7,7 @@ Go process, without Node, SSR workers, an asset server or a package registry.
 
 ## Build and development
 
-Use Node.js 24 with npm, plus the Go/CGO prerequisites in the contributor guide.
+Use Node.js 24 with npm, plus the Go build prerequisites in the contributor guide.
 `make build`, `make check` and `make test` install the locked frontend inventory
 when needed and compile it before Go accesses embedded files. A direct `go build`
 from a fresh checkout must first run `make frontend`.

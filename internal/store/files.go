@@ -34,7 +34,7 @@ func (s *Store) CreateFile(ctx context.Context, l Link, a Asset, src io.Reader) 
 		if len(l.Content) > 256<<10 {
 			return 0, a, fault.Invalid("indexed text exceeds 256 KiB")
 		}
-		if _, e = tx.ExecContext(ctx, "UPDATE links SET content=? WHERE id=?", l.Content, id); e != nil {
+		if _, e = tx.ExecContext(ctx, "UPDATE links SET content=$1 WHERE id=$2", l.Content, id); e != nil {
 			return 0, a, e
 		}
 	}

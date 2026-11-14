@@ -112,15 +112,12 @@ update repository rulesets. Architecture matrices use `fail-fast: false`.
 
 Go toolchain setup uses `actions/setup-go` with its native module/build cache,
 keyed from `go.sum`. Go handles compilation settings such as race instrumentation.
-Static distribution builds use `GOFLAGS=-a` to rebuild against the installed musl
-compiler and C libraries rather than trusting cached CGO objects. This keeps the
-module download cache without custom cache keys, compiler fingerprinting or a
-project-local cache action. Caches are disposable accelerators, never release
+Static distribution builds set `CGO_ENABLED=0`. Caches are disposable accelerators, never release
 artifacts; no cache hit skips tests, and `-count=1` remains enabled.
 
 Each native test job emits package execution times and the twenty slowest tests
 to its Actions summary. These exclude compilation, and parent/subtest times
-must not be added. Tests retain race, atomic coverage and both SQLite tags.
+must not be added. Tests run with the race detector, atomic coverage and a disposable PostgreSQL 18 service.
 Route-only fixtures reuse a precalculated synthetic password hash, checked once
 against the production KDF; actual authentication tests still use the real KDF.
 Databases and session state remain disposable and independent per test.
@@ -140,8 +137,7 @@ Go and JavaScript. `CODEQL_ACTION_DIFF_INFORMED_QUERIES: 'false'` disables autom
 PR diff filtering so the pre-merge gate evaluates the same complete source as
 main. Both language jobs run on every PR and are individually required by branch
 protection. The SARIF gate also rejects reports declaring an
-incremental mode, even if they have no findings. The Go build uses the production SQLite tags with compilation
-forced for extraction. JavaScript excludes test harnesses and compiled application bundles and upstream minified
+incremental mode, even if they have no findings. The Go build forces compilation for extraction. JavaScript excludes test harnesses and compiled application bundles and upstream minified
 vendor assets; the latter are covered by dependency scanning. Reports stay in
 short-lived artifacts, without uploading databases or requiring code-scanning
 write permissions. `check_sarif.py` makes unreviewed findings and absent/failed

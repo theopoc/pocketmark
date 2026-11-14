@@ -45,7 +45,7 @@ func TestAPIKeyLimitAndRevocation(t *testing.T) {
 
 func TestRenamedAPIKeyPreservesCredentialAndHistoryAcrossRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "library.db")
-	s, err := Open(path)
+	s, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestRenamedAPIKeyPreservesCredentialAndHistoryAcrossRestart(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = Open(path)
+	s, err = openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}

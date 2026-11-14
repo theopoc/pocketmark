@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"pocketmark/internal/pgtest"
 	"strings"
 	"sync"
 	"testing"
@@ -12,7 +13,7 @@ import (
 
 func TestOpenInitializesPersistenceAndPreservesAcrossRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "library.db")
-	s, err := Open(path)
+	s, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +68,7 @@ func TestOpenInitializesPersistenceAndPreservesAcrossRestart(t *testing.T) {
 	if err = s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = Open(path)
+	s, err = openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +114,7 @@ func TestOpenInitializesPersistenceAndPreservesAcrossRestart(t *testing.T) {
 
 func TestOpenRollsBackFailedSchemaInitialization(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "broken.db")
-	legacy, err := sql.Open("pocketmark-sqlite3", path)
+	legacy, err := sql.Open("pgx", pgtest.URL(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +123,7 @@ func TestOpenRollsBackFailedSchemaInitialization(t *testing.T) {
 	if _, err = legacy.Exec("CREATE TABLE dav_revision(id INTEGER PRIMARY KEY,value INTEGER)"); err != nil {
 		t.Fatal(err)
 	}
-	s, err := Open(path)
+	s, err := openTestStore(t, path)
 	if err == nil || s != nil {
 		if s != nil {
 			s.Close()
@@ -131,14 +132,14 @@ func TestOpenRollsBackFailedSchemaInitialization(t *testing.T) {
 	}
 	for _, table := range []string{"links", "account_setup", "account", "api_tokens", "assets"} {
 		var count int
-		if err = legacy.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&count); err != nil || count != 0 {
+		if err = legacy.QueryRow("SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name=$1", table).Scan(&count); err != nil || count != 0 {
 			t.Fatalf("partial schema %s: %d (%v)", table, count, err)
 		}
 	}
 	if _, err = legacy.Exec("DROP TABLE dav_revision"); err != nil {
 		t.Fatal(err)
 	}
-	s, err = Open(path)
+	s, err = openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,20 +152,11 @@ func TestOpenRollsBackFailedSchemaInitialization(t *testing.T) {
 
 func TestLegacyAPIKeysMigrateAndKeepActivityAcrossRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.db")
-	legacy, err := sql.Open("pocketmark-sqlite3", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = legacy.Exec(`CREATE TABLE api_tokens(id INTEGER PRIMARY KEY,name TEXT NOT NULL,hash TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL);
-INSERT INTO api_tokens VALUES(7,'Legacy sync','legacy hash','2025-01-02T03:04:05Z')`)
-	legacy.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
+	pgtest.Migrate(t, path, `INSERT INTO api_tokens(id,name,hash,created_at) VALUES(7,'Legacy sync','legacy hash','2025-01-02T03:04:05Z');`)
 	ctx := context.Background()
 	var expected APIKey
 	for restart := 0; restart < 3; restart++ {
-		s, err := Open(path)
+		s, err := openTestStore(t, path)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -208,26 +200,12 @@ INSERT INTO api_tokens VALUES(7,'Legacy sync','legacy hash','2025-01-02T03:04:05
 }
 
 func TestLegacyAccountSchemaNeverBecomesClaimable(t *testing.T) {
-	for _, fixture := range []string{
-		`CREATE TABLE account(id INTEGER PRIMARY KEY,username TEXT NOT NULL,salt TEXT NOT NULL,hash TEXT NOT NULL)`,
-		`CREATE TABLE account(id INTEGER PRIMARY KEY,username TEXT NOT NULL,salt TEXT NOT NULL,hash TEXT NOT NULL); INSERT INTO account VALUES(1,'disabled','','')`,
-		`CREATE TABLE api_tokens(id INTEGER PRIMARY KEY,name TEXT NOT NULL,hash TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL)`,
-	} {
+	for _, fixture := range []string{"", "INSERT INTO account VALUES(1,'disabled','','');", "INSERT INTO api_tokens(id,name,hash,created_at) VALUES(1,'client','disabled','2025-01-01');"} {
 		t.Run(fixture, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "legacy.db")
-			legacy, err := sql.Open("pocketmark-sqlite3", path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err = legacy.Exec(fixture); err != nil {
-				legacy.Close()
-				t.Fatal(err)
-			}
-			if err = legacy.Close(); err != nil {
-				t.Fatal(err)
-			}
+			pgtest.Migrate(t, path, fixture)
 			for i := 0; i < 2; i++ {
-				s, err := Open(path)
+				s, err := openTestStore(t, path)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -248,12 +226,12 @@ func TestLegacyAccountSchemaNeverBecomesClaimable(t *testing.T) {
 
 func TestAccountClaimAcrossIndependentConnections(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "shared.db")
-	a, err := Open(path)
+	a, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer a.Close()
-	b, err := Open(path)
+	b, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}

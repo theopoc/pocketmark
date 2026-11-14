@@ -19,7 +19,7 @@ import (
 
 func (a *Server) registerAssets(mux *http.ServeMux) {
 	// One expensive archive/upload/backup at a time. Downloads stream one 64 KiB
-	// SQLite chunk at a time and share the existing server request limit.
+	// PostgreSQL chunk at a time and share the existing server request limit.
 	gate := make(chan struct{}, 1)
 	limited := func(fn http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
@@ -138,7 +138,7 @@ func (a *Server) viewAsset(w http.ResponseWriter, r *http.Request) {
 	}
 	var preview *os.File
 	if asset.MediaType == "text/html" && r.Method != http.MethodHead {
-		// Disk staging releases SQLite between chunks and finishes preparation
+		// Disk staging releases PostgreSQL between chunks and finishes preparation
 		// before committing a success response. The shared work slot bounds RAM.
 		source, err := a.Store.TemporaryFile(".preview-source-*")
 		if err != nil {
@@ -287,7 +287,7 @@ func (a *Server) backup(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", `attachment; filename="pocketmark-backup.zip"`)
 	z := zip.NewWriter(backupWriter{ctx: ctx, ResponseWriter: w, controller: controller})
-	entry, e := z.CreateHeader(&zip.FileHeader{Name: "pocketmark.db", Method: zip.Store})
+	entry, e := z.CreateHeader(&zip.FileHeader{Name: "pocketmark.sql", Method: zip.Store})
 	if e != nil {
 		observability.Error(r.Context(), "backup_zip_failed", e)
 		return
@@ -298,7 +298,7 @@ func (a *Server) backup(w http.ResponseWriter, r *http.Request) {
 	}
 	entry, e = z.CreateHeader(&zip.FileHeader{Name: "RESTORE.txt", Method: zip.Store})
 	if e == nil {
-		_, e = io.WriteString(entry, "Stop Pocketmark. Extract pocketmark.db into an EMPTY data directory (never leave old -wal/-shm files). Set file permissions to 0600 and owner to the service user. Preserve the server-secret file separately (older installations may use access-token or POCKETMARK_TOKEN): it protects the TOTP secret. Login sessions are excluded. Recovery codes and the current TOTP window in this ZIP are invalidated on restore; wait for up to two new authenticator codes, sign in and generate new recovery codes. Clock differences can add delay. If the authenticator is unavailable, run Pocketmark with -reset-mfa locally while stopped, then enroll again using your password. Older ZIPs and raw copies are not automatically detected: reset MFA or regenerate recovery codes and revoke restored sessions manually. Restoring this ZIP with a different server secret requires an MFA reset and new enrollment. Named API keys are independent: review them because a rollback can restore previously revoked keys. Start Pocketmark. The database includes bookmarks, collections, annotations, all captured HTML and uploaded attachments. Keep this sensitive backup private.\n")
+		_, e = io.WriteString(entry, "Stop all Pocketmark instances. Restore pocketmark.sql using psql -X --single-transaction -v ON_ERROR_STOP=1 against an empty PostgreSQL database owned by the application role. Restore the original server secret separately. Login sessions are excluded. Recovery codes and the current TOTP window in this ZIP are invalidated on restore; wait for up to two new authenticator codes, sign in and generate new recovery codes. Clock differences can add delay. If the authenticator is unavailable, run Pocketmark with -reset-mfa locally while stopped, then enroll again using your password. Older ZIPs and raw copies are not automatically detected: reset MFA or regenerate recovery codes and revoke restored sessions manually. Restoring this ZIP with a different server secret requires an MFA reset and new enrollment. Named API keys are independent: review them because a rollback can restore previously revoked keys. Start Pocketmark. The database includes bookmarks, collections, annotations, all captured HTML and uploaded attachments. Keep this sensitive backup private.\n")
 	}
 	if e != nil {
 		observability.Error(r.Context(), "backup_instructions_failed", e)

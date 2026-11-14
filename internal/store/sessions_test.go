@@ -10,7 +10,7 @@ import (
 
 func TestSessionsUpgradeBoundsAndCredentialChange(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.db")
-	s, err := Open(path)
+	s, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,14 +24,10 @@ func TestSessionsUpgradeBoundsAndCredentialChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Simulate a database from before the session migration.
-	if _, err = s.db.Exec("DROP TABLE sessions"); err != nil {
-		t.Fatal(err)
-	}
 	if err = s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = Open(path)
+	s, err = openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +61,7 @@ func TestSessionsUpgradeBoundsAndCredentialChange(t *testing.T) {
 	if err = s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = Open(path)
+	s, err = openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}

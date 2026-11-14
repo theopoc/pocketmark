@@ -2,29 +2,17 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"path/filepath"
+	"pocketmark/internal/pgtest"
 	"testing"
 	"time"
 )
 
 func TestCreationTimestampsUpgradeLegacyDatabaseOnce(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.db")
-	legacy, err := sql.Open("pocketmark-sqlite3", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = legacy.Exec(`CREATE TABLE collections(id INTEGER PRIMARY KEY,name TEXT NOT NULL,parent_id INTEGER REFERENCES collections(id));
-CREATE TABLE compat_tags(id INTEGER PRIMARY KEY,name TEXT NOT NULL UNIQUE);
-INSERT INTO collections(id,name) VALUES(7,'Legacy collection');
-INSERT INTO compat_tags(id,name) VALUES(9,'Legacy tag');`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = legacy.Close(); err != nil {
-		t.Fatal(err)
-	}
-	s, err := Open(path)
+	pgtest.Migrate(t, path, `INSERT INTO collections(id,name,created_at) SELECT 7,'Legacy collection',created_at FROM library_metadata;
+INSERT INTO compat_tags(id,name,created_at) SELECT 9,'Legacy tag',created_at FROM library_metadata;`)
+	s, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +46,7 @@ INSERT INTO compat_tags(id,name) VALUES(9,'Legacy tag');`)
 	if err = s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = Open(path)
+	s, err = openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}

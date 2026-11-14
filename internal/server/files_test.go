@@ -46,7 +46,7 @@ func TestStandaloneFileUploadEditAndExport(t *testing.T) {
 	if !strings.Contains(w.Body.String(), `"type":"file"`) {
 		t.Fatal("missing file metadata")
 	}
-	s, e := store.Open(t.TempDir() + "/roundtrip.db")
+	s, e := openTestStore(t, t.TempDir()+"/roundtrip.db")
 	if e != nil {
 		t.Fatal(e)
 	}

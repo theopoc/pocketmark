@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mattn/go-sqlite3"
 	nethtml "golang.org/x/net/html"
 )
 
@@ -56,10 +56,9 @@ func (s *Store) ImportHTML(ctx context.Context, r io.Reader) (ImportResult, erro
 			return nil
 		}
 		created := current.CreatedAt
-		id, e := Insert(ctx, tx, *current)
+		id, e := insertLink(ctx, tx, *current, true)
 		if e != nil {
-			var se sqlite3.Error
-			if errors.As(e, &se) && se.ExtendedCode == sqlite3.ErrConstraintUnique {
+			if errors.Is(e, sql.ErrNoRows) {
 				result.Skipped++
 				current = nil
 				return nil
@@ -67,7 +66,7 @@ func (s *Store) ImportHTML(ctx context.Context, r io.Reader) (ImportResult, erro
 			return e
 		}
 		if created != "" {
-			if _, e = tx.ExecContext(ctx, "UPDATE links SET created_at=?,updated_at=? WHERE id=?", created, created, id); e != nil {
+			if _, e = tx.ExecContext(ctx, "UPDATE links SET created_at=$1,updated_at=$2 WHERE id=$3", created, created, id); e != nil {
 				return e
 			}
 		}
@@ -198,13 +197,13 @@ func (s *Store) ImportHTML(ctx context.Context, r io.Reader) (ImportResult, erro
 // ExportHTML streams bookmarks and writes folders depth-first. Only the small
 // collection directory is retained in memory; bookmark bodies are never read.
 func (s *Store) ExportHTML(ctx context.Context, w io.Writer) error {
-	tx, e := s.db.BeginTx(ctx, nil)
+	tx, e := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if e != nil {
 		return e
 	}
 	defer tx.Rollback()
 	children := map[int64][]Collection{}
-	rows, e := tx.QueryContext(ctx, "SELECT id,name,parent_id FROM collections ORDER BY name COLLATE NOCASE,id")
+	rows, e := tx.QueryContext(ctx, "SELECT id,name,parent_id FROM collections ORDER BY lower(name),id")
 	if e != nil {
 		return e
 	}
@@ -233,7 +232,7 @@ func (s *Store) ExportHTML(ctx context.Context, w io.Writer) error {
 		if depth > 100 {
 			return fault.New("export", "hierarchy_limit", "folder nesting exceeds 100")
 		}
-		rows, e := tx.QueryContext(ctx, "SELECT url,title,description,tags,created_at FROM links WHERE collection_id IS ? AND url NOT LIKE 'pocketmark-file:%' ORDER BY id", parent)
+		rows, e := tx.QueryContext(ctx, "SELECT url,title,description,tags,created_at FROM links WHERE collection_id IS NOT DISTINCT FROM $1 AND url NOT LIKE 'pocketmark-file:%' ORDER BY id", parent)
 		if e != nil {
 			return e
 		}

@@ -4,7 +4,7 @@
 
 # Pocketmark
 
-A personal bookmark manager built for low RAM usage: one Go process, SQLite and an embedded web interface. No external database or server-side browser.
+A personal bookmark manager with a Go server, an embedded web interface and PostgreSQL storage for bookmarks, search, archives and attachments.
 
 [![GitHub Actions](https://img.shields.io/badge/GitHub-Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/theopoc/pocketmark/actions/workflows/ci.yml)
 [![Releases](https://img.shields.io/badge/GitHub-Releases-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/theopoc/pocketmark/releases)
@@ -27,15 +27,17 @@ Personal use only: collaboration, public sharing, SSO and automations are outsid
 
 Use Docker Compose, or [download a Linux binary](docs/RELEASE_INSTALL.md).
 
-With Git and Docker Compose installed:
+For a new installation, set a database password before starting Compose. Existing SQLite installations must first follow the [PostgreSQL migration guide](docs/MIGRATION_POSTGRESQL.md).
 
 ```sh
 git clone https://github.com/theopoc/pocketmark.git
 cd pocketmark
-docker compose up -d
+umask 077
+printf 'POCKETMARK_DB_PASSWORD=%s\n' "$(openssl rand -hex 32)" > .env
+docker compose up -d --build
 ```
 
-Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account before exposing the instance to untrusted networks. Register an authenticator app and save the single-use recovery codes. On later visits, sign in with your password and an authentication or recovery code. Data persists in a Docker volume. Compose sets a 128 MiB memory limit; see [memory measurement methodology](docs/BENCHMARK.md) for workload boundaries.
+Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account before exposing the instance to untrusted networks. Register an authenticator app and save the single-use recovery codes. On later visits, sign in with your password and an authentication or recovery code. PostgreSQL stores the library in its own persistent volume. The application volume holds the server secret. The Go container has a 128 MiB memory limit, with PostgreSQL using additional memory; see [memory measurement methodology](docs/BENCHMARK.md) for workload boundaries.
 
 For HTTPS access, set `POCKETMARK_ORIGIN` to your public URL. See the [guide](docs/GUIDE.md#configuration) for configuration.
 
@@ -75,16 +77,17 @@ WebDAV was previously verified with unmodified **Floccus 5.11.1**, including syn
 
 ## Development
 
-Requires Go (see `go.mod`), a C compiler and Make. Node.js 24 with npm is required to compile the React/shadcn frontend; Python 3 is required for checks and tests. Production runs only the Go binary. See the [frontend guide](docs/FRONTEND.md) for development and dependency updates.
+Requires Go (see `go.mod`), a C compiler and Make. Node.js 24 with npm is required to compile the React/shadcn frontend; Python 3 is required for checks and tests. Production runs the Go binary and PostgreSQL 18. Native backups require the PostgreSQL client tools. See the [frontend guide](docs/FRONTEND.md) for development and dependency updates.
 
 Build and run locally:
 
 ```sh
+export POCKETMARK_DATABASE_URL=postgresql://pocketmark@localhost/pocketmark
 make build
 ./bin/pocketmark
 ```
 
-Run the checks before contributing:
+For integration tests, set `POCKETMARK_TEST_DATABASE_URL` to a disposable PostgreSQL cluster where the role can create databases. Install PostgreSQL 18 client tools, then run:
 
 ```sh
 make check
