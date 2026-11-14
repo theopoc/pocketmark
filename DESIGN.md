@@ -205,6 +205,23 @@ Quick filters beneath library search use rounded pills. The selected filter uses
 
 Bookmark capture states use compact rounded badges with a text label and an icon: green Captured, amber Queued / Saving…, red Capture failed, and neutral Not captured. Only Saving… rotates a small ring to indicate active capture. Reduced motion keeps the ring still and preserves the label. Light and dark themes use tinted backgrounds with readable semantic foregrounds; badge placement and card actions remain unchanged.
 
+### Toasts
+
+All application feedback shares one toast treatment in `style.css`, including
+the library, reader, settings and native dialogs. Use the active theme's
+`surface`, `ink` and `line`, a 12px radius, the toast shadow, 13px text and a
+20px outline icon. Keep a 60px minimum height, 12px gaps and wrapping messages
+within 560px or the viewport minus 32px. The centered bottom position respects
+the safe area and moves above the library selection bar.
+
+Informational feedback uses the info icon in `muted`; errors use the warning
+icon in `danger` on the same surface. Favorite feedback retains its star, filled
+when added, using `accent` in light mode and `focus` in dark mode. Every toast
+action uses the same 44px minimum target, 6px radius, `accent-soft` background
+and `accent` foreground (`focus` in dark mode), with `control-hover` on hover
+and a visible `focus` outline. Preserve the existing durations, focus pause,
+Undo and HTML retry behavior.
+
 ### Cards / Containers
 Grid bookmark cards use the panel radius, white background and a line border; selection changes both fill and border without a checkbox. A softly tinted header groups the domain and the favorite star, with the full saved URL available on hover. The capture state and remaining actions stay in the footer. List mode removes individual card rounding, separates rows with dividers and retains the same selection, tags, capture labels and actions. Do not add permanent card shadows.
 
