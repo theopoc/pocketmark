@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.0.0](https://github.com/theopoc/pocketmark/compare/v1.3.4...v2.0.0) (2026-11-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* **storage:** configure PostgreSQL 18 and import existing SQLite libraries offline before starting the new server. Preserve the original server secret to retain MFA and sessions.
+
+### Features
+
+* **storage:** replace SQLite with PostgreSQL ([1693bf7](https://github.com/theopoc/pocketmark/commit/1693bf7a38932c7e370fb1f9848ab30c215254bf))
+
+
+### Bug Fixes
+
+* **auth:** share MFA challenges across replicas ([2defb51](https://github.com/theopoc/pocketmark/commit/2defb51fae60a66f3004e31fac17e4047c406d08))
+* **backup:** route rolling exports to the target revision ([518fe5e](https://github.com/theopoc/pocketmark/commit/518fe5efc8e1aabc5581e761e3247bb0d70fa01e))
+
 ## [1.3.4](https://github.com/theopoc/pocketmark/compare/v1.3.3...v1.3.4) (2026-11-09)
 
 
