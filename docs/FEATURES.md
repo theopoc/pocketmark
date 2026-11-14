@@ -1,6 +1,6 @@
 # Personal feature coverage
 
-This implementation uses a Go server and PostgreSQL for storage and search. Collaboration, public sharing, SSO/OIDC and automations (RSS/AI, recurring captures and scheduled backups) are excluded by request.
+This implementation uses a Go server and PostgreSQL for storage and search. Collaboration, public sharing, SSO/OIDC and RSS/AI automations and recurring captures are excluded by request. Owners can schedule encrypted full-instance or selective library backups to S3-compatible storage, including Garage.
 
 | Feature | Implementation and limits |
 | --- | --- |

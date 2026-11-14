@@ -33,7 +33,7 @@ A self-hosted bookmark library built around one Go process, SQLite/FTS5 and an e
 - Retain Go, CGO-backed SQLite/FTS5 and the embedded, statically compiled React UI; no resident browser, database or search sidecars.
 - Prefer standard-library solutions, bounded queues and disk-backed or streamed work. Justify dependencies and caches against the RAM goal.
 - Keep origin checks, SSRF protections, request limits and archive boundaries intact.
-- Collaboration, public sharing, SSO/OIDC, RSS, AI automation, scheduled recapture and automatic backups are outside scope.
+- Collaboration, public sharing, SSO/OIDC, RSS, AI automation and scheduled recapture are outside scope.
 - The personal Chrome extension uses the native API. Linkwarden compatibility endpoints and third-party client integration are removed; Floccus WebDAV remains.
 - Metadata JSON/HTML exports do not contain the complete archive library. The owner-only full ZIP backup preserves the database and saved assets; the server secret must be kept separately.
 - Third-party Android/iOS clients are outside the supported scope. Physical phones, Firefox and Safari are not established as qualified clients by the current evidence.

@@ -3,8 +3,7 @@
 Pocketmark writes structured JSON logs to **stderr** and serves authenticated
 Prometheus metrics at **`GET /metrics`**. Neither requires a telemetry exporter or
 an additional resident process. OpenTelemetry **traces** are optional and disabled
-by default. Logs remain on stderr and metrics remain scrape-based even when traces
-are enabled; an external collector can ingest them independently.
+by default. When enabled, backup metrics also export via OTLP/HTTP every 30 seconds. Logs remain on stderr.
 
 ## JSON logs
 
@@ -202,3 +201,17 @@ unreachable collector. Keep the workload, sampling rate and toolchain identical.
 Exclude the external collector from application RSS and distinguish native RSS
 from container memory. Record results and limitations in the PR, keeping raw
 samples in ignored `reports/` or `artifacts/` directories.
+
+## Scheduled backup signals
+
+Set `POCKETMARK_OTEL_ENABLED=true` and point `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` to the collector's full HTTP metrics URL, or set `OTEL_EXPORTER_OTLP_ENDPOINT` to its base URL. The same instruments are available at `/metrics`. Instrument names have the prefix `pocketmark_backup_`. The counter suffixes are `succeeded_total`, `failed_total`, `warning_total`, `cancelled_total`, `deleted_total` and `retention_errors_total`. Gauges expose `enabled`, `in_progress`, `next_timestamp_seconds`, `last_success_timestamp_seconds`, `last_duration_seconds` and `last_size_bytes`. Timestamps are Unix seconds. The retry counter is `retries_total`. Cumulative stage time is available as `stage_{prepare,encrypt,upload,verify,retention}_milliseconds_total`. A retention warning counts as a verified backup for freshness.
+
+Example PromQL rules for one Pocketmark installation:
+
+| Alert | Expression |
+| --- | --- |
+| Backup failed | `max(increase(pocketmark_backup_failed_total[15m])) > 0` |
+| Retention failed | `max(increase(pocketmark_backup_retention_errors_total[15m])) > 0` |
+| Daily backup overdue | `(time() - max(pocketmark_backup_last_success_timestamp_seconds) > 36 * 3600) and (max(pocketmark_backup_enabled) == 1)` |
+
+Adjust freshness to the chosen schedule and allow a grace period for the first run. Replicas read shared database counters. Aggregate by installation with `max` to avoid counting the same event twice. Search stderr by `backup_id` to correlate queue, stage and completion. Failure events include attempt, operation, classified cause and retry delay.

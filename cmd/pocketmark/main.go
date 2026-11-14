@@ -205,6 +205,17 @@ func run() (runErr error) {
 			observability.Error(flush, "trace_shutdown_failed", err)
 		}
 	}()
+	shutdownMetrics, e := observability.EnableBackupOTLP(ctx, traceConfig, s.BackupMetrics)
+	if e != nil {
+		return e
+	}
+	defer func() {
+		flush, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdownMetrics(flush); err != nil {
+			observability.Error(flush, "backup_metrics_shutdown_failed", err)
+		}
+	}()
 	done := make(chan struct{})
 	if !*noCapture {
 		go func() { defer close(done); worker(ctx, s, observer) }()
@@ -220,6 +231,9 @@ func run() (runErr error) {
 	if e = handler.SetTrustedProxies(os.Getenv("POCKETMARK_TRUSTED_PROXIES")); e != nil {
 		return e
 	}
+	backupDone := make(chan struct{})
+	go func() { defer close(backupDone); handler.BackupWorker(ctx) }()
+	defer func() { stop(); <-backupDone }()
 	operation = "http.serve"
 	srv := &http.Server{Addr: *addr, Handler: handler, ErrorLog: observability.HTTPErrorLog(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 * 1024}
 	errCh := make(chan error, 1)

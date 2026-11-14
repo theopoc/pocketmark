@@ -444,6 +444,7 @@ export function AppView() {
               hidden
             >
               <h2 id="backup-title">{"Backup & restore"}</h2>
+              <div id="scheduled-backups" />
               <p className="small muted">
                 {
                   "A full backup keeps your bookmarks, captures, attachments, highlights and account settings together."

@@ -339,3 +339,7 @@ for capture, invalidation and image limits.
 ### Bookmark site icon
 
 `GET /api/links/{id}/favicon` retrieves a site icon for a saved URL. It requires library read access and returns a supported raster icon up to 128 KiB, or 404 when unavailable. Responses are privately cached in the browser for one hour. At most two icon fetches run concurrently; excess requests receive 503. See [archive boundaries](ARCHIVES.md) for network and privacy details.
+
+## Scheduled backup API
+
+Owner sessions can read `GET /api/backups` and preview a schedule with `POST /api/backups/preview`. Destination changes, S3 probes, key generation, run, cancellation and restore require recent password confirmation. See the interactive API reference under **Backups** for JSON fields and response codes. Scheduling also works with every browser closed.
