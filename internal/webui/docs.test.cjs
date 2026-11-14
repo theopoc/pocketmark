@@ -12,6 +12,7 @@ async function loadDocs({ responseOK = true, invalidJSON = false, bundle = true 
       hidden: false, attributes: {}, events: {},
       setAttribute(key, value) { this.attributes[key] = value; },
       getAttribute(key) { return this.attributes[key] ?? null; },
+      removeAttribute(key) { delete this.attributes[key]; },
       addEventListener(event, handler) { this.events[event] = handler; },
       querySelector(selector) { return element(selector === '.operation-filter-input' ? 'filter' : 'auth-close'); },
       querySelectorAll() { return []; },
@@ -134,6 +135,44 @@ test('late Swagger selectors are enhanced once, synchronized and disposed when R
   selects = [];
   view.mutation();
   assert.deepEqual(view.selectorEvents.map(([type]) => type), ['enhance', 'sync', 'destroy', 'enhance', 'destroy']);
+});
+
+test('nested schema controls retain contextual names when their contents change', async () => {
+  const view = await loadDocs();
+  const titled = view.element('titled-model');
+  titled.querySelector = () => ({ textContent: 'LinkPage' });
+  titled.closest = () => null;
+  const property = view.element('property-model');
+  const row = { firstElementChild: { textContent: 'links*' } };
+  property.querySelector = () => null;
+  property.closest = selector => selector === '.property-row' ? row : null;
+  property.setAttribute('aria-expanded', 'false');
+  const enumeration = view.element('enum-model');
+  enumeration.querySelector = () => null;
+  enumeration.closest = selector => selector === '.property-row' ? { firstElementChild: { textContent: 'type' } } : {};
+  view.elements.get('swagger-ui').querySelectorAll = selector => selector === '.model-box-control' ? [titled, property, enumeration] : [];
+  view.mutation();
+  assert.equal(titled.getAttribute('aria-label'), 'LinkPage');
+  assert.equal(property.getAttribute('aria-label'), 'links');
+  assert.equal(enumeration.getAttribute('aria-label'), 'type allowed values');
+  assert.equal(property.getAttribute('aria-expanded'), 'false');
+  row.firstElementChild.textContent = 'total';
+  view.mutation();
+  assert.equal(property.getAttribute('aria-label'), 'total');
+});
+
+test('authorization buttons use their visible action name while icon-only labels survive', async () => {
+  const view = await loadDocs();
+  const action = view.element('authorize-action');
+  action.textContent = 'Authorize';
+  action.setAttribute('aria-label', 'Apply credentials');
+  const icon = view.element('icon-action');
+  icon.textContent = '';
+  icon.setAttribute('aria-label', 'Existing icon action');
+  view.elements.get('swagger-ui').querySelectorAll = selector => selector === '.modal-ux .auth-btn-wrapper button[aria-label]' ? [action, icon] : [];
+  view.mutation();
+  assert.equal(action.getAttribute('aria-label'), null);
+  assert.equal(icon.getAttribute('aria-label'), 'Existing icon action');
 });
 
 test('operation permalinks open a closed operation while preserving open and modified clicks', async () => {

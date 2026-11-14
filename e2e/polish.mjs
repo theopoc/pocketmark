@@ -127,6 +127,21 @@ async function expandedDocumentation(page, theme, engine) {
     await expectThemeColor(operation.locator('tbody .header-col').first(), 'color', '--ink');
     await expectThemeColor(operation.locator('.authorization__btn path').first(), 'fill', '--ink');
     await page.locator('#docs-theme').click();
+    await operation.locator('.model-example .tab li').filter({ hasText: 'Schema' }).first().click();
+    for (let depth = 0; depth < 8; depth++) {
+      const collapsed = operation.locator('.model-toggle.collapsed').first();
+      if (!await collapsed.count()) break;
+      await collapsed.locator('xpath=ancestor::button[1]').click();
+    }
+    await expectThemeColor(operation.locator('.model-title').first(), 'color', '--ink');
+    await audit(page, `${theme}-api-schema-${width}`, engine);
+    await shot(page, `${theme}-api-schema-${width}`, engine);
+    await page.getByRole('button', { name: 'Authorize', exact: true }).first().click();
+    await page.locator('.modal-ux').waitFor();
+    await expectThemeColor(page.locator('.auth-container').first(), 'borderBottomColor', '--line');
+    await audit(page, `${theme}-api-authorize-${width}`, engine);
+    await shot(page, `${theme}-api-authorize-${width}`, engine);
+    await page.getByRole('button', { name: 'Close authorizations', exact: true }).click();
     if (width === 390) {
       await page.emulateMedia({ forcedColors: 'active' });
       assert.equal(await operation.locator('.authorization__btn path').first().evaluate(node => getComputedStyle(node).forcedColorAdjust), 'auto');
@@ -147,6 +162,18 @@ for (const name of selected) {
       page.on('pageerror', e => errors.push(e.message));
       await page.goto(base.href); await page.locator('#bookmark-grid .bookmark-card').first().waitFor();
       await audit(page, `${theme}-library`, name); await shot(page, `${theme}-library`, name);
+      await openNavigation(page);
+      const deleteCollection = page.getByRole('button', { name: 'Delete Reading & references', exact: true });
+      await deleteCollection.locator('xpath=..').hover();
+      await deleteCollection.hover();
+      await expectThemeColor(deleteCollection, 'color', '--danger');
+      await deleteCollection.focus();
+      await page.mouse.move(600, 400);
+      await deleteCollection.press('Tab'); await page.keyboard.press('Shift+Tab');
+      await expectThemeColor(deleteCollection, 'color', '--danger');
+      await page.getByRole('button', { name: 'Rename or move Reading & references', exact: true }).hover();
+      await expectThemeColor(page.getByRole('button', { name: 'Rename or move Reading & references', exact: true }), 'color', '--ink');
+      await page.goto(base.href); await page.locator('#bookmark-grid .bookmark-card').first().waitFor();
       const card = page.locator('.bookmark-card').filter({ has: page.getByRole('button', { name: link.title, exact: true }) });
       assert.equal(await card.locator('.card-actions-toggle').isVisible(), false, 'desktop retains its icon actions');
       assert.equal(await card.locator('.card-overflow-actions .card-action').count(), 4);
@@ -213,6 +240,11 @@ for (const name of selected) {
       const helpTopic = page.locator('#help-topics summary:visible').first();
       await helpTopic.hover();
       assert.ok(await helpTopic.evaluate(n => getComputedStyle(n).backgroundColor !== 'rgba(0, 0, 0, 0)'), 'Help hover has a visible background');
+      await helpTopic.focus(); await helpTopic.press('Tab'); await page.keyboard.press('Shift+Tab');
+      assert.ok(await helpTopic.evaluate(node => {
+        const bounds = node.getBoundingClientRect(), clip = node.closest('.help-body').getBoundingClientRect(), style = getComputedStyle(node);
+        return bounds.top - parseFloat(style.outlineOffset) - parseFloat(style.outlineWidth) >= clip.top;
+      }), 'Help keeps the complete focus outline inside its scroll viewport');
       await audit(page, `${theme}-help`, name); await shot(page, `${theme}-help-mobile`, name);
       await page.getByRole('button', { name: 'Close help', exact: true }).click();
       await clickNavigation(page, '#add-collection');
@@ -262,6 +294,7 @@ for (const name of selected) {
     const notebookTransitionMs = await notebookDuration();
     await motion.emulateMedia({ reducedMotion: 'reduce' });
     assert.equal(await notebookDuration(), 0, 'reduced motion removes the new notebook fade');
+    assert.ok(await motion.locator('#reader-dialog').evaluate(node => getComputedStyle(node, '::backdrop').transitionDuration.split(',').every(value => parseFloat(value) === 0)), 'reduced motion removes the modal backdrop fade');
     evidence.motion.push({ engine: name, notebookTransitionMs, notebookReducedTransitionMs: 0, idleMaximumFrameMs: Math.round(Math.max(...baseline)), idleFramesOver50ms: baseline.filter(n => n > 50).length, frames: frames.length, maximumFrameMs: Math.round(Math.max(...frames)), framesOver50ms: frames.filter(n => n > 50).length, note: 'Headless local sample, not a device performance guarantee' });
     await motionContext.close();
     const touch = await browser.newContext({ storageState, viewport: { width: 390, height: 844 }, hasTouch: true, reducedMotion: 'reduce' });
