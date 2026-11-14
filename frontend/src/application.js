@@ -1161,6 +1161,7 @@ export function createApplication() {
     $("tags-list").setAttribute("aria-busy", "true");
     $("tags-results").textContent = "Loading tags…";
     $("tags-error").hidden = true;
+    $("tags-retry").className = "text-button";
     $("tags-empty-state").hidden = true;
     $("tags-index-layout").hidden = true;
     $("tags-letter-control").hidden = true;
@@ -1244,6 +1245,7 @@ export function createApplication() {
       if (request !== tagsRequest) return;
       $("tags-error").textContent = error.message;
       $("tags-error").hidden = false;
+      $("tags-retry").className = "button primary";
       $("tags-results").textContent =
         "Could not load tags. Use Refresh tags to try again.";
     } finally {
@@ -1580,7 +1582,11 @@ export function createApplication() {
         "",
         `${error.message}${libraryUnavailable ? "" : " Showing the last loaded results."} `,
       );
-      const retry = el("button", "text-button", "Try again");
+      const retry = el(
+        "button",
+        libraryUnavailable ? "button primary" : "text-button",
+        "Try again",
+      );
       retry.type = "button";
       lifecycle.listen(retry, "click", () => {
         $("page-title").focus();
@@ -1941,6 +1947,9 @@ export function createApplication() {
   const logoutDialog = $("logout-dialog");
   let signingOut = false;
   lifecycle.listen($("logout-button"), "click", () => {
+    $("logout-confirm").className = drafts.size
+      ? "button danger"
+      : "button primary";
     $("logout-description").textContent = drafts.size
       ? "Signing out will discard the unsaved drafts kept in this tab. You’ll need to sign in again to access your library."
       : "You’ll need to sign in again to access your library.";

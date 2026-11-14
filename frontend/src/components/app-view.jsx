@@ -290,7 +290,7 @@ export function AppView() {
                     "Requests from an open library count as activity. Changing this setting requires recent password confirmation."
                   }
                 </p>
-                <Button className="button subtle" type="submit">
+                <Button variant="default" type="submit">
                   {"Save timeout"}
                 </Button>
               </form>
@@ -367,7 +367,7 @@ export function AppView() {
               <p id="tokens-error" className="form-error" role="alert"></p>
               {"\n    "}
               <details id="token-create" className="token-create">
-                <summary className="button primary">
+                <summary className="button subtle">
                   <span data-icon="plus" aria-hidden="true"></span>
                   {"Create API key"}
                 </summary>
@@ -414,7 +414,7 @@ export function AppView() {
                     <option value="0">{"Never"}</option>
                   </select>
                   {"\n      "}
-                  <Button className="button subtle" type="submit">
+                  <Button variant="default" type="submit">
                     {"Create key"}
                   </Button>
                   {"\n    "}
@@ -449,7 +449,7 @@ export function AppView() {
                   "A full backup keeps your bookmarks, captures, attachments, highlights and account settings together."
                 }
               </p>
-              <a className="button subtle" href="/api/backup">
+              <a className="button primary" href="/api/backup">
                 {"Download full backup"}
               </a>
               <details className="help-details">

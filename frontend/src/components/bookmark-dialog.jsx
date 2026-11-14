@@ -126,7 +126,7 @@ export function BookmarkDialog() {
             <Button
               id="discard-bookmark-draft"
               type="button"
-              className="text-button"
+              className="text-button destructive-action"
             >
               {"Discard draft"}
             </Button>

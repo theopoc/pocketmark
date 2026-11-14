@@ -118,7 +118,7 @@ summary { cursor: pointer; font-size: 11px; color: var(--muted); }
 #background-note { margin: 0; text-align: center; }
 #task-actions { align-items: stretch; flex-wrap: wrap; }
 #retry { flex: 1 1 140px; }
-#discard { flex: 1 1 auto; }
+#discard { flex: 1 1 auto; color: var(--danger); }
 .task { margin-bottom: 12px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
 .task > summary { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 12px; list-style: none; min-block-size: 28px; }
 .task > summary::-webkit-details-marker { display: none; }

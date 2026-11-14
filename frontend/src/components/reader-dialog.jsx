@@ -319,12 +319,7 @@ export function ReaderDialog() {
             </details>
           </div>
           {"\n        "}
-          <Button
-            id="reader-retry-open"
-            type="button"
-            className="button subtle"
-            hidden
-          >
+          <Button id="reader-retry-open" type="button" variant="default" hidden>
             {"Try opening again"}
           </Button>
           <Button
@@ -435,7 +430,7 @@ export function ReaderDialog() {
               <Button
                 id="discard-reader-notes"
                 type="button"
-                className="text-button"
+                className="text-button destructive-action"
               >
                 {"Discard notes draft"}
               </Button>

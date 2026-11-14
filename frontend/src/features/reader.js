@@ -1011,6 +1011,7 @@ function create(
       : `/api/assets/${asset.id}`;
     $("asset-viewer-status").textContent = "Opening saved file…";
     $("asset-viewer-retry").hidden = true;
+    $("asset-viewer-retry").className = "text-button";
     $("asset-viewer-hint").textContent = asset.basicArchive
       ? "Basic HTML capture shown as a simplified page. Download the original HTML to keep the saved source."
       : asset.mediaType === "text/html"
@@ -1021,6 +1022,7 @@ function create(
     const failed = (message) => {
       if (current()) {
         $("asset-viewer-status").textContent = message;
+        $("asset-viewer-retry").className = "button primary";
         $("asset-viewer-retry").hidden = false;
       }
     };

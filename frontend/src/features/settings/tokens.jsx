@@ -291,7 +291,7 @@ function TokenStatus({ message, onRetry }) {
     <li className={`token-empty${onRetry ? "" : " muted"}`}>
       {onRetry ? (
         <Button
-          variant="outline"
+          variant="default"
           type="button"
           disabled={busy}
           onClick={async () => {

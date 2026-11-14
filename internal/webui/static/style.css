@@ -760,6 +760,7 @@ body:has(dialog[open]) { overflow: hidden; }
 .filter-chip .icon { width: 12px; height: 12px; }
 .draft-notice { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; background: var(--accent-soft); color: var(--ink); padding: 10px 12px; border-radius: 6px; font-size: 12px; margin-bottom: 16px; }
 .draft-notice .text-button { color: inherit; }
+.draft-notice .destructive-action:is(:hover, :focus-visible) { color: var(--danger); }
 #reader-mode-hint, .draft-notice, #bulk-scope { overflow-wrap: anywhere; }
 .reader-sticky-heading { display: block; flex-shrink: 0; z-index: 2; background: var(--paper); margin: 0; padding: 14px 24px; border-bottom: 1px solid var(--line); }
 .reader-heading-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; }

@@ -725,6 +725,8 @@ try {
   await page.route('**/api/links?*', failLibrary);
   await page.locator('#refresh-button').click();
   await page.locator('#library-error').getByRole('button', { name: 'Try again' }).waitFor();
+  const retryBackground = () => page.locator('#library-error button').evaluate(node => getComputedStyle(node).backgroundColor);
+  assert.equal(await retryBackground(), 'rgba(0, 0, 0, 0)', 'retry stays quiet while results remain usable');
   assert.equal(await card(original).isVisible(), true, 'a failed refresh preserves the last results for the same view');
   assert.match(await page.locator('#library-error').textContent(), /Showing the last loaded results/);
   await page.unroute('**/api/links?*', failLibrary);
@@ -747,6 +749,8 @@ try {
   assert.match(await page.locator('#results-label').textContent(), /Loading/);
   releaseDelayedFailure();
   await page.locator('#library-error').getByRole('button', { name: 'Try again' }).waitFor();
+  assert.equal(await retryBackground(), await page.locator('#add-bookmark').evaluate(node => getComputedStyle(node).backgroundColor),
+    'retry becomes the primary action when there are no usable results');
   assert.equal(await card(original).isVisible(), false, 'old results do not appear under a failed new filter');
   assert.equal(await page.locator('#empty-state').isVisible(), false, 'a failed request is not presented as an empty view');
   await page.unroute('**/api/links?*', delayedFailure);
