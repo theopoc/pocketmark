@@ -134,7 +134,7 @@ func (a *Server) setup(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "authentication unavailable; sign in again")
 		return
 	}
-	if !a.newMFAChallenge(w, mfaChallenge{kind: "enroll", salt: salt, username: b.Username, generation: mfaState.Generation}) {
+	if !a.newMFAChallenge(r.Context(), w, store.MFAChallenge{Kind: "enroll", Salt: salt, Username: b.Username, Generation: mfaState.Generation}) {
 		return
 	}
 	respond(w, 201, map[string]bool{"mfaRequired": true, "enrollmentRequired": true})
@@ -169,7 +169,6 @@ func (a *Server) setAccount(w http.ResponseWriter, r *http.Request) {
 		fail(w, 401, "session changed; sign in again")
 		return
 	}
-	a.clearPendingMFA(false)
 	a.setSessionCookie(w, value, expires)
 	respond(w, 200, map[string]bool{"ok": true})
 }

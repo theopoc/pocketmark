@@ -111,7 +111,14 @@ func TestMFAChallengeLimitsDoNotBlockLocalReset(t *testing.T) {
 	requireStatus(t, request(a, "POST", "/api/mfa/verify", `{"code":"invalid"}`, false, map[string]string{"Cookie": first}), 429)
 	requireStatus(t, request(a, "POST", "/api/mfa/verify", `{"code":"`+codes[0]+`"}`, false, map[string]string{"Cookie": second}), 200)
 	// Exhaust the shared anti-bruteforce budget independently of the reset.
-	for a.allowMFA(nil) {
+	for {
+		_, err := a.Store.ReserveMFAAttempt(t.Context(), "")
+		if err == store.ErrMFALimit {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	third := pendingCookie(t, request(a, "POST", "/api/login", setupCredentials, false, nil))
 	requireStatus(t, request(a, "POST", "/api/mfa/verify", `{"code":"`+codes[1]+`"}`, false, map[string]string{"Cookie": third}), 429)
@@ -125,14 +132,21 @@ func TestMFAResetClearsPendingChallengesAndVerificationBudget(t *testing.T) {
 	setup := request(a, "POST", "/api/setup", setupRequest, false, nil)
 	_, _, _, _, _ = enrollForTest(t, a, pendingCookie(t, setup), "")
 	for range 32 {
-		if !a.newMFAChallenge(httptest.NewRecorder(), mfaChallenge{kind: "verify"}) {
+		if !a.newMFAChallenge(t.Context(), httptest.NewRecorder(), store.MFAChallenge{Kind: "verify"}) {
 			t.Fatal("failed to fill challenge capacity")
 		}
 	}
-	if a.newMFAChallenge(httptest.NewRecorder(), mfaChallenge{kind: "verify"}) {
+	if a.newMFAChallenge(t.Context(), httptest.NewRecorder(), store.MFAChallenge{Kind: "verify"}) {
 		t.Fatal("challenge capacity exceeded")
 	}
-	for a.allowMFA(nil) {
+	for {
+		_, err := a.Store.ReserveMFAAttempt(t.Context(), "")
+		if err == store.ErrMFALimit {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := a.Store.ResetMFA(t.Context()); err != nil {
 		t.Fatal(err)
@@ -217,9 +231,6 @@ func TestMFAEnrollmentReplayRecoveryAndReset(t *testing.T) {
 		a.loginAttempts[source] = window
 	}
 	a.loginMu.Unlock()
-	a.mfaMu.Lock()
-	a.mfaAttempts.at = time.Now().Add(-time.Minute)
-	a.mfaMu.Unlock()
 	if err := a.Store.ResetMFA(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -293,12 +304,14 @@ func TestMFARecoveryGrantOnlyAllowsAuthenticatorReplacement(t *testing.T) {
 	}
 	// A full challenge queue must not consume the grant before retrying.
 	for range 32 {
-		if !a.newMFAChallenge(httptest.NewRecorder(), mfaChallenge{kind: "verify"}) {
+		if !a.newMFAChallenge(t.Context(), httptest.NewRecorder(), store.MFAChallenge{Kind: "verify"}) {
 			t.Fatal("failed to fill challenge capacity")
 		}
 	}
 	requireStatus(t, request(a, "POST", "/api/mfa/replace", body, false, map[string]string{"Cookie": session}), 429)
-	a.clearPendingMFA(false)
+	if _, err := db.Exec("DELETE FROM mfa_challenges"); err != nil {
+		t.Fatal(err)
+	}
 	// An abandoned replacement can be retried without another recovery code.
 	first := request(a, "POST", "/api/mfa/replace", body, false, map[string]string{"Cookie": session})
 	requireStatus(t, first, 200)
@@ -381,7 +394,7 @@ func TestMFAPendingChallengeRejectsCrossOriginAndCredentialChanges(t *testing.T)
 	if err := ResetLocalAccount(t.Context(), a.Store, "reader", "changed personal password"); err != nil {
 		t.Fatal(err)
 	}
-	requireStatus(t, request(a, "POST", "/api/mfa/verify", `{"code":"`+code+`"}`, false, map[string]string{"Cookie": pending}), 409)
+	requireStatus(t, request(a, "POST", "/api/mfa/verify", `{"code":"`+code+`"}`, false, map[string]string{"Cookie": pending}), 401)
 	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": pending}), 401)
 }
 
@@ -400,4 +413,54 @@ func TestMFARotatedServerSecretCanRecoverWithBackupCode(t *testing.T) {
 	requireStatus(t, request(rotated, "POST", "/api/mfa/reset", "", false, map[string]string{"Cookie": session}), 405)
 	// The old administrator key no longer grants reset access after rotation.
 	requireStatus(t, request(rotated, "POST", "/api/mfa/reset", "", false, map[string]string{"Authorization": "Bearer " + testToken}), 401)
+}
+
+func TestPendingMFAAcrossReplicasAndIssuerShutdown(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "replicas")
+	open := func() *testServer {
+		s, err := openTestStore(t, path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { s.Close() })
+		return wrapTestServer(t, New(s, testToken, "", false), path)
+	}
+	a, b := open(), open()
+	setup := request(a, "POST", "/api/setup", setupRequest, false, nil)
+	_, _, codes, _, _ := enrollForTest(t, b, pendingCookie(t, setup), "")
+	start := func() map[string]string {
+		return map[string]string{"Cookie": pendingCookie(t, request(a, "POST", "/api/login", setupCredentials, false, nil))}
+	}
+	verify := func(p *testServer, headers map[string]string, code string) *httptest.ResponseRecorder {
+		return request(p, "POST", "/api/mfa/verify", `{"code":"`+code+`"}`, false, headers)
+	}
+	expired := start()
+	if _, err := a.db.Exec("UPDATE mfa_challenges SET expires_at=clock_timestamp()"); err != nil {
+		t.Fatal(err)
+	}
+	requireStatus(t, verify(b, expired, codes[0]), 401)
+	headers := start()
+	if err := a.Store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	c := open()
+	// Two distinct valid proofs for one challenge: exactly one session.
+	startRace := make(chan struct{})
+	results := make(chan *httptest.ResponseRecorder, 2)
+	for i, p := range []*testServer{b, c} {
+		go func() { <-startRace; results <- verify(p, headers, codes[i]) }()
+	}
+	close(startRace)
+	counts := map[int]int{}
+	for range 2 {
+		w := <-results
+		counts[w.Code]++
+		if w.Code == 200 {
+			requireStatus(t, request(c, "GET", "/api/stats", "", false, map[string]string{"Cookie": responseCookie(t, w, "pocketmark")}), 200)
+		}
+	}
+	if counts[200] != 1 || counts[401] != 1 {
+		t.Fatalf("same challenge, two pods: %v", counts)
+	}
+	requireStatus(t, verify(b, headers, codes[2]), 401)
 }

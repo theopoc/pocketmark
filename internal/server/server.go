@@ -41,9 +41,6 @@ type Server struct {
 	authRequests   chan struct{}
 	healthRequests chan struct{}
 	passwordMu     sync.Mutex
-	mfaMu          sync.Mutex
-	mfaPending     map[string]*mfaChallenge
-	mfaAttempts    loginWindow
 	totpNow        func() time.Time
 	rateLimit      *requestLimiter
 }
@@ -253,7 +250,7 @@ func (a *Server) login(w http.ResponseWriter, r *http.Request) {
 	if len(state.Secret) == 0 {
 		kind = "enroll"
 	}
-	if !a.newMFAChallenge(w, mfaChallenge{kind: kind, salt: account.Salt, username: account.Username, generation: state.Generation}) {
+	if !a.newMFAChallenge(r.Context(), w, store.MFAChallenge{Kind: kind, Salt: account.Salt, Username: account.Username, Generation: state.Generation}) {
 		return
 	}
 	respond(w, 200, map[string]bool{"mfaRequired": true, "enrollmentRequired": kind == "enroll"})

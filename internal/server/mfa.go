@@ -2,10 +2,12 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base32"
 	"encoding/base64"
 	"encoding/hex"
@@ -14,6 +16,7 @@ import (
 	"net/http"
 	"pocketmark/internal/fault"
 	"pocketmark/internal/observability"
+	"pocketmark/internal/store"
 	"strings"
 	"time"
 
@@ -21,16 +24,6 @@ import (
 	"github.com/pquerna/otp/hotp"
 	"github.com/pquerna/otp/totp"
 )
-
-// Challenges are short-lived, bounded and process-local. They never authorize
-// library access and disappear on restart. Only their keyed digests are indexed.
-type mfaChallenge struct {
-	kind, salt, username, secret, session string
-	generation                            int64
-	busy, recoveryGrant                   bool
-	expires                               time.Time
-	attempts                              loginWindow
-}
 
 func publicAuthPath(path string) bool {
 	return path == "/api/login" || path == "/api/setup" || path == "/api/mfa/enroll" || path == "/api/mfa/verify"
@@ -43,113 +36,50 @@ func (a *Server) registerMFA(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/mfa/recovery-codes", a.mfaRecoveryCodes)
 }
 
-func (a *Server) newMFAChallenge(w http.ResponseWriter, challenge mfaChallenge) bool {
+func (a *Server) newMFAChallenge(ctx context.Context, w http.ResponseWriter, challenge store.MFAChallenge) bool {
 	value := randomSecret()
-	now := time.Now()
-	a.mfaMu.Lock()
-	if a.mfaPending == nil {
-		a.mfaPending = make(map[string]*mfaChallenge)
-	}
-	for key, item := range a.mfaPending {
-		if !item.expires.After(now) {
-			delete(a.mfaPending, key)
+	if err := a.Store.CreateMFAChallenge(ctx, a.sessionHash(value), challenge); err != nil {
+		if errors.Is(err, store.ErrMFALimit) {
+			w.Header().Set("Retry-After", "60")
+			fail(w, 429, "too many sign-ins in progress; try again later")
+		} else {
+			authFailure(w, "mfa_challenge_create_failed", err)
 		}
-	}
-	if len(a.mfaPending) >= 32 {
-		a.mfaMu.Unlock()
-		w.Header().Set("Retry-After", "60")
-		fail(w, 429, "too many sign-ins in progress; try again later")
 		return false
 	}
-	challenge.expires = now.Add(5 * time.Minute)
-	a.mfaPending[a.sessionHash(value)] = &challenge
-	a.mfaMu.Unlock()
 	http.SetCookie(w, &http.Cookie{Name: "pocketmark_mfa", Value: value, Path: "/api/mfa/", HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteStrictMode, MaxAge: 300})
 	return true
 }
 
-func (a *Server) claimMFAChallenge(w http.ResponseWriter, r *http.Request) (string, mfaChallenge, bool) {
+func (a *Server) mfaAttempt(w http.ResponseWriter, r *http.Request, key string) (store.MFAChallenge, bool) {
+	c, err := a.Store.ReserveMFAAttempt(r.Context(), key)
+	switch {
+	case err == nil:
+		return c, true
+	case errors.Is(err, sql.ErrNoRows):
+		fail(w, 401, "sign-in expired; start again")
+	case errors.Is(err, store.ErrMFALimit):
+		w.Header().Set("Retry-After", "60")
+		fail(w, 429, "too many verification attempts; retry in a minute")
+	default:
+		authFailure(w, "mfa_attempt_failed", err)
+	}
+	return c, false
+}
+
+func (a *Server) claimMFAChallenge(w http.ResponseWriter, r *http.Request) (string, store.MFAChallenge, bool) {
 	cookie, err := r.Cookie("pocketmark_mfa")
 	if err != nil || len(cookie.Value) != 64 {
 		fail(w, 401, "sign-in expired; start again")
-		return "", mfaChallenge{}, false
+		return "", store.MFAChallenge{}, false
 	}
 	key := a.sessionHash(cookie.Value)
-	a.mfaMu.Lock()
-	defer a.mfaMu.Unlock()
-	challenge, ok := a.mfaPending[key]
-	if !ok || !challenge.expires.After(time.Now()) {
-		delete(a.mfaPending, key)
-		fail(w, 401, "sign-in expired; start again")
-		return "", mfaChallenge{}, false
-	}
-	if challenge.busy {
-		fail(w, 409, "verification is already in progress")
-		return "", mfaChallenge{}, false
-	}
-	challenge.busy = true
-	return key, *challenge, true
-}
-
-func (a *Server) releaseMFAChallenge(key string, challenge mfaChallenge, consumed bool) {
-	a.mfaMu.Lock()
-	defer a.mfaMu.Unlock()
-	if _, ok := a.mfaPending[key]; !ok {
-		return
-	}
-	if consumed {
-		delete(a.mfaPending, key)
-		return
-	}
-	challenge.busy = false
-	a.mfaPending[key] = &challenge
+	c, ok := a.mfaAttempt(w, r, key)
+	return key, c, ok
 }
 
 func (a *Server) clearMFAChallenge(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{Name: "pocketmark_mfa", Value: "", Path: "/api/mfa/", HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteStrictMode, MaxAge: -1})
-}
-
-func (a *Server) clearPendingMFA(resetBudget bool) {
-	a.mfaMu.Lock()
-	defer a.mfaMu.Unlock()
-	clear(a.mfaPending)
-	if resetBudget {
-		a.mfaAttempts = loginWindow{}
-	}
-}
-
-func (a *Server) allowMFA(challenge *mfaChallenge) bool {
-	a.mfaMu.Lock()
-	defer a.mfaMu.Unlock()
-	now := time.Now()
-	if challenge != nil {
-		if now.Sub(challenge.attempts.at) >= time.Minute {
-			challenge.attempts = loginWindow{at: now}
-		}
-		if challenge.attempts.count >= 5 {
-			return false
-		}
-	}
-	if now.Sub(a.mfaAttempts.at) >= time.Minute {
-		a.mfaAttempts = loginWindow{at: now}
-	}
-	if a.mfaAttempts.count >= 10 {
-		return false
-	}
-	if challenge != nil {
-		challenge.attempts.count++
-	}
-	a.mfaAttempts.count++
-	return true
-}
-
-func (a *Server) mfaThrottle(w http.ResponseWriter, challenge *mfaChallenge) bool {
-	if a.allowMFA(challenge) {
-		return true
-	}
-	w.Header().Set("Retry-After", "60")
-	fail(w, 429, "too many verification attempts; retry in a minute")
-	return false
 }
 
 func (a *Server) mfaCipher() (cipher.AEAD, error) {
@@ -261,11 +191,7 @@ func (a *Server) mfaEnroll(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	defer func() { a.releaseMFAChallenge(key, challenge, false) }()
-	if !a.mfaThrottle(w, &challenge) {
-		return
-	}
-	if challenge.kind != "enroll" {
+	if challenge.Kind != "enroll" {
 		fail(w, 403, "enrollment is unavailable")
 		return
 	}
@@ -274,14 +200,37 @@ func (a *Server) mfaEnroll(w http.ResponseWriter, r *http.Request) {
 	if authFailure(w, "mfa_state_failed", stateErr) {
 		return
 	}
-	if err != nil || stateErr != nil || account.Salt != challenge.salt || state.Generation != challenge.generation || len(state.Secret) != 0 {
+	if err != nil || stateErr != nil || account.Salt != challenge.Salt || state.Generation != challenge.Generation || len(state.Secret) != 0 {
 		if authFailure(w, "mfa_operation_failed", err) {
 			return
 		}
 		fail(w, 401, "account changed; sign in again")
 		return
 	}
-	secret, qr, err := enrollmentImage(challenge.username, challenge.secret)
+	if len(challenge.Secret) == 0 {
+		var seed [20]byte
+		if _, err = rand.Read(seed[:]); err != nil {
+			authFailure(w, "mfa_seed_failed", err)
+			return
+		}
+		candidate, err := a.encryptMFA(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(seed[:]))
+		if authFailure(w, "mfa_encrypt_failed", err) {
+			return
+		}
+		challenge.Secret, err = a.Store.EnrollmentSecret(r.Context(), key, candidate)
+		if errors.Is(err, sql.ErrNoRows) {
+			fail(w, 401, "sign-in expired; start again")
+			return
+		}
+		if authFailure(w, "mfa_enrollment_failed", err) {
+			return
+		}
+	}
+	seed, err := a.decryptMFA(challenge.Secret)
+	if authFailure(w, "mfa_decrypt_failed", err) {
+		return
+	}
+	secret, qr, err := enrollmentImage(challenge.Username, seed)
 	if err != nil {
 		if authFailure(w, "mfa_operation_failed", err) {
 			return
@@ -289,7 +238,6 @@ func (a *Server) mfaEnroll(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "could not prepare authentication; try again")
 		return
 	}
-	challenge.secret = secret
 	respond(w, 200, map[string]string{"secret": secret, "qr": qr})
 }
 
@@ -304,25 +252,20 @@ func (a *Server) mfaVerify(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	consumed := false
-	defer func() { a.releaseMFAChallenge(key, challenge, consumed) }()
-	if !a.mfaThrottle(w, &challenge) {
-		return
-	}
 	expires := time.Now().Add(7 * 24 * time.Hour)
 	value := "v3." + randomSecret()
-	if challenge.kind == "enroll" || challenge.kind == "replace" {
-		if challenge.secret == "" {
+	if challenge.Kind == "enroll" || challenge.Kind == "replace" {
+		if len(challenge.Secret) == 0 {
 			fail(w, 403, "start enrollment first")
 			return
 		}
-		if challenge.kind == "replace" {
+		if challenge.Kind == "replace" {
 			cookie, err := r.Cookie("pocketmark")
-			if err != nil || a.sessionHash(cookie.Value) != challenge.session {
+			if err != nil || a.sessionHash(cookie.Value) != challenge.Session {
 				fail(w, 401, "session changed; sign in again")
 				return
 			}
-			valid, err := a.Store.CheckAndTouchSession(r.Context(), challenge.session)
+			valid, err := a.Store.CheckAndTouchSession(r.Context(), challenge.Session)
 			if authFailure(w, "mfa_session_failed", err) {
 				return
 			}
@@ -331,41 +274,36 @@ func (a *Server) mfaVerify(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		counter := matchTOTPCounter(challenge.secret, body.Code, a.totpNow())
+		seed, err := a.decryptMFA(challenge.Secret)
+		if authFailure(w, "mfa_decrypt_failed", err) {
+			return
+		}
+		counter := matchTOTPCounter(seed, body.Code, a.totpNow())
 		if counter < 0 {
 			fail(w, 401, "invalid authentication code")
 			return
 		}
-		encrypted, err := a.encryptMFA(challenge.secret)
-		if err != nil {
-			if authFailure(w, "mfa_operation_failed", err) {
-				return
-			}
-			fail(w, 503, "could not save authentication")
-			return
-		}
 		codes, hashes := newRecoveryCodes()
-		if err = a.Store.ActivateMFA(r.Context(), challenge.salt, challenge.generation, counter, encrypted, hashes, challenge.session, a.sessionHash(value), expires, r.UserAgent(), challenge.recoveryGrant); err != nil {
+		if err = a.Store.ActivateMFA(r.Context(), key, challenge.Salt, challenge.Generation, counter, challenge.Secret, hashes, challenge.Session, a.sessionHash(value), expires, r.UserAgent(), challenge.RecoveryGrant); err != nil {
 			if authFailure(w, "mfa_operation_failed", err) {
 				return
 			}
 			fail(w, 409, "account changed; start again")
 			return
 		}
-		consumed = true
-		if challenge.session == "" {
+		if challenge.Session == "" {
 			a.setSessionCookie(w, value, expires)
 		}
 		a.clearMFAChallenge(w)
 		respond(w, 200, map[string]any{"authenticated": true, "recoveryCodes": codes})
 		return
 	}
-	if challenge.kind != "verify" {
+	if challenge.Kind != "verify" {
 		fail(w, 401, "sign-in expired; start again")
 		return
 	}
 	state, err := a.Store.MFA(r.Context())
-	if err != nil || state.Generation != challenge.generation || len(state.Secret) == 0 {
+	if err != nil || state.Generation != challenge.Generation || len(state.Secret) == 0 {
 		if authFailure(w, "mfa_operation_failed", err) {
 			return
 		}
@@ -387,14 +325,13 @@ func (a *Server) mfaVerify(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err = a.Store.SignInMFA(r.Context(), challenge.salt, challenge.generation, counter, recoveryHash, a.sessionHash(value), expires, r.UserAgent()); err != nil {
+	if err = a.Store.SignInMFA(r.Context(), key, challenge.Salt, challenge.Generation, counter, recoveryHash, a.sessionHash(value), expires, r.UserAgent()); err != nil {
 		if authFailure(w, "mfa_operation_failed", err) {
 			return
 		}
 		fail(w, 401, "invalid or already used authentication code")
 		return
 	}
-	consumed = true
 	a.setSessionCookie(w, value, expires)
 	a.clearMFAChallenge(w)
 	respond(w, 200, map[string]bool{"authenticated": true, "usedRecoveryCode": recoveryHash != ""})
@@ -408,7 +345,10 @@ func (a *Server) authorizeMFAChange(w http.ResponseWriter, r *http.Request, allo
 		return "", 0, false, false
 	}
 	var body struct{ Password, Code string }
-	if !decode(w, r, &body, 4096) || !a.mfaThrottle(w, nil) {
+	if !decode(w, r, &body, 4096) {
+		return "", 0, false, false
+	}
+	if _, ok := a.mfaAttempt(w, r, ""); !ok {
 		return "", 0, false, false
 	}
 	if body.Password == "" || len(body.Password) > 1024 {
@@ -483,7 +423,11 @@ func (a *Server) mfaReplace(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, "could not prepare authentication; try again")
 		return
 	}
-	if !a.newMFAChallenge(w, mfaChallenge{kind: "replace", salt: salt, username: account.Username, secret: secret, session: requestPrincipal(r).session, generation: generation, recoveryGrant: recoveryGrant}) {
+	encrypted, err := a.encryptMFA(secret)
+	if authFailure(w, "mfa_encrypt_failed", err) {
+		return
+	}
+	if !a.newMFAChallenge(r.Context(), w, store.MFAChallenge{Kind: "replace", Salt: salt, Username: account.Username, Secret: encrypted, Session: requestPrincipal(r).session, Generation: generation, RecoveryGrant: recoveryGrant}) {
 		return
 	}
 	respond(w, 200, map[string]string{"secret": secret, "qr": qr})

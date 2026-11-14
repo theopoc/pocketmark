@@ -49,12 +49,20 @@ func signInSession(ctx context.Context, s *Store, salt, hash string, expires tim
 	if err != nil {
 		return err
 	}
+	kind := "verify"
 	if len(state.Secret) == 0 {
-		return s.ActivateMFA(ctx, salt, state.Generation, 0, []byte("test-only-encrypted-factor"), nil, "", hash, expires, label, false)
+		kind = "enroll"
+	}
+	key := "challenge-" + hash
+	if err = s.CreateMFAChallenge(ctx, key, MFAChallenge{Kind: kind, Salt: salt, Generation: state.Generation}); err != nil {
+		return err
+	}
+	if len(state.Secret) == 0 {
+		return s.ActivateMFA(ctx, key, salt, state.Generation, 0, []byte("test-only-encrypted-factor"), nil, "", hash, expires, label, false)
 	}
 	var counter int64
 	if err := s.db.QueryRowContext(ctx, "SELECT last_counter+1 FROM mfa WHERE id=1").Scan(&counter); err != nil {
 		return err
 	}
-	return s.SignInMFA(ctx, salt, state.Generation, counter, "", hash, expires, label)
+	return s.SignInMFA(ctx, key, salt, state.Generation, counter, "", hash, expires, label)
 }

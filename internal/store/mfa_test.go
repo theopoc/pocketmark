@@ -72,6 +72,9 @@ func TestMFANativeBackupInvalidatesCodesOnlyOnRestore(t *testing.T) {
 	if _, err = s.db.Exec("UPDATE mfa SET secret=decode('0102','hex') WHERE id=1; INSERT INTO mfa_recovery(hash) VALUES('saved-code')"); err != nil {
 		t.Fatal(err)
 	}
+	if err = s.CreateMFAChallenge(ctx, "before", MFAChallenge{Kind: "verify", Salt: "salt"}); err != nil {
+		t.Fatal(err)
+	}
 	f, err := s.Snapshot(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -95,14 +98,20 @@ func TestMFANativeBackupInvalidatesCodesOnlyOnRestore(t *testing.T) {
 	if err != nil || len(state.Secret) != 2 {
 		t.Fatal("restore removed the encrypted factor", err)
 	}
+	if err = restored.db.QueryRow("SELECT count(*) FROM mfa_challenges").Scan(&count); err != nil || count != 0 {
+		t.Fatal("pending challenges survived restore", err)
+	}
+	if err = restored.CreateMFAChallenge(ctx, "after", MFAChallenge{Kind: "verify", Salt: "salt", Generation: state.Generation}); err != nil {
+		t.Fatal(err)
+	}
 	var restoredCounter int64
 	if err = restored.db.QueryRow("SELECT last_counter FROM mfa WHERE id=1").Scan(&restoredCounter); err != nil || restoredCounter < minimumCounter {
 		t.Fatal("restore did not invalidate the current TOTP window", err)
 	}
-	if err = restored.SignInMFA(ctx, "salt", state.Generation, restoredCounter, "", "replayed-session", time.Now().Add(time.Hour), ""); err == nil {
+	if err = restored.SignInMFA(ctx, "after", "salt", state.Generation, restoredCounter, "", "replayed-session", time.Now().Add(time.Hour), ""); err == nil {
 		t.Fatal("restore accepted a TOTP counter from the invalidated window")
 	}
-	if err = restored.SignInMFA(ctx, "salt", state.Generation, restoredCounter+1, "", "fresh-session", time.Now().Add(time.Hour), ""); err != nil {
+	if err = restored.SignInMFA(ctx, "after", "salt", state.Generation, restoredCounter+1, "", "fresh-session", time.Now().Add(time.Hour), ""); err != nil {
 		t.Fatal("later TOTP counter rejected after restore", err)
 	}
 	if _, err = restored.db.Exec("INSERT INTO mfa_recovery(hash) VALUES('new-code')"); err != nil {

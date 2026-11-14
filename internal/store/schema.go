@@ -9,6 +9,9 @@ import (
 //go:embed migrations/001_initial.sql
 var initialSchema string
 
+//go:embed migrations/002_mfa_challenges.sql
+var challengeSchema string
+
 func (s *Store) initializeSchema(ctx context.Context) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -34,11 +37,20 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(1)"); err != nil {
 			return err
 		}
+		fallthrough
 	case 1:
+		if _, err = tx.ExecContext(ctx, challengeSchema); err != nil {
+			return fmt.Errorf("migrate MFA challenges: %w", err)
+		}
+		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(2)"); err != nil {
+			return err
+		}
+	case 2:
 	default:
 		return fmt.Errorf("unsupported Pocketmark schema version %d", version)
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM mfa_recovery WHERE EXISTS(SELECT 1 FROM mfa WHERE restored=1);
+	if _, err = tx.ExecContext(ctx, `DELETE FROM mfa_challenges WHERE EXISTS(SELECT 1 FROM mfa WHERE restored=1);
+DELETE FROM mfa_recovery WHERE EXISTS(SELECT 1 FROM mfa WHERE restored=1);
 UPDATE mfa SET last_counter=greatest(last_counter,epoch_seconds()/30+1),restored=0 WHERE restored=1`); err != nil {
 		return err
 	}
