@@ -235,6 +235,10 @@ Controls use restrained rounded corners; smaller tags and action buttons use the
 ## Components
 
 ### Buttons
+Center button text horizontally and vertically within the control. When an icon
+accompanies a label, center the icon and label together as one group. Navigation
+and menu rows retain their documented left-aligned layout.
+
 Compact and direct. Primary actions use indigo and white, subtle actions use the active theme’s neutral control surface and border, and icon actions use transparent backgrounds. Primary and subtle controls use the shared control radius and label type. Hover changes background or border with (160ms ease-out) transitions. Keyboard focus has a (2px) outline and (3px) offset; disabled buttons use (.48) opacity. Phone actions increase their target dimensions where the layout requires it.
 
 Choose the variant by task: saving a form or recovering from an empty view uses the primary action. Navigation, disclosures and alternative actions stay quiet. Destructive confirmations use the danger treatment; quiet discard controls signal danger on hover and keyboard focus. Selection and focus keep their own cues without promoting a control to primary.
@@ -243,6 +247,8 @@ Choose the variant by task: saving a form or recovering from an empty view uses 
 Small rectangular tags use neutral fill, short padding and compact type. Hover or active filter states use the soft accent and indigo text. Long labels truncate rather than widening the navigation drawer.
 
 Quick filters beneath library search use rounded pills. The selected filter uses the accent with white text and a check; inactive filters use the themed control surface and border. They wrap as needed and have 44px minimum height on phones.
+Center each pill's content on both axes. Hide the entire inactive check wrapper
+so it reserves no width or gap beside the centered label.
 
 ### Capture status
 
