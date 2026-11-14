@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"pocketmark/internal/pgtest"
@@ -87,7 +88,18 @@ func TestMFANativeBackupInvalidatesCodesOnlyOnRestore(t *testing.T) {
 		t.Fatal("backup changed live recovery codes", err)
 	}
 	minimumCounter := time.Now().Unix()/30 + 1
-	restored, err := restoreTestStore(t, path)
+	// Inspect the SQL export before Open processes the restore marker and purges
+	// challenges. Otherwise a dump containing live challenges would pass.
+	target := pgtest.Restore(t, path)
+	raw, err := sql.Open("pgx", target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	if err = raw.QueryRowContext(ctx, "SELECT count(*) FROM mfa_challenges").Scan(&count); err != nil || count != 0 {
+		t.Fatalf("native dump contains %d pending MFA challenges (query error: %v)", count, err)
+	}
+	restored, err := Open(target, pgtest.Directory(path))
 	if err != nil {
 		t.Fatal(err)
 	}

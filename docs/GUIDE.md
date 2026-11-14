@@ -43,6 +43,31 @@ PostgreSQL provides shared durable storage. Replicas using the same database and
 
 On the first upgrade from schema 1, challenges already issued by the older binary exist only in its memory. Older pods also cannot verify a challenge issued by a new pod. While versions are mixed, a sign-in may need to restart; cross-pod verification works once all serving pods use the new version. The migration is additive, but the older binary cannot start against schema 2. Take a backup before upgrading.
 
+### Route backups during a Kubernetes rollout
+
+Install the [backup Service, Ingress paths and NetworkPolicy](../deploy/kubernetes/backup-routing.yaml) **before** starting pods that migrate the schema. The exact path `/api/backup` selects only ready pods bearing the target revision label. The ordinary `pocketmark` ClusterIP Service continues to select all application pods for other requests.
+
+Adapt the example to your namespace, existing host, TLS secret, Service port and controller labels. Merge the paths into the existing Ingress for that host and preserve its authentication and TLS settings. For Traefik, enable `providers.kubernetesIngress.allowEmptyServices=true` so that the exact path returns 503 while its Service is empty. With a controller that drops empty backends, the catch-all path could otherwise send the request to an old pod. Use a CNI enforcing NetworkPolicy, allow only the trusted ingress controller to reach the app port, and remove other access paths or additive policies that allow clients to reach the pods directly.
+
+1. Set the backup Service selector to the incoming revision (`mfa-schema-2` in the example). Keep this label off the running pods. Before the image rollout, verify that the backup Service has no ready endpoints. Check every serving ingress-controller replica individually with the production Host and TLS server name: an authenticated backup request must return 503 and an authenticated library read must succeed on each. Recheck any controller that joins during this step. Once the routing change has converged, let any backup requests already accepted by old pods finish.
+2. Change the pinned image and the revision label **together** in the Deployment pod template. For example, with the verified image reference in `POCKETMARK_IMAGE` and a container named `pocketmark`:
+
+   ```sh
+   kubectl patch deployment pocketmark --type=strategic --patch-file=/dev/stdin <<EOF
+   spec:
+     template:
+       metadata:
+         labels:
+           pocketmark-backup-revision: mfa-schema-2
+       spec:
+         containers:
+           - name: pocketmark
+             image: "${POCKETMARK_IMAGE:?set the pinned new image}"
+   EOF
+   ```
+
+3. As the first new pod passes its HTTP readiness probe, the backup Service begins serving exports. Check its EndpointSlices during rollout and download a backup through the configured host. For subsequent rollouts use a fresh revision value in both the Service selector and the pod template. If the rollout stalls or rolls back, keep the backup selector off images that cannot exclude pending challenges.
+
 ## What is included
 
 - Bookmarks with descriptions, personal notes, favorite/read flags and tags.

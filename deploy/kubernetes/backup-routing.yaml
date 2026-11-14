@@ -1,0 +1,64 @@
+# Merge the paths and TLS settings into the existing Ingress for this host.
+# Install the Service and restrict backend access before starting the rollout.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pocketmark-backup
+spec:
+  type: ClusterIP
+  selector:
+    app: pocketmark
+    pocketmark-backup-revision: mfa-schema-2
+  ports:
+    - name: http
+      port: 8090
+      targetPort: 8090
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pocketmark-ingress-only
+spec:
+  podSelector:
+    matchLabels:
+      app: pocketmark
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8090
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pocketmark
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [pocketmark.example.com]
+      secretName: pocketmark-tls
+  rules:
+    - host: pocketmark.example.com
+      http:
+        paths:
+          - path: /api/backup
+            pathType: Exact
+            backend:
+              service:
+                name: pocketmark-backup
+                port:
+                  number: 8090
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pocketmark
+                port:
+                  number: 8090
