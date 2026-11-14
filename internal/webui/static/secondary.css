@@ -5,13 +5,13 @@
   font-size: 14px;
   line-height: 1.6;
 }
-[data-theme="dark"] :is(#login-view, #settings-page, #help-dialog),
-html[data-theme="dark"] body.api-docs { --secondary-link: var(--focus); color-scheme: dark; }
+[data-theme="dark"] :is(#login-view, #settings-page, #help-dialog, body.api-docs) { --secondary-link: var(--focus); color-scheme: dark; }
 :is(#login-view, #settings-page, #help-dialog, .api-docs) :is(label, .button, .text-button, .field-hint, .small) { font-size: 13px; }
 :is(#login-view, #settings-page, #help-dialog, .api-docs) :is(p, .field-hint, .small) { line-height: 1.6; }
 :is(#login-view, #settings-page, #help-dialog, .api-docs) .text-button { color: var(--secondary-link); }
 :is(#login-view, #settings-page, #help-dialog, .api-docs) :is(input, select, textarea) { border-color: var(--control-line); }
-:is(#login-view, #settings-page, #help-dialog, .api-docs) :is(button, a, input, select, textarea, summary):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+:is(#login-view, #settings-page, #help-dialog, .api-docs) :is(button, a, input, select, textarea, summary):focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+:is(#login-view, #settings-page, #help-dialog, .api-docs) :is(input, select, textarea, .app-select-trigger):focus-visible { outline-offset: 2px; }
 :is(#login-view, #settings-page, #help-dialog, .api-docs) .subtle:hover { background: var(--control-hover); border-color: var(--control-line); }
 #login-view .login-intro .theme-toggle:is(:hover, :focus-visible) { background: #ffffff12; border-color: #ffffff80; }
 :is(#login-view, #settings-page, #help-dialog, .api-docs) .primary:active { background: var(--accent-hover); }
@@ -111,13 +111,12 @@ html[data-theme="dark"] body.api-docs { --secondary-link: var(--focus); color-sc
   #settings-page #token-list .token-metadata > div + div { padding-left: 0; border-left: 0; }
   #settings-page #token-list .token-revoke { margin-left: 0; border-left-color: transparent; }
 }
+#help-dialog .help-body { padding-top: 8px; }
 #help-topics summary:hover { background: var(--control-hover); }
 #help-topics .help-answer { max-width: 72ch; }
 .api-docs .swagger-ui :is(input, select, textarea) { border-color: var(--control-line); color: var(--ink); background: var(--paper); }
 .api-docs .swagger-ui :is(.btn, label, .parameter__type, .parameter__in) { font-size: 13px; }
 .api-docs .swagger-ui :is(.opblock-summary-description, .renderedMarkdown p, .renderedMarkdown li) { font-size: 14px; line-height: 1.6; }
-.api-docs .swagger-ui .btn { min-height: 38px; }
-.api-docs .swagger-ui .btn.authorize { color: var(--ink); border-color: var(--control-line); }
 .api-docs .swagger-ui .opblock-body pre { overflow: auto; }
 
 /* Collection validation and the approved reader journey have their own scope. */

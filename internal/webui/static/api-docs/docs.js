@@ -46,6 +46,15 @@
     if (servers && servers.getAttribute("aria-label") !== "API server") servers.setAttribute("aria-label", "API server");
     reference.querySelector(".operation-filter-input")?.setAttribute("aria-label", "Filter API operations");
     reference.querySelector(".modal-ux-header .close-modal")?.setAttribute("aria-label", "Close authorizations");
+    for (const button of reference.querySelectorAll(".modal-ux .auth-btn-wrapper button[aria-label]")) {
+      if (button.textContent.trim()) button.removeAttribute("aria-label");
+    }
+    for (const button of reference.querySelectorAll(".model-box-control")) {
+      const title = button.querySelector(".model-title__text")?.textContent.trim();
+      const property = button.closest(".property-row")?.firstElementChild?.textContent.replace(/\*/g, "").trim();
+      const name = title || (button.closest(".prop-enum") ? `${property || "Schema"} allowed values` : property) || "Schema details";
+      if (button.getAttribute("aria-label") !== name) button.setAttribute("aria-label", name);
+    }
     for (const row of reference.querySelectorAll("tr[data-param-name]")) {
       for (const field of row.querySelectorAll("input, select, textarea")) {
         if (!field.getAttribute("aria-label") && !field.getAttribute("aria-labelledby") && !field.labels?.length) {

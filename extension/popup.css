@@ -13,6 +13,7 @@
   --focus: #a39aff;
   --danger: #f58a96;
   --success: #80c9a3;
+  --pending: #d9b87c;
 }
 * { box-sizing: border-box; }
 html { background: var(--paper); }
@@ -58,8 +59,10 @@ input::placeholder { color: var(--muted); opacity: 1; }
 button { padding: 9px 12px; min-block-size: 38px; border: 1px solid transparent; color: #fff; background: var(--accent); cursor: pointer; font-weight: 550; transition: background-color 160ms ease-out; }
 button:hover { background: var(--accent-hover); }
 button:active { background: #4f46d1; }
-button:disabled { opacity: .5; cursor: default; }
+button:disabled { opacity: .48; cursor: default; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+:is(button, a, summary):focus-visible { outline-offset: 3px; }
+.choice-trigger:focus-visible { outline-offset: 2px; }
 .secondary { color: var(--ink); background: var(--surface); border-color: var(--control); }
 .secondary:hover { background: var(--accent-soft); }
 .text-button { color: var(--focus); background: transparent; font-size: 12px; padding: 4px 2px; min-block-size: 28px; }
@@ -121,7 +124,7 @@ summary { cursor: pointer; font-size: 11px; color: var(--muted); }
 .task > summary::-webkit-details-marker { display: none; }
 .task > summary > svg:first-child { color: var(--success); }
 .task[data-state="paused"] > summary > svg:first-child { color: var(--danger); }
-.task[data-state="running"] > summary > svg:first-child { color: var(--focus); }
+.task[data-state="running"] > summary > svg:first-child { color: var(--pending); }
 #task-heading { flex: 1; min-inline-size: 0; overflow-wrap: anywhere; }
 #task-count { flex: none; font-size: 11px; color: var(--muted); }
 .disclosure { inline-size: 13px; block-size: 13px; transition: transform 160ms ease-out; }
@@ -134,6 +137,8 @@ summary { cursor: pointer; font-size: 11px; color: var(--muted); }
 #task-items li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding-block: 8px; border-top: 1px solid var(--line); font-size: 12px; }
 #task-items .item-state { color: var(--muted); }
 #task-items .item-saved { color: var(--success); }
+#task-items :is(.item-pending, .item-capturing, .item-ready, .item-uploading) { color: var(--pending); }
+#task-items .item-failed { color: var(--danger); }
 #task-items .item-error { color: var(--danger); grid-column: 1 / -1; font-size: 11px; overflow-wrap: anywhere; }
 .settings h2 { margin-top: 4px; }
 .intro { color: var(--muted); margin-top: 6px; margin-bottom: 22px; }
@@ -162,7 +167,7 @@ summary { cursor: pointer; font-size: 11px; color: var(--muted); }
   --ink: #20232c; --muted: #626978; --paper: #fff; --surface: #f8f9fb;
   --line: #e3e5eb; --control: #818896; --accent: #4f46e5;
   --accent-hover: #4038c5; --accent-soft: #eeedff; --focus: #7067ef;
-  --danger: #b12e35; --success: #23714a;
+  --danger: #b12e35; --success: #23714a; --pending: #8c5818;
 }
 :root[data-theme="light"] .text-button { color: #5146c8; }
 .theme-toggle { flex: none; padding-inline: 10px; }

@@ -32,9 +32,6 @@
 .api-docs .swagger-ui .operation-permalink svg { width: 16px; height: 16px; }
 .api-docs .swagger-ui .opblock-summary-path { overflow-wrap: anywhere; }
 .api-docs .swagger-ui .opblock-summary-description { font-size: 13px; }
-.api-docs .swagger-ui .btn { box-shadow: none; border-radius: 6px; }
-.api-docs .swagger-ui .btn.authorize { color: var(--ink); border-color: var(--control-line); }
-.api-docs .swagger-ui .btn.authorize svg { fill: var(--ink); }
 .api-docs .swagger-ui .filter .operation-filter-input { border-color: var(--control-line); background: var(--paper); color: var(--ink); }
 .api-docs .swagger-ui input, .api-docs .swagger-ui textarea, .api-docs .swagger-ui select { color: var(--ink); background: var(--paper); border-color: var(--control-line); }
 .api-docs .swagger-ui .dialog-ux .modal-ux { background: var(--paper); border-color: var(--line); border-radius: 12px; }
@@ -60,8 +57,6 @@
 .api-docs .swagger-ui .expand-operation svg, .api-docs .swagger-ui .modal-ux-header .close-modal svg { fill: var(--ink); }
 .api-docs .swagger-ui .opblock-tag svg { color: var(--ink); fill: var(--ink); }
 .api-docs .swagger-ui :is(.opblock-control-arrow, .authorization__btn, .expand-operation, .close-modal, .opblock-tag, .btn.authorize) svg path { fill: var(--ink); forced-color-adjust: auto; }
-.api-docs .swagger-ui .btn.execute { background: var(--accent); color: white; border-color: var(--accent); }
-.api-docs .swagger-ui .btn.execute:hover { background: var(--accent-hover); }
 .api-docs .swagger-ui .responses-inner h4, .api-docs .swagger-ui .responses-inner h5 { color: var(--ink); }
 .api-docs .swagger-ui .highlight-code, .api-docs .swagger-ui .microlight { background: var(--surface); color: var(--ink); }
 /* Swagger also writes its code palette inline with syntax highlighting off. */
@@ -72,6 +67,56 @@
 .api-docs .swagger-ui .opblock.opblock-post .opblock-summary-method { background: #23714a; }
 .api-docs .swagger-ui .opblock.opblock-put .opblock-summary-method { background: #875412; }
 .api-docs .swagger-ui .opblock.opblock-delete .opblock-summary-method { background: #b12e35; }
+/* Generated controls keep the shared field/button identity without restyling code. */
+.api-docs .swagger-ui .app-select-trigger,
+.api-docs .swagger-ui input:not([type="checkbox"]):not([type="radio"]),
+.api-docs .swagger-ui textarea, .api-docs .swagger-ui select {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  border-radius: 6px;
+}
+.api-docs .swagger-ui input:not([type="checkbox"]):not([type="radio"]),
+.api-docs .swagger-ui textarea, .api-docs .swagger-ui select { padding: 10px 12px; border-width: 1px; }
+.api-docs .swagger-ui .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid var(--control-line);
+  border-radius: 6px;
+  box-shadow: none;
+  background: var(--control-bg);
+  color: var(--control-ink);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.5;
+  transition: background-color 160ms ease-out, border-color 160ms ease-out;
+}
+.api-docs .swagger-ui .btn:hover:enabled { background: var(--control-hover); }
+.api-docs .swagger-ui .btn:active:enabled { background: var(--accent-soft); }
+.api-docs .swagger-ui .btn:disabled { opacity: .48; cursor: default; }
+.api-docs .swagger-ui .scheme-container .schemes .auth-wrapper .authorize { padding: 8px 12px; }
+.api-docs .swagger-ui .btn.authorize span { float: none; padding: 0; }
+.api-docs .swagger-ui .btn.authorize svg { color: inherit; }
+.api-docs .swagger-ui .btn.authorize svg path { fill: currentColor; }
+.api-docs .swagger-ui .btn.execute { background: var(--accent); color: #fff; border-color: var(--accent); }
+.api-docs .swagger-ui .btn.execute:is(:hover, :active):enabled { background: var(--accent-hover); }
+.api-docs .swagger-ui .auth-container { border-color: var(--line); }
+.api-docs .swagger-ui .model, .api-docs .swagger-ui .model-title { color: var(--ink); }
+.api-docs .swagger-ui .model-title { font-family: var(--font-ui); }
+.api-docs .swagger-ui .model-box { background: var(--surface); }
+.api-docs .swagger-ui .model :is(.property, .prop-format, .prop-enum, .description, .external-docs),
+.api-docs .swagger-ui table.model tr.description, .api-docs .swagger-ui table.model tr.extension { color: var(--muted); }
+.api-docs .swagger-ui .model .prop-type { color: var(--secondary-link); }
+.api-docs .swagger-ui table.model tr.property-row .star { color: var(--danger); }
+.api-docs .swagger-ui .model-toggle::after {
+  background: var(--ink);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M10 6 8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z'/%3E%3C/svg%3E") center / 100% no-repeat;
+}
 @media (max-width: 600px) {
   .docs-header { padding: 16px; flex-wrap: wrap; }
   .docs-header .reader-actions { width: 100%; justify-content: space-between; }
@@ -82,6 +127,9 @@
   .api-docs .swagger-ui .opblock-summary-path { max-width: 100%; font-size: 12px; }
   .api-docs .swagger-ui .opblock-summary-method { min-width: 62px; font-size: 12px; }
   .api-docs .swagger-ui .opblock-body { overflow-x: auto; }
+  .api-docs .swagger-ui .app-select-trigger,
+  .api-docs .swagger-ui input:not([type="checkbox"]):not([type="radio"]),
+  .api-docs .swagger-ui textarea, .api-docs .swagger-ui select { font-size: 16px; }
   .api-docs .swagger-ui .auth-container { padding: 16px 0; }
   .api-docs .swagger-ui .auth-container input { width: 100%; }
   .api-docs .swagger-ui .dialog-ux .modal-ux { width: calc(100% - 24px); }
@@ -90,4 +138,5 @@
 }
 @media (forced-colors: active) {
   .api-docs .swagger-ui :is(.opblock-control-arrow, .authorization__btn, .expand-operation, .close-modal, .opblock-tag, .btn.authorize) svg path { fill: ButtonText; }
+  .api-docs .swagger-ui .model-toggle::after { background-color: CanvasText; forced-color-adjust: none; }
 }

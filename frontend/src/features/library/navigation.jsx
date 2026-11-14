@@ -82,7 +82,7 @@ export function renderCollectionNavigation(
             <Icon name="edit" />
           </Button>
           <Button
-            className="icon-button delete-collection"
+            className="icon-button delete-collection destructive-action"
             data-focus-key={`delete-collection:${collection.id}`}
             data-keep-navigation=""
             title={`Delete ${collection.name}`}

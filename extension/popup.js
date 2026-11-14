@@ -132,7 +132,7 @@ function renderTask(job) {
       const li = document.createElement("li");
       const label = { pending: "Waiting", capturing: "Capturing", ready: "Captured locally", uploading: "Uploading", saved: "Saved", failed: "Failed" }[item.status];
       const name = document.createElement("span"), state = document.createElement("span");
-      name.textContent = formats[item.mode][0]; state.textContent = label; state.className = item.status === "saved" ? "item-state item-saved" : "item-state";
+      name.textContent = formats[item.mode][0]; state.textContent = label; state.className = `item-state item-${item.status}`;
       li.append(name, state);
       if (item.error) { const error = document.createElement("span"); error.className = "item-error"; error.textContent = item.error; li.append(error); }
       $("task-items").append(li);

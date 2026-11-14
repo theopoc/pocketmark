@@ -10,7 +10,9 @@ export function ReauthDialog() {
       aria-describedby="reauth-description"
     >
       <form id="reauth-form">
-        <h2 id="reauth-title">{"Confirm your password"}</h2>
+        <div className="dialog-heading">
+          <h2 id="reauth-title">{"Confirm your password"}</h2>
+        </div>
         <p id="reauth-description" className="muted">
           {
             "Protect your account before continuing. Confirmation lasts five minutes in this browser."
