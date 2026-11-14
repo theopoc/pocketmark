@@ -24,7 +24,7 @@ type TagDirectory struct {
 }
 
 func (s *Store) Tags(ctx context.Context) ([]Tag, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT value,COUNT(*) FROM links,json_each(links.tags) GROUP BY value ORDER BY COUNT(*) DESC,value LIMIT 200")
+	rows, err := s.db.QueryContext(ctx, "SELECT value,COUNT(*) FROM links,jsonb_array_elements_text(links.tags::jsonb) AS tag(value) GROUP BY value ORDER BY COUNT(*) DESC,value LIMIT 200")
 	if err != nil {
 		return nil, err
 	}
@@ -41,9 +41,9 @@ func (s *Store) Tags(ctx context.Context) ([]Tag, error) {
 }
 func (s *Store) BrowseTags(ctx context.Context, query string, page int, jump string) (TagDirectory, error) {
 	const pageSize = 40
-	const source = " FROM links,json_each(links.tags) WHERE instr(lower(value),lower(?)) > 0"
-	const initial = "CASE WHEN upper(substr(value,1,1)) BETWEEN 'A' AND 'Z' THEN upper(substr(value,1,1)) ELSE '#' END"
-	const order = "CASE WHEN letter = '#' THEN 1 ELSE 0 END,letter"
+	const source = ` FROM links,jsonb_array_elements_text(links.tags::jsonb) AS tag(value) WHERE strpos(lower(value COLLATE "C"),lower($1 COLLATE "C")) > 0`
+	const initial = `CASE WHEN upper(substr(value,1,1) COLLATE "C") BETWEEN 'A' AND 'Z' THEN upper(substr(value,1,1) COLLATE "C") ELSE '#' END`
+	const order = "CASE WHEN (" + initial + ") = '#' THEN 1 ELSE 0 END,letter"
 	groupsRows, err := s.db.QueryContext(ctx, "SELECT "+initial+" AS letter,COUNT(DISTINCT value)"+source+" GROUP BY letter ORDER BY "+order, query)
 	if err != nil {
 		return TagDirectory{}, err
@@ -67,7 +67,7 @@ func (s *Store) BrowseTags(ctx context.Context, query string, page int, jump str
 	if err != nil {
 		return TagDirectory{}, err
 	}
-	rows, err := s.db.QueryContext(ctx, "SELECT value,COUNT(*),"+initial+" AS letter"+source+" GROUP BY value ORDER BY "+order+",value COLLATE NOCASE,value LIMIT ? OFFSET ?", query, pageSize, (page-1)*pageSize)
+	rows, err := s.db.QueryContext(ctx, "SELECT value,COUNT(*),"+initial+" AS letter"+source+" GROUP BY value ORDER BY "+order+`,lower(value COLLATE "C"),value COLLATE "C" LIMIT $2 OFFSET $3`, query, pageSize, (page-1)*pageSize)
 	if err != nil {
 		return TagDirectory{}, err
 	}

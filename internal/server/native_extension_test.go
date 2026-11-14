@@ -38,7 +38,7 @@ func TestRemovedCompatibilityDoesNotAffectNativeLibraryOrDAV(t *testing.T) {
 
 func TestNativeLibraryRetainsLegacyDataAcrossRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.db")
-	s, err := store.Open(path)
+	s, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestNativeLibraryRetainsLegacyDataAcrossRestart(t *testing.T) {
 	if err = s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = store.Open(path)
+	s, err = openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}

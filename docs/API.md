@@ -27,7 +27,7 @@ update it alongside this document. `make test` checks route coverage, local sche
 references, security declarations and documentation delivery. Upstream asset
 provenance and update instructions are in the adjacent `vendor/README.md`.
 
-Base URL: `http://127.0.0.1:8090`. API endpoints require an owner session or named API key unless explicitly public. First-run setup and login are public. `/healthz` is unauthenticated and returns `{"status":"ok"}` when SQLite is reachable. Named keys cannot access account/key/session management or full backups. Their profile also restricts library and WebDAV access; see Security controls below.
+Base URL: `http://127.0.0.1:8090`. API endpoints require an owner session or named API key unless explicitly public. First-run setup and login are public. `/healthz` is unauthenticated and returns `{"status":"ok"}` when PostgreSQL is reachable. Named keys cannot access account/key/session management or full backups. Their profile also restricts library and WebDAV access; see Security controls below.
 
 `GET /metrics` exposes Prometheus text metrics using the same session/bearer
 authentication. Responses include a server-generated `X-Request-ID` for log
@@ -183,7 +183,7 @@ Existing bookmarks, collections, tags, notes, annotations and archives are kept.
 Legacy compatibility metadata tables remain on disk so no destructive database
 migration is needed; they no longer expose an HTTP interface.
 
-WebDAV supports `OPTIONS`, `PROPFIND`, `GET`, `HEAD`, `PUT`, `DELETE` and `MOVE` for the fixed `/dav/` collection and its `bookmarks.xbel`, `bookmarks.xbel.temp` and `bookmarks.xbel.lock` resources. Resource-specific methods are restricted; primary XML deletion is not supported. Authenticate using Basic with any username and a dedicated API key as password, or use bearer authentication. Extension-origin Basic authentication is accepted only after normal credential verification. ETag conditional `If-Match` writes and stale locked snapshots return 412; competing lock owners receive 423. Acquire a lock, GET the primary XML, upload the temporary resource, then MOVE it to the same server's primary XML. XML is limited to 8 MiB and persisted as bounded SQLite chunks. Uploads apply an authoritative bookmark tree including deletions and preserve personal fields for retained IDs/URLs. There is no scheduled server synchronizer. See [Floccus instructions](FEATURES.md#floccus-setup-and-data-semantics) and [protocol details](CLIENT_FLOCCUS_NOTES.md).
+WebDAV supports `OPTIONS`, `PROPFIND`, `GET`, `HEAD`, `PUT`, `DELETE` and `MOVE` for the fixed `/dav/` collection and its `bookmarks.xbel`, `bookmarks.xbel.temp` and `bookmarks.xbel.lock` resources. Resource-specific methods are restricted; primary XML deletion is not supported. Authenticate using Basic with any username and a dedicated API key as password, or use bearer authentication. Extension-origin Basic authentication is accepted only after normal credential verification. ETag conditional `If-Match` writes and stale locked snapshots return 412; competing lock owners receive 423. Acquire a lock, GET the primary XML, upload the temporary resource, then MOVE it to the same server's primary XML. XML is limited to 8 MiB and persisted as bounded PostgreSQL chunks. Uploads apply an authoritative bookmark tree including deletions and preserve personal fields for retained IDs/URLs. There is no scheduled server synchronizer. See [Floccus instructions](FEATURES.md#floccus-setup-and-data-semantics) and [protocol details](CLIENT_FLOCCUS_NOTES.md).
 
 ## Limits and failures
 
@@ -238,7 +238,7 @@ keep ingress connection/rate limits in front of an Internet-facing instance.
 
 ## Tag directory
 
-`GET /api/tags/browse?q=<substring>&page=1` lists all tags currently used by bookmarks, in alphabetical order. Returns `{tags:[{name,count,letter}],groups:[{letter,count}],total,page,pageSize}` with 40 tags per page and global bookmark counts. Groups contain the distinct tag count for each available initial across all matching pages (at most 27 groups). ASCII initials are grouped under A–Z; numbers, symbols and other scripts follow under `#`. Names within a group use SQLite's ASCII case-insensitive order, with exact name as a tie-breaker.
+`GET /api/tags/browse?q=<substring>&page=1` lists all tags currently used by bookmarks, in alphabetical order. Returns `{tags:[{name,count,letter}],groups:[{letter,count}],total,page,pageSize}` with 40 tags per page and global bookmark counts. Groups contain the distinct tag count for each available initial across all matching pages (at most 27 groups). ASCII initials are grouped under A–Z; numbers, symbols and other scripts follow under `#`. Names within a group use case-insensitive order, with exact name as a tie-breaker.
 
 Optional `jump=A` (A–Z, case-insensitive, or URL-encoded `#`) resolves the page containing the first matching tag under that initial; the response's `page` reports the resolved page. If that initial has no matches, the requested page is retained. Search is a literal substring (ASCII case-insensitive); `%` and `_` have no wildcard meaning. `q` is limited to 512 bytes and page to 1–1,000,000; invalid values return 400. Authentication is required. The existing `/api/tags` array remains limited to the 200 most-used tags; the web sidebar shows the first 12 as frequent-tag shortcuts.
 
@@ -248,7 +248,7 @@ Set `POCKETMARK_ORIGIN` to the exact HTTPS origin. Complete first-run setup befo
 
 Behind an Ingress, set `POCKETMARK_TRUSTED_PROXIES` to a comma-separated list of **only the actual proxy CIDRs**. The immediate peer must be trusted before `X-Forwarded-For` is used; the chain is read from right to left to find the first untrusted address. Untrusted peers cannot spoof their limit through forwarding headers. Configure the proxy to overwrite or append the actual source address and restrict direct access to the application. Without this setting, clients behind the same proxy share its limit. Do not trust every address or the whole cluster unless every workload in that range is trusted.
 
-Public `/api/login`, `/api/setup` and MFA challenge endpoints use two separate request slots; their POST bodies have a five-second read deadline. Library requests retain eight slots. `/healthz` uses two independent slots and a one-second SQLite context timeout: use it for readiness. `/livez` has no database dependency and is independent of these slots: use it for liveness. Ingress connection/rate limits are still needed for distributed traffic floods.
+Public `/api/login`, `/api/setup` and MFA challenge endpoints use two separate request slots; their POST bodies have a five-second read deadline. Library requests retain eight slots. `/healthz` uses two independent slots and a one-second PostgreSQL context timeout: use it for readiness. `/livez` has no database dependency and is independent of these slots: use it for liveness. Ingress connection/rate limits are still needed for distributed traffic floods.
 
 ## Security controls
 

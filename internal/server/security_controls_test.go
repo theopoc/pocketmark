@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"pocketmark/internal/pgtest"
 	"strings"
 	"testing"
 
@@ -17,12 +18,12 @@ import (
 func securityServer(t *testing.T) (*testServer, *sql.DB) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "security.db")
-	s, err := store.Open(path)
+	s, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { s.Close() })
-	db, err := sql.Open("sqlite3", path)
+	db, err := sql.Open("pgx", pgtest.URL(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +79,7 @@ func TestSensitiveRoutesRequireRecentPassword(t *testing.T) {
 	requireStatus(t, request(a, "GET", "/api/backup", "", false, headers), 200)
 	// Confirmation is bound to one session, not to the owner globally.
 	other := additionalTestSession(t, a)
-	if _, err := db.Exec("UPDATE sessions SET confirmed_at=0 WHERE hash=?", a.sessionHash(other.Value)); err != nil {
+	if _, err := db.Exec("UPDATE sessions SET confirmed_at=0 WHERE hash=$1", a.sessionHash(other.Value)); err != nil {
 		t.Fatal(err)
 	}
 	requireStatus(t, request(a, "DELETE", "/api/tokens/1", ``, false, map[string]string{"Cookie": other.String()}), 403)
@@ -91,7 +92,7 @@ func TestAccountChangePreservesAbsoluteSessionExpiryAndIdlePolicy(t *testing.T) 
 	a, db := securityServer(t)
 	old := passwordLogin(t, a).Result().Cookies()[0]
 	var expiry int64
-	if err := db.QueryRow("UPDATE sessions SET expires_at=unixepoch()+3600,idle_minutes=15 WHERE hash=? RETURNING expires_at", a.sessionHash(old.Value)).Scan(&expiry); err != nil {
+	if err := db.QueryRow("UPDATE sessions SET expires_at=epoch_seconds()+3600,idle_minutes=15 WHERE hash=$1 RETURNING expires_at", a.sessionHash(old.Value)).Scan(&expiry); err != nil {
 		t.Fatal(err)
 	}
 	w := request(a, "PUT", "/api/account", `{"username":"me","password":"test-only-password"}`, false, map[string]string{"Cookie": old.String()})
@@ -99,7 +100,7 @@ func TestAccountChangePreservesAbsoluteSessionExpiryAndIdlePolicy(t *testing.T) 
 	next := w.Result().Cookies()[0]
 	var storedExpiry int64
 	var idleMinutes int
-	if err := db.QueryRow("SELECT expires_at,idle_minutes FROM sessions WHERE hash=?", a.sessionHash(next.Value)).Scan(&storedExpiry, &idleMinutes); err != nil {
+	if err := db.QueryRow("SELECT expires_at,idle_minutes FROM sessions WHERE hash=$1", a.sessionHash(next.Value)).Scan(&storedExpiry, &idleMinutes); err != nil {
 		t.Fatal(err)
 	}
 	if storedExpiry != expiry || idleMinutes != 15 || next.Expires.Unix() != expiry || next.MaxAge > 3600 {
@@ -219,7 +220,7 @@ func TestKeyProfilesRealOperationsAndRotation(t *testing.T) {
 	keys["capture"] = rotated["token"]
 	requireStatus(t, request(a, "GET", "/api/session", "", false, headers("capture")), 200)
 	requireStatus(t, request(a, "DELETE", "/api/links/1", "", false, headers("capture")), 403)
-	if _, err := db.Exec("UPDATE api_tokens SET expires_at=unixepoch()"); err != nil {
+	if _, err := db.Exec("UPDATE api_tokens SET expires_at=epoch_seconds()"); err != nil {
 		t.Fatal(err)
 	}
 	requireStatus(t, request(a, "GET", "/api/session", "", false, headers("capture")), 401)
@@ -247,7 +248,7 @@ func TestSessionManagementHTTP(t *testing.T) {
 	requireStatus(t, request(a, "DELETE", "/api/sessions/others", "", false, headers), 200)
 	requireStatus(t, request(a, "GET", "/api/session", "", false, map[string]string{"Cookie": second.String()}), 401)
 	requireStatus(t, request(a, "GET", "/api/session", "", false, headers), 200)
-	if _, err := db.Exec("UPDATE sessions SET last_used_at=unixepoch()-900"); err != nil {
+	if _, err := db.Exec("UPDATE sessions SET last_used_at=epoch_seconds()-900"); err != nil {
 		t.Fatal(err)
 	}
 	requireStatus(t, request(a, "GET", "/api/session", "", false, headers), 401)

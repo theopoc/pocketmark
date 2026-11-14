@@ -20,6 +20,7 @@ import time
 import urllib.request
 from pathlib import Path
 from disposable_auth import bootstrap
+from disposable_postgres import disposable_database
 
 
 def main():
@@ -47,9 +48,9 @@ def main():
         with urllib.request.urlopen(req, timeout=60) as response:
             return json.load(response)
 
-    with tempfile.TemporaryDirectory(prefix="pocketmark-bench-") as data:
+    with disposable_database() as database, tempfile.TemporaryDirectory(prefix="pocketmark-bench-") as data:
         with open(Path(data) / "server.log", "w+") as log:
-            env = {**os.environ, "POCKETMARK_TOKEN": token, "GOMEMLIMIT": "32MiB"}
+            env = {**os.environ, "POCKETMARK_DATABASE_URL": database, "POCKETMARK_TOKEN": token, "GOMEMLIMIT": "32MiB"}
             proc = subprocess.Popen([str(binary), "-listen", f"127.0.0.1:{port}",
                                      "-data", data, "-no-capture"], env=env, stdout=log, stderr=log)
 

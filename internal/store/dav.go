@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"pocketmark/internal/fault"
 	"time"
@@ -36,12 +37,12 @@ func davRevision(ctx context.Context, tx *sql.Tx) (int64, int64, error) {
 func davFile(ctx context.Context, tx *sql.Tx, name string) (DAVFile, error) {
 	var f DAVFile
 	var modified int64
-	e := tx.QueryRowContext(ctx, "SELECT size,etag,modified,revision,owner FROM dav_files WHERE name=?", name).Scan(&f.Size, &f.ETag, &modified, &f.Revision, &f.Owner)
+	e := tx.QueryRowContext(ctx, "SELECT size,etag,modified,revision,owner FROM dav_files WHERE name=$1", name).Scan(&f.Size, &f.ETag, &modified, &f.Revision, &f.Owner)
 	f.Modified = time.Unix(modified, 0)
 	return f, e
 }
 func writeDAVChunks(ctx context.Context, tx *sql.Tx, name string, w io.Writer) error {
-	rows, e := tx.QueryContext(ctx, "SELECT data FROM dav_chunks WHERE name=? ORDER BY ordinal", name)
+	rows, e := tx.QueryContext(ctx, "SELECT data FROM dav_chunks WHERE name=$1 ORDER BY ordinal", name)
 	if e != nil {
 		return e
 	}
@@ -59,10 +60,10 @@ func writeDAVChunks(ctx context.Context, tx *sql.Tx, name string, w io.Writer) e
 }
 func saveDAVFile(ctx context.Context, tx *sql.Tx, name, owner string, rev int64, r io.Reader) (DAVFile, error) {
 	f := DAVFile{Owner: owner, Revision: rev, Modified: time.Now().UTC()}
-	if _, e := tx.ExecContext(ctx, "DELETE FROM dav_files WHERE name=?", name); e != nil {
+	if _, e := tx.ExecContext(ctx, "DELETE FROM dav_files WHERE name=$1", name); e != nil {
 		return f, e
 	}
-	if _, e := tx.ExecContext(ctx, "INSERT INTO dav_files VALUES(?,0,'',?,?,?)", name, f.Modified.Unix(), rev, owner); e != nil {
+	if _, e := tx.ExecContext(ctx, "INSERT INTO dav_files VALUES($1,0,'',$2,$3,$4)", name, f.Modified.Unix(), rev, owner); e != nil {
 		return f, e
 	}
 	buf := make([]byte, 64<<10)
@@ -75,7 +76,7 @@ func saveDAVFile(ctx context.Context, tx *sql.Tx, name, owner string, rev int64,
 				return f, fault.Invalid("XBEL exceeds 8 MiB")
 			}
 			h.Write(buf[:n])
-			if _, e := tx.ExecContext(ctx, "INSERT INTO dav_chunks VALUES(?,?,?)", name, i, buf[:n]); e != nil {
+			if _, e := tx.ExecContext(ctx, "INSERT INTO dav_chunks VALUES($1,$2,$3)", name, i, buf[:n]); e != nil {
 				return f, e
 			}
 		}
@@ -87,7 +88,7 @@ func saveDAVFile(ctx context.Context, tx *sql.Tx, name, owner string, rev int64,
 		}
 	}
 	f.ETag = `"` + hex.EncodeToString(h.Sum(nil)) + `"`
-	_, e := tx.ExecContext(ctx, "UPDATE dav_files SET size=?,etag=? WHERE name=?", f.Size, f.ETag, name)
+	_, e := tx.ExecContext(ctx, "UPDATE dav_files SET size=$1,etag=$2 WHERE name=$3", f.Size, f.ETag, name)
 	return f, e
 }
 
@@ -99,6 +100,9 @@ func (s *Store) WriteDAVSnapshot(ctx context.Context, w io.Writer) (DAVFile, err
 		return DAVFile{}, e
 	}
 	defer tx.Rollback()
+	if _, e = tx.ExecContext(ctx, "SELECT id FROM dav_revision WHERE id=1 FOR UPDATE"); e != nil {
+		return DAVFile{}, e
+	}
 	if e = ensureDAVIDs(ctx, tx); e != nil {
 		return DAVFile{}, e
 	}
@@ -163,7 +167,7 @@ func checkDAVLease(ctx context.Context, tx *sql.Tx, owner string, checkRevision 
 			return ErrSyncConflict
 		}
 		var observed int64
-		if tx.QueryRowContext(ctx, "SELECT revision FROM dav_observed WHERE owner=?", owner).Scan(&observed) != nil || observed != rev {
+		if tx.QueryRowContext(ctx, "SELECT revision FROM dav_observed WHERE owner=$1", owner).Scan(&observed) != nil || observed != rev {
 			return ErrSyncConflict
 		}
 	}
@@ -175,6 +179,9 @@ func (s *Store) DAVLock(ctx context.Context, owner string, set bool) (time.Time,
 		return time.Time{}, e
 	}
 	defer tx.Rollback()
+	if _, e = tx.ExecContext(ctx, "SELECT id FROM dav_revision WHERE id=1 FOR UPDATE"); e != nil {
+		return time.Time{}, e
+	}
 	if e = checkDAVLease(ctx, tx, owner, false); e != nil {
 		return time.Time{}, e
 	}
@@ -201,7 +208,7 @@ func (s *Store) DAVLock(ctx context.Context, owner string, set bool) (time.Time,
 		}
 	}
 	now := time.Now().UTC()
-	_, e = tx.ExecContext(ctx, "INSERT INTO dav_lock VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET owner=excluded.owner,modified=excluded.modified,revision=excluded.revision", owner, now.Unix(), base)
+	_, e = tx.ExecContext(ctx, "INSERT INTO dav_lock VALUES(1,$1,$2,$3) ON CONFLICT(id) DO UPDATE SET owner=excluded.owner,modified=excluded.modified,revision=excluded.revision", owner, now.Unix(), base)
 	if e != nil {
 		return now, e
 	}
@@ -220,7 +227,7 @@ func (s *Store) DAVLockTime(ctx context.Context) (time.Time, error) {
 // prevents a browser resuming after sleep from refreshing its lock then pushing
 // an old cached tree over native edits made while its lease was expired.
 func (s *Store) ConfirmDAVRead(ctx context.Context, owner string, revision int64) error {
-	_, e := s.db.ExecContext(ctx, "INSERT INTO dav_observed(owner,revision) SELECT ?,? WHERE EXISTS(SELECT 1 FROM dav_lock WHERE owner=?) ON CONFLICT(owner) DO UPDATE SET revision=excluded.revision", owner, revision, owner)
+	_, e := s.db.ExecContext(ctx, "INSERT INTO dav_observed(owner,revision) SELECT $1,$2 WHERE EXISTS(SELECT 1 FROM dav_lock WHERE owner=$3) ON CONFLICT(owner) DO UPDATE SET revision=excluded.revision", owner, revision, owner)
 	return e
 }
 func (s *Store) StageDAV(ctx context.Context, owner string, r io.Reader) error {
@@ -229,6 +236,9 @@ func (s *Store) StageDAV(ctx context.Context, owner string, r io.Reader) error {
 		return e
 	}
 	defer tx.Rollback()
+	if _, e = tx.ExecContext(ctx, "SELECT id FROM dav_revision WHERE id=1 FOR UPDATE"); e != nil {
+		return e
+	}
 	if e = checkDAVLease(ctx, tx, owner, true); e != nil {
 		return e
 	}
@@ -245,7 +255,7 @@ func (s *Store) StageDAV(ctx context.Context, owner string, r io.Reader) error {
 	return tx.Commit()
 }
 func (s *Store) WriteDAVTemp(ctx context.Context, owner string, w io.Writer) (DAVFile, error) {
-	tx, e := s.db.BeginTx(ctx, nil)
+	tx, e := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if e != nil {
 		return DAVFile{}, e
 	}
@@ -263,7 +273,7 @@ func (s *Store) WriteDAVTemp(ctx context.Context, owner string, w io.Writer) (DA
 	return f, tx.Commit()
 }
 func (s *Store) DeleteDAVTemp(ctx context.Context, owner string) error {
-	_, e := s.db.ExecContext(ctx, "DELETE FROM dav_files WHERE name='temp' AND owner=?", owner)
+	_, e := s.db.ExecContext(ctx, "DELETE FROM dav_files WHERE name='temp' AND owner=$1", owner)
 	return e
 }
 
@@ -280,6 +290,13 @@ func (s *Store) ApplyDAV(ctx context.Context, owner string, r io.ReadSeeker, exp
 		return e
 	}
 	defer tx.Rollback()
+	if _, e = tx.ExecContext(ctx, "LOCK TABLE collections, links IN SHARE ROW EXCLUSIVE MODE; SELECT id FROM dav_revision WHERE id=1 FOR UPDATE"); e != nil {
+		return e
+	}
+	// Make implicit allocations roll back even if validation rejects the upload.
+	if e = restartDAVSequence(ctx, tx, 0); e != nil {
+		return e
+	}
 	if e = ensureDAVIDs(ctx, tx); e != nil {
 		return e
 	}
@@ -317,6 +334,11 @@ func (s *Store) ApplyDAV(ctx context.Context, owner string, r io.ReadSeeker, exp
 			return ErrSyncConflict
 		}
 	}
+	if root.HighestID > 0 {
+		if e = restartDAVSequence(ctx, tx, root.HighestID); e != nil {
+			return e
+		}
+	}
 	if e = replaceXBELTree(ctx, tx, root); e != nil {
 		return e
 	}
@@ -327,8 +349,25 @@ func (s *Store) ApplyDAV(ctx context.Context, owner string, r io.ReadSeeker, exp
 	if _, e = saveDAVFile(ctx, tx, "snapshot", owner, rev, r); e != nil {
 		return e
 	}
-	if _, e = tx.ExecContext(ctx, "DELETE FROM dav_files WHERE name='temp' AND owner=?;UPDATE dav_lock SET revision=? WHERE id=1 AND owner=?;UPDATE dav_observed SET revision=? WHERE owner=?", owner, rev, owner, rev, owner); e != nil {
+	if _, e = tx.ExecContext(ctx, "DELETE FROM dav_files WHERE name='temp' AND owner=$1", owner); e != nil {
+		return e
+	}
+	if _, e = tx.ExecContext(ctx, "UPDATE dav_lock SET revision=$1 WHERE id=1 AND owner=$2", rev, owner); e != nil {
+		return e
+	}
+	if _, e = tx.ExecContext(ctx, "UPDATE dav_observed SET revision=$1 WHERE owner=$2", rev, owner); e != nil {
 		return e
 	}
 	return tx.Commit()
+}
+
+// restartDAVSequence reserves a transactional sequence state. Only a validated
+// upload can advance the exported watermark beyond the current library.
+func restartDAVSequence(ctx context.Context, tx *sql.Tx, floor int64) error {
+	var next int64
+	if err := tx.QueryRowContext(ctx, "SELECT greatest(last_value + is_called::integer, $1::bigint + 1) FROM dav_ids_id_seq", floor).Scan(&next); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, fmt.Sprintf("ALTER SEQUENCE dav_ids_id_seq RESTART WITH %d", next))
+	return err
 }

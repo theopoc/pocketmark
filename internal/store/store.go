@@ -10,27 +10,25 @@ import (
 	"os"
 	"path/filepath"
 	"pocketmark/internal/fault"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
-	"github.com/mattn/go-sqlite3"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 )
 
-func init() {
-	sql.Register("pocketmark-sqlite3", &sqlite3.SQLiteDriver{ConnectHook: func(c *sqlite3.SQLiteConn) error {
-		return c.RegisterFunc("fuzzy_match", fuzzyMatch, true)
-	}})
-}
-
-// Store owns the SQLite connection, complete schema and disk-backed work files.
+// Store owns the PostgreSQL connection pool, complete schema and disk-backed work files.
 // A successful Open is sufficient for every operation; HTTP construction never
 // initializes or migrates persistence.
 type Store struct {
-	db        *sql.DB
-	directory string
-	path      string
+	db          *sql.DB
+	directory   string
+	databaseURL string
 }
 type Link struct {
+	captureAttempt   int64
 	HasThumbnail     bool     `json:"hasThumbnail,omitempty"`
 	ID               int64    `json:"id"`
 	Type             string   `json:"type"`
@@ -69,27 +67,32 @@ type Page struct {
 	PageSize int    `json:"pageSize"`
 }
 
-func Open(path string) (*Store, error) {
-	path, err := filepath.Abs(path)
+func Open(databaseURL, directory string) (*Store, error) {
+	if databaseURL == "" {
+		return nil, errors.New("POCKETMARK_DATABASE_URL is required")
+	}
+	u, err := url.Parse(databaseURL)
+	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") {
+		return nil, errors.New("expected a PostgreSQL connection URI")
+	}
+	cfg, err := pgx.ParseConfig(databaseURL)
+	if err != nil {
+		return nil, errors.New("invalid PostgreSQL connection configuration")
+	}
+	directory, err = filepath.Abs(directory)
 	if err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err = os.MkdirAll(directory, 0700); err != nil {
 		return nil, err
 	}
-	u := url.URL{Scheme: "file", Path: path}
-	db, err := sql.Open("pocketmark-sqlite3", u.String()+"?_journal_mode=WAL&_synchronous=FULL&_foreign_keys=on&_busy_timeout=5000&_cache_size=-2048")
-	if err != nil {
-		return nil, err
-	}
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-	s := &Store{db: db, directory: filepath.Dir(path), path: path}
-	if err = s.initializeSchema(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err = os.Chmod(path, 0600); err != nil {
+	db := stdlib.OpenDB(*cfg)
+	db.SetMaxOpenConns(4)
+	db.SetMaxIdleConns(2)
+	s := &Store{db: db, directory: directory, databaseURL: databaseURL}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	if err = s.initializeSchema(ctx); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -149,10 +152,14 @@ func Normalize(l *Link) error {
 }
 
 type executor interface {
-	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
 func Insert(ctx context.Context, ex executor, l Link) (int64, error) {
+	return insertLink(ctx, ex, l, false)
+}
+
+func insertLink(ctx context.Context, ex executor, l Link, skipDuplicate bool) (int64, error) {
 	if err := Normalize(&l); err != nil {
 		return 0, err
 	}
@@ -162,16 +169,18 @@ func Insert(ctx context.Context, ex executor, l Link) (int64, error) {
 	if IsFileURL(l.URL) {
 		status = "ready"
 	}
-	r, err := ex.ExecContext(ctx, `INSERT INTO links(url,title,description,notes,collection_id,tags,favorite,read,created_at,updated_at,status) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, l.URL, l.Title, l.Description, l.Notes, l.CollectionID, string(tags), l.Favorite, l.Read, now, now, status)
-	if err != nil {
-		return 0, err
+	query := `INSERT INTO links(url,title,description,notes,collection_id,tags,favorite,read,created_at,updated_at,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`
+	if skipDuplicate {
+		query += " ON CONFLICT (url_digest(url)) DO NOTHING"
 	}
-	return r.LastInsertId()
+	var id int64
+	err := ex.QueryRowContext(ctx, query+" RETURNING id", l.URL, l.Title, l.Description, l.Notes, l.CollectionID, string(tags), l.Favorite, l.Read, now, now, status).Scan(&id)
+	return id, err
 }
 func (s *Store) Create(ctx context.Context, l Link) (int64, error) { return Insert(ctx, s.db, l) }
 func (s *Store) Update(ctx context.Context, id int64, l Link) error {
 	var oldURL string
-	if e := s.db.QueryRowContext(ctx, "SELECT url FROM links WHERE id=?", id).Scan(&oldURL); e != nil {
+	if e := s.db.QueryRowContext(ctx, "SELECT url FROM links WHERE id=$1", id).Scan(&oldURL); e != nil {
 		return e
 	}
 	if (IsFileURL(oldURL) || IsFileURL(l.URL)) && oldURL != l.URL {
@@ -182,9 +191,9 @@ func (s *Store) Update(ctx context.Context, id int64, l Link) error {
 		return err
 	}
 	tags, _ := json.Marshal(l.Tags)
-	r, err := s.db.ExecContext(ctx, `UPDATE links SET title=?,description=?,notes=?,collection_id=?,tags=?,favorite=?,read=?,updated_at=?,
- status=CASE WHEN url<>? THEN 'pending' ELSE status END,error=CASE WHEN url<>? THEN '' ELSE error END,
- content=CASE WHEN url<>? THEN '' ELSE content END,archive=CASE WHEN url<>? THEN NULL ELSE archive END,url=? WHERE id=?`, l.Title, l.Description, l.Notes, l.CollectionID, string(tags), l.Favorite, l.Read, time.Now().UTC().Format(time.RFC3339Nano), l.URL, l.URL, l.URL, l.URL, l.URL, id)
+	r, err := s.db.ExecContext(ctx, `UPDATE links SET title=$1,description=$2,notes=$3,collection_id=$4,tags=$5,favorite=$6,read=$7,updated_at=$8,
+ status=CASE WHEN url<>$9 THEN 'pending' ELSE status END,error=CASE WHEN url<>$10 THEN '' ELSE error END,
+ content=CASE WHEN url<>$11 THEN '' ELSE content END,archive=CASE WHEN url<>$12 THEN NULL ELSE archive END,url=$13 WHERE id=$14`, l.Title, l.Description, l.Notes, l.CollectionID, string(tags), l.Favorite, l.Read, time.Now().UTC().Format(time.RFC3339Nano), l.URL, l.URL, l.URL, l.URL, l.URL, id)
 	return affected(r, err)
 }
 func affected(r sql.Result, err error) error {
@@ -201,7 +210,7 @@ func affected(r sql.Result, err error) error {
 	return nil
 }
 func (s *Store) Delete(ctx context.Context, id int64) error {
-	r, e := s.db.ExecContext(ctx, "DELETE FROM links WHERE id=?", id)
+	r, e := s.db.ExecContext(ctx, "DELETE FROM links WHERE id=$1", id)
 	return affected(r, e)
 }
 
@@ -228,7 +237,7 @@ func scan(row scanner, withContent bool, extra ...any) (Link, error) {
 	return l, err
 }
 func (s *Store) Get(ctx context.Context, id int64) (Link, error) {
-	return scan(s.db.QueryRowContext(ctx, "SELECT "+columns+",l.content FROM links l WHERE id=?", id), true)
+	return scan(s.db.QueryRowContext(ctx, "SELECT "+columns+",l.content FROM links l WHERE id=$1", id), true)
 }
 func (s *Store) List(ctx context.Context, f Filter) (Page, error) {
 	if f.Page < 1 {
@@ -237,59 +246,53 @@ func (s *Store) List(ctx context.Context, f Filter) (Page, error) {
 	p := Page{Links: []Link{}, Page: f.Page, PageSize: 40}
 	where := " WHERE 1=1"
 	args := []any{}
-	ftsQuery := ""
+	bind := func(value any) string {
+		args = append(args, value)
+		return "$" + strconv.Itoa(len(args))
+	}
+	snippet := ",''"
 	if len(f.Query) > 512 {
 		return p, fault.Invalid("query exceeds 512 bytes")
 	}
-	if f.Query != "" {
-		terms := strings.Fields(f.Query)
-		for i, t := range terms {
-			terms[i] = `"` + strings.ReplaceAll(t, `"`, `""`) + `"*`
+	terms := strings.FieldsFunc(f.Query, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
+	if len(terms) > 0 {
+		termsArg := bind(terms)
+		q := "to_tsquery('pocketmark_search',lower(unaccent(array_to_string(" + termsArg + "::text[],':* & ')) COLLATE pg_unicode_fast) || ':*')"
+		exact := "l.search_vector @@ " + q
+		where += " AND (" + exact
+		if f.Fuzzy {
+			where += " OR near_metadata(" + termsArg + ",concat_ws(' ',l.title,l.url,l.description,l.notes,l.tags))"
 		}
-		if len(terms) > 0 {
-			ftsQuery = strings.Join(terms, " AND ")
-			where += " AND (l.id IN (SELECT rowid FROM links_fts WHERE links_fts MATCH ?)"
-			args = append(args, ftsQuery)
-			if f.Fuzzy {
-				where += " OR fuzzy_match(?,l.title || ' ' || l.url || ' ' || l.description || ' ' || l.tags)=1"
-				args = append(args, f.Query)
-			}
-			where += ")"
-		}
+		where += ")"
+		snippet = ",CASE WHEN " + exact + " THEN search_excerpt(ARRAY[l.title,l.url,l.description,l.notes,l.tags,l.content]," + termsArg + ") ELSE '' END"
+
+	} else if strings.TrimSpace(f.Query) != "" {
+		where += " AND false"
 	}
 	if f.Collection == "0" {
 		where += " AND l.collection_id IS NULL"
 	} else if f.Collection != "" {
-		where += " AND l.collection_id=?"
-		args = append(args, f.Collection)
+		where += " AND l.collection_id=" + bind(f.Collection)
 	}
 	if f.Tag != "" {
-		where += " AND EXISTS(SELECT 1 FROM json_each(l.tags) WHERE value=?)"
-		args = append(args, f.Tag)
+		where += " AND jsonb_exists(l.tags::jsonb," + bind(f.Tag) + ")"
 	}
 	if f.Favorite {
-		where += " AND l.favorite=1"
+		where += " AND l.favorite"
 	}
 	if f.Unread {
-		where += " AND l.read=0"
+		where += " AND NOT l.read"
 	}
 	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM links l"+where, args...).Scan(&p.Total); err != nil {
 		return p, err
 	}
-	args = append(args, p.PageSize, (f.Page-1)*p.PageSize)
-	order := map[string]string{"": "l.id DESC", "newest": "julianday(l.created_at) DESC,l.id DESC", "oldest": "julianday(l.created_at),l.id", "title": "l.title COLLATE NOCASE,l.id", "title_desc": "l.title COLLATE NOCASE DESC,l.id", "updated": "julianday(l.updated_at) DESC,l.id DESC"}[f.Sort]
+	limit := bind(p.PageSize)
+	offset := bind((f.Page - 1) * p.PageSize)
+	order := map[string]string{"": "l.id DESC", "newest": "link_instant(l.created_at) DESC,l.id DESC", "oldest": "link_instant(l.created_at),l.id", "title": "lower(l.title),l.id", "title_desc": "lower(l.title) DESC,l.id", "updated": "link_instant(l.updated_at) DESC,l.id DESC"}[f.Sort]
 	if order == "" {
 		return p, fault.Invalid("invalid sort")
 	}
-	// Only search results carry an excerpt, bounded to 24 tokens and 600
-	// characters. Never send the captured document in a library response.
-	// Control-character markers are rendered as text nodes/marks by the UI.
-	snippet := ",''"
-	if ftsQuery != "" {
-		snippet = ",COALESCE((SELECT substr(snippet(links_fts,-1,char(30),char(31),'…',24),1,600) FROM links_fts WHERE rowid=l.id AND links_fts MATCH ?),'')"
-		args = append([]any{ftsQuery}, args...)
-	}
-	rows, err := s.db.QueryContext(ctx, "SELECT "+columns+snippet+",EXISTS(SELECT 1 FROM thumbnails t WHERE t.link_id=l.id) FROM links l"+where+" ORDER BY "+order+" LIMIT ? OFFSET ?", args...)
+	rows, err := s.db.QueryContext(ctx, "SELECT "+columns+snippet+",EXISTS(SELECT 1 FROM thumbnails t WHERE t.link_id=l.id) FROM links l"+where+" ORDER BY "+order+" LIMIT "+limit+" OFFSET "+offset, args...)
 	if err != nil {
 		return p, err
 	}
@@ -308,7 +311,7 @@ func (s *Store) List(ctx context.Context, f Filter) (Page, error) {
 	return p, rows.Err()
 }
 func (s *Store) Collections(ctx context.Context) ([]Collection, error) {
-	rows, e := s.db.QueryContext(ctx, "SELECT id,name,parent_id,description FROM collections ORDER BY name COLLATE NOCASE,id")
+	rows, e := s.db.QueryContext(ctx, "SELECT id,name,parent_id,description FROM collections ORDER BY lower(name),id")
 	if e != nil {
 		return nil, e
 	}
@@ -331,27 +334,37 @@ func (s *Store) AddCollection(ctx context.Context, c Collection) (int64, error) 
 	if c.Description != nil && len(*c.Description) > 8192 {
 		return 0, fault.Invalid("collection description exceeds 8 KiB")
 	}
-	r, e := s.db.ExecContext(ctx, "INSERT INTO collections(name,parent_id,description) VALUES(?,?,COALESCE(?,''))", c.Name, c.ParentID, c.Description)
-	if e != nil {
-		return 0, e
-	}
-	return r.LastInsertId()
+	var id int64
+	e := s.db.QueryRowContext(ctx, "INSERT INTO collections(name,parent_id,description) VALUES($1,$2,COALESCE($3,'')) RETURNING id", c.Name, c.ParentID, c.Description).Scan(&id)
+	return id, e
 }
 func (s *Store) DeleteCollection(ctx context.Context, id int64) error {
-	r, e := s.db.ExecContext(ctx, "DELETE FROM collections WHERE id=?", id)
+	r, e := s.db.ExecContext(ctx, "DELETE FROM collections WHERE id=$1", id)
 	return affected(r, e)
 }
 func (s *Store) Queue(ctx context.Context, id int64) error {
-	r, e := s.db.ExecContext(ctx, "UPDATE links SET status='pending',error='' WHERE id=? AND status<>'processing' AND url NOT LIKE 'pocketmark-file:%'", id)
+	r, e := s.db.ExecContext(ctx, "UPDATE links SET status='pending',error='' WHERE id=$1 AND status<>'processing' AND url NOT LIKE 'pocketmark-file:%'", id)
 	return affected(r, e)
 }
 func (s *Store) Next(ctx context.Context) (Link, error) {
-	// The service runs exactly one worker. This atomic claim also guards accidental second workers.
-	return scan(s.db.QueryRowContext(ctx, `UPDATE links SET status='processing' WHERE id=(SELECT id FROM links WHERE status='pending' AND url NOT LIKE 'pocketmark-file:%' ORDER BY id LIMIT 1) RETURNING id,url,title,description,notes,collection_id,tags,favorite,read,status,error,archive IS NOT NULL,created_at,updated_at`), false)
+	// Expired reservations can be reclaimed after a worker disappears.
+	// Incrementing the attempt fences an earlier worker that finishes late.
+	var l Link
+	var tags string
+	err := s.db.QueryRowContext(ctx, `UPDATE links SET status='processing', capture_until=now()+interval '2 minutes',capture_attempt=capture_attempt+1
+WHERE id=(SELECT id FROM links WHERE (status='pending' OR (status='processing' AND capture_until <= now()))
+AND url NOT LIKE 'pocketmark-file:%' ORDER BY id FOR UPDATE SKIP LOCKED LIMIT 1)
+RETURNING id,url,title,description,notes,collection_id,tags,favorite,read,status,error,archive IS NOT NULL,created_at,updated_at,capture_attempt`).
+		Scan(&l.ID, &l.URL, &l.Title, &l.Description, &l.Notes, &l.CollectionID, &tags, &l.Favorite, &l.Read, &l.Status, &l.Error, &l.ArchiveAvailable, &l.CreatedAt, &l.UpdatedAt, &l.captureAttempt)
+	l.Type = "url"
+	if err == nil {
+		err = json.Unmarshal([]byte(tags), &l.Tags)
+	}
+	return l, err
 }
 func (s *Store) Finish(ctx context.Context, l Link, title, description, content string, archive []byte, fetchErr error, thumbnail ...[]byte) error {
 	if fetchErr != nil {
-		_, e := s.db.ExecContext(ctx, "UPDATE links SET status='failed',error=? WHERE id=? AND url=? AND status='processing'", fetchErr.Error(), l.ID, l.URL)
+		_, e := s.db.ExecContext(ctx, "UPDATE links SET status='failed',error=$1 WHERE id=$2 AND url=$3 AND status='processing' AND capture_attempt=$4", fetchErr.Error(), l.ID, l.URL, l.captureAttempt)
 		return e
 	}
 	tx, e := s.db.BeginTx(ctx, nil)
@@ -359,7 +372,7 @@ func (s *Store) Finish(ctx context.Context, l Link, title, description, content 
 		return e
 	}
 	defer tx.Rollback()
-	result, e := tx.ExecContext(ctx, `UPDATE links SET status='ready',error='',title=CASE WHEN title=url AND ?<>'' THEN ? ELSE title END,description=CASE WHEN description='' THEN ? ELSE description END,content=?,archive=? WHERE id=? AND url=? AND status='processing'`, title, title, description, content, archive, l.ID, l.URL)
+	result, e := tx.ExecContext(ctx, `UPDATE links SET status='ready',error='',title=CASE WHEN title=url AND $1<>'' THEN $2 ELSE title END,description=CASE WHEN description='' THEN $3 ELSE description END,content=$4,archive=$5 WHERE id=$6 AND url=$7 AND status='processing' AND capture_attempt=$8`, title, title, description, content, archive, l.ID, l.URL, l.captureAttempt)
 	if e != nil {
 		return e
 	}
@@ -371,11 +384,11 @@ func (s *Store) Finish(ctx context.Context, l Link, title, description, content 
 		if len(thumbnail[0]) > 512<<10 {
 			return errors.New("thumbnail exceeds 512 KiB")
 		}
-		if _, e = tx.ExecContext(ctx, "DELETE FROM thumbnails WHERE link_id=?", l.ID); e != nil {
+		if _, e = tx.ExecContext(ctx, "DELETE FROM thumbnails WHERE link_id=$1", l.ID); e != nil {
 			return e
 		}
 		if len(thumbnail[0]) > 0 {
-			if _, e = tx.ExecContext(ctx, "INSERT INTO thumbnails(link_id,data) VALUES(?,?)", l.ID, thumbnail[0]); e != nil {
+			if _, e = tx.ExecContext(ctx, "INSERT INTO thumbnails(link_id,data) VALUES($1,$2)", l.ID, thumbnail[0]); e != nil {
 				return e
 			}
 		}

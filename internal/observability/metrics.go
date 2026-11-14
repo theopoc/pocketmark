@@ -116,5 +116,5 @@ func (o *Observer) Metrics(w http.ResponseWriter, _ *http.Request) {
 
 	samples := []metrics.Sample{{Name: "/memory/classes/total:bytes"}, {Name: "/memory/classes/heap/released:bytes"}, {Name: "/gc/heap/live:bytes"}, {Name: "/sched/goroutines:goroutines"}}
 	metrics.Read(samples)
-	fmt.Fprintf(w, "# HELP pocketmark_go_managed_memory_bytes Go runtime memory excluding released heap; not RSS or SQLite memory.\n# TYPE pocketmark_go_managed_memory_bytes gauge\npocketmark_go_managed_memory_bytes %d\n# TYPE pocketmark_go_heap_live_bytes gauge\npocketmark_go_heap_live_bytes %d\n# TYPE pocketmark_go_goroutines gauge\npocketmark_go_goroutines %d\n", samples[0].Value.Uint64()-samples[1].Value.Uint64(), samples[2].Value.Uint64(), samples[3].Value.Uint64())
+	fmt.Fprintf(w, "# HELP pocketmark_go_managed_memory_bytes Go runtime memory excluding released heap; not RSS or PostgreSQL memory.\n# TYPE pocketmark_go_managed_memory_bytes gauge\npocketmark_go_managed_memory_bytes %d\n# TYPE pocketmark_go_heap_live_bytes gauge\npocketmark_go_heap_live_bytes %d\n# TYPE pocketmark_go_goroutines gauge\npocketmark_go_goroutines %d\n", samples[0].Value.Uint64()-samples[1].Value.Uint64(), samples[2].Value.Uint64(), samples[3].Value.Uint64())
 }

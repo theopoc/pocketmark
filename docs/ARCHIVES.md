@@ -25,8 +25,8 @@ need an HTML snapshot from the user's browser.
 
 Each bookmark supports up to 32 attachments, each at most 20 MiB: PDF, PNG, JPEG,
 GIF, WebP or HTML/SingleFile. Uploads are staged in the data directory and then
-stored transactionally as 64 KiB SQLite chunks. A failed upload rolls back; deleting
-a bookmark or attachment cascades to its chunks. Downloads release the SQLite
+stored transactionally as 64 KiB PostgreSQL binary chunks. A failed upload rolls back; deleting
+a bookmark or attachment cascades to its chunks. Downloads release the database
 connection between chunks so slow clients do not monopolize it. Uploaded HTML is
 indexed for search with a 256 KiB extracted-text limit and a 2 MiB individual HTML
 token limit; a failed extraction leaves the original download intact and returns
@@ -54,7 +54,7 @@ rendered markup. Larger files remain downloadable.
 | `DELETE /api/assets/{assetId}` | Delete metadata and all chunks |
 | `POST /api/links/{id}/preserve` | Create offline HTML; returns `{asset, embedded, omitted}` |
 | `GET /api/links/{id}/reader?asset=123` | Sandboxed reader; `asset` is optional |
-| `GET /api/backup` | Owner-only ZIP (recent password confirmation for browser sessions) containing a consistent complete SQLite database and restore instructions |
+| `GET /api/backup` | Owner-only ZIP (recent password confirmation for browser sessions) containing a consistent PostgreSQL dump and restore instructions |
 
 Native attachment uploads, manual preservation, rich-reader generation and backup
 share one work slot; standalone uploads share the import slot.
@@ -80,25 +80,7 @@ Preparation uses bounded byte copying and temporary disk files in the existing
 single work slot; no browser process or resident cache is added. Closing the
 viewer unloads its content. Untrusted HTML never gains the application's origin. The API does not upload to a third-party service.
 
-Backup uses SQLite's online backup API to include committed WAL data in a
-consistent snapshot. A temporary read-only connection pins the source version;
-a temporary destination connection copies at most 1 MiB per step. Both have 2 MiB
-page-cache targets and disabled mmap, and close when copying finishes. The normal
-application connection remains available to reads and writes. Spilled destination
-pages are synced every 8 MiB to limit dirty filesystem-cache pressure in small
-containers. The snapshot is
-written in the data directory, then streamed into an uncompressed ZIP with
-constant-size copy buffers. Unlike a vacuum, this preserves free database pages
-instead of compacting the file. It requires free disk space approximately equal
-to the database size, plus any WAL growth while the read view is pinned.
-Preparation and download have a five-minute overall deadline; network writes
-have a renewable 30-second deadline so a progressing large download can exceed
-the normal 60-second HTTP write limit. It contains all archive bytes, uploads and
-account records; treat it as sensitive. Browser sessions are removed from the
-snapshot only; live sessions remain valid, and restoring requires signing in
-again. Preserve the `server-secret` file (or legacy `access-token` file or
-`POCKETMARK_TOKEN`) separately. Restore with the service stopped into an empty data
-directory, never alongside an old WAL/SHM file. New ZIP snapshots invalidate recovery codes and the current TOTP window on restore; wait for up to two new authenticator codes before signing in and generating recovery codes, or use the local `-reset-mfa` command if the authenticator is unavailable. Clock differences can add delay. Older ZIPs and raw copies are not detected and may restore earlier TOTP counters: reset MFA or regenerate recovery codes manually, and revoke restored sessions. Changing the server secret invalidates session digests and makes the encrypted TOTP secret unreadable. A still-valid recovery code can be used to sign in and replace the authenticator; otherwise reset MFA and enroll again. A new ZIP restored with a different key requires reset because its recovery codes are invalidated. Named API keys are independent of that key: review them because a rollback can restore keys revoked after the backup. No scheduled backup is enabled.
+Backup runs PostgreSQL's pg_dump against a consistent snapshot. The temporary SQL file lives in the application work directory. Reserve space for the dump including hex-encoded binary data. The ZIP contains uploaded originals, archives, metadata, account and API-key records and restore instructions. Sessions and recovery codes are excluded. Restore into an empty dedicated database while all application instances are stopped, preserve the server secret, then sign in and regenerate recovery codes. See the [backup guide](GUIDE.md) for commands.
 
 HTML preview preparation deliberately does not parse or sanitize saved markup.
 It copies at most 20 MiB through a bounded buffer to avoid memory amplification
@@ -118,11 +100,11 @@ pixels. JPEG and PNG are accepted; animated PNG, SVG and other formats are
 omitted. Only image headers are decoded on the server. Image failure does not
 fail HTML capture. Existing bookmarks obtain an image on their next capture.
 
-Thumbnail bytes are a persistent SQLite cache, committed with capture status.
+Thumbnail bytes are a persistent PostgreSQL cache, committed with capture status.
 There is no resident image map or background renderer. Recapture replaces the
 cache; changing the URL or deleting the bookmark removes it. Full database
 backups preserve it; metadata exports omit it. Disk use is at most 512 KiB per
-cached bookmark (plus SQLite overhead). This is optional preview metadata, not
+cached bookmark (plus database overhead). This is optional preview metadata, not
 an archive attachment.
 
 Grid cards load thumbnails lazily from the authenticated

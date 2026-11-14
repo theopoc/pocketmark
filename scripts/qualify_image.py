@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Qualify a published GHCR image and retain a sanitized result, including failures."""
 import argparse
+from contextlib import ExitStack
+import secrets
 import json
 from pathlib import Path
 import re
@@ -52,14 +54,26 @@ def require_private(image, tag):
 
 def health(image_id, platform):
     """Exercise the image's own HEALTHCHECK without repeating candidate journeys."""
-    container = command('docker', 'run', '--detach', '--pull=never', '--network=none',
-                        '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges',
-                        '--memory=128m', '--cpus=1', '--pids-limit=64',
-                        '--tmpfs=/data:rw,noexec,nosuid,size=16m,uid=10001,gid=10001,mode=0700',
-                        '--health-interval=1s', '--health-timeout=2s', '--health-start-period=2s',
-                        '--health-retries=30', '--platform', platform, image_id).strip()
-    require(re.fullmatch('[0-9a-f]{64}', container), 'missing qualification container ID')
-    try:
+    network = 'pocketmark-qualification-' + secrets.token_hex(8)
+    with ExitStack() as cleanup:
+        command('docker', 'network', 'create', '--internal', network)
+        cleanup.callback(command, 'docker', 'network', 'rm', network)
+        database = command('docker', 'run', '--detach', '--network', network, '--network-alias', 'db',
+                           '--tmpfs=/var/lib/postgresql', '-e', 'POSTGRES_HOST_AUTH_METHOD=trust',
+                           'postgres:18-alpine').strip()
+        require(re.fullmatch('[0-9a-f]{64}', database), 'missing database container ID')
+        cleanup.callback(command, 'docker', 'rm', '--force', '--volumes', database)
+        command('docker', 'exec', database, 'sh', '-ec',
+                'for i in $(seq 1 60); do pg_isready -h 127.0.0.1 -U postgres && exit 0; sleep 1; done; exit 1')
+        container = command('docker', 'run', '--detach', '--pull=never', '--network', network,
+                            '-e', 'POCKETMARK_DATABASE_URL=postgresql://postgres@db/postgres?sslmode=disable',
+                            '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges',
+                            '--memory=128m', '--cpus=1', '--pids-limit=64',
+                            '--tmpfs=/data:rw,noexec,nosuid,size=16m,uid=10001,gid=10001,mode=0700',
+                            '--health-interval=1s', '--health-timeout=2s', '--health-start-period=2s',
+                            '--health-retries=30', '--platform', platform, image_id).strip()
+        require(re.fullmatch('[0-9a-f]{64}', container), 'missing qualification container ID')
+        cleanup.callback(command, 'docker', 'rm', '--force', '--volumes', container)
         deadline = time.monotonic() + 45
         while True:
             state = json.loads(command('docker', 'inspect', container, '--format', '{{json .State}}'))
@@ -70,8 +84,7 @@ def health(image_id, platform):
                 return
             require(time.monotonic() < deadline, 'qualification healthcheck timed out')
             time.sleep(0.5)
-    finally:
-        command('docker', 'rm', '--force', '--volumes', container)
+
 
 
 def qualify(image, digest, revision, platform, report_path, check_privacy=True):

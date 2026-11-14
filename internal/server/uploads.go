@@ -34,7 +34,7 @@ func (u *stagedUpload) cleanup() {
 	os.Remove(u.file.Name())
 }
 
-// Stage the entire bounded upload before opening a SQLite transaction, so a
+// Stage the entire bounded upload before opening a PostgreSQL transaction, so a
 // slow client cannot occupy the sole database connection. noun only preserves
 // the existing error messages for attachments and standalone files.
 func (a *Server) stageUpload(w http.ResponseWriter, r *http.Request, noun string) (*stagedUpload, bool) {

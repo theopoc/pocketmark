@@ -19,7 +19,7 @@ import (
 
 func TestServerSecretPersistenceAndLegacyMigration(t *testing.T) {
 	dir := t.TempDir()
-	secret, err := loadServerSecret(dir, "", false)
+	secret, err := loadServerSecret(dir, "", true)
 	if err != nil || len(secret) != 64 {
 		t.Fatalf("new secret: %v", err)
 	}
@@ -41,9 +41,6 @@ func TestServerSecretPersistenceAndLegacyMigration(t *testing.T) {
 		t.Fatal("legacy secret changed", err)
 	}
 	missing := t.TempDir()
-	if err := os.WriteFile(filepath.Join(missing, "pocketmark.db"), nil, 0600); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := loadServerSecret(missing, "", false); err == nil {
 		t.Fatal("missing secret silently replaced")
 	}
@@ -53,7 +50,7 @@ func TestServerSecretPersistenceAndLegacyMigration(t *testing.T) {
 }
 
 func TestResetAccountInputValidation(t *testing.T) {
-	s, err := store.Open(filepath.Join(t.TempDir(), "account.db"))
+	s, err := openTestStore(t, filepath.Join(t.TempDir(), "account.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +77,7 @@ func TestResetAccountInputValidation(t *testing.T) {
 // The production worker must report an ordinary fetch failure even when saving
 // that failure to SQLite succeeds. The loopback URL is rejected without network.
 func TestWorkerReportsPersistedCaptureFailure(t *testing.T) {
-	s, err := store.Open(filepath.Join(t.TempDir(), "worker.db"))
+	s, err := openTestStore(t, filepath.Join(t.TempDir(), "worker.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

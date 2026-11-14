@@ -4,7 +4,7 @@ Start with the [development and merge policy](CI.md#development-and-merge-policy
 
 ## Rehearse packaging locally
 
-Release tooling uses **GoReleaser OSS 2.18.3**, pinned in Actions. No Pro license or additional secret is required. Linux binaries require `musl-gcc` and matching native architecture because SQLite uses CGO. The native release jobs compile and smoke-check them after validation and tagging; GoReleaser's OSS `meta` archives then package those exact binaries with installation instructions. It generates the extension ZIPs and `SHA256SUMS` too. The single extension ZIP contains fourteen explicitly named production files, including its background worker, and declares `debugger` access. Tests and local data are never globbed into release archives.
+Release tooling uses **GoReleaser OSS 2.18.3**, pinned in Actions. No Pro license or additional secret is required. Linux binaries are built with CGO disabled. The native release jobs compile and smoke-check them after validation and tagging; GoReleaser's OSS `meta` archives then package those exact binaries with installation instructions. It generates the extension ZIPs and `SHA256SUMS` too. The single extension ZIP contains fourteen explicitly named production files, including its background worker, and declares `debugger` access. Tests and local data are never globbed into release archives.
 
 For a local packaging rehearsal, download the `linux-amd64` and `linux-arm64` Release artifacts into `artifacts/linux-amd64/` and `artifacts/linux-arm64/`, retaining their executable and `.buildinfo.txt` files. With GoReleaser 2.18.3 installed, run:
 
@@ -32,8 +32,8 @@ Use artifacts built from the current clean commit; verification rejects another 
    cannot be tagged by this run. Release Please handles notes and label state;
    GitHub CLI never creates release tags. The temporary label is deleted after
    successful creation. Existing tags must resolve to the tested commit.
-4. Native AMD64/ARM64 jobs build static CGO executables with musl. They check the
-   executable, embedded source revision, architecture and SQLite settings before
+4. Native AMD64/ARM64 jobs build static Go executables. They check the
+   executable, embedded source revision, architecture and build settings before
    uploading same-run artifacts. No polling, lookup of previous CI runs or
    long-lived main binary inventory is needed.
 5. Two branches proceed in parallel: GoReleaser packages and uploads GitHub draft
@@ -97,7 +97,7 @@ push untagged candidate digests, generate CycloneDX inventories with Syft 1.55.0
 and scan with Grype 0.121.0. High/critical findings block even without a fix.
 Docker layer cache exports are optional: a read-only cache token cannot block
 publication, while build failures, security findings and test failures still do.
-Compose tests cover authentication, FTS5, SSRF rejection, backup and restart
+Compose tests cover authentication, PostgreSQL search, SSRF rejection, backup and restart
 persistence; Chromium journeys run once on AMD64. Build attestations remain
 disabled so the index contains exactly two runnable platforms; this pipeline does
 not claim signed provenance or complete identification of statically embedded C.

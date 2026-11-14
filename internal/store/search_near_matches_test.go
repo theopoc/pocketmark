@@ -18,7 +18,7 @@ func TestNearMatchesIncludeFullTextAndPreserveFilters(t *testing.T) {
 		{"Other article", "", "browzer"}, // No typo scanning of captured bodies.
 	} {
 		id := createLink(t, s, Link{URL: "https://example.com/" + strings.ReplaceAll(item.title, " ", "-"), Title: item.title, Notes: item.notes, CollectionID: &collection, Tags: []string{"reading"}, Favorite: true})
-		if _, err := s.db.Exec("UPDATE links SET content=? WHERE id=?", item.content, id); err != nil {
+		if _, err := s.db.Exec("UPDATE links SET content=$1 WHERE id=$2", item.content, id); err != nil {
 			t.Fatal(err)
 		}
 	}

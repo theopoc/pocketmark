@@ -15,8 +15,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"pocketmark/internal/store"
 )
 
 func TestSecretEqual(t *testing.T) {
@@ -41,7 +39,7 @@ func TestSecretEqual(t *testing.T) {
 
 func TestSessionRevocationAcrossRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sessions.db")
-	s, err := store.Open(path)
+	s, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +71,7 @@ func TestSessionRevocationAcrossRestart(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = store.Open(path)
+	s, err = openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}

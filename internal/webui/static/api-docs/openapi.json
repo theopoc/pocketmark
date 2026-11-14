@@ -99,7 +99,7 @@
           }
         },
         "security": [],
-        "description": "Checks SQLite with a one-second context timeout and two separate readiness slots. Independent of login and library slots."
+        "description": "Checks PostgreSQL with a one-second context timeout and two separate readiness slots. Independent of login and library slots."
       }
     },
     "/api/setup": {
@@ -291,7 +291,7 @@
             "$ref": "#/components/responses/429"
           }
         },
-        "description": "Revokes the current session in SQLite and clears its cookie. Revocation survives restart. Other sessions and API keys remain valid. Owner session required; named keys are forbidden.",
+        "description": "Revokes the current session in PostgreSQL and clears its cookie. Revocation survives restart. Other sessions and API keys remain valid. Owner session required; named keys are forbidden.",
         "x-owner-only": true,
         "security": [
           {
@@ -2874,7 +2874,7 @@
             "$ref": "#/components/responses/ServerError"
           },
           "200": {
-            "description": "ZIP stream containing a consistent SQLite snapshot and restore instructions",
+            "description": "ZIP stream containing a consistent PostgreSQL snapshot and restore instructions",
             "content": {
               "application/zip": {
                 "schema": {
@@ -2955,7 +2955,7 @@
           }
         },
         "security": [],
-        "description": "Independent of SQLite and application request slots. Use for Kubernetes liveness; /healthz is bounded SQLite readiness."
+        "description": "Independent of PostgreSQL and application request slots. Use for Kubernetes liveness; /healthz is bounded PostgreSQL readiness."
       }
     },
     "/api/reauth": {

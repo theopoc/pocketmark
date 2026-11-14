@@ -234,7 +234,7 @@ export function HelpDialog() {
                 <li>{"Stop Pocketmark."}</li>
                 <li>
                   {
-                    "Restore into an empty data directory, following the included "
+                    "Restore into an empty PostgreSQL database, following the included "
                   }
                   <code>{"RESTORE.txt"}</code>
                   {" instructions."}

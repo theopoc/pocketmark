@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"strings"
 
-	"pocketmark/internal/store"
 	"testing"
 	"time"
 
@@ -116,7 +115,7 @@ func TestBackupRestoreExcludesSessions(t *testing.T) {
 	requireStatus(t, request(a, "GET", "/api/account", "", false, headers), 200)
 	requireStatus(t, request(a, "POST", "/api/logout", "", false, headers), 200)
 	requireStatus(t, request(a, "GET", "/api/account", "", false, headers), 401)
-	restored, err := store.Open(path)
+	restored, err := restoreTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +137,7 @@ func TestBackupRestoreExcludesSessions(t *testing.T) {
 	if err := restored.Close(); err != nil {
 		t.Fatal(err)
 	}
-	restarted, err := store.Open(path)
+	restarted, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}

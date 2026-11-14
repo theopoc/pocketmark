@@ -13,7 +13,7 @@ import (
 func TestThumbnailLegacyRestartAndURLInvalidation(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "legacy.db")
-	s, err := Open(path)
+	s, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -22,13 +22,9 @@ func TestThumbnailLegacyRestartAndURLInvalidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Close()
-	legacy, _ := sql.Open("pocketmark-sqlite3", path)
-	if _, err = legacy.Exec("DROP TRIGGER thumbnail_url_change;DROP TABLE thumbnails"); err != nil {
-		t.Fatal(err)
-	}
-	legacy.Close()
+
 	for restart := 0; restart < 2; restart++ {
-		s, err = Open(path)
+		s, err = openTestStore(t, path)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -51,7 +47,7 @@ func TestThumbnailLegacyRestartAndURLInvalidation(t *testing.T) {
 		}
 		s.Close()
 	}
-	s, err = Open(path)
+	s, err = openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +59,7 @@ func TestThumbnailLegacyRestartAndURLInvalidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.db.Exec("UPDATE links SET url='https://other.example' WHERE id=?", id); err != nil {
+	if _, err = s.db.Exec("UPDATE links SET url='https://other.example' WHERE id=$1", id); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.Finish(ctx, l, "", "", "", nil, nil, []byte("stale")); err != nil {
@@ -81,7 +77,7 @@ func BenchmarkThumbnailCache(b *testing.B) {
 			name = "images"
 		}
 		b.Run(name, func(b *testing.B) {
-			s, err := Open(filepath.Join(b.TempDir(), "cache.db"))
+			s, err := openTestStore(b, filepath.Join(b.TempDir(), "cache.db"))
 			if err != nil {
 				b.Fatal(err)
 			}

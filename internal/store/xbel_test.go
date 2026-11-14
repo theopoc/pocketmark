@@ -12,7 +12,7 @@ import (
 )
 
 func TestXBELSyncRetainsDataAndRollsBack(t *testing.T) {
-	s, e := Open(filepath.Join(t.TempDir(), "test.db"))
+	s, e := openTestStore(t, filepath.Join(t.TempDir(), "test.db"))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -52,7 +52,7 @@ func TestXBELSyncRetainsDataAndRollsBack(t *testing.T) {
 }
 
 func TestXBELURLEditPreservesPersonalDataAndFiles(t *testing.T) {
-	s, e := Open(filepath.Join(t.TempDir(), "test.db"))
+	s, e := openTestStore(t, filepath.Join(t.TempDir(), "test.db"))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -62,7 +62,7 @@ func TestXBELURLEditPreservesPersonalDataAndFiles(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, e = s.db.Exec(`UPDATE links SET content='Original text',archive=?,status='ready' WHERE id=?`, []byte("<p>Original text</p>"), id); e != nil {
+	if _, e = s.db.Exec(`UPDATE links SET content='Original text',archive=$1,status='ready' WHERE id=$2`, []byte("<p>Original text</p>"), id); e != nil {
 		t.Fatal(e)
 	}
 	annotationID, e := s.SaveAnnotation(ctx, id, 0, Annotation{Quote: "Original", Start: 0, End: 8, Note: "Keep this"})
@@ -77,7 +77,7 @@ func TestXBELURLEditPreservesPersonalDataAndFiles(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, e = s.db.Exec("UPDATE links SET url=?,status='ready' WHERE id=?", "pocketmark-file:"+strings.Repeat("a", 64), fileID); e != nil {
+	if _, e = s.db.Exec("UPDATE links SET url=$1,status='ready' WHERE id=$2", "pocketmark-file:"+strings.Repeat("a", 64), fileID); e != nil {
 		t.Fatal(e)
 	}
 	var before bytes.Buffer
@@ -114,7 +114,7 @@ func TestXBELURLEditPreservesPersonalDataAndFiles(t *testing.T) {
 }
 
 func TestXBELRejectsConflictingAndInvalidIDsAtomically(t *testing.T) {
-	s, e := Open(filepath.Join(t.TempDir(), "test.db"))
+	s, e := openTestStore(t, filepath.Join(t.TempDir(), "test.db"))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -152,7 +152,7 @@ func TestXBELRejectsConflictingAndInvalidIDsAtomically(t *testing.T) {
 }
 
 func TestDAVHighestIDAndExpiredLeaseRequireFreshRead(t *testing.T) {
-	s, e := Open(filepath.Join(t.TempDir(), "test.db"))
+	s, e := openTestStore(t, filepath.Join(t.TempDir(), "test.db"))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -200,7 +200,7 @@ func TestDAVHighestIDAndExpiredLeaseRequireFreshRead(t *testing.T) {
 	if e = s.Update(ctx, id, l); e != nil {
 		t.Fatal(e)
 	}
-	if _, e = s.db.Exec("UPDATE dav_lock SET modified=unixepoch()-1000"); e != nil {
+	if _, e = s.db.Exec("UPDATE dav_lock SET modified=epoch_seconds()-1000"); e != nil {
 		t.Fatal(e)
 	}
 	if _, e = s.DAVLockTime(ctx); !errors.Is(e, sql.ErrNoRows) {

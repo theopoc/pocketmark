@@ -15,35 +15,25 @@ type MFAState struct {
 
 var ErrMFAChanged = errors.New("authentication state changed or proof was already used")
 
-func initMFA(ctx context.Context, tx *sql.Tx) error {
-	var existed int
-	if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_schema WHERE type='table' AND name='mfa'").Scan(&existed); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS mfa(
- id INTEGER PRIMARY KEY CHECK(id=1), secret BLOB NOT NULL DEFAULT X'',
- generation INTEGER NOT NULL DEFAULT 0, last_counter INTEGER NOT NULL DEFAULT -1,
- restored INTEGER NOT NULL DEFAULT 0 CHECK(restored IN (0,1)));
- INSERT OR IGNORE INTO mfa(id) VALUES(1);
- CREATE TABLE IF NOT EXISTS mfa_recovery(hash TEXT PRIMARY KEY);`); err != nil {
-		return err
-	}
-	if existed == 0 {
-		// Sessions created by an older version never verified a second factor.
-		if _, err := tx.ExecContext(ctx, "DELETE FROM sessions"); err != nil {
-			return err
-		}
-	}
-	// Only new native backup copies have this marker; the live database does not.
-	_, err := tx.ExecContext(ctx, `DELETE FROM mfa_recovery WHERE EXISTS(SELECT 1 FROM mfa WHERE id=1 AND restored=1);
- UPDATE mfa SET last_counter=MAX(last_counter,unixepoch()/30+1),restored=0 WHERE id=1 AND restored=1`)
-	return err
-}
-
 func (s *Store) MFA(ctx context.Context) (MFAState, error) {
 	var state MFAState
 	err := s.db.QueryRowContext(ctx, "SELECT secret,generation FROM mfa WHERE id=1").Scan(&state.Secret, &state.Generation)
 	return state, err
+}
+
+// Serialize changes to the personal account, its factors and session budget.
+// The singleton exists even before enrollment. Each check after acquiring
+// its lock observes the preceding transaction's commit at READ COMMITTED.
+func (s *Store) beginAccountChange(ctx context.Context) (*sql.Tx, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	if _, err = tx.ExecContext(ctx, "SELECT id FROM mfa WHERE id=1 FOR UPDATE"); err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	return tx, nil
 }
 
 // consumeFactorTx consumes a TOTP counter or a recovery code exactly once.
@@ -51,20 +41,20 @@ func (s *Store) MFA(ctx context.Context) (MFAState, error) {
 func consumeFactorTx(ctx context.Context, tx *sql.Tx, salt string, generation, counter int64, recoveryHash string) error {
 	var currentSalt string
 	var currentGeneration int64
-	var enabled int
+	var enabled bool
 	if err := tx.QueryRowContext(ctx, `SELECT account.salt,mfa.generation,length(mfa.secret)>0
  FROM account JOIN mfa ON mfa.id=1 WHERE account.id=1`).Scan(&currentSalt, &currentGeneration, &enabled); err != nil {
 		return err
 	}
-	if currentSalt != salt || currentGeneration != generation || enabled == 0 {
+	if currentSalt != salt || currentGeneration != generation || !enabled {
 		return ErrMFAChanged
 	}
 	var result sql.Result
 	var err error
 	if recoveryHash != "" {
-		result, err = tx.ExecContext(ctx, "DELETE FROM mfa_recovery WHERE hash=?", recoveryHash)
+		result, err = tx.ExecContext(ctx, "DELETE FROM mfa_recovery WHERE hash=$1", recoveryHash)
 	} else if counter >= 0 {
-		result, err = tx.ExecContext(ctx, "UPDATE mfa SET last_counter=? WHERE id=1 AND generation=? AND last_counter<?", counter, generation, counter)
+		result, err = tx.ExecContext(ctx, "UPDATE mfa SET last_counter=$1 WHERE id=1 AND generation=$2 AND last_counter<$3", counter, generation, counter)
 	} else {
 		return ErrMFAChanged
 	}
@@ -83,7 +73,7 @@ func consumeFactorTx(ctx context.Context, tx *sql.Tx, salt string, generation, c
 
 // SignInMFA atomically consumes the proof and creates the session.
 func (s *Store) SignInMFA(ctx context.Context, salt string, generation, counter int64, recoveryHash, sessionHash string, expires time.Time, device string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginAccountChange(ctx)
 	if err != nil {
 		return err
 	}
@@ -100,22 +90,22 @@ func (s *Store) SignInMFA(ctx context.Context, salt string, generation, counter 
 // AuthorizeMFAChange consumes a fresh factor. A recent recovery-code sign-in
 // grants replacement authorization until the change is successfully committed.
 func (s *Store) AuthorizeMFAChange(ctx context.Context, salt string, generation, counter int64, recoveryHash, sessionHash string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginAccountChange(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 	var one int
-	if err = tx.QueryRowContext(ctx, "SELECT 1 FROM sessions WHERE hash=? AND "+liveSession, sessionHash).Scan(&one); err != nil {
+	if err = tx.QueryRowContext(ctx, "SELECT 1 FROM sessions WHERE hash=$1 AND "+liveSession+" FOR UPDATE", sessionHash).Scan(&one); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
 		return ErrMFAChanged
 	}
 	if counter < 0 && recoveryHash == "" {
-		err = tx.QueryRowContext(ctx, `SELECT 1 FROM sessions WHERE hash=? AND recovery_until>unixepoch()
- AND EXISTS(SELECT 1 FROM account WHERE id=1 AND salt=?)
-		 AND EXISTS(SELECT 1 FROM mfa WHERE id=1 AND generation=? AND length(secret)>0)`, sessionHash, salt, generation).Scan(&one)
+		err = tx.QueryRowContext(ctx, `SELECT 1 FROM sessions WHERE hash=$1 AND recovery_until>epoch_seconds()
+ AND EXISTS(SELECT 1 FROM account WHERE id=1 AND salt=$2)
+		 AND EXISTS(SELECT 1 FROM mfa WHERE id=1 AND generation=$3 AND length(secret)>0) FOR UPDATE`, sessionHash, salt, generation).Scan(&one)
 		if err != nil {
 			if !errors.Is(err, sql.ErrNoRows) {
 				return err
@@ -133,7 +123,7 @@ func insertRecoveryCodes(ctx context.Context, tx *sql.Tx, hashes []string) error
 		return err
 	}
 	for _, hash := range hashes {
-		if _, err := tx.ExecContext(ctx, "INSERT INTO mfa_recovery(hash) VALUES(?)", hash); err != nil {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO mfa_recovery(hash) VALUES($1)", hash); err != nil {
 			return err
 		}
 	}
@@ -143,24 +133,24 @@ func insertRecoveryCodes(ctx context.Context, tx *sql.Tx, hashes []string) error
 // ActivateMFA replaces the factor and recovery codes in one transaction. An
 // initial enrollment creates a session; a replacement keeps only its session.
 func (s *Store) ActivateMFA(ctx context.Context, salt string, generation, counter int64, encrypted []byte, hashes []string, keepSession, newSession string, expires time.Time, device string, recoveryGrant bool) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginAccountChange(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 	var currentSalt string
 	var currentGeneration int64
-	var enabled int
+	var enabled bool
 	if err = tx.QueryRowContext(ctx, `SELECT account.salt,mfa.generation,length(mfa.secret)>0
  FROM account JOIN mfa ON mfa.id=1 WHERE account.id=1`).Scan(&currentSalt, &currentGeneration, &enabled); err != nil {
 		return err
 	}
-	if currentSalt != salt || currentGeneration != generation || (keepSession == "" && enabled != 0) || (keepSession != "" && enabled == 0) {
+	if currentSalt != salt || currentGeneration != generation || (keepSession == "" && enabled) || (keepSession != "" && !enabled) {
 		return ErrMFAChanged
 	}
 	if keepSession != "" {
 		var one int
-		if err = tx.QueryRowContext(ctx, "SELECT 1 FROM sessions WHERE hash=? AND "+liveSession, keepSession).Scan(&one); err != nil {
+		if err = tx.QueryRowContext(ctx, "SELECT 1 FROM sessions WHERE hash=$1 AND "+liveSession+" FOR UPDATE", keepSession).Scan(&one); err != nil {
 			if !errors.Is(err, sql.ErrNoRows) {
 				return err
 			}
@@ -168,7 +158,7 @@ func (s *Store) ActivateMFA(ctx context.Context, salt string, generation, counte
 		}
 	}
 	if recoveryGrant {
-		r, e := tx.ExecContext(ctx, "UPDATE sessions SET recovery_until=0 WHERE hash=? AND recovery_until>unixepoch() AND "+liveSession, keepSession)
+		r, e := tx.ExecContext(ctx, "UPDATE sessions SET recovery_until=0 WHERE hash=$1 AND recovery_until>epoch_seconds() AND "+liveSession, keepSession)
 		if e != nil {
 			return e
 		}
@@ -180,7 +170,7 @@ func (s *Store) ActivateMFA(ctx context.Context, salt string, generation, counte
 			return ErrMFAChanged
 		}
 	}
-	if _, err = tx.ExecContext(ctx, "UPDATE mfa SET secret=?,generation=generation+1,last_counter=? WHERE id=1", encrypted, counter); err != nil {
+	if _, err = tx.ExecContext(ctx, "UPDATE mfa SET secret=$1,generation=generation+1,last_counter=$2 WHERE id=1", encrypted, counter); err != nil {
 		return err
 	}
 	if err = insertRecoveryCodes(ctx, tx, hashes); err != nil {
@@ -194,10 +184,10 @@ func (s *Store) ActivateMFA(ctx context.Context, salt string, generation, counte
 			return err
 		}
 	} else {
-		if _, err = tx.ExecContext(ctx, "DELETE FROM sessions WHERE hash!=?", keepSession); err != nil {
+		if _, err = tx.ExecContext(ctx, "DELETE FROM sessions WHERE hash!=$1", keepSession); err != nil {
 			return err
 		}
-		if _, err = tx.ExecContext(ctx, "UPDATE sessions SET recovery_until=0,confirmed_at=unixepoch() WHERE hash=?", keepSession); err != nil {
+		if _, err = tx.ExecContext(ctx, "UPDATE sessions SET recovery_until=0,confirmed_at=epoch_seconds() WHERE hash=$1", keepSession); err != nil {
 			return err
 		}
 	}
@@ -205,15 +195,15 @@ func (s *Store) ActivateMFA(ctx context.Context, salt string, generation, counte
 }
 
 func (s *Store) ReplaceRecoveryCodes(ctx context.Context, salt string, generation int64, sessionHash string, hashes []string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginAccountChange(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 	var one int
-	if err = tx.QueryRowContext(ctx, `SELECT 1 FROM sessions WHERE hash=? AND `+liveSession+`
- AND EXISTS(SELECT 1 FROM account WHERE id=1 AND salt=?)
- AND EXISTS(SELECT 1 FROM mfa WHERE id=1 AND generation=? AND length(secret)>0)`, sessionHash, salt, generation).Scan(&one); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT 1 FROM sessions WHERE hash=$1 AND `+liveSession+`
+ AND EXISTS(SELECT 1 FROM account WHERE id=1 AND salt=$2)
+ AND EXISTS(SELECT 1 FROM mfa WHERE id=1 AND generation=$3 AND length(secret)>0) FOR UPDATE`, sessionHash, salt, generation).Scan(&one); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
@@ -226,12 +216,12 @@ func (s *Store) ReplaceRecoveryCodes(ctx context.Context, salt string, generatio
 }
 
 func (s *Store) ResetMFA(ctx context.Context) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginAccountChange(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err = tx.ExecContext(ctx, `UPDATE mfa SET secret=X'',generation=generation+1,last_counter=-1 WHERE id=1;
+	if _, err = tx.ExecContext(ctx, `UPDATE mfa SET secret=''::bytea,generation=generation+1,last_counter=-1 WHERE id=1;
  DELETE FROM mfa_recovery; DELETE FROM sessions`); err != nil {
 		return err
 	}

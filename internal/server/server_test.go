@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"pocketmark/internal/pgtest"
 	"strconv"
 	"strings"
 	"testing"
@@ -33,7 +34,7 @@ type testServer struct {
 
 func wrapTestServer(t *testing.T, a *Server, path string) *testServer {
 	t.Helper()
-	db, err := sql.Open("sqlite3", path)
+	db, err := sql.Open("pgx", pgtest.URL(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,9 +47,9 @@ func (a *testServer) withServer(server *Server) *testServer {
 }
 
 func (a *testServer) insertSessionFixture(hash string, expires time.Time) error {
-	_, err := a.db.Exec(`INSERT OR REPLACE INTO sessions
+	_, err := a.db.Exec(`INSERT INTO sessions
  (hash,expires_at,created_at,last_used_at,confirmed_at,idle_minutes,device)
- VALUES(?,?,unixepoch(),unixepoch(),unixepoch(),1440,'fixture')`, hash, expires.Unix())
+ VALUES($1,$2,epoch_seconds(),epoch_seconds(),epoch_seconds(),1440,'fixture') ON CONFLICT(hash) DO UPDATE SET expires_at=excluded.expires_at`, hash, expires.Unix())
 	return err
 }
 
@@ -61,7 +62,7 @@ func TestRouteFixturePasswordHash(t *testing.T) {
 func newTestServer(t *testing.T, origin string, secure bool) *testServer {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "test.db")
-	s, err := store.Open(path)
+	s, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}

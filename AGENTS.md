@@ -3,7 +3,7 @@
 ## Project rules
 
 Pocketmark is a personal bookmark manager built for low server RAM: one Go process
-with standard-library HTTP routing, SQLite/FTS5 through CGO, an embedded React + shadcn/ui frontend compiled
+with standard-library HTTP routing, PostgreSQL through pgx, an embedded React + shadcn/ui frontend compiled
 with Vite, a Chrome capture extension and
 Floccus/WebDAV sync. Deploy with Docker Compose or a standalone Linux binary.
 Keep page rendering in the user's browser;
@@ -40,7 +40,7 @@ the RAM goal.
 Requirements: Go from `go.mod`, a C compiler, Make, Node.js 24 with npm and Python 3.
 Frontend architecture, dependency updates and development: [frontend guide](docs/FRONTEND.md).
 Make installs locked frontend dependencies and compiles assets before Go checks, tests and builds.
-CGO is required; use Make targets for the SQLite build tags.
+Integration tests require PostgreSQL 18 client tools and a disposable cluster. Set POCKETMARK_TEST_DATABASE_URL to a database URI for a role with CREATEDB. The race detector requires a C compiler.
 
 For code changes, run all four commands:
 
@@ -63,8 +63,7 @@ python3 scripts/smoke_docker.py --image pocketmark:ci
 ```
 
 For environment failures, see [local preflight and failure records](docs/CI.md#local-preflight-and-failure-records).
-Use `TEST_FLAGS` for focused runs, then run the relevant full suite. With limited
-disk, prefix Go/Make commands with `CGO_CFLAGS='-O2 -g0'`.
+Use `TEST_FLAGS` for focused runs, then run the relevant full suite.
 For CI/release tooling changes, run the applicable [additional checks](docs/CI.md#reproduce-locally).
 Live-network RAM benchmarks are optional; follow [measurement boundaries](docs/BENCHMARK.md).
 

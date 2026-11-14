@@ -11,11 +11,9 @@ import (
 	"pocketmark/internal/fault"
 	"strings"
 	"time"
-
-	"github.com/mattn/go-sqlite3"
 )
 
-// Imports intentionally exclude captured assets. Copy the SQLite database for a full backup.
+// Imports intentionally exclude captured assets. Use the native ZIP for a full backup.
 type importLink struct {
 	CreatedAt    string            `json:"createdAt"`
 	UpdatedAt    string            `json:"updatedAt"`
@@ -167,10 +165,9 @@ func (s *Store) Import(ctx context.Context, r io.Reader) (ImportResult, error) {
 		if e != nil {
 			return e
 		}
-		id, e := Insert(ctx, tx, l)
+		id, e := insertLink(ctx, tx, l, true)
 		if e != nil {
-			var se sqlite3.Error
-			if errors.As(e, &se) && se.ExtendedCode == sqlite3.ErrConstraintUnique {
+			if errors.Is(e, sql.ErrNoRows) {
 				result.Skipped++
 				return nil
 			}
@@ -183,7 +180,7 @@ func (s *Store) Import(ctx context.Context, r io.Reader) (ImportResult, error) {
 			if updated == "" {
 				updated = created
 			}
-			if _, e = tx.ExecContext(ctx, "UPDATE links SET created_at=?,updated_at=? WHERE id=?", created, updated, id); e != nil {
+			if _, e = tx.ExecContext(ctx, "UPDATE links SET created_at=$1,updated_at=$2 WHERE id=$3", created, updated, id); e != nil {
 				return e
 			}
 		}
@@ -219,7 +216,7 @@ func (s *Store) Import(ctx context.Context, r io.Reader) (ImportResult, error) {
 
 // Export uses a consistent read transaction and streams bookmarks one at a time.
 func (s *Store) Export(ctx context.Context, w io.Writer) error {
-	tx, e := s.db.BeginTx(ctx, nil)
+	tx, e := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if e != nil {
 		return e
 	}
@@ -311,21 +308,18 @@ func findOrAddDescribedCollection(ctx context.Context, tx *sql.Tx, name string, 
 		return 0, fault.Invalid("collection description exceeds 8 KiB")
 	}
 	var id int64
-	e := tx.QueryRowContext(ctx, "SELECT id FROM collections WHERE name=? AND parent_id IS ? ORDER BY id LIMIT 1", name, parent).Scan(&id)
+	e := tx.QueryRowContext(ctx, "SELECT id FROM collections WHERE name=$1 AND parent_id IS NOT DISTINCT FROM $2 ORDER BY id LIMIT 1", name, parent).Scan(&id)
 	if e == nil {
 		if description != nil {
 			// Import merges into existing named folders without discarding their
 			// descriptions; an empty destination can recover imported metadata.
-			_, e = tx.ExecContext(ctx, "UPDATE collections SET description=? WHERE id=? AND description=''", *description, id)
+			_, e = tx.ExecContext(ctx, "UPDATE collections SET description=$1 WHERE id=$2 AND description=''", *description, id)
 		}
 		return id, e
 	}
 	if !errors.Is(e, sql.ErrNoRows) {
 		return 0, e
 	}
-	r, e := tx.ExecContext(ctx, "INSERT INTO collections(name,parent_id,description) VALUES(?,?,COALESCE(?,''))", name, parent, description)
-	if e != nil {
-		return 0, e
-	}
-	return r.LastInsertId()
+	e = tx.QueryRowContext(ctx, "INSERT INTO collections(name,parent_id,description) VALUES($1,$2,COALESCE($3,'')) RETURNING id", name, parent, description).Scan(&id)
+	return id, e
 }

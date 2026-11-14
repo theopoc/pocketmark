@@ -29,7 +29,7 @@ import (
 	"pocketmark/internal/store"
 )
 
-func loadServerSecret(dir, configured string, allowNewForExisting bool) (string, error) {
+func loadServerSecret(dir, configured string, allowGenerate bool) (string, error) {
 	token := strings.TrimSpace(configured)
 	if token == "" {
 		path := filepath.Join(dir, "server-secret")
@@ -43,12 +43,8 @@ func loadServerSecret(dir, configured string, allowNewForExisting bool) (string,
 			} else if !errors.Is(legacyErr, os.ErrNotExist) {
 				return "", legacyErr
 			} else {
-				if !allowNewForExisting {
-					if _, err := os.Stat(filepath.Join(dir, "pocketmark.db")); err == nil {
-						return "", fault.New("configuration", "server_secret_missing", "server secret missing for existing database; restore it or use -reset-mfa")
-					} else if !errors.Is(err, os.ErrNotExist) {
-						return "", err
-					}
+				if !allowGenerate {
+					return "", fault.New("configuration", "server_secret_missing", "server secret missing for existing library; restore it or use -reset-mfa")
 				}
 				buf := make([]byte, 32)
 				if _, e = rand.Read(buf); e != nil {
@@ -140,7 +136,7 @@ func run() (runErr error) {
 		slog.Error("telemetry_configuration_failed", "error", err.Error())
 		return err
 	}
-	// A soft Go heap budget, not an RSS cap; SQLite/native allocations are separate.
+	// A soft Go heap budget, not an RSS cap; PostgreSQL memory is separate.
 	if os.Getenv("GOMEMLIMIT") == "" {
 		debug.SetMemoryLimit(32 * 1024 * 1024)
 	}
@@ -153,10 +149,10 @@ func run() (runErr error) {
 	if e = os.MkdirAll(dir, 0700); e != nil {
 		return e
 	}
-	operation = "config.server_secret"
-	token, e := loadServerSecret(dir, os.Getenv("POCKETMARK_TOKEN"), *resetMFA)
-	if e != nil {
-		return e
+	if _, err := os.Stat(filepath.Join(dir, "pocketmark.db")); err == nil {
+		return fault.New("configuration", "legacy_storage", "SQLite library detected: migrate it before starting Pocketmark (docs/MIGRATION_POSTGRESQL.md)")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
 	operation = "config.origin"
 	origin := os.Getenv("POCKETMARK_ORIGIN")
@@ -164,11 +160,20 @@ func run() (runErr error) {
 		return e
 	}
 	operation = "database.open"
-	s, e := store.Open(filepath.Join(dir, "pocketmark.db"))
+	s, e := store.Open(os.Getenv("POCKETMARK_DATABASE_URL"), dir)
 	if e != nil {
 		return e
 	}
 	defer s.Close()
+	operation = "config.server_secret"
+	setup, e := s.SetupStatus(context.Background())
+	if e != nil {
+		return e
+	}
+	token, e := loadServerSecret(dir, os.Getenv("POCKETMARK_TOKEN"), setup.SetupRequired || *resetMFA)
+	if e != nil {
+		return e
+	}
 	if *resetAccount {
 		operation = "recovery.account"
 		if err := resetAccountFromInput(s, os.Stdin); err != nil {

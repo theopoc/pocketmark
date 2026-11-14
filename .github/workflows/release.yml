@@ -192,10 +192,6 @@ jobs:
         with:
           ref: ${{ needs.source.outputs.revision }}
           persist-credentials: false
-      - name: Install native static toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends musl-tools
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -222,8 +218,7 @@ jobs:
             tar -xzf "$RUNNER_TEMP/published/pocketmark-linux-$ARCH.tar.gz" -C bin pocketmark
             cp "$RUNNER_TEMP/published/pocketmark-linux-$ARCH.buildinfo.txt" "artifacts/linux-$ARCH/"
           else
-            # Recompile CGO against the installed musl toolchain, keeping the native module cache.
-            CC=musl-gcc GOFLAGS=-a make build LDFLAGS='-s -w -linkmode external -extldflags "-static"'
+            CGO_ENABLED=0 make build
           fi
           file bin/pocketmark | grep 'statically linked'
           go version -m bin/pocketmark > "$RUNNER_TEMP/buildinfo"
@@ -234,10 +229,10 @@ jobs:
           else
             cp "$RUNNER_TEMP/buildinfo" "artifacts/linux-$ARCH/pocketmark-linux-$ARCH.buildinfo.txt"
           fi
-          for setting in "vcs.revision=$REVISION" vcs.modified=false "GOARCH=$ARCH" GOOS=linux CGO_ENABLED=1; do
+          for setting in "vcs.revision=$REVISION" vcs.modified=false "GOARCH=$ARCH" GOOS=linux; do
             grep -Fx "$(printf '\tbuild\t%s' "$setting")" "$RUNNER_TEMP/actual-buildinfo"
           done
-          grep -E 'sqlite_fts5.*sqlite_omit_load_extension|sqlite_omit_load_extension.*sqlite_fts5' "$RUNNER_TEMP/actual-buildinfo"
+          if [[ "$PUBLISHED" != true ]]; then grep -F 'CGO_ENABLED=0' "$RUNNER_TEMP/actual-buildinfo"; fi
           ./bin/pocketmark -h
           cp bin/pocketmark "artifacts/linux-$ARCH/pocketmark"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

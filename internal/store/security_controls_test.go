@@ -12,7 +12,7 @@ import (
 
 func TestSecurityMigrationAndRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.db")
-	s, err := Open(path)
+	s, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,16 +23,13 @@ func TestSecurityMigrationAndRestart(t *testing.T) {
 	if _, err = s.Create(ctx, Link{URL: "https://example.test", Title: "preserved"}); err != nil {
 		t.Fatal(err)
 	}
-	// Reproduce the schema before profiles, expiration and session metadata.
-	_, err = s.db.Exec(`DROP TABLE api_tokens; CREATE TABLE api_tokens(id INTEGER PRIMARY KEY,name TEXT NOT NULL,hash TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1,last_used_at TEXT NOT NULL DEFAULT '');
- INSERT INTO api_tokens VALUES(1,'legacy','old-key','2026-01-01',1,'');
- DROP TABLE sessions; CREATE TABLE sessions(id INTEGER PRIMARY KEY AUTOINCREMENT,hash TEXT NOT NULL UNIQUE,expires_at INTEGER NOT NULL);
- INSERT INTO sessions(hash,expires_at) VALUES('old-cookie',unixepoch()+3600);`)
+	_, err = s.db.Exec(`INSERT INTO api_tokens(id,name,hash,created_at) VALUES(1,'legacy','old-key','2026-01-01');
+ INSERT INTO sessions(hash,expires_at) VALUES('old-cookie',epoch_seconds()+3600);`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
-	s, err = Open(path)
+	s, err = openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,11 +52,11 @@ func TestSecurityMigrationAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Set last activity as a real successful request would.
-	if _, err = s.db.Exec("UPDATE sessions SET last_used_at=unixepoch()"); err != nil {
+	if _, err = s.db.Exec("UPDATE sessions SET last_used_at=epoch_seconds()"); err != nil {
 		t.Fatal(err)
 	}
 	// Add an enrolled factor without replacing the intentionally retained legacy session.
-	if _, err = s.db.Exec("UPDATE mfa SET secret=X'0102' WHERE id=1"); err != nil {
+	if _, err = s.db.Exec("UPDATE mfa SET secret=decode('0102','hex') WHERE id=1"); err != nil {
 		t.Fatal(err)
 	}
 	if err = signInSession(ctx, s, "salt", "second-cookie", time.Now().Add(time.Hour), strings.Repeat("a", 1000)); err != nil {
@@ -72,7 +69,7 @@ func TestSecurityMigrationAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Close()
-	s, err = Open(path)
+	s, err = openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +101,7 @@ func TestSessionExpiryConfirmationAndIdle(t *testing.T) {
 	if !sessionConfirmed(t, s, ctx, "session") {
 		t.Fatal("fresh password login should be confirmed")
 	}
-	if _, err = s.db.Exec("UPDATE sessions SET confirmed_at=unixepoch()-300"); err != nil {
+	if _, err = s.db.Exec("UPDATE sessions SET confirmed_at=epoch_seconds()-300"); err != nil {
 		t.Fatal(err)
 	}
 	if sessionConfirmed(t, s, ctx, "session") {
@@ -116,7 +113,7 @@ func TestSessionExpiryConfirmationAndIdle(t *testing.T) {
 	if err = s.SetSessionIdleTimeout(ctx, "session", 15); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.db.Exec("UPDATE sessions SET last_used_at=unixepoch()-900"); err != nil {
+	if _, err = s.db.Exec("UPDATE sessions SET last_used_at=epoch_seconds()-900"); err != nil {
 		t.Fatal(err)
 	}
 	if sessionUsable(t, s, ctx, "session") {
@@ -153,7 +150,7 @@ func TestScopedKeyExpiryAndRotation(t *testing.T) {
 	if err != nil || keys[0].Profile != key.Profile || keys[0].ExpiresAt != key.ExpiresAt || keys[0].LastUsedAt != "" {
 		t.Fatal("rotation changed policy")
 	}
-	if _, err = s.db.Exec("UPDATE api_tokens SET expires_at=unixepoch()"); err != nil {
+	if _, err = s.db.Exec("UPDATE api_tokens SET expires_at=epoch_seconds()"); err != nil {
 		t.Fatal(err)
 	}
 	if apiKeyAuthenticates(t, s, ctx, "rotated") {

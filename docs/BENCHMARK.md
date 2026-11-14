@@ -1,9 +1,9 @@
 # Memory measurement methodology
 
-Pocketmark uses one Go process and SQLite. Compose sets a 128 MiB container
+Pocketmark uses one Go application process and a PostgreSQL server. Compose sets a 128 MiB container
 limit and the Go runtime defaults to a 32 MiB soft memory budget. These are
 configuration limits, not a measured worst-case requirement or a guarantee
-against OOM for every input. Native SQLite allocations and filesystem cache
+against OOM for every input. PostgreSQL memory and filesystem cache
 are outside the Go heap budget.
 
 ## Metadata-only workload
@@ -20,7 +20,7 @@ requests at concurrency four, and exports the library. It samples child-process
 RSS using `ps` about every 50 ms, then stops the server and removes its temporary
 data. It never touches an existing library or fetches the bookmark URLs.
 
-Python 3, localhost binding and permission to read process RSS are required.
+Set POCKETMARK_TEST_DATABASE_URL to a disposable PostgreSQL cluster with CREATEDB privileges. Install PostgreSQL 18 client tools. Python 3, localhost binding and permission to read process RSS are required. The sampled application RSS excludes PostgreSQL.
 Sampling can miss short spikes. This fixture contains no captured articles,
 screenshots or PDFs and does not measure browser, Docker or VM memory.
 
@@ -50,7 +50,7 @@ reports, screenshots and profiles outside version control, including summaries.
 Record the workload, source revision, platform, toolchain, image/binary identity,
 results and limitations in the PR, as required by [AGENTS.md](../AGENTS.md).
 
-To exercise hostile JSON input sizes, run `python3 scripts/security_import_probe.py --image pocketmark:validation --output reports/import-probe.json` after creating `reports/`. The probe starts a disposable, memory-limited local Docker container and checks rejection and server health. Its results describe those payloads and limits.
+The optional import resource check in `scripts/security_import_probe.py` uses a disposable Compose stack and records application container limits.
 
 ## Interpret measurements
 

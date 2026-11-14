@@ -16,9 +16,10 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/mattn/go-sqlite3"
+	"github.com/jackc/pgx/v5/pgconn"
 	"pocketmark/internal/capture"
 	"pocketmark/internal/fault"
+	"strings"
 )
 
 type diagnosis struct {
@@ -31,7 +32,7 @@ type diagnosis struct {
 func diagnose(err error) diagnosis {
 	d := diagnosis{kind: "internal", code: "unexpected", status: 500}
 	var app *fault.Error
-	var sqlite sqlite3.Error
+	var postgres *pgconn.PgError
 	var remote *capture.HTTPStatusError
 	var dns *net.DNSError
 	var network net.Error
@@ -49,13 +50,13 @@ func diagnose(err error) diagnosis {
 		d.kind, d.code, d.status = "timeout", "deadline_exceeded", 504
 	case errors.Is(err, sql.ErrNoRows):
 		d.kind, d.code, d.status = "not_found", "not_found", 404
-	case errors.As(err, &sqlite):
-		d.kind, d.code = "database", "sqlite"
-		d.attrs = []any{"sqlite_code", int(sqlite.Code), "sqlite_extended_code", int(sqlite.ExtendedCode)}
-		if sqlite.Code == sqlite3.ErrConstraint {
+	case errors.As(err, &postgres):
+		d.kind, d.code = "database", "postgresql"
+		d.attrs = []any{"sqlstate", postgres.Code}
+		if strings.HasPrefix(postgres.Code, "23") {
 			d.status = 400
 		}
-		if sqlite.Code == sqlite3.ErrBusy || sqlite.Code == sqlite3.ErrLocked {
+		if postgres.Code == "55P03" || postgres.Code == "40001" || postgres.Code == "40P01" {
 			d.status = 503
 		}
 	case errors.As(err, &size):

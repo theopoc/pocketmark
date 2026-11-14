@@ -57,7 +57,7 @@ func TestBulkAtomicAndSearchSort(t *testing.T) {
 
 func TestBulkBooleanActionsRejectUnknownColumn(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "library.db")
-	s, err := Open(path)
+	s, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestBulkBooleanActionsRejectUnknownColumn(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = Open(path)
+	s, err = openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestAnnotationsAnchorUnicodeStaleAndCascade(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
 	id := createLink(t, s, Link{URL: "https://example.com"})
-	_, e := s.db.Exec("UPDATE links SET content=? WHERE id=?", "A 😀 café article", id)
+	_, e := s.db.Exec("UPDATE links SET content=$1 WHERE id=$2", "A 😀 café article", id)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -109,7 +109,7 @@ func TestAnnotationsAnchorUnicodeStaleAndCascade(t *testing.T) {
 	if e != nil || len(list) != 1 || list[0].Stale {
 		t.Fatalf("%+v %v", list, e)
 	}
-	_, _ = s.db.Exec("UPDATE links SET content='changed' WHERE id=?", id)
+	_, _ = s.db.Exec("UPDATE links SET content='changed' WHERE id=$1", id)
 	list, e = s.Annotations(ctx, id)
 	if e != nil || !list[0].Stale {
 		t.Fatal("stale anchor not identified")

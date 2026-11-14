@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/mattn/go-sqlite3"
+	"github.com/jackc/pgx/v5/pgconn"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -33,7 +33,7 @@ func TestErrorDiagnosticsPreserveSafeCauses(t *testing.T) {
 		{"upstream", &capture.HTTPStatusError{StatusCode: 503}, "http", "upstream_status", 502},
 		{"dns", &net.DNSError{Name: "private-host", Err: "private-text", IsNotFound: true}, "dns", "dns_not_found", 502},
 		{"disk", &os.PathError{Op: "write", Path: "private-path", Err: syscall.ENOSPC}, "io", "system_error", 500},
-		{"database", sqlite3.Error{Code: sqlite3.ErrBusy}, "database", "sqlite", 503},
+		{"database", &pgconn.PgError{Code: "55P03"}, "database", "postgresql", 503},
 		{"validation", fault.Invalid("private-validation"), "validation", "invalid_input", 400},
 		{"unknown", errors.New("private-unexpected"), "internal", "unexpected", 500},
 	} {

@@ -14,7 +14,7 @@ import (
 
 func testStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := Open(filepath.Join(t.TempDir(), "library.db"))
+	s, err := openTestStore(t, filepath.Join(t.TempDir(), "library.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func createCollection(t *testing.T, s *Store, name string, parent *int64) int64 
 func TestCRUDPersistsAcrossReopen(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "nested", "library.db")
-	s, err := Open(path)
+	s, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestCRUDPersistsAcrossReopen(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = Open(path)
+	s, err = openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func TestSearchExcerptBoundsAndOrdinaryLists(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
 	id := createLink(t, s, Link{URL: "https://example.com/snippet", Title: "Compact result"})
-	if _, err := s.db.Exec("UPDATE links SET content=? WHERE id=?", "<script>not executable</script> needle "+strings.Repeat("界", 1200), id); err != nil {
+	if _, err := s.db.Exec("UPDATE links SET content=$1 WHERE id=$2", "<script>not executable</script> needle "+strings.Repeat("界", 1200), id); err != nil {
 		t.Fatal(err)
 	}
 	for _, filter := range []Filter{{Query: "needle"}, {Query: "Compact", Fuzzy: true}, {}} {
@@ -282,7 +282,7 @@ func TestNormalizeAndLimits(t *testing.T) {
 func TestQueueRecoveryAndURLChangeRace(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "queue.db")
-	s, err := Open(path)
+	s, err := openTestStore(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,8 +301,11 @@ func TestQueueRecoveryAndURLChangeRace(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = Open(path)
+	s, err = openTestStore(t, path)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec("UPDATE links SET capture_until=now() WHERE id=$1", id); err != nil {
 		t.Fatal(err)
 	}
 	recovered, err := s.Next(ctx)
