@@ -39,7 +39,9 @@ Tagged releases also publish a private multiarchitecture image at `ghcr.io/theop
 
 The supplied Compose configuration sets a **128 MiB application container memory limit** and one CPU. This is a deployment limit, not a guarantee that every workload completes within it. See [memory measurement methodology](BENCHMARK.md) for workload boundaries.
 
-PostgreSQL provides shared durable storage. The current server keeps pending MFA challenges and request limits in memory per process. Use one application instance for the documented authentication behavior. A PostgreSQL migration by itself does not qualify a multi-replica rollout.
+PostgreSQL provides shared durable storage. Replicas using the same database and server secret can finish each other’s pending MFA sign-ins without session affinity. Configure readiness on `/healthz`; for an application rolling update, use at least two replicas and `maxUnavailable: 0`. Password and HTTP request limits remain per process; enforce ingress limits across replicas if needed.
+
+On the first upgrade from schema 1, challenges already issued by the older binary exist only in its memory. Older pods also cannot verify a challenge issued by a new pod. While versions are mixed, a sign-in may need to restart; cross-pod verification works once all serving pods use the new version. The migration is additive, but the older binary cannot start against schema 2. Take a backup before upgrading.
 
 ## What is included
 
@@ -98,7 +100,7 @@ Choose **Settings → Backup & restore → Download full backup**. Pocketmark us
 psql -X --single-transaction -v ON_ERROR_STOP=1 -d "$POCKETMARK_DATABASE_URL" -f pocketmark.sql
 ```
 
-Restore the original server secret before startup. Sign in again and generate new recovery codes. The snapshot excludes browser sessions and recovery codes. To upgrade a SQLite library, follow the [migration procedure](MIGRATION_POSTGRESQL.md).
+Restore the original server secret before startup. Sign in again and generate new recovery codes. The snapshot excludes browser sessions, pending MFA challenges and recovery codes. To upgrade a SQLite library, follow the [migration procedure](MIGRATION_POSTGRESQL.md).
 
 ## Development and verification
 

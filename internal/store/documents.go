@@ -53,7 +53,7 @@ func (s *Store) Snapshot(ctx context.Context) (*os.File, error) {
 	}
 	u.RawQuery = query.Encode()
 	cmd := exec.CommandContext(ctx, "pg_dump", "--no-owner", "--no-acl", "--no-password",
-		"--exclude-table-data=*.sessions", "--exclude-table-data=*.mfa_recovery", "--dbname="+u.String())
+		"--exclude-table-data=*.mfa_challenges", "--exclude-table-data=*.sessions", "--exclude-table-data=*.mfa_recovery", "--dbname="+u.String())
 	cmd.Env = os.Environ()
 	if user != "" {
 		cmd.Env = append(cmd.Env, "PGUSER="+user)

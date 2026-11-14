@@ -64,7 +64,7 @@ func (s *Store) SaveAccount(ctx context.Context, a Account) error {
 	if _, err = tx.ExecContext(ctx, "INSERT INTO account(id,username,salt,hash) VALUES(1,$1,$2,$3) ON CONFLICT(id) DO UPDATE SET username=excluded.username,salt=excluded.salt,hash=excluded.hash", a.Username, a.Salt, a.Hash); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, "DELETE FROM sessions"); err != nil {
+	if _, err = tx.ExecContext(ctx, "DELETE FROM sessions; DELETE FROM mfa_challenges"); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -90,7 +90,7 @@ func (s *Store) SaveAccountFromSession(ctx context.Context, a Account, oldHash, 
 	if _, err = tx.ExecContext(ctx, "UPDATE account SET username=$1,salt=$2,hash=$3 WHERE id=1", a.Username, a.Salt, a.Hash); err != nil {
 		return time.Time{}, err
 	}
-	if _, err = tx.ExecContext(ctx, "DELETE FROM sessions"); err != nil {
+	if _, err = tx.ExecContext(ctx, "DELETE FROM sessions; DELETE FROM mfa_challenges"); err != nil {
 		return time.Time{}, err
 	}
 	expires := time.Unix(expiry, 0)
