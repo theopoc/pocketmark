@@ -327,6 +327,8 @@ html[data-theme="dark"] body.api-docs { --secondary-link: var(--focus); color-sc
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
+.backup-zone-field { min-width: 0; }
+.backups .backup-zone-field > label { margin-bottom: 0; }
 .backups label {
   display: block;
   margin: 5px 0;

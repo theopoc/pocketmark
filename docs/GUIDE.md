@@ -45,7 +45,7 @@ On the first upgrade from schema 1, challenges already issued by the older binar
 
 ### Scheduled S3 backups
 
-Open **Settings → Backup & restore → Configure**. Set a five-field cron expression and IANA time zone. The form previews three occurrences in that zone. Choose an existing bucket, its region and an object prefix. For Garage, use the S3 API endpoint and the region configured on the server. Use HTTPS or explicitly enable HTTP for a trusted private endpoint. **Test connection** writes, reads and deletes a small probe with the supplied credentials.
+Open **Settings → Backup & restore → Configure**. Set a five-field cron expression and choose a country and city. The time zone menu groups places with matching clock changes. Each choice saves its own IANA identifier. The form previews three occurrences in that zone. Choose an existing bucket, its region and an object prefix. For Garage, use the S3 API endpoint and the region configured on the server. Use HTTPS or explicitly enable HTTP for a trusted private endpoint. **Test connection** writes, reads and deletes a small probe with the supplied credentials.
 
 Choose **Full instance** for a PostgreSQL snapshot, or **Custom library** for bookmarks, collections, notes, tags and annotations with optional extracted text, archived pages, attachments and thumbnails. Enter an age X25519 public recipient or generate a recovery key and store the downloaded private key offline. Keep the original Pocketmark server secret separately for full-instance recovery. Save the settings and enable the schedule. **Back up now** also works while the schedule is paused.
 

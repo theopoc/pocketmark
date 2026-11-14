@@ -1,16 +1,20 @@
-import { Fragment, useState, useEffect, useRef } from "react";
+import { Fragment, useState, useEffect, useMemo, useRef } from "react";
 import { renderRegion } from "../../lib/render";
 import { Icon } from "../../components/icon";
+import { backupZoneGroups, savedZoneLabel } from "./backup-zones";
 
 const base = "/api/backups";
-const date = (t, zone) =>
-  t
-    ? new Date(t).toLocaleString(undefined, {
-        timeZone: zone,
-        dateStyle: "medium",
-        timeStyle: "short",
-      })
-    : "—";
+function date(t, zone) {
+  if (!t) return "—";
+  const fmt = { dateStyle: "medium", timeStyle: "short" };
+  try {
+    return new Date(t).toLocaleString(undefined, { ...fmt, timeZone: zone });
+  } catch (err) {
+    if (!(err instanceof RangeError)) throw err;
+    // Server tzdata can include places the browser does not recognize yet.
+    return new Date(t).toISOString();
+  }
+}
 const size = (n) =>
   n != null
     ? Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(
@@ -130,6 +134,14 @@ function BackupPanel({ api, toast }) {
       clearInterval(timer);
     };
   }, [api]);
+  const configuring = Boolean(draft);
+  const zones = useMemo(
+    () =>
+      configuring
+        ? backupZoneGroups(document.documentElement.lang || "en")
+        : [],
+    [configuring],
+  );
   const cron = draft?.Cron,
     zone = draft?.Zone;
   useEffect(() => {
@@ -137,6 +149,7 @@ function BackupPanel({ api, toast }) {
     let current = true;
     setNexts([]);
     setCronError("");
+    if (!zone) return;
     const timer = setTimeout(async () => {
       try {
         const n = await api(base + "/preview", {
@@ -262,7 +275,16 @@ function BackupPanel({ api, toast }) {
           className="button subtle"
           disabled={busy}
           onClick={() =>
-            edit(draft ? null : { ...c, AccessKey: "", SecretKey: "" })
+            edit(
+              draft
+                ? null
+                : {
+                    ...c,
+                    Zone: c.HasCredentials ? c.Zone : "",
+                    AccessKey: "",
+                    SecretKey: "",
+                  },
+            )
           }
         >
           {draft ? "Back to history" : "Configure"}
@@ -280,41 +302,49 @@ function BackupPanel({ api, toast }) {
           onSubmit={(e) => {
             e.preventDefault();
             action(async () => {
-              await save(draft);
+              await save({ ...draft, Enabled: c.Enabled });
               edit(null);
             }, "Backup settings saved.");
           }}
         >
           <fieldset disabled={busy}>
             <legend>Schedule</legend>
-            <label>
-              <input
-                type="checkbox"
-                checked={draft.Enabled}
-                onChange={(e) => change("Enabled", e.target.checked)}
-              />{" "}
-              Enable scheduled backups
-            </label>
             <div className="backup-fields">
               {input("Cron", "Cron expression")}
-              <label>
-                Time zone
+              <div className="backup-zone-field">
+                <label htmlFor="backup-zone">Time zone</label>
                 <select
+                  id="backup-zone"
+                  required
                   value={draft.Zone}
                   onChange={(e) => change("Zone", e.target.value)}
                 >
-                  {Array.from(
-                    new Set([
-                      draft.Zone,
-                      "UTC",
-                      "Europe/Paris",
-                      ...(Intl.supportedValuesOf?.("timeZone") || []),
-                    ]),
-                  ).map((z) => (
-                    <option key={z}>{z}</option>
+                  {!c.HasCredentials && (
+                    <option value="" disabled>
+                      Choose a country and city
+                    </option>
+                  )}
+                  {Boolean(draft.Zone) &&
+                    !zones.some((group) =>
+                      group.options.some(
+                        (option) => option.value === draft.Zone,
+                      ),
+                    ) && (
+                      <option value={draft.Zone} hidden>
+                        {savedZoneLabel(draft.Zone)}
+                      </option>
+                    )}
+                  {zones.map((group) => (
+                    <optgroup key={group.options[0].value} label={group.label}>
+                      {group.options.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
-              </label>
+              </div>
             </div>
             <small role="status">
               {cronError || nexts.map((t) => date(t, draft.Zone)).join(" · ")}
