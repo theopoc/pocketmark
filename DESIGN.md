@@ -101,6 +101,47 @@ Density serves finding and organizing; reading deliberately opens into a larger 
 - Indigo selection and action cues over cool neutral surfaces.
 - Responsive navigation and a comfortable reader in the same visual language.
 
+## Component consistency and identity
+
+Each component type keeps its own visual identity within the shared palette,
+typography, spacing rhythm and icon system. Toasts, popovers, menus, dialogs,
+buttons and fields remain recognizable as distinct components. Every instance
+of the same component and documented variant follows one canonical treatment
+throughout the application, including inside other components and overlays.
+
+Before adding or changing an instance, identify its existing implementation,
+owning styles and component rules below. Reuse its shared primitive and base
+styles. Preserve its identity across screens:
+
+- **Color:** semantic roles for surfaces, text, icons, borders, accents and status.
+- **Shape:** corner radii, border treatment, shadow and component proportions.
+- **Typography:** font family, size, weight, line height and text hierarchy.
+- **Composition:** padding, gaps, icon sizing and alignment, content hierarchy
+  and placement of actions.
+- **Interaction:** hover, active, focus, disabled and loading treatments, plus
+  the component's motion and dismissal behavior where applicable.
+
+Light and dark themes express the same identity with their respective semantic
+tokens. Responsive layouts may wrap, resize or reposition content while keeping
+the component's visual signature and reachable controls. Existing documented
+variants, such as primary/subtle buttons or status icons, retain their explicit
+differences. A screen, feature or nesting context alone does not create a new
+variant. For example, every toast uses the shared toast panel and action styling;
+every instance of a given popover uses its established popover treatment.
+
+Keep common rules in the owning component or shared stylesheet. Scope secondary
+surface refinements as defined under Layout; local overrides must preserve the
+base component identity. When a new variant or a deliberate identity change is
+needed, document its purpose, defining properties and allowed differences here,
+then update all affected instances and states together.
+
+For interface changes, compare the affected component with existing instances
+of the same type and variant across its relevant screens and nesting contexts.
+Check desktop and phone layouts, both themes, theme switching while visible and
+the affected interaction/status states. Assess visual consistency, palette
+conformity and accessibility separately; record coverage and limits in the PR
+as required by the design review policy.
+
 ## Colors
 
 The palette is cool and restrained; the frontmatter records the reusable CSS color properties without the legacy green aliases.
