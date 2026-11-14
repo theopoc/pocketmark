@@ -257,8 +257,49 @@ input[type=checkbox] { width: 15px; height: 15px; padding: 0; flex-shrink: 0; ac
 .main-footer kbd { height: 18px; min-width: 17px; font-size: 11px; margin-right: 3px; }
 .shortcut-divider { margin-inline: 8px; }
 .error-banner { padding: 12px 16px; background: #fff2f3; color: var(--danger); border: 1px solid #f1cbd0; border-radius: 6px; margin: 14px 0; font-size: 13px; }
-#toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 100; max-width: calc(100vw - 32px); padding: 12px 18px; border-radius: 8px; background: #252a3b; color: #fff; font-size: 13px; box-shadow: 0 6px 24px #20232c25; }
-#toast.error { background: #9a2e36; }
+/* Shared feedback for the library, reader, settings and native dialogs. */
+#toast {
+  position: fixed;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  width: max-content;
+  max-width: min(560px, calc(100vw - 32px));
+  min-height: 60px;
+  gap: 12px;
+  padding: 8px 10px 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: 0 6px 24px #20232c25;
+}
+#toast > .icon { width: 20px; height: 20px; color: var(--muted); }
+#toast.error > .icon { color: var(--danger); }
+#toast.favorite-notice.is-added > .icon { color: var(--accent); fill: currentColor; }
+[data-theme="dark"] #toast.favorite-notice.is-added > .icon { color: var(--focus); }
+#toast .toast-message { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+#toast .toast-action {
+  flex-shrink: 0;
+  min-width: 60px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+[data-theme="dark"] #toast .toast-action { color: var(--focus); }
+#toast .toast-action:hover { background: var(--control-hover); }
+#toast .toast-action:active { background: var(--accent-soft); }
+#toast .toast-action:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .bookmark-grid[aria-busy=true] { opacity: .65; }
 /* Forms, settings and native dialogs */
 label { display: block; font-size: 12px; font-weight: 550; margin: 16px 0 6px; }
@@ -870,10 +911,6 @@ body:has(dialog[open]) { overflow: hidden; }
 @media (max-width: 600px) {
   .card-footer:has(.card-overflow-actions.is-open) .card-actions { flex-basis: 100%; }
 }
-
-#toast { display: flex; align-items: center; gap: 16px; }
-.toast-action { flex-shrink: 0; min-height: 44px; padding: 6px 12px; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 5px; font-size: 12px; }
-.toast-action:hover { text-decoration: underline; }
 
 /* Field boundaries must remain identifiable without relying on focus. */
 [data-theme] input, [data-theme] select, [data-theme] textarea,

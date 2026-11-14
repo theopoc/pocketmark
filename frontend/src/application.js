@@ -494,12 +494,14 @@ export function createApplication() {
     // layer to be visible and exposed to assistive technology.
     const dialogs = [...document.querySelectorAll("dialog[open]")];
     (dialogs.at(-1) || document.body).append(toastHost);
-    notice.replaceChildren(el("span", "toast-message", message));
+    notice.replaceChildren(
+      icon(error ? "warning" : favorite !== null ? "star" : "info"),
+      el("span", "toast-message", message),
+    );
     notice.className = error ? "error" : "";
     if (!error && favorite !== null) {
       notice.classList.add("favorite-notice");
       notice.classList.toggle("is-added", favorite);
-      notice.prepend(icon("star"));
     }
     notice.setAttribute("role", error ? "alert" : "status");
     if (action) {
