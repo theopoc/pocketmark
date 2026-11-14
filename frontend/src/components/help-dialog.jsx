@@ -363,7 +363,7 @@ export function HelpDialog() {
         <div id="help-empty" hidden>
           <p>{"No matching topics."}</p>
           <p className="muted">{"Try “tags”, “capture” or “backup”."}</p>
-          <Button id="help-clear" type="button" className="button subtle">
+          <Button id="help-clear" type="button" variant="default">
             {"Clear search"}
           </Button>
         </div>

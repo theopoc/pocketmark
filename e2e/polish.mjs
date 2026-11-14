@@ -139,6 +139,10 @@ async function expandedDocumentation(page, theme, engine) {
     await page.getByRole('button', { name: 'Authorize', exact: true }).first().click();
     await page.locator('.modal-ux').waitFor();
     await expectThemeColor(page.locator('.auth-container').first(), 'borderBottomColor', '--line');
+    for (const form of await page.locator('.modal-ux .auth-btn-wrapper').all()) {
+      await expectThemeColor(form.getByRole('button', { name: 'Authorize', exact: true }), 'backgroundColor', '--accent');
+      await expectThemeColor(form.getByRole('button', { name: 'Close', exact: true }), 'backgroundColor', '--control-bg');
+    }
     await audit(page, `${theme}-api-authorize-${width}`, engine);
     await shot(page, `${theme}-api-authorize-${width}`, engine);
     await page.getByRole('button', { name: 'Close authorizations', exact: true }).click();

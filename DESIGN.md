@@ -235,7 +235,9 @@ Controls use restrained rounded corners; smaller tags and action buttons use the
 ## Components
 
 ### Buttons
-Compact and direct. Primary actions use indigo and white, subtle actions use white with a cool gray border, and icon actions use transparent backgrounds. Primary and subtle controls use the shared control radius and label type. Hover changes background or border with (160ms ease-out) transitions. Keyboard focus has a (2px) outline and (3px) offset; disabled buttons use (.48) opacity. Phone actions increase their target dimensions where the layout requires it.
+Compact and direct. Primary actions use indigo and white, subtle actions use the active theme’s neutral control surface and border, and icon actions use transparent backgrounds. Primary and subtle controls use the shared control radius and label type. Hover changes background or border with (160ms ease-out) transitions. Keyboard focus has a (2px) outline and (3px) offset; disabled buttons use (.48) opacity. Phone actions increase their target dimensions where the layout requires it.
+
+Choose the variant by task: saving a form or recovering from an empty view uses the primary action. Navigation, disclosures and alternative actions stay quiet. Destructive confirmations use the danger treatment; quiet discard controls signal danger on hover and keyboard focus. Selection and focus keep their own cues without promoting a control to primary.
 
 ### Chips
 Small rectangular tags use neutral fill, short padding and compact type. Hover or active filter states use the soft accent and indigo text. Long labels truncate rather than widening the navigation drawer.

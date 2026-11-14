@@ -103,8 +103,8 @@
 .api-docs .swagger-ui .btn.authorize span { float: none; padding: 0; }
 .api-docs .swagger-ui .btn.authorize svg { color: inherit; }
 .api-docs .swagger-ui .btn.authorize svg path { fill: currentColor; }
-.api-docs .swagger-ui .btn.execute { background: var(--accent); color: #fff; border-color: var(--accent); }
-.api-docs .swagger-ui .btn.execute:is(:hover, :active):enabled { background: var(--accent-hover); }
+.api-docs .swagger-ui :is(.btn.execute, .auth-btn-wrapper .btn.authorize[type="submit"]) { background: var(--accent); color: #fff; border-color: var(--accent); }
+.api-docs .swagger-ui :is(.btn.execute, .auth-btn-wrapper .btn.authorize[type="submit"]):is(:hover, :active):enabled { background: var(--accent-hover); }
 .api-docs .swagger-ui .auth-container { border-color: var(--line); }
 .api-docs .swagger-ui .model, .api-docs .swagger-ui .model-title { color: var(--ink); }
 .api-docs .swagger-ui .model-title { font-family: var(--font-ui); }
