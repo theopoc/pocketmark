@@ -50,7 +50,7 @@ export function createApplication() {
   };
   let toastTimer,
     toastActionPending = false;
-  let expandedBookmarkActions = null;
+  let selectionMode = false;
   const expandedBookmarkTags = new Set();
   let searchTimer;
   let tagsTimer;
@@ -102,6 +102,68 @@ export function createApplication() {
       { ...history.state, pocketmarkScroll: window.scrollY },
       "",
     );
+  }
+  function readerRouteID() {
+    const value = new URLSearchParams(location.search).get("reader");
+    const id = Number(value);
+    return /^\d+$/.test(value || "") && Number.isSafeInteger(id) && id > 0
+      ? id
+      : null;
+  }
+  let editAfterReader = null;
+  function openLibraryReader(link, panel = "read") {
+    const id = link.id;
+    rememberScroll();
+    const focusKey =
+      document.activeElement?.dataset.focusKey || `link:${id}:open`;
+    history.replaceState({ ...history.state, readerReturnFocus: focusKey }, "");
+    const url = new URL(location.href);
+    url.searchParams.set("reader", id);
+    history.pushState(
+      {
+        ...history.state,
+        readerReturnKey: window.navigation?.currentEntry?.key,
+        readerFromLibrary: true,
+        readerFrameOpened: false,
+        readerReturnScroll: window.scrollY,
+        readerPanel: panel,
+      },
+      "",
+      url,
+    );
+    return reader.open(id, false, panel);
+  }
+  async function leaveReader() {
+    const id = readerRouteID();
+    if (!id) return;
+    const entry = history.state;
+    if (entry?.readerReturnKey && window.navigation) {
+      // Preview frames can add joint history entries. Return to the catalog's
+      // top-level entry even after switching copies or opening a native PDF.
+      try {
+        const traversal = window.navigation.traverseTo(entry.readerReturnKey);
+        await Promise.all([traversal.committed, traversal.finished]);
+        return;
+      } catch {
+        if (readerRouteID() !== id || !state.signedIn) return;
+      }
+    } else if (entry?.readerFromLibrary && !entry.readerFrameOpened) {
+      history.back();
+      return;
+    }
+    const url = new URL(location.href);
+    url.searchParams.delete("reader");
+    history.replaceState(
+      {
+        ...entry,
+        pocketmarkScroll: entry?.readerReturnScroll ?? entry?.pocketmarkScroll,
+        readerReturnKey: null,
+        readerPanel: null,
+      },
+      "",
+      url,
+    );
+    restoreRoute();
   }
   function commitRoute(replace = false, destination = route()) {
     const url = location.pathname + workspace.routeSearch(destination);
@@ -155,7 +217,11 @@ export function createApplication() {
     closeSortMenu();
     $("tags-view").hidden = !showingTags;
     $("library-view").hidden = showingTags;
-    if (!initial && previous !== workspace.routeSearch(route())) bulk.clear();
+    if (!initial && previous !== workspace.routeSearch(route())) {
+      selectionMode = false;
+      closeDisplay();
+      bulk.clear();
+    }
     reader.close();
     bulk.close();
     document.querySelectorAll("dialog[open]").forEach((dialog) => {
@@ -169,16 +235,28 @@ export function createApplication() {
       return;
     }
     await refresh();
-    if (request !== routeRequest) return;
+    if (request !== routeRequest || !state.signedIn) return;
     if (showingTags) await loadTagDirectory();
-    if (request !== routeRequest) return;
-    if (!initial)
-      $(showingTags ? "tags-title" : "page-title").focus({
+    if (request !== routeRequest || !state.signedIn) return;
+    const readerID = readerRouteID();
+    if (readerID) {
+      await reader.open(readerID, false, history.state?.readerPanel);
+    } else if (!initial) {
+      const key = history.state?.readerReturnFocus;
+      const target =
+        key && document.querySelector(`[data-focus-key="${CSS.escape(key)}"]`);
+      (target || $(showingTags ? "tags-title" : "page-title")).focus({
         preventScroll: true,
       });
+    }
     requestAnimationFrame(() => {
-      if (request === routeRequest)
-        window.scrollTo({ top: scroll, behavior: "instant" });
+      if (request !== routeRequest || !state.signedIn) return;
+      window.scrollTo({ top: scroll, behavior: "instant" });
+      if (editAfterReader && !readerID) {
+        const link = editAfterReader;
+        editAfterReader = null;
+        openEditor(link);
+      }
     });
   }
   lifecycle.listen(
@@ -268,8 +346,8 @@ export function createApplication() {
     const dark = theme === "dark";
     document.documentElement.dataset.theme = theme;
     document.querySelector('meta[name="theme-color"]').content = dark
-      ? "#15161b"
-      : "#ffffff";
+      ? "#1a1b1d"
+      : "#faf9f6";
     document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
       button.setAttribute("aria-pressed", String(dark));
       button.setAttribute("aria-label", dark ? "Dark mode" : "Light mode");
@@ -301,31 +379,62 @@ export function createApplication() {
   );
 
   let libraryView = "list";
-  try {
-    if (localStorage.getItem("pocketmark-view") === "grid")
-      libraryView = "grid";
-  } catch {
-    /* Storage is optional. */
+  let layoutScope = null;
+  function layoutKey() {
+    return state.filter === "collection" && state.collection != null
+      ? `pocketmark-view:collection:${state.collection}`
+      : "pocketmark-view";
   }
-  function setLibraryView(view) {
-    const changed =
-      $("bookmark-grid").classList.contains("view-list") !== (view === "list");
+  function applyLayout(view) {
     libraryView = view;
     $("bookmark-grid").classList.toggle("view-list", view === "list");
-    if (state.signedIn) renderLinks();
     for (const value of ["list", "grid"])
       $("view-" + value).setAttribute("aria-pressed", String(view === value));
-    try {
-      localStorage.setItem("pocketmark-view", view);
-    } catch {
-      /* Private browsing may disallow storage. */
-    }
-    if (changed && state.signedIn)
-      move($("bookmark-grid"), [{ opacity: 0.8 }, { opacity: 1 }]);
   }
-  lifecycle.listen($("view-list"), "click", () => setLibraryView("list"));
-  lifecycle.listen($("view-grid"), "click", () => setLibraryView("grid"));
-  setLibraryView(libraryView);
+  function restoreLayout() {
+    const key = layoutKey();
+    if (layoutScope === key) return;
+    layoutScope = key;
+    let preferred = "list";
+    try {
+      if (localStorage.getItem(key) === "grid") preferred = "grid";
+    } catch {
+      /* Layout remains usable when storage is unavailable. */
+    }
+    applyLayout(preferred);
+  }
+  function closeDisplay(focus = false) {
+    $("display-settings").open = false;
+    closeSortMenu();
+    if (focus) $("display-settings").querySelector("summary").focus();
+  }
+  for (const view of ["list", "grid"]) {
+    lifecycle.listen($("view-" + view), "click", () => {
+      applyLayout(view);
+      try {
+        localStorage.setItem(layoutKey(), view);
+      } catch {
+        /* Optional preference. */
+      }
+      if (state.signedIn) renderLinks();
+      closeDisplay(true);
+    });
+  }
+  restoreLayout();
+  lifecycle.listen(document, "pointerdown", (event) => {
+    if (
+      $("display-settings").open &&
+      !$("display-settings").contains(event.target)
+    )
+      closeDisplay();
+  });
+  lifecycle.listen($("display-settings"), "keydown", (event) => {
+    if (event.key === "Escape" && !event.defaultPrevented) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeDisplay(true);
+    }
+  });
 
   const navigation = $("navigation-dialog");
   const sidebar = $("sidebar");
@@ -336,28 +445,6 @@ export function createApplication() {
   );
   const sidebarRail = document.createElement("div");
   sidebarRail.className = "sidebar-rail";
-  let sidebarFixed = false;
-  try {
-    sidebarFixed = localStorage.getItem("pocketmark-sidebar") === "fixed";
-  } catch {
-    /* Storage is optional. */
-  }
-  function renderSidebarMode() {
-    $("app-view").classList.toggle(
-      "sidebar-fixed",
-      desktopNavigation.matches && sidebarFixed,
-    );
-    const button = $("sidebar-mode");
-    const label = sidebarFixed
-      ? "Hide navigation automatically"
-      : "Keep navigation open";
-    button.setAttribute("aria-pressed", String(sidebarFixed));
-    button.setAttribute("aria-label", label);
-    button.title = label;
-    $("sidebar-mode-icon").replaceChildren(
-      icon(sidebarFixed ? "panel-close" : "panel-open"),
-    );
-  }
   function arrangeNavigation() {
     navigationHost.hidden = false;
     if (navigation.open) navigation.close();
@@ -376,32 +463,7 @@ export function createApplication() {
     if (desktopNavigation.matches)
       $("open-navigation").removeAttribute("aria-expanded");
     else $("open-navigation").setAttribute("aria-expanded", "false");
-    renderSidebarMode();
   }
-  lifecycle.listen($("sidebar-mode"), "click", () => {
-    sidebarFixed = !sidebarFixed;
-    if (!sidebarFixed) {
-      sidebarRail.classList.toggle("dismissed", sidebarRail.matches(":hover"));
-      sidebarRail.classList.remove("revealed");
-      $("open-navigation").focus({ preventScroll: true });
-    } else sidebarRail.classList.remove("dismissed");
-    try {
-      localStorage.setItem(
-        "pocketmark-sidebar",
-        sidebarFixed ? "fixed" : "auto",
-      );
-    } catch {
-      /* Storage is optional. */
-    }
-    renderSidebarMode();
-  });
-  lifecycle.listen(sidebarRail, "pointerleave", () =>
-    sidebarRail.classList.remove("dismissed"),
-  );
-  lifecycle.listen(sidebar, "focusout", (event) => {
-    if (!sidebar.contains(event.relatedTarget))
-      sidebarRail.classList.remove("revealed");
-  });
   lifecycle.listen(desktopNavigation, "change", arrangeNavigation);
   const workspaceButton = $("workspace-button");
   const workspacePopover = $("workspace-popover");
@@ -413,8 +475,14 @@ export function createApplication() {
     const anchor = workspaceButton.getBoundingClientRect();
     const width = Math.min(224, window.innerWidth - 16);
     workspacePopover.style.left = `${Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8))}px`;
-    workspacePopover.style.top = `${Math.max(8, anchor.bottom + 4)}px`;
-    workspacePopover.style.maxHeight = `${Math.max(44, window.innerHeight - anchor.bottom - 12)}px`;
+    const below = window.innerHeight - anchor.bottom - 12;
+    const above = anchor.top - 12;
+    const alignAbove = below < 176 && above > below;
+    workspacePopover.style.top = alignAbove ? "auto" : `${anchor.bottom + 4}px`;
+    workspacePopover.style.bottom = alignAbove
+      ? `${window.innerHeight - anchor.top + 4}px`
+      : "auto";
+    workspacePopover.style.maxHeight = `${Math.max(44, alignAbove ? above : below)}px`;
   }
   lifecycle.listen(workspacePopover, "beforetoggle", (event) => {
     workspaceButton.setAttribute(
@@ -437,9 +505,6 @@ export function createApplication() {
   function closeNavigation() {
     closeWorkspacePopover();
     if (desktopNavigation.matches) {
-      sidebarRail.classList.remove("revealed");
-      if (sidebar.contains(document.activeElement))
-        $("main-content").focus({ preventScroll: true });
       return;
     }
     if (!navigation.open) return;
@@ -448,11 +513,7 @@ export function createApplication() {
     $("open-navigation").focus({ preventScroll: true });
   }
   lifecycle.listen($("open-navigation"), "click", () => {
-    if (desktopNavigation.matches) {
-      sidebarRail.classList.add("revealed");
-      $("sidebar-mode").focus();
-      return;
-    }
+    if (desktopNavigation.matches) return;
     navigation.showModal();
     $("open-navigation").setAttribute("aria-expanded", "true");
     $("close-navigation").focus();
@@ -478,7 +539,6 @@ export function createApplication() {
       if (
         button &&
         button.id !== "close-navigation" &&
-        button.id !== "sidebar-mode" &&
         !button.hasAttribute("data-keep-navigation")
       )
         closeNavigation();
@@ -564,6 +624,7 @@ export function createApplication() {
     $("mfa-code").value = $("mfa-secret").value = "";
     $("mfa-login-codes-value").textContent = "";
     $("mfa-qr").removeAttribute("src");
+    $("manual-setup-key").open = false;
     $("login-help").hidden = false;
   }
   function showLogin() {
@@ -611,9 +672,14 @@ export function createApplication() {
     lifecycle.cancelTimeout(tagsTimer);
     tagsRequest++;
     state.signedIn = false;
+    routeRequest++;
+    editorSession++;
+    editAfterReader = null;
+    $("toast").hidden = true;
     renderedLibraryRoute = null;
     libraryUnavailable = true;
     expandedBookmarkTags.clear();
+    selectionMode = false;
     state.links = [];
     bulk.clear();
     state.request++;
@@ -709,7 +775,21 @@ export function createApplication() {
     drafts,
     toast,
     confirmAction,
-    onEdit: openEditor,
+    onEdit(link) {
+      if (!readerRouteID()) return openEditor(link);
+      editAfterReader = link;
+      leaveReader();
+    },
+    onDismiss: leaveReader,
+    onFrameOpen() {
+      const entry = history.state;
+      if (
+        entry?.readerFromLibrary &&
+        !entry.readerReturnKey &&
+        !entry.readerFrameOpened
+      )
+        history.replaceState({ ...entry, readerFrameOpened: true }, "");
+    },
     onChange: () => refresh(true),
     onSessionExpired: showLogin,
   });
@@ -718,7 +798,10 @@ export function createApplication() {
     api,
     toast,
     onChange: () => refresh(true),
-    onSelectionChange: syncBookmarkSelection,
+    onSelectionChange: () => {
+      if ($("bulk-bar").hidden) selectionMode = false;
+      syncBookmarkSelection();
+    },
     fillCollections,
     icon,
     defaultCollection: () =>
@@ -731,11 +814,31 @@ export function createApplication() {
     bulk,
     links: () => (libraryLoading || libraryUnavailable ? [] : state.links),
     onChange: syncBookmarkSelection,
+    onEscape: () => {
+      selectionMode = false;
+      if (document.activeElement?.matches(".row-checkbox"))
+        $("selection-toggle").focus({ preventScroll: true });
+    },
+  });
+  lifecycle.listen($("selection-toggle"), "click", () => {
+    selectionMode =
+      $("selection-toggle").getAttribute("aria-pressed") !== "true";
+    if (!selectionMode) bulk.clear();
+    syncBookmarkSelection();
   });
   function syncBookmarkSelection() {
+    const enabled = selectionMode || !$("bulk-bar").hidden;
+    $("bookmark-grid").classList.toggle("selection-mode", enabled);
+    $("selection-toggle").setAttribute("aria-pressed", String(enabled));
+    $("selection-toggle-label").textContent = enabled
+      ? "Cancel selection"
+      : "Select";
+
     for (const card of $("bookmark-grid").querySelectorAll(".bookmark-card")) {
       const selected = bulk.has(Number(card.dataset.id));
       card.classList.toggle("is-selected", selected);
+      const checkbox = card.querySelector(".row-checkbox");
+      if (checkbox) checkbox.checked = selected;
       card.setAttribute(
         "aria-label",
         `${card.dataset.label}${selected ? ", selected" : ""}`,
@@ -827,7 +930,7 @@ export function createApplication() {
       all: "All bookmarks",
       inbox: "Inbox",
       favorite: "Favorites",
-      unread: "To read",
+      unread: "Unread",
     }[state.filter];
   }
 
@@ -921,6 +1024,10 @@ export function createApplication() {
 
   function updateHeading() {
     const title = currentTitle();
+    $("app-view").classList.toggle(
+      "nested-destination",
+      !showingTags && (!!state.tag || state.filter === "collection"),
+    );
     $("page-title").textContent = title;
     renderBreadcrumb();
     $("tags-library-context").hidden = !state.query;
@@ -929,16 +1036,18 @@ export function createApplication() {
     $("all-tags").classList.toggle("active", showingTags);
     if (showingTags) $("all-tags").setAttribute("aria-current", "page");
     else $("all-tags").removeAttribute("aria-current");
-    const descriptions = {
-      all: "Everything you save, in one place.",
-      inbox: "Saved links waiting to be organized.",
-      favorite: "The bookmarks you want to keep close.",
-      unread: "Your reading list, ready when you are.",
-      collection: "Bookmarks organized in this collection.",
-    };
-    $("page-subtitle").textContent = state.tag
-      ? `Bookmarks tagged #${state.tag}.`
-      : descriptions[state.filter];
+    restoreLayout();
+    const searchLabel = `Search in ${title}`;
+    $("search").placeholder = searchLabel + "…";
+    $("library-search-label").textContent = searchLabel;
+    const description =
+      state.filter === "collection"
+        ? state.collections.find(
+            (item) => String(item.id) === String(state.collection),
+          )?.description
+        : "";
+    $("page-subtitle").hidden = !description;
+    $("page-subtitle").textContent = description || "";
     document.querySelectorAll("[data-filter]").forEach((button) => {
       const active =
         !showingTags && !state.tag && button.dataset.filter === state.filter;
@@ -946,23 +1055,13 @@ export function createApplication() {
       if (active) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
     });
-    document.querySelectorAll("[data-quick-filter]").forEach((button) => {
-      button.setAttribute(
-        "aria-pressed",
-        String(
-          !showingTags &&
-            !state.tag &&
-            button.dataset.quickFilter === state.filter,
-        ),
-      );
-    });
     renderActiveFilters();
   }
 
   function renderActiveFilters() {
     const root = $("active-filters"),
       key = focusedKey(root);
-    renderFilter(root, state.query, () => {
+    renderFilter(root, state.query, currentTitle(), () => {
       lifecycle.cancelTimeout(searchTimer);
       state.query = "";
       $("search").value = "";
@@ -1008,6 +1107,8 @@ export function createApplication() {
     lifecycle.cancelTimeout(tagsTimer);
     tagsRequest++;
     showingTags = false;
+    selectionMode = false;
+    closeDisplay();
     state.filter = filter;
     state.collection = collection;
     state.tag = tag;
@@ -1215,7 +1316,8 @@ export function createApplication() {
         `${result.total} tag${result.total === 1 ? "" : "s"}${query ? ` matching “${query}”` : " in your library"}`;
       $("tags-empty-state").hidden = result.total > 0;
       $("tags-index-layout").hidden = result.total === 0;
-      $("tags-letter-control").hidden = result.total === 0;
+      $("tags-letter-control").hidden = result.total < 24;
+      $("tags-alphabet").hidden = result.total < 24;
       $("tags-clear-search").hidden = !query;
       $("tags-browse-bookmarks").hidden = !!query;
       $("tags-empty-art").replaceChildren(icon(query ? "search" : "tag"));
@@ -1229,8 +1331,6 @@ export function createApplication() {
       $("tags-page-label").textContent = `Page ${tagsPage} of ${pages}`;
       $("tags-previous").disabled = tagsPage <= 1;
       $("tags-next").disabled = tagsPage >= pages;
-      if (!jump && showingTags)
-        move($("tags-list"), [{ opacity: 0.75 }, { opacity: 1 }]);
       if (jump && sections.has(jump)) {
         const heading = sections.get(jump).previousElementSibling;
         heading.focus({ preventScroll: true });
@@ -1380,10 +1480,14 @@ export function createApplication() {
       revision: state.request,
       view: libraryView,
       query: state.query,
-      expandedActions: expandedBookmarkActions,
       expandedTags: expandedBookmarkTags,
-      onOpen: (link) => reader.open(link.id),
+      onOpen: openLibraryReader,
       onEdit: openEditor,
+      onSelect: (link, checked) => {
+        bulk.select(link, checked);
+        syncBookmarkSelection();
+      },
+      collectionLabel,
       onUpdate: updateLink,
       onTag: (name) => selectFilter("all", null, name),
       onMoreTags: (link) => {
@@ -1392,11 +1496,6 @@ export function createApplication() {
         grid
           .querySelector(`[data-id="${link.id}"] .card-tag:nth-child(6)`)
           ?.focus();
-      },
-      onActions: (link) => {
-        expandedBookmarkActions =
-          expandedBookmarkActions === link.id ? null : link.id;
-        renderLinks();
       },
       onDelete: (link) => {
         deleteBookmark = link;
@@ -1461,10 +1560,17 @@ export function createApplication() {
     }
     $("empty-import").hidden = filtered;
     $("empty-reset").hidden = !filtered;
-    $("empty-reset").textContent = emptyView
-      ? "View all bookmarks"
-      : "Clear filters";
-    $("empty-add").hidden = !!emptyView && !emptyView[2];
+    const scopedSearch =
+      !!state.query && (state.filter !== "all" || !!state.tag);
+    $("empty-reset").textContent = scopedSearch
+      ? `Search for “${state.query}” in all bookmarks`
+      : state.query
+        ? "Clear search"
+        : "View all bookmarks";
+    if (state.query)
+      $("empty-message").textContent =
+        `No match for “${state.query}” in ${currentTitle()}. Try another word or a broader search.`;
+    $("empty-add").hidden = !!state.query || (!!emptyView && !emptyView[2]);
     $("empty-add").textContent = filtered
       ? "Add a bookmark"
       : "Add your first bookmark";
@@ -1482,7 +1588,11 @@ export function createApplication() {
       ? "Loading your library…"
       : libraryUnavailable
         ? "Could not load this view"
-        : `${state.total} bookmark${state.total === 1 ? "" : "s"}${state.query ? ` matching “${state.query}”` : " in this view"}`;
+        : `${state.total} ${state.query ? "result" : "bookmark"}${state.total === 1 ? "" : "s"}`;
+    const firstVisit =
+      !filtered && !state.total && !libraryLoading && !libraryUnavailable;
+    $("library-view").classList.toggle("first-bookmark", firstVisit);
+    $("selection-toggle").disabled = !state.links.length;
     syncBookmarkSelection();
     transitionBookmarks(previous);
     restoreFocus(grid, key);
@@ -1561,15 +1671,7 @@ export function createApplication() {
       renderCollections();
       renderTags(tags || []);
       renderLinks();
-      const destination = params.toString();
-      if (
-        !quiet &&
-        !showingTags &&
-        renderedLibraryRoute !== null &&
-        destination !== renderedLibraryRoute
-      )
-        move($("bookmark-grid"), [{ opacity: 0.75 }, { opacity: 1 }]);
-      renderedLibraryRoute = destination;
+      renderedLibraryRoute = params.toString();
       if (stats.pending && !document.hidden)
         state.timer = lifecycle.timeout(() => refresh(true), 5000);
     } catch (error) {
@@ -1612,9 +1714,14 @@ export function createApplication() {
     $("bookmark-error").textContent = "";
     $("bookmark-dialog-title").textContent = link
       ? "Edit bookmark"
-      : "Add bookmark";
+      : "Save bookmark";
     $("bookmark-url").value = link?.url || "";
     const file = link?.type === "file";
+    $("bookmark-link-field").hidden = file;
+    $("bookmark-url").disabled = file;
+    $("upload-file-button").hidden = !!link;
+    $("bookmark-options").open = !!link;
+    if (file) $("bookmark-dialog-title").textContent = "Edit saved file";
     $("bookmark-capture-option").hidden = file;
     $("bookmark-save-html").disabled = file;
     $("bookmark-url").readOnly = file;
@@ -1640,7 +1747,7 @@ export function createApplication() {
     $("bookmark-draft").hidden = !draft;
     validateBookmarkFields();
     $("bookmark-dialog").showModal();
-    $("bookmark-url").focus();
+    $(file ? "bookmark-title" : "bookmark-url").focus();
   }
 
   function editorValues() {
@@ -1671,6 +1778,8 @@ export function createApplication() {
       ...editorValues(),
       type: state.editing?.type,
     });
+    if (issues.title || issues.tags || issues.description || issues.notes)
+      $("bookmark-options").open = true;
     if (issues.description || issues.notes) $("bookmark-details").open = true;
     for (const field of ["url", "title", "description", "notes", "tags"]) {
       $(
@@ -1680,6 +1789,15 @@ export function createApplication() {
     return issues;
   }
   function fillEditor(value) {
+    $("bookmark-options").open = !!(
+      state.editing ||
+      value.title ||
+      value.tags?.length ||
+      value.notes ||
+      value.description ||
+      value.read ||
+      value.favorite
+    );
     $("bookmark-details").open = !!(value.description || value.notes);
     $("bookmark-save-html").checked = !!value.saveHTML;
     for (const field of ["url", "title", "description", "notes"])
@@ -1736,7 +1854,16 @@ export function createApplication() {
     await restoreRoute(true);
     openSharedLink();
   }
+  function markSetupStep(step) {
+    $("setup-steps").hidden = step === 0;
+    [...$("setup-steps").children].forEach((item, index) => {
+      if (index === step - 1) item.setAttribute("aria-current", "step");
+      else item.removeAttribute("aria-current");
+    });
+  }
+
   function showMFACode(enrollment) {
+    markSetupStep(enrollment ? 2 : 0);
     $("mfa-code-form").hidden = false;
     $("mfa-enrollment").hidden = !enrollment;
     $("mfa-back").hidden = false;
@@ -1815,7 +1942,8 @@ export function createApplication() {
         $("mfa-login-codes-value").textContent =
           result.recoveryCodes.join("\n");
         $("mfa-login-codes").hidden = false;
-        $("login-title").textContent = "Your backup access";
+        markSetupStep(3);
+        $("login-title").textContent = "Keep your recovery codes";
         $("login-description").textContent =
           "Keep these codes separate from your authenticator.";
         $("mfa-login-codes-value").focus();
@@ -1961,7 +2089,10 @@ export function createApplication() {
     if (signingOut) event.preventDefault();
   });
   lifecycle.listen(logoutDialog, "close", () => {
-    if (state.signedIn) $("open-navigation").focus({ preventScroll: true });
+    if (state.signedIn)
+      $(
+        desktopNavigation.matches ? "workspace-button" : "open-navigation",
+      ).focus({ preventScroll: true });
   });
   lifecycle.listen($("logout-form"), "submit", async (event) => {
     event.preventDefault();
@@ -1990,12 +2121,6 @@ export function createApplication() {
         selectFilter(button.dataset.filter),
       ),
     );
-  document.querySelectorAll("[data-quick-filter]").forEach((button) =>
-    lifecycle.listen(button, "click", () => {
-      if (!state.tag && state.filter === button.dataset.quickFilter) return;
-      selectFilter(button.dataset.quickFilter, null, "", false);
-    }),
-  );
   // Treat an outside click like Escape so each dialog keeps its cancellation guards.
   document.querySelectorAll("dialog").forEach((dialog) => {
     let backdropPress = false;
@@ -2042,9 +2167,15 @@ export function createApplication() {
     selectFilter("all");
     $("search").focus();
   }
-  lifecycle.listen($("empty-reset"), "click", resetLibraryFilters);
+  lifecycle.listen($("empty-reset"), "click", () => {
+    if (state.query && (state.filter !== "all" || state.tag))
+      selectFilter("all");
+    else resetLibraryFilters();
+    $("search").focus();
+  });
   lifecycle.listen($("tags-browse-bookmarks"), "click", resetLibraryFilters);
   lifecycle.listen($("refresh-button"), "click", (event) => {
+    closeDisplay(true);
     if (event.currentTarget.getAttribute("aria-busy") !== "true") refresh();
   });
   lifecycle.listen($("search"), "input", () => {
@@ -2147,7 +2278,20 @@ export function createApplication() {
               ? `Bookmark and HTML copy saved.${result.capture.omitted ? ` ${result.capture.omitted} resource${result.capture.omitted === 1 ? "" : "s"} could not be included.` : ""}`
               : editing
                 ? "Bookmark updated."
-                : "Bookmark saved.",
+                : `Saved to ${body.collectionId ? collectionLabel(body.collectionId) : "Inbox"}.`,
+          false,
+          !editing && !newer && !result.capture
+            ? {
+                label: "Organize",
+                run: async () => {
+                  if (!state.signedIn || session !== editorSession) return;
+                  const saved = await api(`/api/links/${result.link.id}`);
+                  if (!state.signedIn || session !== editorSession) return;
+                  $("toast").hidden = true;
+                  openEditor(saved);
+                },
+              }
+            : null,
         );
       await refresh();
     } catch (error) {
@@ -2250,11 +2394,16 @@ export function createApplication() {
     $("import-dialog").showModal();
   }
   lifecycle.listen($("import-button"), "click", openImport);
+  lifecycle.listen($("settings-import"), "click", openImport);
+  lifecycle.listen($("settings-export"), "click", () =>
+    $("export-dialog").showModal(),
+  );
   lifecycle.listen($("import-choose"), "click", () => $("import-file").click());
   lifecycle.listen($("import-file"), "change", async () => {
     const file = $("import-file").files[0];
     if (!file) return;
     $("import-dialog").close();
+    if (state.settingsSection) settings.leaveSettings();
     $("import-result").hidden = true;
     $("import-choose").disabled = true;
     $("import-button").disabled = true;
@@ -2283,14 +2432,16 @@ export function createApplication() {
       $("import-result").textContent = message;
       $("import-result").className = "operation-result";
       $("import-result").hidden = false;
-      toast(message);
       await refresh();
     } catch (error) {
       $("import-result").textContent =
         `Import could not finish. ${error.message}`;
       $("import-result").className = "error-banner";
+      const retry = el("button", "text-button", "Choose another file");
+      retry.type = "button";
+      lifecycle.listen(retry, "click", openImport);
+      $("import-result").append(" ", retry);
       $("import-result").hidden = false;
-      toast(error.message, true);
     } finally {
       $("import-choose").disabled = false;
       $("import-progress").hidden = true;
@@ -2478,14 +2629,20 @@ export function createApplication() {
   lifecycle.listen($("library-file"), "change", async () => {
     const file = $("library-file").files[0];
     if (!file) return;
+    const fromEditor = $("bookmark-dialog").open && !state.editing;
+    const destination = fromEditor
+      ? $("bookmark-collection").value
+      : state.filter === "collection"
+        ? state.collection
+        : null;
+    if (fromEditor) $("bookmark-dialog").close();
     $("upload-file-button").disabled = true;
     $("upload-progress").hidden = false;
     try {
       if (file.size > 20 * 1024 * 1024)
         throw new Error("Choose a file smaller than 20 MiB.");
       const params = new URLSearchParams({ name: file.name });
-      if (state.filter === "collection")
-        params.set("collection", state.collection);
+      if (destination) params.set("collection", destination);
       const result = await api(`/api/files?${params}`, {
         method: "POST",
         headers: {
@@ -2499,7 +2656,7 @@ export function createApplication() {
       });
       await refresh();
       toast("File saved to your library.");
-      await reader.open(result.link.id);
+      await openLibraryReader(result.link);
     } catch (error) {
       toast(error.message, true);
     } finally {
@@ -2537,11 +2694,12 @@ export function createApplication() {
   });
 
   function configureLogin(passwordEnabled = true) {
+    markSetupStep(setupRequired ? 1 : 0);
     $("login-title").textContent = setupRequired
       ? "Create your account"
-      : "Welcome back";
+      : "Sign in";
     $("login-description").textContent = setupRequired
-      ? "After creating your account, you’ll set up an authenticator app and save recovery codes."
+      ? "Choose your sign-in details. Next, connect an authenticator app and save your recovery codes."
       : "Sign in with your password and an authentication or recovery code.";
     $("login-submit-label").textContent = setupRequired
       ? "Create account"

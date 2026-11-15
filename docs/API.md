@@ -4,7 +4,7 @@
 
 Open **API documentation** at the bottom of the library navigation, or visit
 `/api-docs/` on your instance. Swagger UI lists the native HTTP API with request
-schemas, filters, responses and errors. Search by tag or path, expand an operation,
+schemas, filters, responses and errors. Search by HTTP method, path or operation text. Pick an operation from the results,
 then use **Try it out** to send a real request to your instance. Mutations affect
 your library, including deletions.
 

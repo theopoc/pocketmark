@@ -25,19 +25,24 @@ export function renderBreadcrumbs(element, crumbs, disabled) {
   );
 }
 
-export function renderFilter(element, query, onClear) {
+export function renderFilter(element, query, scope, onClear) {
   renderRegion(
     element,
     query ? (
-      <Button
-        className="filter-chip"
-        data-focus-key={`filter:Search: ${query}`}
-        aria-label={`Remove Search: ${query} filter`}
-        onClick={onClear}
-      >
-        Search: {query}
-        <Icon name="close" />
-      </Button>
+      <>
+        <span className="search-scope">
+          Searching in <strong>{scope}</strong>
+        </span>
+        <Button
+          className="filter-chip"
+          data-focus-key={`filter:Search: ${query}`}
+          aria-label={`Remove Search: ${query} filter`}
+          onClick={onClear}
+        >
+          Search: {query}
+          <Icon name="close" />
+        </Button>
+      </>
     ) : null,
   );
 }

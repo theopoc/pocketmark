@@ -8,9 +8,9 @@ no Linkwarden extension or service is involved. Requires Chrome 120 or newer.
 1. Open `chrome://extensions` and enable **Developer mode**.
 2. Choose **Load unpacked**, then select this `extension/` directory. Alternatively,
    extract `pocketmark-extension.zip` and select the extracted folder.
-3. In Pocketmark, sign in and create a dedicated key under **API keys**.
-4. Open the extension on a regular HTTP(S) page. Under **Connection settings**,
-   enter the Pocketmark server origin and the key, then click **Connect**.
+3. Open the extension on a regular HTTP(S) page and enter the Pocketmark server address.
+4. Select **Open API keys on this server**, sign in and create an **Add, edit & capture** key.
+   Reopen the extension on the page you want to save, paste the key and click **Connect**.
 5. Approve access to that server. Chrome may close the popup while asking;
    reopen it to finish validation without re-entering the connection.
 
@@ -23,7 +23,7 @@ that task before connecting to another server.
 ## Save and edit
 
 The popup loads an existing bookmark for the exact URL, or starts a new one.
-Edit its **title**, **collection** and **tags**. The save action stays visible
+Save immediately, change its **title** or **collection**, or expand **Tags** to edit labels. The save action stays visible
 while the editor scrolls. **Connection** opens settings without losing the
 current editor fields. Select nested collections or create
 one under the root/current collection. Choose existing tags from suggestions or
@@ -32,13 +32,13 @@ description, favorites and read status are preserved when updating a bookmark.
 No library browser or bookmark synchronization is built into this extension.
 Floccus can still synchronize browser bookmarks independently through WebDAV.
 
-Open **Attach captures** and select any combination of these optional formats;
+Open **Save offline copies** and select any combination of these optional formats;
 all start unchecked:
 
-- **Rendered HTML**: a passive offline snapshot of the current rendered DOM.
+- **Offline page** (HTML): a passive offline snapshot of the current rendered DOM.
 - **Visible area**: PNG of the source tab's viewport.
-- **Full page**: PNG of the current full rendered layout.
-- **PDF**: print-layout PDF of the current rendered page.
+- **Entire page**: PNG of the current full rendered layout.
+- **Print layout**: PDF of the current rendered page.
 
 Captures can contain private signed-in content visible in the source page.
 Chrome's `debugger` permission is required at installation (Chrome does not allow
@@ -52,8 +52,8 @@ One background task runs at a time. Closing the popup does not cancel it; reopen
 the popup to see progress and results. Active/failed tasks take priority over
 the editor, with retry/discard actions kept visible. The popup closes automatically
 after the bookmark and all selected captures are saved, including after a successful
-retry. Reopening it on the saved page shows a green “Saved to Pocketmark” message
-and a collapsed summary; expand it to inspect individual formats or edit the bookmark.
+retry. Reopening it on the saved page shows one receipt with the collection and copy count.
+Expand it to inspect individual formats. Use the editor below to update the bookmark.
 Partial failures keep the popup open with the attention message and retry actions.
 Keep the source tab open and on the same URL until acquisition finishes. After acquisition, uploads do not need that tab.
 Closing Chrome interrupts work; reopening the popup marks it interrupted and

@@ -15,6 +15,8 @@ function create(
     onEdit,
     onChange,
     onSessionExpired,
+    onDismiss,
+    onFrameOpen,
   },
   browser = globalThis,
 ) {
@@ -42,7 +44,11 @@ function create(
   let viewerRequest = 0;
   let retryReaderID = null;
   let activeSection = "reader-notes-form";
-  let readingView = false;
+  let readingView = true;
+  let articleScroll = 0;
+  let routedBookmark = null;
+  let directPreview = false;
+  let pendingFilePreview = false;
   let filesOpen = false;
   let assetsState = "loading";
   const formats = [
@@ -81,6 +87,11 @@ function create(
   }
 
   function showNotebook(open) {
+    if (open) {
+      $("reader-highlight").hidden = true;
+      pendingFilePreview = false;
+      if (filesOpen) showFiles(false);
+    }
     $("reader-notebook").hidden = !open;
     $("reader-dialog").setAttribute("data-notebook-open", String(open));
     $("reader-notebook-toggle").setAttribute("aria-expanded", String(open));
@@ -94,10 +105,20 @@ function create(
   });
 
   function showFiles(open) {
+    const changed = filesOpen !== open;
+    const panel = $("reader-text-panel");
+    if (changed && open) articleScroll = panel.scrollTop;
     filesOpen = open;
+    $("reader-dialog").setAttribute("data-copies-open", String(open));
+    $("reader-formats").hidden = !open;
     $("reader-files").hidden = !open;
+    if (changed) panel.scrollTop = open ? 0 : articleScroll;
     $("reader-files-toggle").setAttribute("aria-expanded", String(open));
-    if (open) showNotebook(false);
+    if (open) {
+      $("reader-highlight").hidden = true;
+      pendingFilePreview = false;
+      showNotebook(false);
+    }
   }
   lifecycle.listen($("reader-files-toggle"), "click", () =>
     showFiles(!filesOpen),
@@ -110,10 +131,11 @@ function create(
   function emptyReaderText() {
     return safeURL(state.reading?.url)
       ? "No article text was saved. Open the original page to read it."
-      : "No article text was saved. Open a saved file under Saved formats → Manage files.";
+      : "No article text was saved. Check Copies for an available file.";
   }
 
   function closeViewer() {
+    directPreview = false;
     viewerRequest++;
     $("asset-viewer-content").replaceChildren();
     if ($("asset-viewer").open) $("asset-viewer").close();
@@ -143,6 +165,7 @@ function create(
     $("reader-layout").removeAttribute("src");
   }
   function close() {
+    routedBookmark = null;
     invalidate();
     if ($("annotation-dialog").open) $("annotation-dialog").close();
     if ($("reader-dialog").open) $("reader-dialog").close();
@@ -161,7 +184,12 @@ function create(
   }
   const readerDialog = $("reader-dialog");
   lifecycle.listen(readerDialog, "close", () => {
-    if (!readerDialog.open) invalidate();
+    if (!readerDialog.open) {
+      const id = routedBookmark;
+      routedBookmark = null;
+      invalidate();
+      if (id) onDismiss?.(id);
+    }
   });
   lifecycle.listen($("annotation-dialog"), "close", () => {
     if (!$("annotation-dialog").open) {
@@ -170,7 +198,8 @@ function create(
     }
   });
 
-  async function openReader(id, recheck = false) {
+  async function openReader(id, recheck = false, section = "read") {
+    routedBookmark = id;
     closeViewer();
     retryReaderID = null;
     $("reader-retry-open").hidden = true;
@@ -180,17 +209,21 @@ function create(
     state.annotationDraft = null;
     if ($("annotation-dialog").open) $("annotation-dialog").close();
     if (!recheck) {
-      readingView = false;
+      readingView = true;
       showFiles(false);
+      articleScroll = 0;
       $("reader-options").open = false;
       activeSection = "reader-notes-form";
       showNotebook(false);
     }
+    pendingFilePreview = !recheck && section !== "copies";
+    $("reader-files-toggle").disabled = true;
+    $("reader-files-toggle").textContent = "Copies";
     $("reader-notebook-toggle").disabled = true;
     $("reader-text-panel").scrollTop = 0;
     $("reader-dialog").scrollTop = 0;
     $("reader-text-panel").hidden = false;
-    $("reader-highlight").hidden = false;
+    $("reader-highlight").hidden = true;
     layoutRequest++;
     state.reading = null;
     readerAssets = [];
@@ -255,7 +288,7 @@ function create(
       if (!isCurrent(request)) return;
       state.reading = link;
       $("reader-content").hidden = !readingView;
-      $("reader-formats").hidden = false;
+      $("reader-files-toggle").disabled = false;
       renderFormats();
       for (const id of [
         "reader-section-nav",
@@ -263,16 +296,16 @@ function create(
         "annotations-section",
       ])
         $(id).hidden = false;
-      showFiles(filesOpen);
+      showFiles(filesOpen || section === "copies");
       $("reader-title").textContent = link.title || link.url;
       $("reader-domain").textContent =
-        link.type === "file"
-          ? "Saved file"
-          : safeURL(link.url) || domain(link.url);
+        link.type === "file" ? "Saved file" : domain(link.url);
       $("reader-capture").hidden = link.type === "file";
       const url = safeURL(link.url);
       $("reader-original").hidden = !url;
       if (url) $("reader-original").href = url;
+      else $("reader-original").removeAttribute("href");
+      $("reader-dialog").setAttribute("data-has-text", String(!!link.content));
       $("reader-archive").hidden = !link.archiveAvailable;
       $("reader-archive").href = `/api/links/${id}/archive`;
       $("reader-archive").setAttribute("download", "");
@@ -693,6 +726,7 @@ function create(
   }
 
   function editAnnotation(annotation) {
+    $("reader-highlight").hidden = true;
     annotationSession++;
     $("annotation-form").querySelector("button[type=submit]").disabled = false;
     state.annotationDraft = annotation;
@@ -754,10 +788,12 @@ function create(
       start,
       end: start + Array.from(quote).length,
     };
+    $("reader-highlight").hidden = false;
     return state.readerSelection;
   }
   lifecycle.listen(document, "selectionchange", rememberReaderSelection);
   lifecycle.listen($("reader-content"), "pointerdown", () => {
+    $("reader-highlight").hidden = true;
     state.readerSelection = null;
   });
   document.querySelectorAll("[data-highlight-selection]").forEach((button) => {
@@ -836,6 +872,7 @@ function create(
   });
   function readerMode(layout) {
     readingView = true;
+    $("reader-highlight").hidden = true;
     state.readerSelection = null;
     $("reader-layout").hidden = !layout;
     $("reader-content").hidden = layout;
@@ -855,7 +892,7 @@ function create(
     readerLayoutURL = snapshot.url;
     $("reader-layout-mode").disabled = !snapshot.url;
     $("reader-mode-hint").textContent = snapshot.message;
-    if (!snapshot.url && readingView) readerMode(false);
+    if (!snapshot.url && !$("reader-layout").hidden) readerMode(false);
   }
   lifecycle.listen($("reader-layout-mode"), "click", async () => {
     if (!readerLayoutURL) return;
@@ -883,6 +920,7 @@ function create(
         throw new Error(
           "Formatted view is unavailable. Read the text or retry after saving an HTML capture.",
         );
+      onFrameOpen?.();
       $("reader-layout").src = url;
       readerMode(true);
       $("reader-layout").scrollIntoView({
@@ -966,6 +1004,9 @@ function create(
         ? `Open latest saved ${format.name}`
         : `${format.name}: ${status}`;
     }
+    const count = previewAssets().length;
+    $("reader-files-toggle").textContent =
+      assetsState === "ready" ? `Copies (${count})` : "Copies";
     $("reader-formats-summary").textContent =
       assetsState === "loading"
         ? "Checking saved copies…"
@@ -980,9 +1021,33 @@ function create(
       const copies = previewAssets().filter(format.matches);
       if (copies.length) openAsset(copies[0], copies);
     });
-  lifecycle.listen($("asset-viewer-close"), "click", closeViewer);
+  lifecycle.listen($("asset-viewer-close"), "click", () =>
+    $("asset-viewer").close(),
+  );
+  function returnFromPreview(destination) {
+    closeViewer();
+    if (destination === "notes") {
+      selectSection("reader-notes-form");
+      showNotebook(true);
+      $("reader-tab-notes").focus({ preventScroll: true });
+    } else {
+      showFiles(true);
+      $("reader-files-toggle").focus({ preventScroll: true });
+    }
+  }
+  lifecycle.listen($("asset-viewer-notes"), "click", () =>
+    returnFromPreview("notes"),
+  );
+  lifecycle.listen($("asset-viewer-copies"), "click", () =>
+    returnFromPreview("copies"),
+  );
   lifecycle.listen($("asset-viewer"), "close", () => {
-    if (!$("asset-viewer").open) closeViewer();
+    if (!$("asset-viewer").open) {
+      const returnToLibrary = directPreview;
+      closeViewer();
+      if (returnToLibrary && $("reader-dialog").open)
+        $("reader-dialog").close();
+    }
   });
   lifecycle.listen($("asset-viewer-select"), "change", () =>
     showAsset(Number($("asset-viewer-select").value)),
@@ -1009,6 +1074,7 @@ function create(
     $("asset-viewer-download").href = asset.basicArchive
       ? `/api/links/${state.reading.id}/archive`
       : `/api/assets/${asset.id}`;
+    $("asset-viewer-title").textContent = asset.name;
     $("asset-viewer-status").textContent = "Opening saved file…";
     $("asset-viewer-retry").hidden = true;
     $("asset-viewer-retry").className = "text-button";
@@ -1054,6 +1120,7 @@ function create(
       );
       if (image) content.alt = asset.name;
       else {
+        onFrameOpen?.();
         content.title = asset.name;
         if (asset.basicArchive) content.setAttribute("sandbox", "");
         // HTML is placed in the trusted shell's nested opaque sandbox. The
@@ -1134,14 +1201,35 @@ function create(
     $("reader-formats-retry").hidden = true;
     readerAvailability();
     $("asset-list").replaceChildren();
-    for (const asset of assets || []) {
+    if (pendingFilePreview && state.reading.type === "file") {
+      pendingFilePreview = false;
+      // The first attachment is the file imported with this bookmark.
+      const copies = previewAssets();
+      const original = copies.at(-1);
+      if (original) {
+        directPreview = true;
+        openAsset(original, copies);
+      }
+    }
+    for (const asset of [...readerAssets].sort((a, b) => b.id - a.id)) {
       const row = el("div", "asset-item");
       const download = el("a", "", asset.name);
       download.href = `/api/assets/${asset.id}`;
       download.setAttribute("download", "");
       row.append(
         download,
-        el("span", "small muted", `${(asset.size / 1024).toFixed(1)} KiB`),
+        el(
+          "span",
+          "small muted",
+          [
+            asset.createdAt
+              ? new Date(asset.createdAt).toLocaleDateString()
+              : "",
+            `${(asset.size / 1024).toFixed(1)} KiB`,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        ),
       );
       if (previewable(asset)) {
         const view = el("button", "text-button", "View");
@@ -1197,7 +1285,7 @@ function create(
           "p",
           "reader-section-empty muted",
           state.reading.archiveAvailable
-            ? "No attached files. The basic HTML capture is available above under Saved formats."
+            ? "No attached files. The basic HTML capture is available under Saved copies."
             : "No attached files yet. Attach a file to keep it with this bookmark.",
         ),
       );

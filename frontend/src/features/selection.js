@@ -2,7 +2,10 @@ import { createLifecycle } from "../lib/lifecycle.js";
 ("use strict");
 
 // File-manager selection without changing the links and controls inside each card.
-function create({ grid, bulk, links, onChange }, browser = globalThis) {
+function create(
+  { grid, bulk, links, onChange, onEscape },
+  browser = globalThis,
+) {
   const lifecycle = createLifecycle(browser);
   let anchor = null,
     gesture = null,
@@ -65,16 +68,17 @@ function create({ grid, bulk, links, onChange }, browser = globalThis) {
     if (
       event.key !== "Escape" ||
       browser.document.querySelector("dialog[open]") ||
-      event.target.closest("input,textarea,select,[contenteditable]")
+      event.target.closest(
+        "input:not([type=checkbox]),textarea,select,[contenteditable]",
+      )
     )
       return;
-    const help = browser.document.querySelector(".selection-help[open]");
-    if (help) {
-      help.open = false;
-      help.querySelector("summary").focus();
-      event.preventDefault();
+    if (
+      event.defaultPrevented ||
+      browser.document.querySelector(":popover-open")
+    )
       return;
-    }
+    onEscape?.();
     cancel();
     bulk.clear();
     onChange();
@@ -172,10 +176,6 @@ function create({ grid, bulk, links, onChange }, browser = globalThis) {
   lifecycle.listen(browser.document, "pointercancel", cancel);
   lifecycle.listen(grid, "lostpointercapture", cancel);
   lifecycle.listen(browser, "blur", cancel);
-  lifecycle.listen(browser.document, "click", (event) => {
-    const help = browser.document.querySelector(".selection-help[open]");
-    if (help && !help.contains(event.target)) help.open = false;
-  });
   // Scrolling invalidates the viewport rectangles; native scrolling wins.
   lifecycle.listen(browser, "scroll", cancel, true);
   return {

@@ -1,360 +1,51 @@
----
-name: Pocketmark
-description: A precise workspace for a personal bookmark library.
-colors:
-  ink: "#20232c"
-  muted: "#626978"
-  paper: "#fff"
-  sidebar: "#f6f7f9"
-  surface: "#f8f9fb"
-  line: "#e3e5eb"
-  control-line: "#818896"
-  control-line-dark: "#747b92"
-  accent: "#4f46e5"
-  accent-hover: "#4038c5"
-  accent-soft: "#eeedff"
-  danger: "#b12e35"
-  success: "#23714a"
-  focus: "#7067ef"
-typography:
-  headline:
-    fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
-    fontSize: "26px"
-    fontWeight: 650
-    lineHeight: 1.3
-    letterSpacing: "-.7px"
-  title:
-    fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
-    fontSize: "14px"
-    fontWeight: 600
-    lineHeight: 1.5
-  body:
-    fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
-    fontSize: "14px"
-    lineHeight: 1.5
-  label:
-    fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
-    fontSize: "12px"
-    fontWeight: 550
-    lineHeight: 1.5
-  reader:
-    fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
-    fontSize: "17px"
-    lineHeight: 1.95
-rounded:
-  small: "4px"
-  control: "6px"
-  utility: "8px"
-  panel: "12px"
-spacing:
-  compact: "8px"
-  row: "12px"
-  standard: "16px"
-  section: "24px"
-  workspace: "32px"
-components:
-  button-primary:
-    backgroundColor: "{colors.accent}"
-    textColor: "{colors.paper}"
-    rounded: "{rounded.control}"
-    padding: "8px 12px"
-    typography: "{typography.label}"
-  button-primary-hover:
-    backgroundColor: "{colors.accent-hover}"
-  button-subtle:
-    backgroundColor: "{colors.paper}"
-    textColor: "#4b5263"
-    rounded: "{rounded.control}"
-    padding: "8px 12px"
-    typography: "{typography.label}"
-  input:
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.control}"
-    padding: "10px 12px"
-  bookmark-card:
-    backgroundColor: "{colors.paper}"
-    rounded: "{rounded.panel}"
-  tag:
-    backgroundColor: "#f0f1f6"
-    textColor: "#5b6272"
-    rounded: "{rounded.small}"
-    padding: "2px 6px"
----
-
-# Design System: Pocketmark
-
-This document is the source of truth for current interface design rules.
-Record validation evidence and its testing limits in the PR; keep generated
-artifacts outside version control as described in [AGENTS.md](AGENTS.md).
-
-## Overview
-
-**Creative North Star: "The Personal Library Workspace"**
-
-A precise technology workspace for a strictly personal library. Cool white content, a slate-tinted navigation drawer and indigo controls keep attention on saved material and practical actions. The interface uses the operating system’s sans serif, authored outline SVG icons and restrained borders.
-
-Density serves finding and organizing; reading deliberately opens into a larger type size and generous measure. The React interface uses locally compiled shadcn/ui primitives styled with Pocketmark’s semantic CSS tokens. Assets remain embedded in Go; fonts remain local to the operating system.
-
-**Key Characteristics:**
-- Compact library rows with visible actions and labeled capture states.
-- Indigo selection and action cues over cool neutral surfaces.
-- Responsive navigation and a comfortable reader in the same visual language.
+# Pocketmark interface
 
-## Component consistency and identity
+Pocketmark is a personal library for retrieving and reading saved material. A document title and its source should be easy to scan before choosing what to open. Collection navigation, search and save stay within reach as the library grows.
 
-Each component type keeps its own visual identity within the shared palette,
-typography, spacing rhythm and icon system. Toasts, popovers, menus, dialogs,
-buttons and fields remain recognizable as distinct components. Every instance
-of the same component and documented variant follows one canonical treatment
-throughout the application, including inside other components and overlays.
+## Type, color and controls
 
-Before adding or changing an instance, identify its existing implementation,
-owning styles and component rules below. Reuse its shared primitive and base
-styles. Preserve its identity across screens:
+Use a locally available book serif for library headings and bookmark titles. Keep navigation, buttons, metadata and forms in the system sans serif. Avoid fetching fonts or images from third parties for interface decoration. Reuse the canonical Pocketmark bookmark mark.
 
-- **Color:** semantic roles for surfaces, text, icons, borders, accents and status.
-- **Shape:** corner radii, border treatment, shadow and component proportions.
-- **Typography:** font family, size, weight, line height and text hierarchy.
-- **Composition:** padding, gaps, icon sizing and alignment, content hierarchy
-  and placement of actions.
-- **Interaction:** hover, active, focus, disabled and loading treatments, plus
-  the component's motion and dismissal behavior where applicable.
+| Role | Light | Dark |
+| --- | --- | --- |
+| Reading surface | `#faf9f6` | `#1a1b1d` |
+| Navigation rail | `#eeede7` | `#202123` |
+| Primary text | `#26272a` | `#f1efe8` |
+| Secondary text | `#60625e` | `#b8b6ae` |
+| Divider | `#d8d7ce` | `#454640` |
+| Accent text | `#5749b6` | `#c6bafa` |
+| Primary button fill | `#5749b6` | `#6250b2` |
 
-Light and dark themes express the same identity with their respective semantic
-tokens. Responsive layouts may wrap, resize or reposition content while keeping
-the component's visual signature and reachable controls. Existing documented
-variants, such as primary/subtle buttons or status icons, retain their explicit
-differences. A screen, feature or nesting context alone does not create a new
-variant. For example, every toast uses the shared toast panel and action styling;
-every instance of a given popover uses its established popover treatment.
+Use subtle rules between rows, a distinct background for the active destination and a visible focus ring. Keep danger, successful saves and retry states distinguishable with text as well as color. Use a filled primary button for the immediate action. Give icon buttons accessible names, keyboard operation and a touch target that works independently of hover. Long titles, tags, filenames and collection names must wrap or expose their full text accessibly.
 
-Keep common rules in the owning component or shared stylesheet. Scope secondary
-surface refinements as defined under Layout; local overrides must preserve the
-base component identity. When a new variant or a deliberate identity change is
-needed, document its purpose, defining properties and allowed differences here,
-then update all affected instances and states together.
+## Finding and organizing
 
-For interface changes, compare the affected component with existing instances
-of the same type and variant across its relevant screens and nesting contexts.
-Check desktop and phone layouts, both themes, theme switching while visible and
-the affected interaction/status states. Assess visual consistency, palette
-conformity and accessibility separately; record coverage and limits in the PR
-as required by the design review policy.
+Place search under the current library heading. Show scope and a way to repeat a scoped query across the library. Preserve filters, sorting and pagination in history. Returning from a bookmark should restore the library location, scroll position and keyboard focus.
 
-## Colors
+Default to a scannable list. Put the title first, group source and metadata under it, and keep favorite and contextual actions at the edge. Let each collection remember its layout. The grid gives more space to visual material. The display menu groups sort and presentation options. Selection exposes checkboxes and a shared action bar. Bulk operations describe what will change and confirm destructive actions.
 
-The palette is cool and restrained; the frontmatter records the reusable CSS color properties without the legacy green aliases.
+On narrow screens, retain navigation in the drawer. Keep Add reachable and limit the controls above the first bookmark. Empty states should offer the relevant next action. Keep list updates stable during refreshes and keyboard navigation.
 
-### Primary
-- **Indigo:** accent identifies primary actions and selected controls; accent-hover darkens interactive emphasis, accent-soft supports selected or hovered surfaces, and focus supplies keyboard outlines. The same accent anchors the bookmark mark and installable app theme.
+## Saving and reading
 
-### Neutral
-- **Ink and muted slate:** ink carries titles and body text; muted carries secondary descriptions and metadata.
-- **White paper and cool surfaces:** paper is the content canvas, sidebar distinguishes navigation, and surface supports result headers and secondary containers. Line defines quiet dividers.
-- **Semantic status:** success marks ready/read states; danger marks failed states and destructive affordances. Pending and processing states use amber text with explicit labels.
+Start a new bookmark with its URL and destination. Additional metadata and the HTML capture option are available in the editor. A file can be uploaded from the same dialog. Preserve drafts across dismissal. Successful saves identify their destination. If capture fails after saving, keep the bookmark and provide a retry.
 
-**The Action Accent Rule.** Use indigo for primary actions, selection and focus; retain semantic green and red for success and failure.
+Open a web bookmark on its captured text. Keep a link to the original and show an explanation when text is unavailable. A standalone file opens its preview. Copies exposes saved versions and original downloads. Notes and highlights stay accessible beside the reader on wide screens and as a separate pane on small screens. Preserve the article position when changing panes. Direct links and browser Back must work for bookmarks and files.
 
-## Themes
+## Account and settings
 
-Dark is the default for new browsers. A toggle in the workspace header and on the sign-in screen switches between dark and light; `pocketmark-theme` stores the explicit choice locally. `/theme.js` applies it before the stylesheet loads. Blocked storage falls back to dark without preventing use.
+The initial account flow shows three steps covering account details, an authenticator and recovery codes. Keep the QR, code entry and manual setup method usable on a phone. Protect one-time credentials and pending security actions when navigating. Keep password reauthentication, session management and authorization boundaries intact.
 
-The frontmatter colors describe the light palette. [The semantic stylesheet](internal/webui/static/style.css) defines the light and dark token values used by the interface.
+Organize settings by user intent. The overview groups account and security, apps and devices, and library and data. Give each section its own address. On narrow screens, show either the index or the selected section with a way back. Keep transfer results, errors and recovery actions close to the operation.
 
-Dark controls, dialogs, cards, metadata, highlights and selection share the theme; original saved-page layouts keep their source appearance. Primary-button foregrounds remain white in both modes. Native controls follow `color-scheme`; browser theme color follows the selected page ground. Print uses a white reader surface and black text.
+## Extension and API reference
 
-Every added or modified component must match both the design system and the active theme's palette. Use semantic tokens for surfaces, text, icons, borders, hover, focus and status; resolve their light and dark values independently. A matching layout or readable contrast alone does not establish theme conformity. Check the rendered component in both themes, including its interactive states, before delivery. Approved accent surfaces retain their accent treatment in both themes, with foreground colors chosen for that surface rather than the page ground.
+The extension puts the active page and save action first. Tags and optional offline copy formats expand on demand. Show the save result and individual capture failures, with a way to retry retained captures. Connection and theme controls remain available.
 
-Entered search text uses `ink`; mobile action labels use the readable `muted` token rather than the desktop icon gray. The sign-in theme toggle keeps a translucent hover surface over its violet introduction panel. Programmatically focused Settings headings use the same indigo outline as other keyboard targets. Quiet Delete actions in files and annotations use `danger` on hover and focus, independently of their position among other actions.
+The API reference supports finding an operation by method and path, jumping to its details, and inspecting or trying the request. Keep authentication context visible and make real mutations clear. Preserve Swagger's request and response details.
 
-API documentation applies theme tokens to expanded response headers, examples and SVG paths as well as the collapsed overview; forced colors retain system icon colors. Operation permalinks are separate, labeled keyboard targets beside the summary buttons. Generated parameter fields have accessible names, and scrollable code examples can receive keyboard focus.
+## Interaction and verification
 
-<a id="approved-secondary-refinements--1-november-2026"></a>
+Use motion to communicate a change of state without delaying input. Honor reduced-motion preferences, retain keyboard focus when overlays close, and expose status updates to assistive technology. Place feedback inside open modal dialogs when needed. Escape closes the active layer first.
 
-The app, API documentation and extension share an interruption-safe theme controller. The extension supplements its original dark palette with a locally stored light theme, keeping the field order and bottom save action. Shared local theme/name modules are checked by `scripts/sync_ui_assets.py`; no runtime dependency is added.
-
-Secondary surfaces use the existing palette and field boundary tokens.
-
-### Floating selection bar
-
-The selection bar uses an opaque violet background derived from the active theme's `accent` (75% accent mixed with black), white labels and outline icons, and light red (`#ffb4b8`) for both the Delete label and trash icon. Hover darkens the violet; keyboard focus uses a white outline. Desktop exposes Select all, Move, Tags, Favorites, Read/Unread and Refresh captures followed by Delete and the clear-selection icon. There is no More menu. The bar wraps only when space requires it, without hiding actions. Read uses the circle-check icon whenever at least one selected bookmark is unread; Unread uses the clock icon when every selected bookmark is read, including selections outside the current results.
-
-Action panels use the active theme's `paper`, `ink`, `line`, `control-line` and `accent-soft` tokens. They open above their desktop trigger with protected keyboard focus. Move offers a searchable collection list and Move here; Tags retains the wrapping tag picker and explicitly replaces existing tags. Favorites and reading status offer two explicit commands without an extra apply step. Capture requests have a queue confirmation, and deletion has one destructive confirmation with Cancel focused first. Bulk actions preserve the full frozen selection. Status changes offer Undo, preserving newer metadata and status changes.
-
-On phones, a compact selection count, Actions launcher and clear-selection control leave room to select more bookmarks. Actions opens a bottom sheet with labeled full-width rows. Choosing an action replaces the sheet contents; Back returns to the action list without stacking dialogs. Controls have at least 44px targets, the sheet scrolls on short screens and its footer remains reachable. Both themes retain the indigo launcher and theme-matched sheet.
-
-## Typography
-
-**Body and interface font:** the system sans stack in the frontmatter. There is no separately loaded display face. Monospace is used for generated credentials, including API keys, authenticator setup keys and recovery codes.
-
-The hierarchy is compact: headline for library headings, title for bookmark names, body for the base interface, and label for buttons and field labels. Secondary metadata commonly uses (11px–13px). Dialog headings use (20px); the reader title uses (22px). The sign-in introduction uses (42px) on desktop and (30px) on phones; this is an entrance-specific treatment, not a general display scale.
-
-Login/MFA, settings, help and API documentation use 13px labels/hints and 14px body copy on desktop. Phone fields use 16px.
-
-**The Reading Measure Rule.** Keep reading text within 70ch and give it more leading than workspace metadata.
-
-## Layout
-
-The main column uses the full workspace width. Navigation opens from the header into a full-height native dialog drawer at every viewport width, up to (320px) wide. The workspace header is (64px) tall; library content has (32px) horizontal padding and a maximum width of (1680px). Between (901px) and (1150px), horizontal padding becomes (24px).
-
-At (900px) and below, header and library padding become (20px). At (600px) and below, search spans its own row, header actions expand, fields use (16px) text, forms become one column, and bookmark actions move beneath metadata. The reader becomes a full-height edge-to-edge dialog. The sign-in split layout stacks on phones.
-
-Library results use one unboxed toolbar beneath search: the result count on the left, selection help, Refresh, the labeled sort button and view switch together on the right. Controls wrap into reachable rows on phones. Capture status appears on each bookmark, without a library-wide capture summary. Selection leaves these controls in place and opens a floating action bar near the bottom of the viewport.
-
-Desktop list rows place the favorite star and a site icon (or neutral bookmark icon when unavailable) before the title and description, with domain and tags in separate columns. Narrow screens retain the stacked metadata layout. The list has its own rounded outline beneath the toolbar. Rows retain trailing state/actions. Select bookmarks by clicking or tapping a free area, using Shift for a range or dragging a mouse selection rectangle; titles and action buttons retain their actions. Focused bookmark groups support Space and Shift+Space, with Escape to clear. A floating selection bar shows the total selection count, with every action exposed on desktop and a labeled clear-selection icon. Phones open the action list and its dedicated forms in a bottom sheet; page padding and toast placement follow its measured height. Its help panel opens on click or keyboard and fits phone widths. Grid uses auto-filled columns with a minimum target of (260px), a (16px) gap and one column on phones. Switching view retains the same bookmark structure and state. Reuse the compact spacing rhythm recorded in the frontmatter rather than introducing spacious promotional sections.
-
-The library reference is the restored interface at `e678b74`. Keep its icon actions, mobile Actions disclosure, sort button/menu, grid geometry, palette and density, with the desktop list-row layout described above and the approved selection bar, search text and mobile action label colors defined under Themes. These library rules belong in `style.css`; preserve its unrelated rules. Secondary refinements belong in `secondary.css`, scoped to login/MFA, settings, help, API documentation, the collection hint and the reader files/notebook. Never broaden those selectors to generic application controls.
-
-## Focus and motion
-
-Keep visible keyboard focus and reachable actions in both themes at desktop and phone widths.
-
-Motion preserves context: selected tags settle into their new positions over 180ms, while new tags receive a 150ms entrance. Collection, search and layout changes use a short 180ms content fade; background refreshes stay still. Native dialogs establish depth in 220ms and exit in 140ms, with a matching backdrop; tag suggestions use a 120ms fade. Removed bookmarks exit over 140ms while remaining rows or grid cards settle into place over 200ms; exit layers are inert and hidden from assistive technology. Actions and focus changes never wait for motion. Repeated actions replace in-flight animations. Reduced motion removes spatial transitions and content fades while retaining 80ms control-color feedback. Native overlay transitions progressively enhance the browser's immediate default behavior.
-
-Notes/files and help disclosures use 160ms opacity feedback with immediate reduced-motion fallback.
-
-Manual light/dark changes crossfade the complete view over 240ms using native browser snapshots, keeping text and surfaces synchronized. The first render uses the saved theme immediately. Repeated toggles interrupt the fade and preserve the latest choice; reduced motion and browsers without View Transitions switch immediately. The snapshot overlay does not intercept pointer input.
-
-## Elevation & Depth
-
-Borders and tonal layers organize the workspace. The selected view toggle has a small inset surface lift; dialogs, drawer and toast carry ambient shadows. Focus uses an outline, not an elevation effect.
-
-### Shadow Vocabulary
-- **Selected view:** `0 1px 3px #20232c20`.
-- **Toast:** `0 6px 24px #20232c25`.
-- **Dialog:** `0 20px 80px #171a3433`.
-- **Navigation drawer:** `12px 0 40px #20232c20`.
-
-**The Flat Workspace Rule.** Separate resting library surfaces with borders and tones; reserve substantial shadows for dialogs and transient feedback.
-
-## Shapes
-
-Controls use restrained rounded corners; smaller tags and action buttons use the small radius, controls the control radius, and grid cards/dialogs the panel radius. Dense list rows have square internal edges within a shared softly rounded results container. Borders are generally (1px). Outline SVG icons use rounded caps and joins with a shared (24 × 24) viewBox and (1.7) stroke width; most visible icons are (15px–18px).
-
-## Components
-
-### Buttons
-Center button text horizontally and vertically within the control. When an icon
-accompanies a label, center the icon and label together as one group. Navigation
-and menu rows retain their documented left-aligned layout.
-
-Compact and direct. Primary actions use indigo and white, subtle actions use the active theme’s neutral control surface and border, and icon actions use transparent backgrounds. Primary and subtle controls use the shared control radius and label type. Hover changes background or border with (160ms ease-out) transitions. Keyboard focus has a (2px) outline and (3px) offset; disabled buttons use (.48) opacity. Phone actions increase their target dimensions where the layout requires it.
-
-Choose the variant by task: saving a form or recovering from an empty view uses the primary action. Navigation, disclosures and alternative actions stay quiet. Destructive confirmations use the danger treatment; quiet discard controls signal danger on hover and keyboard focus. Selection and focus keep their own cues without promoting a control to primary.
-
-### Chips
-Small rectangular tags use neutral fill, short padding and compact type. Hover or active filter states use the soft accent and indigo text. Long labels truncate rather than widening the navigation drawer.
-
-Quick filters beneath library search use rounded pills. The selected filter uses the accent with white text and a check; inactive filters use the themed control surface and border. They wrap as needed and have 44px minimum height on phones.
-Center each pill's content on both axes. Hide the entire inactive check wrapper
-so it reserves no width or gap beside the centered label.
-
-### Capture status
-
-Bookmark capture states use compact rounded badges with a text label and an icon: green Captured, amber Queued / Saving…, red Capture failed, and neutral Not captured. Only Saving… rotates a small ring to indicate active capture. Reduced motion keeps the ring still and preserves the label. Light and dark themes use tinted backgrounds with readable semantic foregrounds; badge placement and card actions remain unchanged.
-
-### Toasts
-
-All application feedback shares one toast treatment in `style.css`, including
-the library, reader, settings and native dialogs. Use the active theme's
-`surface`, `ink` and `line`, a 12px radius, the toast shadow, 13px text and a
-20px outline icon. Keep a 60px minimum height, 12px gaps and wrapping messages
-within 560px or the viewport minus 32px. The centered bottom position respects
-the safe area and moves above the library selection bar.
-
-Informational feedback uses the info icon in `muted`; errors use the warning
-icon in `danger` on the same surface. Favorite feedback retains its star, filled
-when added, using `accent` in light mode and `focus` in dark mode. Every toast
-action uses the same 44px minimum target, 6px radius, `accent-soft` background
-and `accent` foreground (`focus` in dark mode), with `control-hover` on hover
-and a visible `focus` outline. Preserve the existing durations, focus pause,
-Undo and HTML retry behavior.
-
-### Cards / Containers
-Grid bookmark cards use the panel radius, white background and a line border; selection changes both fill and border without a checkbox. A softly tinted header groups the domain and the favorite star, with the full saved URL available on hover. The capture state and remaining actions stay in the footer. List mode removes individual card rounding, separates rows with dividers and retains the same selection, tags, capture labels and actions. Do not add permanent card shadows.
-
-### Inputs / Fields
-Field boundaries use control-line (#818896) in light mode and #747b92 in dark mode, providing at least 3:1 against their adjacent field surfaces. Quiet separators keep the line token. Fields retain the control radius and (10px 12px) padding. Focus has a (2px) outline and (2px) offset. Search applies its outline around the complete search container. Read-only fields use the surface fill; form errors appear inline in danger text. Bookmark fields validate the server’s UTF-8 size limits before submission and identify the field to correct. Network/session failures give recovery instructions while retaining unsaved work.
-
-Collection name fields show a red message only when the server UTF-8 limit is exceeded.
-
-Single-choice selectors use the same field boundary and an authored chevron. Their option panels use the active theme's paper, ink, line and accent-soft tokens, a compact radius and a restrained shadow. The current choice is identified by an indigo check and selection treatment; focus is visible independently. Collection choices retain their hierarchy, and long lists scroll within the available space. Menus stay reachable within dialogs, the extension popup and phone viewports, with at least 44px option targets on phones. Keyboard and assistive-technology users can identify, open, navigate and dismiss each selector. The extension's tag suggestions follow the same theme-matched menu vocabulary while retaining free-form tag entry.
-
-Authenticator setup pairs a QR code on white with a labeled, read-only manual key. Recovery codes use selectable, scrollable text in a bordered surface, with a copy action and a manual-selection fallback.
-
-### Navigation
-The slate-tinted drawer combines outline icons, sentence-case labels and compact counts. Its Pocketmark mark is the canonical `internal/webui/static/icon.svg`: a white serif “p.” on an indigo square, with the same fixed brand colors in both themes. Initialization, sign-in/MFA, navigation, settings, API documentation, favicon/installable app, the Chrome extension and README reuse this asset. Preserve each surface’s existing mark dimensions and use empty alternative text beside the Pocketmark name. Active navigation uses pale indigo and stronger text. On desktop with a mouse, the sidebar appears at the left edge on hover or from the header menu; its panel control switches between automatic hiding and a fixed layout, remembered in the browser. Keyboard focus keeps it visible. On smaller screens and touch devices, the header opens a modal drawer; its close button, Escape, backdrop and destination choices dismiss it. Motion respects reduced-motion preferences, and smaller screens give controls more height rather than losing functions.
-
-The header breadcrumb links to the library and every collection ancestor. It scrolls horizontally on narrow screens, initially showing the current location; earlier levels remain reachable by scrolling or keyboard. Breadcrumb controls retain visible focus outlines and 44px phone targets.
-
-### Tag directory
-Tags has a primary navigation entry. Keep up to 12 most-used tags as quick filters at the bottom of the sidebar, including while browsing the directory. The directory groups names under letter headings in three columns on wide screens, two on medium screens and one on phones. Compact counts sit beside each name. A sticky vertical A–Z rail (plus `#` for other initials) jumps across the paginated directory, disables unavailable letters and moves keyboard focus to the selected heading. Search narrows both the index and available letters. Fetch at most 40 tag rows and 27 group totals per request.
-
-### Navigation, scope and drafts
-Bookmark and bulk tag fields show each selected tag in a compact bordered chip with a labeled remove button. The field wraps and grows to keep every selected tag visible, including long names; it has no internal scrolling or truncation. Frequent existing tags appear on focus and the full directory is searched as the user types. Suggestions show bookmark counts, exclude tags already present, and support arrow keys, Enter and Escape. New tags can be committed with Enter, commas or by leaving the field. Backspace in an empty search focuses the last remove button. Results are bounded and suggestion failures leave manual entry available.
-
-Library destination, search, sorting, pagination and tag-directory state are represented in the URL. Back/Forward and reload restore that context; browser history also records the page scroll position. Tag destinations retain the bookmark search and identify the selected tag in the heading. Only the search appears as a removable filter chip. Selection summaries show the total selected count; bulk panels initialize a fresh form for the action chosen in the floating bar or phone sheet, without a redundant action selector.
-
-Bookmark, reader-note and annotation drafts stay in the current tab. A bounded sessionStorage cache restores them after reload; denied storage or quota failures fall back to memory without preventing edits. Reopening a form restores drafts, and reader notes carry into the bookmark editor. Notices name the tab lifetime, discard removes unsaved changes, and leaving/reloading warns while drafts remain. Signing out always opens a confirmation alertdialog, with Cancel focused first and an additional warning when this tab has unsaved drafts. Confirming sign-out clears the cache after the request succeeds; request errors remain in the dialog. Drafts are not stored in localStorage, URLs or on the server. Saving notes retains unrelated unfinished editor changes.
-
-In grid view, Favorite sits at the right of the card header; in list view, it remains immediately before the title. The other four actions stay grouped at the right. Borderless action icons are 18px with 32px desktop targets, theme-matched hover/focus backgrounds and native title tooltips. Selected favorites retain a filled star, and Delete uses danger colors on hover/focus. Mobile bookmark actions retain an accessible Favorite control and disclose the other labeled commands under Actions. Quick favorite/read changes confirm with an Undo action; feedback appears inside any active native dialog so its message is visible and announced. Search-only excerpts highlight matches and display decoded tag names. Near-match scope is visible beside its checkbox: titles, URLs, descriptions and tags only. Task-based Help is searchable from the navigation.
-
-Opening a bookmark shows its title, source URL and Saved formats before any article text. Only available HTML, Screenshot and PDF copies appear as flat rows with authored outline icons and explicit Saved states. A shared message distinguishes checking, failed checks and no saved copies; unavailable format rows are hidden. In-flight and failed file checks stay distinct from absent captures; a local retry stays visible on the bookmark. Screenshot includes uploaded raster images as well as browser captures. Each available format opens the newest attachment in the existing viewer, with earlier copies selectable. When no HTML attachment exists, the basic HTML archive uses the simplified sandboxed reader. Its source download remains under Reading options when attachments exist. Reading options expose text/highlights and formatted reading on demand. Its short toolbar keeps a prominent Open original link and a secondary Notes action visible. Notes opens a companion pane on screens wider than 1000px; narrower windows show the notebook with an explicit Back to bookmark action. The article keeps its own scroll position while the notebook opens or changes sections. Notes and Highlights are local notebook tabs with arrow-key navigation. Attached files are managed directly from Saved formats → Manage files. The notebook starts closed for each new bookmark. Anchored highlights offer Show in text; stale excerpts remain visible without a misleading jump action. An absent captured article is labeled explicitly rather than presenting the bookmark description as article text. Formatted views require a suitable HTML capture or attachment; unavailable modes explain the next step. Text size and highlighting follow the active mode. Highlights and saved-file loading errors remain local to their sections. On phones, row action targets are 44px and a 44px letter picker complements the A–Z rail.
-
-### Settings
-
-Settings is directly available in the library navigation. Library tools groups import, export and sign-out. Import first explains JSON/browser HTML metadata files and the 8 MiB limit, then leaves a durable result in the library. Sync provides a copyable WebDAV address and ordered instructions; mobile/browser settings explain installation, extension access and the local single-key shortcut preference.
-
-
-Settings is a workspace page with one shared frame and navigation for every destination. Its menu always offers API keys, Two-factor authentication, Browser sessions, Password, Backup & restore, Browser bookmark sync, and Mobile & browser, in that order. Each destination displays only its own panel and identifies exactly one active menu entry; changing sections retains the same header, menu labels and positions. API keys puts existing keys first and reveals the creation form on demand. A query parameter preserves the section across reload and browser history, including older links. Back to library restores filters and scroll position. Authentication changes block departure while pending; displayed recovery codes survive session expiration until explicitly dismissed by returning to the library. Leaving Settings clears credentials held in the page.
-
-Settings shares the library's compact typography and density: 13px navigation
-labels, 17px navigation icons, 38px minimum desktop entries and 44px phone targets.
-Reuse the base navigation and brand sizes rather than defining a larger Settings
-scale. The desktop header is 64px tall and the rail is 280px wide, matching the
-library; at 900px and below the header is 58px and the menu becomes a horizontally
-scrollable row. The header stays visible while scrolling. The desktop rail stays
-below it, is bounded to the viewport and scrolls independently on short screens;
-long content never moves its entries. Keep the active destination in view after
-navigation, reload, history or viewport changes.
-
-Page titles match library headings: 26px on desktop and 24px on phones. Labels,
-hints and secondary copy use the existing 13px secondary-surface rule, with 14px
-body copy and 16px phone fields. API keys retains its expandable list and creation
-form, using 14px semibold key names, 13px permission/activity descriptions, 14px
-metadata values and the normal Settings buttons. Do not enlarge these on phones;
-increase target sizes instead. Desktop metadata has three columns and phone
-metadata two; actions wrap and Delete remains separate. The workspace does not
-repeat the generic Settings heading. The brand and Back to library preserve
-library context and respect pending authentication changes. Styles remain scoped
-to Settings in `secondary.css`; library controls and geometry remain unchanged.
-
-Direct Settings headings reserve 16px of scroll space for visible keyboard focus. Phone Settings disclosures have 44px targets. Session dates use a definition list, with raw device details disclosed on demand.
-
-Entering Settings settles the workspace 12px from the right over 220ms with a light fade, paired with a 180ms navigation fade. Initial loads and section changes remain still; leaving cancels the entrance. Focus and controls update immediately. Reduced motion skips both effects.
-
-### Reader and dialogs
-
-<a id="interface-refinement--31-october-2026"></a>
-
-The product choice is saved formats first, not automatic article reading. The formats shown must be available; zero saved copies gets a useful empty state. Text/highlight controls stay secondary and announce an active mode only when that mode is displayed. The companion is labeled Notes and contains notes and highlights. Manage files beside Saved formats opens the attached-file panel and distinguishes attachments from an existing basic HTML capture.
-
-The bookmark editor keeps its heading and save/cancel footer visible around a scrolling form body. URL, title and organization lead; description and notes are disclosed together and open automatically for existing content or drafts. Secondary controls use semantic surface, ink, border and hover tokens in both themes.
-
-The bookmark editor offers an unchecked **Save an HTML copy** option for website bookmarks. Capture starts after metadata is saved, reports partial failure without undoing the bookmark, and offers a capture-only retry. Standalone files hide this option. Saved files in the reader focus on attachments and previews; PDF capture stays in the Chrome extension.
-
-Dialogs use theme-matched panels, a dimmed backdrop, labeled headings and separated footer actions. The reader widens to (1200px), keeps its toolbar separate from the scrolling article and constrains text to a (680px) measure. Its optional companion pane is (320px) wide; notes, highlights and file management stay secondary to saved formats and on-demand reading. Highlight excerpts use their saved color; annotation notes and quiet editing actions sit beneath each quote. Highlight colors describe user annotations rather than application status. On phones, the reader becomes an edge-to-edge reading surface.
-
-## Do's and Don'ts
-
-### Do:
-- Do preserve visible keyboard focus and text labels for capture states.
-- Do use authored outline SVG icons with accessible names on icon-only controls.
-- Do reflow rows and keep their actions available on phones.
-- Do honor reduced motion, keep transitions brief and leave actions immediately available.
-
-### Don't:
-- Don’t add team or public-sharing visual concepts to this personal workspace.
-- Reuse the existing React/shadcn primitives and authored icons. Keep fonts local; justify additional runtime dependencies against the frontend guide.
-- Don’t use color alone to communicate capture status.
+Exercise both themes, narrow and wide windows, keyboard interaction and reduced motion with disposable data. Check first use, populated lists, no results, capture failure, standalone file preview, forms and account recovery. Refresh the README library image from the rendered product when the library changes.

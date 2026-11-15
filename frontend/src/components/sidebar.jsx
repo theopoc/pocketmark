@@ -17,16 +17,6 @@ export function Sidebar() {
           <span>{"Pocketmark"}</span>
         </a>
         <Button
-          id="sidebar-mode"
-          type="button"
-          className="icon-button"
-          aria-pressed="false"
-          aria-label="Keep navigation open"
-          title="Keep navigation open"
-        >
-          <span id="sidebar-mode-icon" aria-hidden="true"></span>
-        </Button>
-        <Button
           id="close-navigation"
           className="icon-button"
           aria-label="Close navigation"
@@ -37,66 +27,9 @@ export function Sidebar() {
       {"\n      "}
       <div id="library-navigation">
         {"\n      "}
-        <Button
-          id="workspace-button"
-          type="button"
-          className="workspace-label"
-          popoverTarget="workspace-popover"
-          aria-expanded="false"
-          aria-controls="workspace-popover"
-          data-keep-navigation=""
-        >
-          <span className="workspace-avatar" aria-hidden="true">
-            {"P"}
-          </span>
-          <span className="workspace-name">
-            {"Library tools"}
-            <span className="workspace-subtitle">
-              {"Import, export & sign out"}
-            </span>
-          </span>
-          <span
-            className="workspace-chevron"
-            data-icon="chevron-right"
-            aria-hidden="true"
-          ></span>
-        </Button>
-        {"\n      "}
-        <div
-          id="workspace-popover"
-          className="workspace-popover"
-          popover=""
-          aria-label="Workspace actions"
-        >
-          {"\n        "}
-          <Button
-            id="import-button"
-            type="button"
-            className="nav-item"
-            autoFocus
-          >
-            <span data-icon="download" aria-hidden="true"></span>
-            {"Import"}
-          </Button>
-          {"\n        "}
-          <Button id="export-button" type="button" className="nav-item">
-            <span data-icon="upload" aria-hidden="true"></span>
-            {"Export"}
-          </Button>
-          {"\n        "}
-          <hr />
-          {"\n        "}
-          <Button
-            id="logout-button"
-            type="button"
-            className="nav-item workspace-sign-out"
-          >
-            <span data-icon="logout" aria-hidden="true"></span>
-            {"Sign out"}
-          </Button>
-          {"\n      "}
+        <div className="sidebar-section-title browse-heading">
+          <h2>Browse</h2>
         </div>
-        {"\n      "}
         <nav aria-label="Library">
           {"\n        "}
           <Button
@@ -123,7 +56,7 @@ export function Sidebar() {
           {"\n        "}
           <Button className="nav-item" data-filter="unread">
             <span data-icon="clock" aria-hidden="true"></span>
-            {"To read"}
+            {"Unread"}
           </Button>
           {"\n        "}
           <Button id="all-tags" className="nav-item">
@@ -161,6 +94,71 @@ export function Sidebar() {
           <div id="tags" className="tag-cloud"></div>
           {"\n        "}
           <div className="sidebar-tools">
+            <Button
+              id="workspace-button"
+              type="button"
+              className="workspace-label"
+              popoverTarget="workspace-popover"
+              aria-expanded="false"
+              aria-controls="workspace-popover"
+              data-keep-navigation=""
+            >
+              <span data-icon="folder-input" aria-hidden="true"></span>
+              <span className="workspace-name">{"Library tools"}</span>
+              <span
+                className="workspace-chevron"
+                data-icon="chevron-right"
+                aria-hidden="true"
+              ></span>
+            </Button>
+            {"\n      "}
+            <div
+              id="workspace-popover"
+              className="workspace-popover"
+              popover=""
+              aria-label="Workspace actions"
+            >
+              {"\n        "}
+              <Button
+                id="import-button"
+                type="button"
+                className="nav-item"
+                autoFocus
+              >
+                <span data-icon="download" aria-hidden="true"></span>
+                {"Import"}
+              </Button>
+              {"\n        "}
+              <Button id="export-button" type="button" className="nav-item">
+                <span data-icon="upload" aria-hidden="true"></span>
+                {"Export"}
+              </Button>
+              {"\n        "}
+              <hr />
+              {"\n        "}
+              <Button
+                id="logout-button"
+                type="button"
+                className="nav-item workspace-sign-out"
+              >
+                <span data-icon="logout" aria-hidden="true"></span>
+                {"Sign out"}
+              </Button>
+              {"\n      "}
+            </div>
+            {"\n      "}
+
+            <Button
+              type="button"
+              className="nav-item sidebar-theme"
+              data-theme-toggle
+              aria-label="Dark mode"
+              aria-pressed="true"
+              title="Switch to light mode"
+            >
+              <span data-theme-icon aria-hidden="true"></span>
+              <span data-theme-label>Dark</span> theme
+            </Button>
             <Button id="settings-button" type="button" className="nav-item">
               <span data-icon="settings" aria-hidden="true"></span>
               {"Settings"}

@@ -4,7 +4,7 @@
   function setTheme(theme) {
     const dark = theme === "dark";
     document.documentElement.dataset.theme = theme;
-    document.querySelector('meta[name="theme-color"]').content = dark ? "#15161b" : "#ffffff";
+    document.querySelector('meta[name="theme-color"]').content = dark ? "#1a1b1d" : "#faf9f6";
     themeButton.textContent = dark ? "Dark" : "Light";
     themeButton.setAttribute("aria-label", dark ? "Dark mode" : "Light mode");
     themeButton.setAttribute("aria-pressed", String(dark));
@@ -21,6 +21,56 @@
 
   const status = document.getElementById("docs-status");
   const reference = document.getElementById("swagger-ui");
+  function enableSearch(spec, swagger) {
+    const region = document.getElementById("operation-search");
+    const input = document.getElementById("docs-query");
+    const clear = document.getElementById("clear-query");
+    const results = document.getElementById("operation-results");
+    const count = document.getElementById("result-count");
+    const quick = document.getElementById("quick-operation");
+    const operations = [];
+    for (const [path, methods] of Object.entries(spec.paths)) {
+      for (const [method, operation] of Object.entries(methods)) {
+        if (!operation.operationId || !operation.tags?.length) continue;
+        const tag = operation.tags[0], verb = method.toUpperCase();
+        operations.push({ path, verb, summary: operation.summary || "", href: `#/${encodeURIComponent(tag)}/${encodeURIComponent(operation.operationId)}`,
+          words: [path, operation.summary, ...operation.tags].join(" ").toLowerCase() });
+      }
+    }
+    function update() {
+      const query = input.value.trim();
+      const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+      const matches = query ? operations.filter(operation => terms.every(term =>
+        /^(get|post|put|delete|head|options|patch|trace)$/.test(term) ? term === operation.verb.toLowerCase() : operation.words.includes(term))) : [];
+      clear.hidden = !query;
+      quick.hidden = Boolean(query);
+      results.hidden = !matches.length;
+      reference.hidden = Boolean(query);
+      count.textContent = !query ? "" : matches.length ? `${matches.length} matching operation${matches.length === 1 ? "" : "s"}` : `No operations match “${query}”.`;
+      results.replaceChildren();
+      for (const operation of matches) {
+        const item = document.createElement("li"), link = document.createElement("a");
+        const method = document.createElement("strong"), path = document.createElement("code"), summary = document.createElement("span");
+        link.href = operation.href; method.textContent = operation.verb; path.textContent = operation.path; summary.textContent = operation.summary;
+        link.append(method, path, summary); item.append(link); results.append(item);
+      }
+    }
+    region.addEventListener("click", event => {
+      const link = event.target.closest("a");
+      if (!link || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      if (input.value) { input.value = ""; update(); }
+      swagger.layoutActions.parseDeepLinkHash(decodeURIComponent(link.hash));
+      requestAnimationFrame(() => {
+        const target = [...reference.querySelectorAll(".operation-permalink")].find(item => item.hash === link.hash);
+        const button = target?.parentElement.querySelector(".opblock-summary-control");
+        if (button) { button.focus({ preventScroll: true }); button.scrollIntoView({ block: "nearest" }); }
+      });
+    });
+    clear.addEventListener("click", () => { input.value = ""; update(); input.focus(); });
+    input.addEventListener("input", update);
+    region.hidden = false;
+  }
   // Swagger owns and may replace these DOM nodes during React updates. Leave
   // each native select in place and dispose its adjacent control when removed.
   const enhancedSelects = new Map();
@@ -44,8 +94,19 @@
   function labelControls() {
     const servers = reference.querySelector("#servers");
     if (servers && servers.getAttribute("aria-label") !== "API server") servers.setAttribute("aria-label", "API server");
-    reference.querySelector(".operation-filter-input")?.setAttribute("aria-label", "Filter API operations");
     reference.querySelector(".modal-ux-header .close-modal")?.setAttribute("aria-label", "Close authorizations");
+    for (const form of reference.querySelectorAll(".auth-container")) {
+      const title = form.querySelector("h4 code");
+      if (title?.textContent === "bearerAuth") title.textContent = "Pocketmark API key";
+      if (title?.textContent === "davBasic") title.textContent = "WebDAV credentials";
+      for (const label of form.querySelectorAll("label[for]")) {
+        const field = document.getElementById(label.htmlFor);
+        if (!field) continue;
+        if (title?.textContent === "Pocketmark API key" && label.textContent !== "API key") label.textContent = "API key";
+        else if (title?.textContent === "WebDAV credentials" && field.type === "password" && label.textContent !== "Sync API key") label.textContent = "Sync API key";
+        if (field.hasAttribute("aria-label")) field.removeAttribute("aria-label");
+      }
+    }
     for (const button of reference.querySelectorAll(".modal-ux .auth-btn-wrapper button[aria-label]")) {
       if (button.textContent.trim()) button.removeAttribute("aria-label");
     }
@@ -105,7 +166,8 @@
       if (!response.ok) throw new Error("Specification unavailable");
       const spec = await response.json();
       if (!window.SwaggerUIBundle) throw new Error("Swagger UI unavailable");
-      window.SwaggerUIBundle({
+      reference.setAttribute("data-single-server", String(spec.servers?.length === 1));
+      const swagger = window.SwaggerUIBundle({
         spec,
         dom_id: "#swagger-ui",
         presets: [window.SwaggerUIBundle.presets.apis],
@@ -117,7 +179,7 @@
         }), accessibleOperations],
         layout: "BaseLayout",
         deepLinking: true,
-        filter: true,
+        filter: false,
         docExpansion: "none",
         defaultModelsExpandDepth: -1,
         displayRequestDuration: true,
@@ -133,6 +195,7 @@
           labelControls();
         },
       });
+      enableSearch(spec, swagger);
     } catch {
       controls.disconnect();
       status.hidden = true;

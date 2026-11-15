@@ -31,23 +31,22 @@ export function LoginView() {
           </Button>
         </div>
         {"\n      "}
-        <div className="login-message">
-          <h1>
-            {"Your library."}
-            <br />
-            {"Always within reach."}
-          </h1>
-          <p>{"Save a page. Find an idea. Pick up where you left off."}</p>
-        </div>
-        {"\n      "}
-        <p className="login-footnote">{"Your personal bookmark workspace."}</p>
-        {"\n    "}
       </div>
       {"\n    "}
       <div className="login-panel">
         <div className="login-card">
           {"\n      "}
-          <h2 id="login-title">{"Welcome back"}</h2>
+          <ol
+            id="setup-steps"
+            className="account-steps"
+            aria-label="Account setup"
+            hidden
+          >
+            <li>Account</li>
+            <li>Authenticator</li>
+            <li>Recovery codes</li>
+          </ol>
+          <h1 id="login-title">Sign in</h1>
           {"\n      "}
           <p id="login-description" className="muted">
             {"Sign in to your Pocketmark library."}
@@ -108,22 +107,25 @@ export function LoginView() {
               height="220"
             />
             {"\n        "}
-            <label htmlFor="mfa-secret">{"Manual setup key"}</label>
-            <Textarea
-              id="mfa-secret"
-              className="mfa-secret"
-              rows="2"
-              readOnly
-              spellCheck="false"
-            ></Textarea>
-            {"\n        "}
-            <Button
-              id="mfa-secret-copy"
-              type="button"
-              className="button subtle"
-            >
-              {"Copy setup key"}
-            </Button>
+            <details id="manual-setup-key">
+              <summary>Use a setup key instead</summary>
+              <label htmlFor="mfa-secret">{"Manual setup key"}</label>
+              <Textarea
+                id="mfa-secret"
+                className="mfa-secret"
+                rows="2"
+                readOnly
+                spellCheck="false"
+              ></Textarea>
+              {"\n        "}
+              <Button
+                id="mfa-secret-copy"
+                type="button"
+                className="button subtle"
+              >
+                {"Copy setup key"}
+              </Button>
+            </details>
             {"\n      "}
           </div>
           {"\n      "}
@@ -147,13 +149,8 @@ export function LoginView() {
             {"\n      "}
           </form>
           {"\n      "}
-          <section
-            id="mfa-login-codes"
-            hidden
-            aria-labelledby="mfa-login-codes-title"
-          >
+          <section id="mfa-login-codes" hidden aria-labelledby="login-title">
             {"\n        "}
-            <h3 id="mfa-login-codes-title">{"Save your recovery codes"}</h3>
             {"\n        "}
             <p className="small muted">
               {

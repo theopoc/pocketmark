@@ -18,11 +18,14 @@ export function AppView() {
             <Button
               id="open-navigation"
               className="icon-button"
-              aria-label="Open navigation"
+              aria-label="Open Pocketmark navigation"
               aria-controls="navigation-dialog"
               aria-expanded="false"
             >
               <span data-icon="menu" aria-hidden="true"></span>
+              <span className="mobile-wordmark" aria-hidden="true">
+                Pocketmark
+              </span>
             </Button>
             <nav
               id="breadcrumb"
@@ -42,10 +45,11 @@ export function AppView() {
               <span data-theme-icon aria-hidden="true"></span>
               <span data-theme-label>{"Dark"}</span>
             </Button>
-            <span className="workspace-badge">
-              <span data-icon="lock" aria-hidden="true"></span>
-              {"Personal library"}
-            </span>
+            <Button id="add-bookmark" className="button primary">
+              <span data-icon="plus" aria-hidden="true"></span>
+              Save bookmark
+              <kbd data-shortcut-hint>N</kbd>
+            </Button>
           </div>
         </header>
         {"\n      "}
@@ -490,7 +494,9 @@ export function AppView() {
               {"\n    "}
               <ol className="setup-steps">
                 <li>
-                  <a href="/?settings=api-keys">{"Create an API key"}</a>
+                  <a href="/?settings=api-keys" data-key-profile="sync">
+                    {"Create an API key"}
+                  </a>
                   {" with "}
                   <strong>{"Floccus sync"}</strong>
                   {" permissions."}
@@ -534,7 +540,7 @@ export function AppView() {
               hidden
             >
               {"\n    "}
-              <h2 id="mobile-title">{"Mobile & browser"}</h2>
+              <h2 id="mobile-title">{"Phone & browser extension"}</h2>
               {"\n    "}
               <h3>{"Install on your phone"}</h3>
               <p className="small muted">
@@ -556,11 +562,55 @@ export function AppView() {
                 <strong>{"Add, edit & capture"}</strong>
                 {" permissions."}
               </p>
-              <a className="button subtle" href="/?settings=api-keys">
-                {"Manage API keys"}
+              <a
+                className="button subtle"
+                href="/?settings=api-keys"
+                data-key-profile="capture"
+              >
+                {"Create a browser capture key"}
               </a>
               {"\n    "}
-              <h3>{"Keyboard shortcuts"}</h3>
+            </section>
+            <section
+              className="settings-section"
+              data-settings-panel="transfer"
+              aria-labelledby="transfer-title"
+              hidden
+            >
+              <h2 id="transfer-title">Import &amp; export</h2>
+              <p>
+                Transfer bookmark links, collections and tags with a Pocketmark
+                JSON or browser HTML file.
+              </p>
+              <div className="reader-actions">
+                <Button
+                  type="button"
+                  id="settings-import"
+                  className="button primary"
+                >
+                  Import bookmarks
+                </Button>
+                <Button
+                  type="button"
+                  id="settings-export"
+                  className="button subtle"
+                >
+                  Export bookmarks
+                </Button>
+              </div>
+              <p>
+                To keep captures, files and account settings together,{" "}
+                <a href="/?settings=backup">back up the whole library</a>.
+              </p>
+            </section>
+            <section
+              className="settings-section"
+              data-settings-panel="preferences"
+              aria-labelledby="preferences-title"
+              hidden
+            >
+              <h2 id="preferences-title">Preferences</h2>
+              <h3>Keyboard shortcuts</h3>
               <label className="inline-check">
                 <Input id="keyboard-shortcuts" type="checkbox" defaultChecked />
                 {" Enable single-key shortcuts"}
@@ -591,12 +641,12 @@ export function AppView() {
             {"Importing bookmarks…"}
           </p>
           {"\n      "}
-          <p
+          <div
             id="import-result"
             className="operation-result"
             role="status"
             hidden
-          ></p>
+          ></div>
           {"\n      "}
           <p
             id="upload-progress"
@@ -614,9 +664,6 @@ export function AppView() {
                 <h1 id="tags-title" tabIndex="-1">
                   {"Tags"}
                 </h1>
-                <p className="muted">
-                  {"Browse your tags. Select one to see its bookmarks."}
-                </p>
               </div>
               <Button id="tags-back" className="button subtle">
                 <span data-icon="arrow-left" aria-hidden="true"></span>
@@ -737,36 +784,23 @@ export function AppView() {
                 <h1 id="page-title" tabIndex="-1">
                   {"All bookmarks"}
                 </h1>
-                <p id="page-subtitle" className="muted">
-                  {"Everything you save, in one place."}
-                </p>
+                <p id="page-subtitle" className="muted" hidden></p>
               </div>
-              {"\n        "}
-              <div className="reader-actions">
-                <Input
-                  id="library-file"
-                  type="file"
-                  accept="application/pdf,image/png,image/jpeg,image/gif,image/webp,text/html,.html,.htm"
-                  hidden
-                />
-                <Button id="add-bookmark" className="button primary">
-                  <span data-icon="plus" aria-hidden="true"></span>
-                  {"Add bookmark"}
-                  <kbd data-shortcut-hint>{"N"}</kbd>
-                </Button>
-                <Button id="upload-file-button" className="button subtle">
-                  <span data-icon="upload" aria-hidden="true"></span>
-                  {"Upload file"}
-                </Button>
-              </div>
-              {"\n      "}
+              <Input
+                id="library-file"
+                type="file"
+                accept="application/pdf,image/png,image/jpeg,image/gif,image/webp,text/html,.html,.htm"
+                hidden
+              />
             </section>
             {"\n      "}
             <div className="library-toolbar">
               {"\n        "}
               <label className="search-box">
                 <span data-icon="search" aria-hidden="true"></span>
-                <span className="sr-only">{"Search bookmarks"}</span>
+                <span id="library-search-label" className="sr-only">
+                  Search all bookmarks
+                </span>
                 <Input
                   id="search"
                   type="search"
@@ -777,46 +811,6 @@ export function AppView() {
                   {"/"}
                 </kbd>
               </label>
-              {"\n      "}
-            </div>
-            {"\n      "}
-            <div
-              className="quick-filters"
-              role="group"
-              aria-label="Filter bookmarks"
-            >
-              {"\n        "}
-              <Button type="button" data-quick-filter="all" aria-pressed="true">
-                <span data-icon="check" aria-hidden="true"></span>
-                {"All"}
-              </Button>
-              {"\n        "}
-              <Button
-                type="button"
-                data-quick-filter="unread"
-                aria-pressed="false"
-              >
-                <span data-icon="check" aria-hidden="true"></span>
-                {"Unread"}
-              </Button>
-              {"\n        "}
-              <Button
-                type="button"
-                data-quick-filter="favorite"
-                aria-pressed="false"
-              >
-                <span data-icon="check" aria-hidden="true"></span>
-                {"Favorites"}
-              </Button>
-              {"\n        "}
-              <Button
-                type="button"
-                data-quick-filter="inbox"
-                aria-pressed="false"
-              >
-                <span data-icon="check" aria-hidden="true"></span>
-                {"Inbox"}
-              </Button>
               {"\n      "}
             </div>
             {"\n      "}
@@ -832,165 +826,145 @@ export function AppView() {
                 {"Loading your library…"}
               </span>
               <div className="results-tools">
-                <div className="selection-guidance">
-                  <span className="selection-hint">
-                    {"Click or drag to select"}
-                  </span>
-                  <details className="selection-help">
-                    <summary aria-label="Selection help">
-                      <span data-icon="info" aria-hidden="true"></span>
-                    </summary>
-                    <div id="selection-help" className="selection-help-panel">
-                      <strong>{"Select bookmarks"}</strong>
-                      <p>
-                        {
-                          "Click an empty area of a bookmark to select it. Drag across bookmarks to select several."
-                        }
-                      </p>
-                      <p>
-                        <kbd>{"Shift"}</kbd>
-                        {" + click selects a range. "}
-                        <kbd>{"Ctrl"}</kbd>
-                        {" / "}
-                        <kbd>{"⌘"}</kbd>
-                        {" + drag adds to your selection."}
-                      </p>
-                      <p>
-                        {"On the keyboard, focus a bookmark and press "}
-                        <kbd>{"Space"}</kbd>
-                        {". Press "}
-                        <kbd>{"Esc"}</kbd>
-                        {" to clear."}
-                      </p>
-                      <p>
-                        {
-                          "On touch screens, tap an empty area of a bookmark. Titles open the reader; action buttons work as usual."
-                        }
-                      </p>
+                <Button
+                  id="selection-toggle"
+                  className="button subtle"
+                  type="button"
+                  aria-pressed="false"
+                  aria-controls="bookmark-grid"
+                >
+                  <span data-icon="check" aria-hidden="true"></span>
+                  <span id="selection-toggle-label">Select</span>
+                </Button>
+                <details id="display-settings" className="display-settings">
+                  <summary className="button subtle">
+                    <span data-icon="settings" aria-hidden="true"></span>Display
+                  </summary>
+                  <div className="display-panel">
+                    <div className="display-row">
+                      <strong>Layout</strong>
+                      <div
+                        className="view-switch"
+                        role="group"
+                        aria-label="Library view"
+                      >
+                        <Button
+                          id="view-list"
+                          className="view-button"
+                          aria-label="List view"
+                          aria-pressed="true"
+                          title="List view"
+                        >
+                          <span data-icon="list" aria-hidden="true"></span>List
+                        </Button>
+                        <Button
+                          id="view-grid"
+                          className="view-button"
+                          aria-label="Grid view"
+                          aria-pressed="false"
+                          title="Grid view"
+                        >
+                          <span data-icon="grid" aria-hidden="true"></span>Grid
+                        </Button>
+                      </div>
                     </div>
-                  </details>
-                </div>
-                {"\n        "}
-                <div className="library-view-controls">
-                  {"\n          "}
-                  <Button
-                    id="refresh-button"
-                    className="button subtle icon-only"
-                    title="Refresh library"
-                    aria-label="Refresh library"
-                  >
-                    <span data-icon="refresh" aria-hidden="true"></span>
-                  </Button>
-                  {"\n          "}
-                  <Button
-                    id="sort-toggle"
-                    className="button subtle"
-                    type="button"
-                    aria-label="Sort bookmarks: Newest first"
-                    title="Sort bookmarks: Newest first"
-                    aria-haspopup="menu"
-                    aria-controls="sort-menu"
-                    aria-expanded="false"
-                  >
-                    <span data-icon="sort" aria-hidden="true"></span>
-                    <span id="sort-label">{"Newest first"}</span>
-                  </Button>
-                  {"\n          "}
-                  <div
-                    id="sort-menu"
-                    className="sort-menu"
-                    role="menu"
-                    aria-labelledby="sort-menu-title"
-                    hidden
-                  >
-                    {"\n            "}
-                    <p id="sort-menu-title" className="sort-menu-title">
-                      {"Sort bookmarks"}
-                    </p>
-                    {"\n            "}
+                    <div className="display-row display-sort">
+                      <strong>Sort</strong>
+                      <Button
+                        id="sort-toggle"
+                        className="button subtle"
+                        type="button"
+                        aria-label="Sort bookmarks: Newest first"
+                        title="Sort bookmarks: Newest first"
+                        aria-haspopup="menu"
+                        aria-controls="sort-menu"
+                        aria-expanded="false"
+                      >
+                        <span data-icon="sort" aria-hidden="true"></span>
+                        <span id="sort-label">{"Newest first"}</span>
+                      </Button>
+                      {"\n          "}
+                      <div
+                        id="sort-menu"
+                        className="sort-menu"
+                        role="menu"
+                        aria-labelledby="sort-menu-title"
+                        hidden
+                      >
+                        {"\n            "}
+                        <p id="sort-menu-title" className="sort-menu-title">
+                          {"Sort bookmarks"}
+                        </p>
+                        {"\n            "}
+                        <Button
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked="true"
+                          data-sort="newest"
+                          tabIndex="-1"
+                        >
+                          <span data-icon="check" aria-hidden="true"></span>
+                          {"Newest first"}
+                        </Button>
+                        {"\n            "}
+                        <Button
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked="false"
+                          data-sort="oldest"
+                          tabIndex="-1"
+                        >
+                          <span data-icon="check" aria-hidden="true"></span>
+                          {"Oldest first"}
+                        </Button>
+                        {"\n            "}
+                        <Button
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked="false"
+                          data-sort="title"
+                          tabIndex="-1"
+                        >
+                          <span data-icon="check" aria-hidden="true"></span>
+                          {"Title A–Z"}
+                        </Button>
+                        {"\n            "}
+                        <Button
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked="false"
+                          data-sort="title_desc"
+                          tabIndex="-1"
+                        >
+                          <span data-icon="check" aria-hidden="true"></span>
+                          {"Title Z–A"}
+                        </Button>
+                        {"\n            "}
+                        <Button
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked="false"
+                          data-sort="updated"
+                          tabIndex="-1"
+                        >
+                          <span data-icon="check" aria-hidden="true"></span>
+                          {"Recently updated"}
+                        </Button>
+                        {"\n          "}
+                      </div>
+                      {"\n          "}
+                    </div>
                     <Button
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked="true"
-                      data-sort="newest"
-                      tabIndex="-1"
+                      id="refresh-button"
+                      className="button subtle"
+                      title="Refresh library"
+                      aria-label="Refresh library"
                     >
-                      <span data-icon="check" aria-hidden="true"></span>
-                      {"Newest first"}
-                    </Button>
-                    {"\n            "}
-                    <Button
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked="false"
-                      data-sort="oldest"
-                      tabIndex="-1"
-                    >
-                      <span data-icon="check" aria-hidden="true"></span>
-                      {"Oldest first"}
-                    </Button>
-                    {"\n            "}
-                    <Button
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked="false"
-                      data-sort="title"
-                      tabIndex="-1"
-                    >
-                      <span data-icon="check" aria-hidden="true"></span>
-                      {"Title A–Z"}
-                    </Button>
-                    {"\n            "}
-                    <Button
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked="false"
-                      data-sort="title_desc"
-                      tabIndex="-1"
-                    >
-                      <span data-icon="check" aria-hidden="true"></span>
-                      {"Title Z–A"}
-                    </Button>
-                    {"\n            "}
-                    <Button
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked="false"
-                      data-sort="updated"
-                      tabIndex="-1"
-                    >
-                      <span data-icon="check" aria-hidden="true"></span>
-                      {"Recently updated"}
-                    </Button>
-                    {"\n          "}
-                  </div>
-                  {"\n          "}
-                  <div
-                    className="view-switch"
-                    role="group"
-                    aria-label="Library view"
-                  >
-                    <Button
-                      id="view-list"
-                      className="view-button"
-                      aria-label="List view"
-                      aria-pressed="true"
-                      title="List view"
-                    >
-                      <span data-icon="list" aria-hidden="true"></span>
-                    </Button>
-                    <Button
-                      id="view-grid"
-                      className="view-button"
-                      aria-label="Grid view"
-                      aria-pressed="false"
-                      title="Grid view"
-                    >
-                      <span data-icon="grid" aria-hidden="true"></span>
+                      <span data-icon="refresh" aria-hidden="true"></span>
+                      Refresh library
                     </Button>
                   </div>
-                  {"\n        "}
-                </div>
+                </details>
                 {"      "}
               </div>
             </div>

@@ -9,19 +9,35 @@ export function AssetViewer() {
     >
       {"\n    "}
       <div className="dialog-heading">
-        <h2 id="asset-viewer-title">{"Saved capture"}</h2>
-        <Button
-          id="asset-viewer-close"
-          type="button"
-          className="icon-button"
-          aria-label="Close preview"
-        >
-          <span data-icon="close" aria-hidden="true"></span>
-        </Button>
+        <h2 id="asset-viewer-title">{"Saved copy"}</h2>
+        <div className="asset-heading-actions">
+          <Button
+            id="asset-viewer-notes"
+            type="button"
+            className="button subtle"
+          >
+            Notes
+          </Button>
+          <Button
+            id="asset-viewer-copies"
+            type="button"
+            className="button subtle"
+          >
+            Copies
+          </Button>
+          <Button
+            id="asset-viewer-close"
+            type="button"
+            className="icon-button"
+            aria-label="Close preview"
+          >
+            <span data-icon="close" aria-hidden="true"></span>
+          </Button>
+        </div>
       </div>
       {"\n    "}
       <div className="asset-viewer-toolbar">
-        <label htmlFor="asset-viewer-select">{"Saved file"}</label>
+        <label htmlFor="asset-viewer-select">{"Version"}</label>
         <select id="asset-viewer-select"></select>
         <a id="asset-viewer-download" className="button subtle" download>
           {"Download original"}

@@ -264,7 +264,8 @@ test("saved files open images, PDF and sandboxed original HTML in the integrated
     { id: 10, name: "Large page.html", mediaType: "text/html", size: 3 * 1024 * 1024 },
   ]);
   await env.reader.open(1);
-  const row = env.get("asset-list").children[0];
+  assert.equal(env.get("asset-list").children[0].children[0].textContent, "Large page.html", "copy history lists the newest file first");
+  const row = env.get("asset-list").children.find(item => item.children[0].textContent === "Full page.png");
   assert.equal(row.children.find(node => node.textContent === "Delete").attributes["aria-label"], "Delete Full page.png");
   await fire(row.children.find(node => node.textContent === "View"), "click");
   await tick();
@@ -597,15 +598,15 @@ test("the shipped script order and worker cache include the reader without priva
 });
 
 
-test("saved formats open first; optional notebook navigation preserves reading and notes", async () => {
+test("article text opens first; optional notebook navigation preserves reading and notes", async () => {
   const env = setup();
   await env.reader.open(1);
   assert.equal(env.get("reader-notebook").hidden, true);
   assert.equal(env.get("reader-original").href, "https://example.com/1");
   assert.equal(env.get("reader-original").hidden, false);
-  assert.equal(env.get("reader-formats").hidden, false);
-  assert.equal(env.get("reader-content").hidden, true);
-  assert.equal(env.get("reader-text-mode").attributes["aria-pressed"], "false");
+  assert.equal(env.get("reader-formats").hidden, true);
+  assert.equal(env.get("reader-content").hidden, false);
+  assert.equal(env.get("reader-text-mode").attributes["aria-pressed"], "true");
   assert.equal(env.get("reader-layout").hidden, true);
   assert.equal(env.headCalls.length, 0, "opening a bookmark must not load a preview automatically");
   for (const format of ["html", "image", "pdf"]) {
@@ -615,7 +616,17 @@ test("saved formats open first; optional notebook navigation preserves reading a
   }
   env.get("reader-text-mode").click();
   assert.equal(env.get("reader-content").hidden, false);
-  env.get("reader-text-panel").scrollTop = 350;
+  const articlePanel = env.get("reader-text-panel");
+  let scroll = 350;
+  // Browsers clamp scroll to the height of the currently visible content.
+  Object.defineProperty(articlePanel, "scrollTop", {
+    get: () => scroll,
+    set: value => { scroll = env.get("reader-files").hidden ? value : 0; },
+  });
+  env.get("reader-files-toggle").click();
+  assert.equal(articlePanel.scrollTop, 0);
+  env.get("reader-files-close").click();
+  assert.equal(articlePanel.scrollTop, 350);
   env.get("reader-notebook-toggle").click();
   assert.equal(env.get("reader-notebook").hidden, false);
   const panels = ["reader-notes-form", "annotations-section"];
@@ -648,7 +659,7 @@ test("saved formats open first; optional notebook navigation preserves reading a
   assert.equal(env.get("reader-text-panel").scrollTop, 350);
   await env.reader.open(2);
   assert.equal(env.get("reader-notebook").hidden, true);
-  assert.equal(env.get("reader-content").hidden, true);
+  assert.equal(env.get("reader-content").hidden, false);
   selected(0);
 });
 
@@ -662,7 +673,10 @@ test("format shortcuts open the newest copy and retain earlier copies of that fo
     { id: 10, name: "page.pdf", mediaType: "application/pdf", size: 100 },
   ]);
   await env.reader.open(1);
-  assert.equal(env.get("reader-content").hidden, true);
+  assert.equal(env.get("reader-content").hidden, false);
+  env.get("reader-files-toggle").click();
+  assert.equal(env.get("reader-formats").hidden, false);
+  assert.equal(env.get("reader-files-toggle").textContent, "Copies (4)");
   assert.equal(env.get("reader-format-html-status").textContent, "Saved · 2 copies");
   assert.equal(env.get("reader-format-html").hidden, false);
   assert.equal(env.get("reader-archive").href, "/api/links/1/archive");
@@ -775,4 +789,33 @@ test("show in text restores an anchored passage without losing the article posit
   assert.equal(mark.focused, true);
   assert.equal(mark.scrollOptions.block, "center");
   assert.equal(env.get("reader-notebook").hidden, true);
+});
+
+test("standalone file opens its original preview directly and retains a path to notes", async () => {
+  const env = setup();
+  env.records.set(1, link(1, { type: "file", url: "pocketmark-file:one", content: "" }));
+  env.assets.set(1, [
+    { id: 13, name: "paper.pdf", mediaType: "application/pdf", size: 400 },
+    { id: 18, name: "figure.png", mediaType: "image/png", size: 200 },
+  ]);
+  await env.reader.open(1);
+  await tick();
+  assert.equal(env.get("asset-viewer").open, true);
+  assert.equal(env.get("asset-viewer-content").children[0].src, "/api/assets/13/view");
+  assert.equal(env.get("reader-original").hidden, true);
+  env.get("asset-viewer-notes").click();
+  await tick();
+  assert.equal(env.get("asset-viewer").open, false);
+  assert.equal(env.get("reader-notebook").hidden, false);
+  assert.equal(env.get("reader-dialog").open, true);
+  assert.equal(env.windows.length, 0);
+});
+test("explicit copies opens the inspector even for a standalone file", async () => {
+  const env = setup();
+  env.records.set(1, link(1, { type: "file", url: "pocketmark-file:one", content: "" }));
+  env.assets.set(1, [{ id: 11, name: "image.png", mediaType: "image/png", size: 100 }]);
+  await env.reader.open(1, false, "copies");
+  assert.equal(env.get("asset-viewer").open, false);
+  assert.equal(env.get("reader-files").hidden, false);
+  assert.equal(env.get("reader-files-toggle").textContent, "Copies (1)");
 });

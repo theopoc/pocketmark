@@ -8,6 +8,9 @@ const positive = (value, fallback = 1, max = 1000000) =>
     ? Math.min(Number(value), max)
     : fallback;
 const settingsSections = [
+  "overview",
+  "preferences",
+  "transfer",
   "api-keys",
   "2fa",
   "sessions",

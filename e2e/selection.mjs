@@ -1,3 +1,4 @@
+import { openDisplay } from './navigation.mjs';
 import assert from 'node:assert/strict';
 
 // Real pointer and keyboard events against disposable bookmarks, never a personal library.
@@ -13,17 +14,15 @@ export async function selectionJourney(page, screenshots) {
   }
   await page.goto(`${base}/?sort=title`);
   await page.locator('#bookmark-grid[aria-busy="false"]').waitFor();
+  await openDisplay(page);
   await page.locator("#view-list").click();
   const cards = page.locator('#bookmark-grid .bookmark-card').filter({ hasText: 'Selection fixture' });
   const layout = await cards.first().evaluate(card => {
-    const rect = selector => card.querySelector(selector).getBoundingClientRect();
-    const title = rect('.card-title'), description = rect('.card-description'), domain = rect('.card-domain'), tags = rect('.card-tags');
-    return { aligned: Math.abs(title.x - description.x) < 1,
-      ordered: title.y < description.y && description.right <= domain.x && domain.right <= tags.x,
-      metadataRow: Math.abs((domain.top + domain.bottom) / 2 - (tags.top + tags.bottom) / 2) < 5 };
+    const title = card.querySelector('.card-title').getBoundingClientRect();
+    const source = card.querySelector('.card-domain').getBoundingClientRect();
+    return title.y < source.y && Math.abs(title.x - source.x) < 3;
   });
-  assert.deepEqual(layout, { aligned: true, ordered: true, metadataRow: true }, 'wide list keeps title/description together and domain/tags in separate columns');
-  assert.equal(await page.locator('.results-tools #refresh-button').count(), 1, 'Refresh is grouped with selection help and view controls');
+  assert.ok(layout, 'title and source share a column');
   const surface = async (index, modifiers = []) => {
     await cards.nth(index).scrollIntoViewIfNeeded();
     const rect = await cards.nth(index).boundingBox();
@@ -41,7 +40,10 @@ export async function selectionJourney(page, screenshots) {
   await page.mouse.move(edge.x + 30, edge.y + 20);
   assert.equal(await page.locator('.selection-marquee').count(), 0);
   await count(0);
-  assert.equal(await cards.locator('input[type=checkbox]').count(), 0);
+  assert.equal(await cards.first().locator('input[type=checkbox]').isVisible(), false);
+  await page.locator('#selection-toggle').click();
+  await cards.first().locator('input[type=checkbox]').check(); await count(1);
+  await page.locator('#selection-toggle').click(); await count(0);
   await surface(0); await count(1);
   await surface(2, ['Shift']); await count(3);
   await surface(1); await count(2);
@@ -69,17 +71,18 @@ export async function selectionJourney(page, screenshots) {
   await page.locator('#reader-dialog').waitFor({ state: 'visible' });
   await page.keyboard.press('Escape');
   await page.locator('#reader-dialog').waitFor({ state: 'hidden' });
+  await page.waitForFunction(id =>
+    !new URL(location.href).searchParams.has('reader') &&
+    document.getElementById('bookmark-grid').getAttribute('aria-busy') === 'false' &&
+    document.activeElement?.dataset.focusKey === `link:${id}:open`, created[0]);
   // Drag from a non-interactive row margin through the next row; the release must not toggle it.
   let first = await cards.nth(0).boundingBox(), second = await cards.nth(1).boundingBox();
   await page.mouse.move(first.x + 2, first.y + 2); await page.mouse.down();
   await page.mouse.move(second.x + second.width - 2, second.y + second.height - 2, { steps: 12 });
   await page.mouse.up(); await count(2);
   assert.equal(await page.locator('.selection-marquee').count(), 0);
-  await page.locator('.selection-help summary').click();
-  assert.equal(await page.locator('.selection-help-panel').isVisible(), true);
+  assert.equal(await cards.first().locator('.row-checkbox').isVisible(), true);
   if (screenshots) await page.screenshot({ path: `${screenshots}/selection-desktop.png` });
-  await page.keyboard.press('Escape');
-  assert.equal(await page.locator('.selection-help-panel').isVisible(), false);
   await count(2);
   // Freeze the browser animation clock so exit and sibling motion can be inspected reliably.
   await page.emulateMedia({ reducedMotion: 'no-preference' });
@@ -93,6 +96,7 @@ export async function selectionJourney(page, screenshots) {
     };
     window.restoreSelectionAnimate = () => { Element.prototype.animate = animate; };
   });
+  await cards.nth(0).locator('.card-actions-toggle').click();
   await cards.nth(0).getByRole('button', { name: /^Delete bookmark:/ }).click();
   await page.locator('#delete-bookmark-confirm').click();
   await page.locator('.bookmark-exit-layer').waitFor();
@@ -103,17 +107,13 @@ export async function selectionJourney(page, screenshots) {
   await page.locator('.bookmark-exit-layer').waitFor({ state: 'detached' });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.locator('#clear-selection').click();
+  await openDisplay(page);
   await page.locator('#view-grid').click();
   await surface(0); await surface(1, ['Shift']); await count(2);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.locator('.selection-help summary').click();
-  assert.ok(await page.locator('.selection-help-panel').evaluate(node => {
-    const rect = node.getBoundingClientRect(); return rect.left >= 0 && rect.right <= innerWidth;
-  }), 'selection help fits a phone');
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'selection toolbar fits a phone');
   assert.ok(await page.locator('#bulk-bar').evaluate(node => { const rect = node.getBoundingClientRect(); return rect.left >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight; }), 'floating actions stay inside the phone viewport');
   if (screenshots) await page.screenshot({ path: `${screenshots}/selection-mobile.png` });
-  await page.locator('.selection-help summary').click();
   await page.locator('#bulk-open').click();
   await page.setViewportSize({ width: 844, height: 390 });
   await page.waitForFunction(() => {
@@ -132,10 +132,11 @@ export async function selectionJourney(page, screenshots) {
   await page.locator('#bulk-dialog').waitFor({ state: 'hidden' });
   await count(0);
   assert.equal(await page.locator('.bookmark-exit-layer').count(), 0, 'reduced motion omits exit layers');
-  for (const id of created) await page.request.delete(`${base}/api/links/${id}`);
   await page.setViewportSize({ width: 1280, height: 1000 });
-  await page.goto(base);
-  await page.locator('#bookmark-grid[aria-busy="false"]').waitFor();
+  await openDisplay(page);
   await page.locator('#view-list').click();
+  for (const id of created) await page.request.delete(`${base}/api/links/${id}`);
+  await page.goto(base);
+  await page.locator('#empty-state').waitFor();
   await page.setViewportSize(viewport);
 }

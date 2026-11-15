@@ -43,8 +43,7 @@ export async function securityJourney({ browser, page, base, username, password,
     await openNavigation(page);
     await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: 'Backup & restore' }).click();
     assert.equal(await page.locator('#backup-title').evaluate(node => document.activeElement === node), true);
-    await openNavigation(page);
-    await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: 'API keys' }).click();
+    await selectSettings(page, 'api-keys');
     assert.equal(await page.locator('#api-keys-title').evaluate(node => document.activeElement === node), true);
     if (process.env.E2E_SCREENSHOTS) {
       await mkdir(process.env.E2E_SCREENSHOTS, { recursive: true });
@@ -165,9 +164,10 @@ export async function securityJourney({ browser, page, base, username, password,
     const expiresAt = Math.floor(Date.now() / 1000) + 2;
     assert.equal((await request.post(url('/api/tokens'), { data: { name: 'Synthetic expired key', profile: 'read', expiresAt } })).status(), 201);
     await page.waitForFunction(expiry => Date.now() >= expiry * 1000, expiresAt);
-    await page.locator('#settings-page [data-settings-back]:visible').click();
+    await clickNavigation(page, '#settings-navigation [data-settings-back]');
     await page.locator('#settings-page').waitFor({ state: 'hidden' });
     await clickNavigation(page, '#settings-button');
+    await selectSettings(page, 'api-keys');
     const expiredRow = page.locator('#token-list .token-row').filter({ hasText: 'Synthetic expired key' });
     await expiredRow.waitFor();
     assert.equal(await page.locator('#token-count').textContent(), '1 active · 2 of 32 keys');
@@ -207,7 +207,7 @@ export async function securityJourney({ browser, page, base, username, password,
     await page.mouse.click(0, 0);
     await page.waitForFunction(() => document.getElementById('reauth-password').value === '');
     assert.equal(await page.locator('#reauth-password').inputValue(), '');
-    await page.locator('#settings-page [data-settings-back]:visible').click();
+    await clickNavigation(page, '#settings-navigation [data-settings-back]');
     await page.waitForFunction(() => document.getElementById('new-token-value').value === '');
     assert.equal(await page.locator('#new-token-value').inputValue(), '');
   } finally { await peer.close(); }

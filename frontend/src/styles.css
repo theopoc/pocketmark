@@ -2,6 +2,7 @@
 @layer theme, utilities;
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
+@import "./features/library/catalog.css";
 @source "./";
 
 .react-root {

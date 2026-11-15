@@ -1,3 +1,4 @@
+import { openDisplay } from './navigation.mjs';
 // Compare the protected library with the exact same disposable fixture and browser.
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
@@ -38,7 +39,7 @@ try {
         const metricsName = name.replace('.png', '.json');
         await writeFile(join(output, metricsName), JSON.stringify(metrics));
         if (reference) assert.deepEqual(metrics, JSON.parse(await readFile(join(reference, metricsName), 'utf8')).map(metric => ({ ...metric, class: metric.class.trim().split(/\s+/).sort().join(" ") })), `Library layout/style changed: ${name}`);
-        const frozen = [page.locator('#sort-toggle')];
+        const frozen = [page.locator('#display-settings > summary')];
         if (await page.locator('#sort-menu').isVisible()) frozen.push(page.locator('#sort-menu'));
         for (const card of await page.locator('.bookmark-card').all()) frozen.push(card.locator('.card-actions'), card.locator('.favorite-button'));
         for (let i = 0; i < frozen.length; i++) {
@@ -50,6 +51,7 @@ try {
         compared++;
       }
       for (const view of ['list', 'grid']) {
+        await openDisplay(page);
         await page.locator(`#view-${view}`).click();
         await page.mouse.move(width / 2, 10);
         await capture(`${view}-rest`);
@@ -57,6 +59,7 @@ try {
         if (width <= 900) {
           await toggle.click(); await capture(`${view}-actions`); await toggle.click();
         }
+        await openDisplay(page);
         await page.locator('#sort-toggle').click(); await capture(`${view}-sort`);
         await page.locator('#sort-menu').press('Escape');
       }

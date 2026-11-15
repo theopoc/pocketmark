@@ -1,4 +1,4 @@
-import { clickNavigation, openNavigation, navigationJourney, dialogDismissalJourney, breadcrumbJourney } from './navigation.mjs';
+import { openDisplay, clickNavigation, openNavigation, navigationJourney, dialogDismissalJourney, breadcrumbJourney } from './navigation.mjs';
 // Real Chromium, real HTTP and PostgreSQL. Run only against the disposable smoke instance.
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
@@ -222,7 +222,7 @@ try {
     await page.locator('#mfa-manage-form button[value="replace"]').click();
     await page.locator('#mfa-manage-enrollment').waitFor({ state: 'visible' });
     // Closing settings must not spend the recovery grant before confirmation.
-    await page.locator('#settings-page [data-settings-back]:visible').click();
+    await clickNavigation(page, '#settings-navigation [data-settings-back]');
     await page.locator('#settings-page').waitFor({ state: 'hidden' });
     await openSettings(page, '2fa');
     await page.locator('#mfa-manage-password').fill(password);
@@ -359,7 +359,7 @@ try {
     freshRecoveryCodes = (await page.locator('#mfa-manage-codes-value').textContent()).trim().split('\n');
     assert.equal(freshRecoveryCodes.length, 10);
     await page.locator('#mfa-manage-feedback').filter({ hasText: 'These recovery codes may have changed' }).waitFor();
-    await page.locator('#settings-page [data-settings-back]:visible').click();
+    await clickNavigation(page, '#settings-navigation [data-settings-back]');
     await page.waitForFunction(() => document.getElementById('mfa-manage-codes-value').textContent === '');
     assert.equal(await page.locator('#mfa-manage-codes-value').textContent(), '');
     assert.equal(await page.locator('#mfa-manage-secret').inputValue(), '');
@@ -404,7 +404,7 @@ try {
       assert.equal((await page.locator('#mfa-manage-codes-value').textContent()).trim(), replacementCodes.slice(4).join('\n'));
       await invalid.remove();
       await expired.remove();
-      await page.locator('#settings-page [data-settings-back]:visible').click();
+      await clickNavigation(page, '#settings-navigation [data-settings-back]');
       await page.locator('#login-view').waitFor({ state: 'visible' });
       await page.reload();
       await page.locator('#app-view').waitFor({ state: 'visible' });
@@ -457,6 +457,7 @@ try {
   await page.locator('#add-bookmark').click();
   // A private destination is deliberately rejected by the capture worker: no public network.
   await page.locator('#bookmark-url').fill('http://127.0.0.1/e2e-fixture');
+  await page.locator('#bookmark-options > summary').click();
   await page.locator('#bookmark-title').fill(original);
   await page.locator('#bookmark-details').evaluate(node => { node.open = true; });
   await page.locator('#bookmark-notes').fill('Persisted browser notes');
@@ -482,14 +483,18 @@ try {
   const card = title => page.locator('.bookmark-card').filter({ has: page.getByRole('button', { name: title, exact: true }) });
   const openActions = async title => {
     const toggle = card(title).getByRole('button', { name: `Actions for ${title}`, exact: true });
-    if (await toggle.isVisible()) await toggle.click();
+    const menu = card(title).locator('.card-overflow-actions');
+    if (!await menu.evaluate(node => node.matches(':popover-open'))) await toggle.click();
+    await menu.waitFor({ state: 'visible' });
   };
   await card(original).waitFor();
+  await openDisplay(page);
   await page.getByRole('button', { name: 'Sort bookmarks: Newest first', exact: true }).click();
   await page.getByRole('menuitemradio', { name: 'Title Z–A', exact: true }).click();
   await page.waitForURL(url => url.searchParams.get('sort') === 'title_desc');
   await page.reload();
   await card(original).waitFor();
+  await openDisplay(page);
   await page.getByRole('button', { name: 'Sort bookmarks: Title Z–A', exact: true }).click();
   assert.equal(await page.getByRole('menuitemradio', { name: 'Title Z–A', exact: true }).getAttribute('aria-checked'), 'true', 'descending title sort survives reload');
   await page.getByRole('menuitemradio', { name: 'Newest first', exact: true }).click();
@@ -513,10 +518,11 @@ try {
   await moreTags.focus();
   await moreTags.press('Enter');
   assert.equal(await card(original).locator('.card-tags button').nth(5).evaluate(node => document.activeElement === node), true, 'expanding tags moves focus to the first revealed tag');
-  await page.locator('#refresh-button').evaluate(button => button.click());
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await page.waitForFunction(() => document.querySelector('#bookmark-grid').getAttribute('aria-busy') === 'false');
   assert.equal(await card(original).locator('.card-tags button').nth(5).evaluate(node => document.activeElement === node), true, 'refresh preserves the revealed tag and its focus');
   await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await openDisplay(page);
   await page.locator('#view-grid').click();
   assert.equal(await page.locator('.breadcrumb-root').textContent(), 'My library');
   const gridHeader = card(original).locator('.card-top');
@@ -526,29 +532,30 @@ try {
   assert.equal(await card(original).locator('.card-footer .card-overflow-actions .card-action').count(), 4, 'grid retains its four footer actions');
   assert.equal(await gridHeader.getByRole('button', { name: `Add to favorites: ${original}` }).getAttribute('aria-pressed'), 'false');
   await card(original).hover();
-  await page.waitForFunction(title => {
-    const card = [...document.querySelectorAll('.bookmark-card')].find(node => node.textContent.includes(title));
-    return card && getComputedStyle(card).transform !== 'none';
-  }, original);
+  assert.equal(await card(original).evaluate(node => getComputedStyle(node).transform), 'none', 'hover keeps reference cards stationary');
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.waitForFunction(title => {
     const card = [...document.querySelectorAll('.bookmark-card')].find(node => node.textContent.includes(title));
     return card && getComputedStyle(card).transform === 'none';
   }, original);
+  await openDisplay(page);
   await page.locator('#view-list').click();
-  assert.equal(await card(original).locator('.card-title-row .favorite-button').count(), 1, 'list view restores its existing favorite position');
+  assert.equal(await card(original).locator('.card-footer .favorite-button').count(), 1, 'list view keeps the title separate from the favorite action');
   assert.equal(await card(original).locator('.card-metadata > .card-domain').count(), 1, 'list view restores the domain to its metadata row');
   await page.locator('#add-bookmark').click();
   assert.ok(await page.locator('#bookmark-dialog').evaluate(node => getComputedStyle(node).transitionDuration.split(',').every(value => parseFloat(value) === 0)), 'reduced motion removes dialog transitions');
   await page.locator('#bookmark-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.setViewportSize({ width: 320, height: 700 });
+  await openDisplay(page);
   await page.locator('#view-grid').click();
   assert.ok(await card(original).locator('.card-top').evaluate(node => {
     const header = node.getBoundingClientRect(), star = node.querySelector('.favorite-button').getBoundingClientRect();
     return node.scrollWidth <= node.clientWidth + 1 && star.width >= 44 && star.height >= 44 && star.right <= header.right;
   }), 'the grid header and favorite fit at narrow mobile widths');
+  await openDisplay(page);
   await page.locator('#view-list').click();
   await page.locator('#add-bookmark').click();
+  await page.locator('#bookmark-options > summary').click();
   for (const selector of ['#bookmark-dialog .dialog-heading .icon-button', '#save-bookmark', '#bookmark-favorite', '#bookmark-read']) {
     assert.ok(await page.locator(selector).evaluate(node => (node.matches('input') ? node.closest('label') : node).getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
   }
@@ -629,13 +636,16 @@ try {
   await page.locator('#reader-title').filter({ hasText: original }).waitFor();
   assert.equal(await page.locator('#reader-retry-open').isVisible(), false);
   assert.equal(await page.locator('#reader-files').isVisible(), false);
-  assert.equal(await page.locator('#reader-formats').isVisible(), true);
-  assert.equal(await page.locator('#reader-content').isVisible(), false);
+  assert.equal(await page.locator('#reader-formats').isVisible(), false);
+  assert.equal(await page.locator('#reader-content').isVisible(), true);
+  assert.equal(new URL(page.url()).searchParams.get('reader'), String(originalID));
+  await page.locator('#reader-files-toggle').click();
   for (const format of ['html', 'image', 'pdf']) {
     const saved = await page.locator(`#reader-format-${format}`).getAttribute('data-saved') === 'true';
     assert.equal(await page.locator(`#reader-format-${format}`).isVisible(), saved);
     if (saved) assert.ok(await page.locator(`#reader-format-${format}`).evaluate(node => node.getBoundingClientRect().height >= 44));
   }
+  await page.locator('#reader-files-close').click();
   await page.locator('#reader-options summary').click();
   for (const selector of ['#reader-original', '#reader-notebook-toggle', '#reader-text-mode', '#reader-size-trigger']) {
     assert.ok(await page.locator(selector).evaluate(node => node.getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
@@ -645,9 +655,16 @@ try {
   const chooser = page.waitForEvent('filechooser');
   await page.locator('#asset-upload-button').click();
   await (await chooser).setFiles([]);
-  await page.getByRole('button', { name: 'Close reader', exact: true }).click();
+  await page.getByRole('button', { name: 'Back to library', exact: true }).click();
   await page.setViewportSize({ width: 1280, height: 720 });
   await card(original).getByRole('button', { name: original, exact: true }).click();
+  await page.locator('#reader-title').filter({ hasText: original }).waitFor();
+  await page.goBack();
+  await page.locator('#reader-dialog').waitFor({ state: 'hidden' });
+  await page.waitForFunction(id => document.activeElement?.dataset.focusKey === `link:${id}:open`, originalID);
+  await page.goForward();
+  await page.locator('#reader-title').filter({ hasText: original }).waitFor();
+  await page.reload();
   await page.locator('#reader-title').filter({ hasText: original }).waitFor();
   const readerBounds = await page.locator('#reader-dialog').boundingBox();
   await page.mouse.move(readerBounds.x + 50, readerBounds.y + 50);
@@ -656,10 +673,28 @@ try {
   await page.mouse.up();
   assert.equal(await page.locator('#reader-dialog').isVisible(), true, 'dragging out of the reader does not close it');
   await page.mouse.click(1, 1);
+  await page.waitForURL(url => !url.searchParams.has('reader'));
   await page.locator('#reader-dialog').waitFor({ state: 'hidden' });
+  // Old browsers still have ordinary Back/Forward for a text-only reader.
+  await page.evaluate(() => Object.defineProperty(window, 'navigation', { configurable: true, value: undefined }));
   await card(original).getByRole('button', { name: original, exact: true }).click();
   await page.locator('#reader-title').filter({ hasText: original }).waitFor();
-  await page.getByRole('button', { name: 'Close reader', exact: true }).click();
+  await page.getByRole('button', { name: 'Back to library', exact: true }).click();
+  await page.waitForURL(url => !url.searchParams.has('reader'));
+  await page.goForward();
+  await page.waitForURL(url => url.searchParams.get('reader') === String(originalID));
+  await page.locator('#reader-title').filter({ hasText: original }).waitFor();
+  if (!await page.locator('#reader-options').evaluate(node => node.open))
+    await page.locator('#reader-options summary').click();
+  const expireList = route => route.fulfill({ status: 401, json: { error: 'Session expired' } });
+  await page.route('**/api/links?*', expireList);
+  await page.locator('#reader-edit').click();
+  await page.locator('#login-view').waitFor();
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await page.locator('#bookmark-dialog').isVisible(), false, 'an expired session cannot reopen the editor over sign-in');
+  await page.unroute('**/api/links?*', expireList);
+  await page.reload();
+  await page.locator('#app-view').waitFor();
   const pagedTags = route => {
     const pageNumber = Number(new URL(route.request().url()).searchParams.get('page'));
     const tags = Array.from({ length: pageNumber === 1 ? 40 : 1 }, (_, index) => ({ name: `tag-${String((pageNumber - 1) * 40 + index).padStart(2, '0')}`, count: 1, letter: 'T' }));
@@ -683,8 +718,7 @@ try {
   assert.equal(await page.locator('#tags-search').inputValue(), '');
   assert.equal(await page.locator('#tags-search').evaluate(node => document.activeElement === node), true);
   await page.locator('#tags-list').getByRole('button', { name: '#reading 1 bookmark' }).waitFor();
-  await chooseOption(page, 'tags-letter-picker', 'R');
-  await page.waitForFunction(() => document.activeElement.id === 'tags-letter-R');
+  assert.equal(await page.locator('#tags-letter-control').isVisible(), false, 'small tag lists need no letter picker');
   await page.locator('#tags-list').getByRole('button', { name: '#reading 1 bookmark' }).click();
   await card(original).waitFor();
   assert.equal(await page.locator('#active-filters').isVisible(), false, 'the tag view has no redundant removable navigation chip');
@@ -697,6 +731,7 @@ try {
   const collectionName = 'A deliberately long collection name for mobile navigation';
   const collectionResponse = await page.request.post(new URL('/api/collections', base).href, { data: { name: collectionName, parentId: null } });
   assert.equal(collectionResponse.status(), 201);
+  await openDisplay(page);
   await page.locator('#refresh-button').click();
   await openNavigation(page);
   await page.getByRole('button', { name: collectionName, exact: true }).waitFor();
@@ -719,10 +754,23 @@ try {
   assert.equal(await page.locator('#bookmark-collection option:checked').textContent(), collectionName);
   assert.equal(await page.locator('#bookmark-collection-trigger').innerText(), collectionName);
   await page.locator('#bookmark-dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await openDisplay(page);
+  await page.locator('#view-grid').click();
+  await page.locator('#search').fill('Browser integration');
+  await page.getByRole('button', {name: 'Search for “Browser integration” in all bookmarks'}).click();
+  await card(original).waitFor();
+  assert.equal(await page.locator('#search').inputValue(), 'Browser integration');
+  assert.equal(await page.locator('#view-list').getAttribute('aria-pressed'), 'true', 'global layout survives collection changes');
+  await page.goBack();
+  await page.getByRole('button', {name: 'Search for “Browser integration” in all bookmarks'}).waitFor();
+  assert.equal(await page.locator('#view-grid').getAttribute('aria-pressed'), 'true', 'collection retains its own layout');
+  await page.getByRole('button', {name: 'Remove Search: Browser integration filter'}).click();
+  await page.locator('#empty-title').filter({hasText:'This collection is empty'}).waitFor();
   await page.locator('#empty-reset').click();
   await card(original).waitFor();
   const failLibrary = route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' });
   await page.route('**/api/links?*', failLibrary);
+  await openDisplay(page);
   await page.locator('#refresh-button').click();
   await page.locator('#library-error').getByRole('button', { name: 'Try again' }).waitFor();
   const retryBackground = () => page.locator('#library-error button').evaluate(node => getComputedStyle(node).backgroundColor);
@@ -815,17 +863,19 @@ try {
     if (name === 'capture.html') htmlAsset = await response.json();
   }
   let downloads = 0, popups = 0;
-  const originalURL = page.url();
   page.on('popup', () => popups++);
   const leakedRequests = [];
   page.on('download', () => downloads++);
   page.on('response', response => { if (new URL(response.url()).pathname.startsWith('/preview-')) leakedRequests.push(response.url()); });
   await card(revised).getByRole('button', { name: revised, exact: true }).click();
+  await page.waitForURL(url => url.searchParams.get('reader') === String(saved.id));
+  const originalURL = page.url();
   const previews = '**/api/assets/*/view';
   await page.route(previews, route => route.request().method() === 'GET'
     ? route.fulfill({ status: 422, contentType: 'application/json', body: '{"error":"Synthetic preparation failure"}' })
     : route.continue());
-  assert.equal(await page.locator('#reader-content').isVisible(), false);
+  await page.locator('#reader-content').waitFor();
+  await page.locator('#reader-files-toggle').click();
   await page.locator('#reader-format-html').click();
   const viewer = page.locator('#asset-viewer');
   await viewer.waitFor({ state: 'visible' });
@@ -893,9 +943,12 @@ try {
   await direct.close();
   await page.getByRole('button', { name: 'Close preview', exact: true }).click();
   await viewer.waitFor({ state: 'hidden' });
-  assert.equal(await page.locator('#asset-viewer-content').innerHTML(), '');
-  await page.getByRole('button', { name: 'Close reader', exact: true }).click();
+  await page.waitForFunction(() => document.getElementById('asset-viewer-content').innerHTML === '');
+  await page.getByRole('button', { name: 'Back to library', exact: true }).click();
+  await page.waitForURL(url => !url.searchParams.has('reader') && url.searchParams.get('q') === 'Browser revised');
+  await page.waitForFunction(id => document.activeElement?.dataset.focusKey === `link:${id}:open`, saved.id);
 
+  await openActions(revised);
   await card(revised).getByRole('button', { name: `Delete bookmark: ${revised}`, exact: true }).click();
   const deleteDialog = page.getByRole('alertdialog', { name: 'Delete bookmark?' });
   await deleteDialog.waitFor({ state: 'visible' });
@@ -903,12 +956,16 @@ try {
   assert.ok((await deleteDialog.textContent()).includes(revised));
   await page.keyboard.press('Escape');
   await deleteDialog.waitFor({ state: 'hidden' });
+  await page.waitForFunction(id => document.activeElement?.dataset.focusKey === `link:${id}:more`, saved.id);
   assert.equal(await card(revised).count(), 1);
+  await openActions(revised);
   await card(revised).getByRole('button', { name: `Delete bookmark: ${revised}`, exact: true }).click();
   await deleteDialog.getByRole('button', { name: 'Delete bookmark', exact: true }).click();
   await card(revised).waitFor({ state: 'detached' });
   await page.reload();
   await page.locator('#empty-title').filter({ hasText: 'No bookmarks found' }).waitFor();
+  assert.equal(new URL(page.url()).searchParams.has('reader'), false, 'a deleted bookmark stays closed on reload');
+  assert.equal(await page.locator('#reader-dialog').isVisible(), false);
   await clickNavigation(page, '#logout-button');
   await page.locator('#logout-confirm').click();
   await page.locator('#login-view').waitFor({ state: 'visible' });

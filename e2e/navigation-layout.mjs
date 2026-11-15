@@ -12,6 +12,10 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
   await page.setContent(html);
   await page.addStyleTag({ path: new URL('style.css', root).pathname });
+  const built = await readFile(new URL('index.html', root), 'utf8');
+  const bundle = built.match(/href="(\/app\/[^"]+\.css)"/);
+  assert.ok(bundle, 'compiled catalog stylesheet is part of the page');
+  await page.addStyleTag({ path: new URL(bundle[1].slice(1), root).pathname });
   await page.evaluate(() => {
     const app = document.querySelector('#app-view');
     app.hidden = false;
@@ -32,12 +36,12 @@ try {
   await page.locator('#import-button').hover();
   const after = await page.locator('#main-content').evaluate(el => el.getBoundingClientRect().left);
   assert.equal(after, before, 'workspace menu hover must not move the main content');
-  assert.equal(before, 280, 'the open sidebar reserves its width');
+  assert.equal(before, await page.locator('#sidebar').evaluate(node => node.getBoundingClientRect().width), 'main content follows reserved sidebar width');
   assert.equal(await page.locator('#sidebar').isVisible(), true, 'the sidebar remains visible');
   await page.keyboard.press('Escape');
   await page.locator('#workspace-popover').waitFor({ state: 'hidden' });
   await page.locator('#main-content').focus();
   await page.mouse.move(600, 400);
-  assert.equal(await page.locator('#main-content').evaluate(el => el.getBoundingClientRect().left), 0, 'the content expands again after the menu closes');
+  assert.equal(await page.locator('#main-content').evaluate(el => el.getBoundingClientRect().left), before, 'the content stays in place after the menu closes');
   console.log('Workspace popover keeps the desktop layout stable.');
 } finally { await browser.close(); }
