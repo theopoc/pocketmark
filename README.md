@@ -10,7 +10,7 @@ A personal bookmark manager with a Go server, an embedded web interface and Post
 [![Releases](https://img.shields.io/badge/GitHub-Releases-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/theopoc/pocketmark/releases)
 [![Issues](https://img.shields.io/badge/GitHub-Issues-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/theopoc/pocketmark/issues)
 
-![Pocketmark bookmark library in dark theme with filters, tags and search](docs/pocketmark-dark-preview.jpg)
+![Pocketmark in dark mode, showing a personal library with collection navigation, search and bookmark titles, sources and tags](docs/pocketmark-dark-preview.jpg)
 
 ## Features
 
@@ -47,8 +47,8 @@ For HTTPS access, set `POCKETMARK_ORIGIN` to your public URL. See the [guide](do
 
 1. Follow the [manual installation instructions](extension/README.md#install-and-connect) to load the Pocketmark extension in Chrome.
 2. Sign in to Pocketmark, open **Settings → API keys**, create a dedicated key and copy it immediately; it is shown only once.
-3. Open the extension on a regular HTTP(S) page. Under **Connection settings**, enter your Pocketmark origin, such as `https://bookmarks.example.com` (without `/api` or `/dav/`), and the key. Click **Connect** and approve server access. If Chrome closes the popup, reopen it to finish connecting.
-4. Choose a collection, edit the title or tags, optionally select formats under **Attach captures**, then save.
+3. Open the extension on a regular HTTP(S) page. Under **Connection**, enter your Pocketmark origin, such as `https://bookmarks.example.com` (without `/api` or `/dav/`), and the key. Click **Connect** and approve server access. If Chrome closes the popup, reopen it to finish connecting.
+4. Choose a collection, edit the title or tags, optionally select formats under **Save offline copies**, then save.
 
 Captures are off by default. Rendered HTML, visible PNG, full-page PNG and PDF can be selected independently. Work continues after the popup closes; failed uploads retain captured files locally for manual retry. See [permissions, recovery and limits](extension/README.md). Linkwarden extensions and mobile clients are no longer supported.
 

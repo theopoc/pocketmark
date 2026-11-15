@@ -1,6 +1,6 @@
 "use strict";
 globalThis.Pocketmark = (() => {
-  const formats = { html: ["Rendered HTML", "html"], screenshot: ["Visible area", "png"], fullpage: ["Full page", "png"], pdf: ["PDF", "pdf"] };
+  const formats = { html: ["Offline page (HTML)", "html"], screenshot: ["Visible area", "png"], fullpage: ["Entire page", "png"], pdf: ["Print layout (PDF)", "pdf"] };
   function origin(value) {
     const url = new URL(value);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || url.pathname !== "/") throw new Error("Enter an http(s) server address without a path or credentials.");

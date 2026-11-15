@@ -1,0 +1,712 @@
+/* A quiet catalog: the document title is the first visual landmark in each row. */
+:root {
+  --catalog-serif: "Iowan Old Style", Baskerville, Georgia, serif;
+  --catalog-paper: #faf9f6;
+  --catalog-rail: #eeede7;
+  --catalog-ink: #26272a;
+  --catalog-muted: #60625e;
+  --catalog-rule: #d8d7ce;
+  --catalog-hover: #f0efe9;
+  --catalog-field: #fffefa;
+  --catalog-fill: #5749b6;
+  --catalog-accent: #5749b6;
+  --catalog-tint: #e7e3f3;
+}
+[data-theme="dark"] {
+  --catalog-paper: #1a1b1d;
+  --catalog-rail: #202123;
+  --catalog-ink: #f1efe8;
+  --catalog-muted: #b8b6ae;
+  --catalog-rule: #454640;
+  --catalog-hover: #292a2c;
+  --catalog-field: #232426;
+  --catalog-fill: #6250b2;
+  --catalog-accent: #c6bafa;
+  --catalog-tint: #343047;
+}
+:root[data-theme] {
+  --ink: var(--catalog-ink);
+  --muted: var(--catalog-muted);
+  --paper: var(--catalog-paper);
+  --surface: var(--catalog-hover);
+  --sidebar: var(--catalog-rail);
+  --line: var(--catalog-rule);
+  --control-bg: var(--catalog-field);
+  --control-ink: var(--catalog-ink);
+  --control-border: var(--catalog-rule);
+  --control-hover: var(--catalog-hover);
+  --accent: var(--catalog-accent);
+  --accent-soft: var(--catalog-tint);
+  --focus: var(--catalog-accent);
+  background-color: var(--paper);
+  color: var(--ink);
+}
+html[data-theme] .button.primary {
+  background-color: var(--catalog-fill);
+  color: white;
+}
+html[data-theme] .button.primary:hover {
+  background-color: color-mix(in srgb, var(--catalog-fill) 86%, black);
+}
+#app-view:not(.showing-settings),
+#navigation-dialog {
+  background: var(--paper);
+  color: var(--ink);
+}
+html[data-theme] .modal {
+  background-color: var(--paper);
+  color: var(--ink);
+}
+
+#app-view .topbar {
+  min-height: 60px;
+  padding-inline: clamp(18px, 3.6vw, 62px);
+  background: var(--paper);
+}
+#app-view .topbar-actions {
+  gap: 8px;
+}
+#app-view .library-content {
+  max-width: 1350px;
+  padding: 26px clamp(18px, 3.6vw, 62px) 32px;
+}
+#app-view .library-header {
+  margin: 0 0 12px;
+  gap: 12px;
+}
+#app-view .library-header h1 {
+  font: 500 clamp(35px, 4vw, 55px)/1.06 var(--catalog-serif);
+  letter-spacing: -0.045em;
+  margin: 0;
+  text-wrap: initial;
+}
+#page-subtitle {
+  margin: 7px 0 0;
+  max-width: 72ch;
+  overflow-wrap: anywhere;
+}
+#app-view .library-toolbar {
+  display: block;
+}
+#app-view :is(.library-toolbar, #tags-view) .search-box {
+  width: 100%;
+  max-width: none;
+  border-radius: 6px;
+  background: var(--control-bg);
+}
+#app-view .search-box:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+#app-view .search-box input {
+  font-size: 14px;
+}
+#app-view .results-bar {
+  min-height: 40px;
+  gap: 6px;
+  flex-wrap: nowrap;
+  padding: 4px 0;
+}
+#app-view .results-tools {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+#app-view .results-tools :is(.button, summary) {
+  font-size: 12px;
+}
+#app-view .active-filters {
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 0;
+  min-width: 0;
+}
+.search-scope {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+#app-view .filter-chip {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+#app-view .first-bookmark :is(.results-bar, .library-toolbar) {
+  display: none;
+}
+#app-view .empty-state {
+  background: transparent;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+}
+#app-view .empty-state h2 {
+  font: 500 29px/1.18 var(--catalog-serif);
+}
+#app-view .empty-state .button {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+#app-view .display-settings {
+  position: relative;
+}
+.display-settings summary {
+  cursor: pointer;
+  list-style: none;
+}
+.display-settings summary::-webkit-details-marker {
+  display: none;
+}
+.display-settings[open] > summary,
+#selection-toggle[aria-pressed="true"] {
+  background: var(--accent-soft);
+}
+.display-panel {
+  position: absolute;
+  z-index: 12;
+  top: calc(100% + 4px);
+  right: 0;
+  width: min(270px, calc(100vw - 30px));
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--control-bg);
+  box-shadow: 0 4px 16px #0002;
+}
+.display-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+.display-row > strong {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.display-row .view-button {
+  width: auto;
+  gap: 4px;
+  padding-inline: 9px;
+}
+.display-sort {
+  position: relative;
+}
+.display-panel .sort-menu {
+  top: 100%;
+  right: 0;
+}
+.display-panel #refresh-button {
+  width: 100%;
+}
+#sidebar {
+  background: var(--catalog-rail);
+  color: var(--catalog-ink);
+}
+#sidebar .brand {
+  font: 600 27px/1.12 var(--catalog-serif);
+  letter-spacing: -1px;
+}
+#sidebar .browse-heading {
+  margin-top: 0;
+}
+#sidebar .sidebar-section-title h2 {
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+}
+#sidebar .nav-item {
+  color: var(--catalog-ink);
+}
+#sidebar .nav-item .icon {
+  color: var(--catalog-muted);
+}
+#sidebar .nav-item.active,
+#sidebar .nav-item.active .icon {
+  color: var(--catalog-accent);
+}
+#sidebar .nav-item.active {
+  background: var(--catalog-tint);
+}
+#sidebar .nav-item:hover {
+  background: var(--catalog-hover);
+}
+#sidebar .workspace-label {
+  margin: 0;
+  min-height: 38px;
+  padding: 8px;
+}
+#sidebar .nav-count {
+  background: transparent;
+}
+#sidebar .sidebar-tools {
+  gap: 1px;
+}
+@media (min-width: 901px) and (hover: hover) and (pointer: fine) {
+  #app-view:not(.showing-settings) {
+    --catalog-sidebar-width: clamp(205px, 17vw, 250px);
+  }
+  #app-view:not(.showing-settings) > .sidebar-rail {
+    width: var(--catalog-sidebar-width);
+  }
+  #app-view:not(.showing-settings) .sidebar-rail .sidebar {
+    visibility: visible;
+    transform: none;
+    transition: none;
+    width: var(--catalog-sidebar-width);
+    padding-top: 22px;
+  }
+  #app-view:not(.showing-settings) > .main-content {
+    margin-left: var(--catalog-sidebar-width);
+    transition: none;
+  }
+  #app-view:not(.showing-settings) #open-navigation {
+    display: none;
+  }
+}
+#app-view .bookmark-grid {
+  align-items: start;
+}
+#app-view .bookmark-card {
+  position: relative;
+  background: var(--paper);
+  color: var(--ink);
+  border-color: var(--line);
+  box-shadow: none;
+  transition: background-color 100ms ease;
+}
+#app-view .bookmark-card:hover {
+  transform: none;
+  box-shadow: none;
+  background: var(--surface);
+}
+#app-view .bookmark-card.is-selected {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 var(--focus);
+}
+#app-view .bookmark-card:focus-visible {
+  outline-offset: -3px;
+}
+#app-view .card-title {
+  text-wrap: initial;
+}
+#app-view .card-title button {
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+#app-view .card-title button:hover {
+  color: var(--catalog-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+#app-view .view-list {
+  container-type: normal;
+  display: block;
+  overflow: visible;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+}
+#app-view .view-list .bookmark-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(80px, 13%) auto;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 10px 4px;
+  min-height: 70px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+#app-view .view-list .card-top {
+  display: none;
+}
+#app-view .view-list .card-body {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-rows: auto;
+  gap: 3px 11px;
+  align-items: center;
+  padding: 0;
+}
+#app-view .view-list .card-site-mark {
+  grid-column: 1;
+  grid-row: 1 / span 4;
+  display: grid;
+  place-items: center;
+  align-self: center;
+  width: 34px;
+  height: 37px;
+  color: var(--catalog-accent);
+  background: var(--catalog-tint);
+  border: 0;
+  border-radius: 3px;
+  font: italic 600 22px/1 var(--catalog-serif);
+}
+#app-view .view-list .card-site-mark img {
+  width: 23px;
+  height: 23px;
+  object-fit: contain;
+}
+#app-view .view-list .card-title-row,
+#app-view .view-list .card-description,
+#app-view .view-list .card-metadata,
+#app-view .view-list .search-excerpt {
+  grid-column: 2;
+  grid-row: auto;
+  margin: 0;
+  min-width: 0;
+}
+#app-view .view-list .card-title,
+#app-view .bookmark-grid:not(.view-list) .card-title {
+  margin: 0;
+  font: 500 21px/1.18 var(--catalog-serif);
+  letter-spacing: -0.025em;
+}
+#app-view .view-list .card-title button {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+#app-view .view-list .card-description {
+  color: var(--muted);
+  font-size: 13px;
+  -webkit-line-clamp: 1;
+}
+#app-view .view-list .card-metadata,
+#app-view .bookmark-grid:not(.view-list) .card-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 8px;
+  align-items: center;
+}
+#app-view .card-domain,
+#app-view .card-unread,
+#app-view .catalog-location,
+#app-view .card-state {
+  color: var(--muted);
+  font: 12px/1.4 var(--font-ui);
+}
+#app-view .catalog-location {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#app-view .catalog-location time {
+  font-size: 11px;
+}
+#app-view .card-unread {
+  color: var(--catalog-accent);
+}
+#app-view .card-unread::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  display: inline-block;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: currentColor;
+  margin-right: 4px;
+}
+#app-view .card-state {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+}
+#app-view .card-state:hover,
+#app-view .card-state:focus-visible {
+  text-decoration: underline;
+}
+#app-view .card-state.failed {
+  color: var(--danger);
+}
+#app-view .card-state .icon {
+  width: 13px;
+  height: 13px;
+}
+#app-view .card-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px 5px;
+  margin: 0;
+}
+#app-view .card-tag {
+  border: 0;
+  border-radius: 3px;
+  padding: 1px 3px;
+  color: var(--catalog-accent);
+  font-size: 12px;
+}
+#app-view .view-list .card-footer {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 1px;
+  padding: 0;
+}
+#app-view .card-footer .favorite-button,
+#app-view .card-actions-toggle,
+#app-view .bookmark-grid:not(.view-list) .card-top .favorite-button {
+  position: static;
+  display: inline-grid;
+  place-items: center;
+  width: 35px;
+  min-width: 35px;
+  height: 35px;
+  min-height: 35px;
+  padding: 0;
+  margin: 0;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+}
+#app-view .favorite-button.is-favorite .icon {
+  fill: var(--catalog-accent);
+  color: var(--catalog-accent);
+}
+#app-view .favorite-button .mobile-action-label {
+  display: none;
+}
+#app-view .card-actions-toggle:hover,
+#app-view .favorite-button:hover {
+  background: var(--accent-soft);
+}
+#app-view .card-actions {
+  flex: none;
+  display: block;
+}
+#app-view .bookmark-grid:not(.view-list) {
+  gap: 14px;
+}
+#app-view .bookmark-grid:not(.view-list) .bookmark-card {
+  border-radius: 6px;
+  overflow: clip;
+}
+#app-view .bookmark-grid:not(.view-list) .card-top {
+  background: var(--surface);
+  border-radius: 0;
+}
+#app-view .bookmark-grid:not(.view-list) .catalog-location {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 14px 8px;
+}
+#app-view .bookmark-grid:not(.view-list) .card-footer {
+  justify-content: flex-end;
+}
+#app-view .card-overflow-actions[popover] {
+  position: fixed;
+  inset: auto;
+  z-index: auto;
+  margin: 0;
+  width: min(215px, calc(100vw - 16px));
+  max-width: none;
+  height: auto;
+  overflow-y: auto;
+  padding: 5px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 4px 18px #0003;
+}
+#app-view .card-overflow-actions[popover]:not(:popover-open) {
+  display: none;
+}
+#app-view .card-overflow-actions[popover]:popover-open {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+#app-view .card-overflow-actions .card-action {
+  display: flex;
+  width: 100%;
+  min-height: 36px;
+  height: auto;
+  gap: 8px;
+  padding: 7px 9px;
+  justify-content: flex-start;
+  font-size: 13px;
+  color: var(--ink);
+}
+#app-view .card-overflow-actions .mobile-action-label {
+  display: inline;
+}
+#app-view .card-overflow-actions .card-action:last-child {
+  color: var(--danger);
+  border-top: 1px solid var(--line);
+}
+#app-view .card-overflow-actions .card-action:hover {
+  background: var(--surface);
+}
+.row-selection {
+  display: none;
+}
+.selection-mode .row-selection {
+  display: grid;
+  place-items: center;
+  position: absolute;
+  z-index: 1;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 40px;
+  cursor: pointer;
+}
+.selection-mode.view-list .card-site-mark {
+  visibility: hidden;
+}
+.selection-mode:not(.view-list) .row-selection {
+  position: static;
+  transform: none;
+}
+.row-checkbox {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--catalog-fill);
+}
+#tags-index-layout:has(#tags-alphabet[hidden]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (max-width: 700px) {
+  #app-view .library-content {
+    padding: 15px 15px 30px;
+  }
+  #app-view .topbar {
+    min-height: 52px;
+    gap: 4px;
+    padding-inline: 8px;
+  }
+  #app-view .topbar-location,
+  #app-view .topbar-actions {
+    gap: 4px;
+  }
+  #app-view .topbar .theme-toggle [data-theme-label],
+  #app-view #add-bookmark kbd {
+    display: none;
+  }
+  #app-view .topbar .theme-toggle {
+    min-width: 38px;
+    padding: 6px;
+  }
+  #app-view .library-header {
+    flex-wrap: nowrap;
+    margin-bottom: 8px;
+  }
+  #app-view .library-header h1 {
+    font-size: 36px;
+  }
+  #app-view .results-bar {
+    min-height: 44px;
+    padding: 0;
+  }
+  #app-view .results-tools :is(summary, .button) {
+    min-height: 40px;
+    padding-inline: 9px;
+  }
+  #app-view .view-list .bookmark-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px;
+    padding-block: 8px;
+  }
+  #app-view .view-list .card-body {
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 3px 8px;
+  }
+  #app-view .view-list .card-site-mark {
+    width: 28px;
+    height: 33px;
+    font-size: 19px;
+  }
+  #app-view .view-list .card-title {
+    font-size: 18px;
+  }
+  #app-view .view-list .catalog-location {
+    display: none;
+  }
+  #app-view .view-list .card-description {
+    display: none;
+  }
+  #app-view .view-list .card-footer {
+    grid-column: 2;
+    grid-row: 1;
+    gap: 0;
+  }
+  #app-view .card-footer .favorite-button,
+  #app-view .card-actions-toggle {
+    min-width: 38px;
+    width: 38px;
+    min-height: 44px;
+    height: 44px;
+  }
+  #app-view .card-overflow-actions .card-action {
+    min-height: 44px;
+  }
+  #app-view .view-list .card-tags .card-tag,
+  #app-view .card-state {
+    min-height: 24px;
+  }
+  #app-view .selection-mode .row-selection {
+    left: 0;
+    width: 34px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #app-view .bookmark-card {
+    transition: none;
+  }
+}
+
+@media (max-width: 700px) {
+  #app-view .bookmark-grid:not(.view-list) .card-top .favorite-button {
+    width: 44px;
+    height: 44px;
+  }
+}
+#app-view .card-overflow-actions .card-action.read {
+  color: var(--success);
+}
+
+.mobile-wordmark,
+#sidebar .sidebar-theme {
+  display: none;
+}
+@media (max-width: 700px) {
+  #app-view:not(.showing-settings) .topbar .theme-toggle {
+    display: none;
+  }
+  #sidebar .sidebar-theme {
+    display: flex;
+  }
+  #app-view:not(.nested-destination) .topbar #breadcrumb {
+    display: none;
+  }
+  #app-view:not(.nested-destination) .mobile-wordmark {
+    display: inline;
+    font: 600 23px/1 var(--catalog-serif);
+    letter-spacing: -0.055em;
+  }
+  #app-view:not(.nested-destination) #open-navigation {
+    gap: 9px;
+    color: var(--ink);
+  }
+  #app-view .topbar {
+    padding-inline: 13px;
+  }
+}
+
+#bulk-bar {
+  background: color-mix(in srgb, var(--catalog-fill) 84%, #17141e);
+}
+
+#app-view .main-footer {
+  color: var(--muted);
+}

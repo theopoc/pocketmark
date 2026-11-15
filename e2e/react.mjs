@@ -1,3 +1,4 @@
+import { openDisplay } from './navigation.mjs';
 import assert from 'node:assert/strict';
 
 // Exercise the browser behavior that changes when keyed React nodes survive a
@@ -5,6 +6,7 @@ import assert from 'node:assert/strict';
 export async function reactJourney(page, base) {
   const previous = page.url();
   const viewport = page.viewportSize();
+  const fixtureURL = new URL('/?q=React+thumbnail+retry+fixture', base).href;
   const view = await page.locator('#view-grid').getAttribute('aria-pressed') === 'true' ? 'grid' : 'list';
   const created = await page.request.post(new URL('/api/links', base).href, { data: { url: 'https://example.com/react-regression', title: 'React thumbnail retry fixture', tags: [] } });
   assert.equal(created.status(), 201);
@@ -36,24 +38,28 @@ export async function reactJourney(page, base) {
   await page.route('**/api/stats', stats);
   await page.route(`**/api/links/${link.id}/favicon?*`, favicon);
   try {
-    await page.locator('#view-grid').click();
-    await page.goto(new URL('/?q=React+thumbnail+retry+fixture', base).href);
+    await page.goto(fixtureURL);
     const card = page.locator(`.bookmark-card[data-id="${link.id}"]`);
     await card.waitFor();
+    await openDisplay(page);
     await page.locator('#view-grid').click();
     await firstFailure;
     await card.locator('.card-thumbnail').waitFor({ state: 'detached' });
     await page.waitForFunction(() => document.getElementById('refresh-button').getAttribute('aria-disabled') === 'false');
+    await openDisplay(page);
     await page.locator('#refresh-button').click();
     await card.locator('.card-thumbnail').waitFor();
     await page.waitForFunction(id => document.querySelector(`.bookmark-card[data-id="${id}"] .card-thumbnail`)?.naturalWidth > 0, link.id);
     assert.ok(requests >= 2, 'Refresh retries a transient thumbnail failure');
+    await openDisplay(page);
     await page.locator('#view-list').click();
     await initialIconFailures;
     await page.waitForFunction(() => document.getElementById('refresh-button').getAttribute('aria-disabled') === 'false');
+    await openDisplay(page);
     await page.locator('#refresh-button').click();
     await card.locator('.card-site-mark img').waitFor();
     assert.ok(faviconRequests >= 3, 'Refresh starts a new favicon attempt after the bounded retry is exhausted');
+    await openDisplay(page);
     await page.locator('#view-grid').click();
     await card.locator('.card-title button').click();
     await page.locator('#reader-dialog').waitFor();
@@ -84,8 +90,11 @@ export async function reactJourney(page, base) {
     await page.unroute(`**/api/links/${link.id}/thumbnail`, thumbnail);
     await page.unroute('**/api/stats', stats);
     await page.unroute(`**/api/links/${link.id}/favicon?*`, favicon);
+    await page.goto(fixtureURL);
+    await page.locator(`.bookmark-card[data-id="${link.id}"]`).waitFor();
+    await openDisplay(page);
+    await page.locator('#view-' + view).click();
     assert.equal((await page.request.delete(new URL(`/api/links/${link.id}`, base).href)).status(), 200);
     await page.goto(previous);
-    await page.locator('#view-' + view).click();
   }
 }

@@ -1,0 +1,167 @@
+#login-view:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--paper);
+  color: var(--ink);
+}
+#login-view .login-intro {
+  padding: 12px clamp(18px, 4vw, 64px);
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+}
+#login-view .brand,
+#login-view .login-intro .theme-toggle {
+  color: var(--ink);
+}
+#login-view .login-intro .theme-toggle {
+  border-color: var(--control-line);
+}
+#login-view .login-intro .theme-toggle:is(:hover, :focus-visible) {
+  background: var(--control-hover);
+}
+#login-view .login-panel {
+  padding: clamp(28px, 7vh, 80px) 20px;
+  align-items: start;
+}
+#login-view .login-card {
+  width: min(100%, 420px);
+}
+#login-title,
+#settings-index-title,
+#settings-page .settings-workspace .settings-section h2 {
+  font:
+    500 clamp(28px, 4vw, 40px)/1.13 Georgia,
+    serif;
+  letter-spacing: -0.035em;
+  margin: 0 0 14px;
+}
+.account-steps {
+  display: flex;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px;
+  gap: 15px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.account-steps li {
+  padding-block: 5px;
+}
+.account-steps [aria-current="step"] {
+  color: var(--ink);
+  box-shadow: inset 0 -2px var(--focus);
+  font-weight: 650;
+}
+#manual-setup-key > summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+#manual-setup-key .button {
+  margin-top: 8px;
+}
+#login-view .mfa-qr {
+  width: 160px;
+  height: 160px;
+}
+#bookmark-form #upload-file-button {
+  margin-right: auto;
+}
+#bookmark-options {
+  margin-block: 16px 8px;
+}
+#bookmark-options > summary {
+  cursor: pointer;
+  padding-block: 10px;
+}
+#bookmark-form .bookmark-capture-option {
+  margin-top: 12px;
+}
+.showing-settings #settings-navigation {
+  flex-direction: column;
+}
+.settings-groups {
+  display: grid;
+  gap: 18px;
+}
+.settings-group h3 {
+  color: var(--muted);
+  margin: 0 8px 5px;
+  font-size: 12px;
+  font-weight: 650;
+}
+.showing-settings .settings-navigation [data-settings-section="sync"] {
+  margin-top: 0;
+}
+#settings-page .settings-workspace .settings-section > p {
+  max-width: 65ch;
+}
+#settings-overview {
+  margin-left: auto;
+}
+.showing-settings .settings-topbar .theme-toggle {
+  margin-left: 0;
+}
+#settings-page.settings-index .settings-topbar .theme-toggle {
+  margin-left: auto;
+}
+#settings-page.settings-index .settings-layout {
+  background: var(--paper);
+  display: block;
+}
+#settings-page.settings-index .settings-workspace {
+  display: none;
+}
+#settings-page.settings-index #settings-navigation {
+  position: static;
+  width: min(100%, 1000px);
+  height: auto;
+  border: 0;
+  margin: 0 auto;
+  padding: clamp(24px, 4vw, 52px) clamp(16px, 4vw, 44px);
+  background: var(--paper);
+}
+.settings-index .settings-groups {
+  grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr));
+  gap: 24px;
+  margin: 12px 0 20px;
+}
+.settings-index .settings-group h3 {
+  margin: 0 0 10px;
+}
+#settings-page .settings-group .nav-item {
+  width: 100%;
+  text-align: left;
+}
+.settings-index .settings-group .nav-item {
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+#settings-page .settings-library-back {
+  width: fit-content;
+}
+#settings-page:not(.settings-index) #settings-index-title {
+  font-size: 24px;
+  margin-inline: 8px;
+}
+@media (max-width: 900px) {
+  #settings-page:not(.settings-index) #settings-navigation {
+    display: none;
+  }
+  #settings-page .settings-navigation .nav-item {
+    min-height: 44px;
+  }
+  .settings-index .settings-groups {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+}
+@media (max-width: 600px) {
+  #login-view .login-intro {
+    padding: 10px 16px;
+  }
+  #login-view .login-panel {
+    padding: 24px 16px;
+  }
+}

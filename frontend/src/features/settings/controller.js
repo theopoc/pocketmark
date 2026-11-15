@@ -221,6 +221,9 @@ export function createSettings(
     setTokensBusy(tokensBusy);
   }
   function syncSettingsNavigation() {
+    $("settings-overview").disabled = !!(
+      state.mfaManagementBusy || state.deferredLogin
+    );
     document.querySelectorAll("[data-settings-section]").forEach((button) => {
       button.disabled =
         (state.mfaManagementBusy || state.deferredLogin) &&
@@ -244,6 +247,11 @@ export function createSettings(
     $("library-content").hidden = active;
     $("library-navigation").hidden = active;
     $("settings-navigation").hidden = !active;
+    $("settings-page").classList.toggle(
+      "settings-index",
+      state.settingsSection === "overview",
+    );
+    $("settings-overview").hidden = state.settingsSection === "overview";
     $("app-view").classList.toggle("showing-settings", active);
     renderBreadcrumb();
     document.querySelectorAll("[data-settings-panel]").forEach((panel) => {
@@ -261,16 +269,7 @@ export function createSettings(
         activeMotion.get(element)?.cancel(),
       );
     } else if (animate && entering) {
-      // The rail changes context as the settings workspace settles beside it.
-      move($("settings-navigation"), [{ opacity: 0.75 }, { opacity: 1 }]);
-      move(
-        $("settings-page"),
-        [
-          { opacity: 0.75, transform: "translateX(12px)" },
-          { opacity: 1, transform: "translateX(0)" },
-        ],
-        220,
-      );
+      move($("settings-page"), [{ opacity: 0.92 }, { opacity: 1 }], 140);
     }
   }
   function revealSettingsSection() {
@@ -301,9 +300,12 @@ export function createSettings(
     .observe(new browser.ResizeObserver(revealSettingsSection))
     .observe($("settings-navigation"));
   function focusSettings() {
-    const heading = document.querySelector(
-      `[data-settings-panel="${state.settingsSection}"] h2`,
-    );
+    const heading =
+      state.settingsSection === "overview"
+        ? $("settings-index-title")
+        : document.querySelector(
+            `[data-settings-panel="${state.settingsSection}"] h2`,
+          );
     heading.tabIndex = -1;
     heading.focus({ preventScroll: true });
     revealSettingsSection();
@@ -353,14 +355,27 @@ export function createSettings(
       lifecycle.listen(button, "click", () => leaveSettings()),
     );
   lifecycle.listen($("settings-button"), "click", () =>
-    navigateSettings("api-keys"),
+    navigateSettings("overview"),
+  );
+  lifecycle.listen($("settings-overview"), "click", () =>
+    navigateSettings("overview"),
   );
   document
-    .querySelectorAll('#settings-page a[href="/?settings=api-keys"]')
+    .querySelectorAll('#settings-page a[href^="/?settings="]')
     .forEach((link) =>
       lifecycle.listen(link, "click", (event) => {
         event.preventDefault();
-        navigateSettings("api-keys");
+        if (state.mfaManagementBusy || state.deferredLogin) return;
+        const section = new URL(link.href).searchParams.get("settings");
+        navigateSettings(section);
+        if (link.dataset.keyProfile) {
+          $("token-create").open = true;
+          $("token-profile").value = link.dataset.keyProfile;
+          $("token-profile").dispatchEvent(
+            new Event("change", { bubbles: true }),
+          );
+          $("token-name").focus();
+        }
       }),
     );
   $("sync-address").value = new URL("/dav/", location.origin).href;

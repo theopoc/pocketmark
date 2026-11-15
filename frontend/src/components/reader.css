@@ -1,0 +1,212 @@
+#reader-dialog {
+  max-width: 100vw;
+  width: min(1120px, calc(100vw - 48px));
+  background: var(--paper);
+  color: var(--ink);
+}
+#reader-dialog .reader-sticky-heading {
+  padding: 10px clamp(16px, 3vw, 32px);
+}
+#reader-dialog .reader-actions,
+#asset-viewer .asset-heading-actions {
+  display: flex;
+  flex: 0 1 auto;
+  gap: 6px;
+  align-items: center;
+}
+#reader-dialog .reader-back,
+#reader-dialog .reader-original {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  border: 0;
+  border-radius: 5px;
+  padding: 8px 4px;
+  min-height: 44px;
+  text-decoration: none;
+}
+#reader-dialog .reader-original {
+  color: var(--muted);
+  font-weight: 500;
+}
+#reader-dialog .reader-original:hover,
+#reader-dialog .reader-back:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+#reader-dialog[data-has-text="false"] .reader-original {
+  background: var(--catalog-fill);
+  color: white;
+  padding-inline: 16px;
+}
+#reader-dialog .reader-back .icon,
+#reader-dialog .reader-original .icon {
+  width: 17px;
+  height: 17px;
+}
+#reader-dialog .reader-text-panel {
+  padding: clamp(24px, 5vw, 64px) clamp(18px, 4vw, 52px) 64px;
+  overscroll-behavior: contain;
+}
+#reader-dialog .reader-text-panel > * {
+  max-width: 46rem;
+}
+#reader-dialog .reader-article-header {
+  margin-bottom: 22px;
+}
+#reader-dialog .reader-domain {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+#reader-dialog #reader-title {
+  font:
+    500 clamp(30px, 4vw, 50px)/1.1 Georgia,
+    "Times New Roman",
+    serif;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+#reader-dialog .reader-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 8px;
+}
+#reader-dialog .reader-meta #reader-status::before {
+  content: none;
+}
+#reader-dialog #reader-content {
+  color: var(--ink);
+  font:
+    19px/1.65 Georgia,
+    "Times New Roman",
+    serif;
+  margin-top: 12px;
+}
+#reader-dialog[data-has-text="false"] #reader-content {
+  font: inherit;
+  color: var(--muted);
+}
+#reader-dialog .reader-options summary {
+  cursor: pointer;
+  font-size: 13px;
+}
+#reader-dialog[data-copies-open="true"]
+  :is(#reader-content, #reader-layout, #reader-reading-bar) {
+  display: none;
+}
+#reader-dialog .saved-format-list {
+  margin-block: 8px;
+}
+#reader-dialog .saved-format {
+  gap: 10px;
+  min-height: 48px;
+  padding: 6px 0;
+}
+#reader-dialog .saved-format > [data-icon]:first-child .icon {
+  width: 20px;
+  height: 20px;
+}
+#reader-dialog .saved-format-name {
+  font-size: 14px;
+}
+#reader-dialog .saved-format-description {
+  display: none;
+}
+#reader-dialog .section-heading {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+#reader-dialog .reader-notebook {
+  background: var(--surface);
+}
+#reader-dialog .asset-item {
+  overflow-wrap: anywhere;
+}
+#asset-viewer .dialog-heading {
+  align-items: center;
+  gap: 10px;
+}
+#asset-viewer-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#asset-viewer .asset-viewer-image {
+  object-fit: contain;
+}
+#annotation-dialog blockquote {
+  margin: 14px 0;
+  padding: 8px 14px;
+  border-inline-start: 3px solid var(--focus);
+  font:
+    17px/1.6 Georgia,
+    serif;
+}
+@media (max-width: 680px) {
+  #reader-dialog,
+  #asset-viewer {
+    width: 100%;
+    max-width: none;
+    max-height: 100dvh;
+    height: 100dvh;
+    margin: 0;
+    inset: 0;
+    border-radius: 0;
+  }
+  #reader-dialog > .reader-sticky-heading {
+    padding: max(6px, env(safe-area-inset-top)) 14px 6px;
+  }
+  #reader-dialog .reader-text-panel {
+    padding: 22px 20px max(32px, env(safe-area-inset-bottom));
+  }
+  #reader-dialog .reader-heading-row {
+    gap: 6px;
+  }
+  #asset-viewer .dialog-heading {
+    flex-wrap: wrap;
+  }
+  #asset-viewer .asset-heading-actions {
+    margin-inline-start: auto;
+  }
+  #asset-viewer .asset-heading-actions button {
+    min-height: 44px;
+  }
+}
+@media print {
+  #reader-dialog {
+    width: 100%;
+    max-width: none;
+  }
+  #reader-dialog #reader-content {
+    display: block;
+    color: black;
+  }
+}
+#reader-dialog .reader-reading-bar {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+}
+#reader-dialog .reader-reading-bar:not([hidden]) {
+  display: block;
+}
+#reader-dialog .reader-selection-action:not([hidden]) {
+  position: absolute;
+  top: 62px;
+  right: clamp(14px, 3vw, 32px);
+  z-index: 4;
+  min-height: 44px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.18);
+}
+#reader-dialog[data-copies-open="true"] #reader-reading-bar {
+  display: none;
+}

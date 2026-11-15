@@ -58,7 +58,7 @@ export function HelpDialog() {
               <ol>
                 <li>
                   {"Choose "}
-                  <strong>{"Add bookmark"}</strong>
+                  <strong>{"Save bookmark"}</strong>
                   {" and paste a URL."}
                 </li>
                 <li>
@@ -79,7 +79,7 @@ export function HelpDialog() {
                 {"Browse your full index in "}
                 <strong>{"Tags"}</strong>
                 {
-                  ". To edit several bookmarks at once, click or tap an empty area of each bookmark, then choose "
+                  ". To edit several bookmarks at once, choose Select, check each bookmark, then choose an action under "
                 }
                 <strong>{"Actions"}</strong>
                 {". You can also focus a bookmark and press "}
@@ -112,7 +112,11 @@ export function HelpDialog() {
                 }
               </p>
               {"\n            "}
-              <p>{"Clear the active chips to remove filters."}</p>
+              <p>
+                {
+                  "When a collection has no matches, use the search link in the empty state to find the same words in all bookmarks."
+                }
+              </p>
               {"\n          "}
             </div>
             {"\n        "}
@@ -128,19 +132,16 @@ export function HelpDialog() {
             <div className="help-answer">
               {"\n            "}
               <p>
-                {
-                  "Open a bookmark’s title to see its saved HTML, screenshots and PDFs. Choose a format to open the latest copy and use the file selector for earlier copies. To read extracted text, choose "
-                }
-                <strong>{"Reading options → Text & highlights"}</strong>
-                {
-                  ". Reading options also contains text size, formatted view and capture controls."
-                }
+                Open the title to read saved text or preview a file. Open{" "}
+                <strong>Copies</strong> to see saved versions, open the original
+                from its link, or choose <strong>Notes</strong> to return to a
+                highlight.
               </p>
               {"\n            "}
               <ul>
                 <li>
                   {"Select a passage, then choose "}
-                  <strong>{"Highlight"}</strong>
+                  <strong>{"Highlight selection"}</strong>
                   {"."}
                 </li>
                 <li>

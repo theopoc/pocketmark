@@ -112,7 +112,7 @@ async function run(job) {
       }
     }
     job.status = job.items.every((item) => item.status === "saved") ? "done" : "paused";
-    job.message = job.status === "done" ? "Saved to Pocketmark." : "Bookmark saved. Some captures need attention; retry or discard them.";
+    job.message = job.status === "done" ? "Saved to Pocketmark." : "Retry the failed copies or discard the pending files.";
   } catch (error) {
     job.status = "paused";
     job.message = `${job.linkId ? "Bookmark saved. " : "Bookmark not confirmed. "}${error.message} Retry manually.`;
@@ -151,7 +151,7 @@ async function dispatch(message) {
       if (!await chrome.permissions.contains({ origins: [candidate.server + "/*"] })) throw new Error("Server access was not granted. Click Connect to retry.");
       const session = await request(candidate, "/api/session");
       if (session?.authenticated !== true) throw new Error("The server did not confirm an authenticated connection.");
-      await chrome.storage.local.set({ ...candidate, pendingConnection: null });
+      await chrome.storage.local.set({ ...candidate, pendingConnection: null, apiKeySetupServer: null });
       return { connected: true };
     }
     if (message.type === "collection") {

@@ -1,3 +1,4 @@
+import "./reader.css";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
@@ -13,24 +14,25 @@ export function ReaderDialog() {
       <div className="dialog-heading reader-sticky-heading">
         <div className="reader-heading-row">
           {"\n      "}
-          <span className="reader-heading-label">
-            <span data-icon="bookmark" aria-hidden="true"></span>
-            {"Bookmark"}
-          </span>
-          {"\n      "}
+          <Button
+            type="button"
+            className="reader-back close-dialog"
+            aria-label="Back to library"
+          >
+            <span data-icon="arrow-left" aria-hidden="true"></span>
+            <span>Back to library</span>
+          </Button>
           <div className="reader-actions">
-            {"\n        "}
-            <a
-              id="reader-original"
-              className="button primary"
-              target="_blank"
-              rel="noopener noreferrer"
-              hidden
+            <Button
+              id="reader-files-toggle"
+              className="button subtle"
+              type="button"
+              aria-expanded="false"
+              aria-controls="reader-formats reader-files"
+              disabled
             >
-              {"Open original "}
-              <span data-icon="external" aria-hidden="true"></span>
-            </a>
-            {"\n        "}
+              Copies
+            </Button>
             <Button
               id="reader-notebook-toggle"
               type="button"
@@ -42,19 +44,20 @@ export function ReaderDialog() {
               {"Notes"}
             </Button>
             {"\n        "}
-            <Button
-              type="button"
-              className="icon-button close-dialog"
-              aria-label="Close reader"
-            >
-              <span data-icon="close" aria-hidden="true"></span>
-            </Button>
-            {"\n      "}
           </div>
           {"\n    "}
         </div>
       </div>
       {"\n    "}
+      <Button
+        id="reader-highlight"
+        type="button"
+        className="button primary reader-selection-action"
+        hidden
+        data-highlight-selection
+      >
+        {"Highlight selection"}
+      </Button>
       <p id="reader-error" className="form-error" role="alert"></p>
       {"\n    "}
       <div className="reader-workspace">
@@ -62,14 +65,24 @@ export function ReaderDialog() {
         <section
           id="reader-text-panel"
           className="reader-text-panel"
-          aria-label="Bookmark and saved formats"
+          aria-label="Reading pane"
           tabIndex="0"
         >
           {"\n        "}
           <header className="reader-article-header">
-            <h2 id="reader-title"></h2>
+            <p id="reader-domain" className="reader-domain"></p>
+            <h2 id="reader-title" tabIndex="-1"></h2>
             <div className="reader-meta">
-              <p id="reader-domain" className="reader-domain"></p>
+              <a
+                id="reader-original"
+                className="reader-original"
+                target="_blank"
+                rel="noopener noreferrer"
+                hidden
+              >
+                Open original{" "}
+                <span data-icon="external" aria-hidden="true"></span>
+              </a>
               <p id="reader-status" className="muted small" role="status"></p>
             </div>
           </header>
@@ -82,23 +95,8 @@ export function ReaderDialog() {
           >
             {"\n          "}
             <div className="saved-formats-heading">
-              <h3 id="reader-formats-title">{"Saved formats"}</h3>
-              <Button
-                id="reader-files-toggle"
-                className="button subtle"
-                type="button"
-                aria-expanded="false"
-                aria-controls="reader-files"
-              >
-                {"Manage files"}
-              </Button>
+              <h3 id="reader-formats-title">Saved copies</h3>
             </div>
-            {"\n          "}
-            <p className="small muted">
-              {
-                "Choose a saved copy. The latest opens first; earlier copies stay available in the file selector."
-              }
-            </p>
             <p
               id="reader-formats-summary"
               className="small muted"
@@ -143,7 +141,7 @@ export function ReaderDialog() {
                 <span className="saved-format-name">
                   {"Screenshot"}
                   <span className="saved-format-description">
-                    {"Page captures and saved images"}
+                    {"Saved image"}
                   </span>
                 </span>
                 <span
@@ -202,12 +200,6 @@ export function ReaderDialog() {
               {"Retry saved formats"}
             </Button>
             {"\n          "}
-            <p className="small muted">
-              {
-                "Save HTML when adding or editing a bookmark. Capture screenshots and PDFs with the browser extension, or attach a file under Saved formats → Manage files."
-              }
-            </p>
-            {"\n        "}
           </section>
           {"\n  "}
           <section
@@ -218,13 +210,13 @@ export function ReaderDialog() {
           >
             {"\n    "}
             <div className="section-heading">
-              <h3 id="saved-files-title">{"Attached files"}</h3>
+              <h3 id="saved-files-title">{"Copy history"}</h3>
               <Button
                 id="reader-files-close"
                 className="text-button"
                 type="button"
               >
-                {"Back to formats"}
+                {"Back to reading"}
               </Button>
               <Button
                 id="asset-upload-button"
@@ -267,14 +259,6 @@ export function ReaderDialog() {
               <div className="reader-options-content">
                 <div className="reader-tools">
                   <Button
-                    id="reader-highlight"
-                    type="button"
-                    className="text-button"
-                    data-highlight-selection
-                  >
-                    {"Highlight selection"}
-                  </Button>
-                  <Button
                     id="reader-text-mode"
                     className="button subtle"
                     aria-pressed="false"
@@ -293,8 +277,8 @@ export function ReaderDialog() {
                   <label className="inline-check">
                     {"Text size "}
                     <select id="reader-size" aria-label="Reader text size">
-                      <option value="17">{"Normal"}</option>
-                      <option value="20">{"Large"}</option>
+                      <option value="19">{"Normal"}</option>
+                      <option value="22">{"Large"}</option>
                       <option value="24">{"Extra large"}</option>
                     </select>
                   </label>
@@ -357,7 +341,7 @@ export function ReaderDialog() {
         <aside
           id="reader-notebook"
           className="reader-notebook"
-          aria-label="Notes and saved files"
+          aria-label="Notes and highlights"
           hidden
         >
           {"\n        "}

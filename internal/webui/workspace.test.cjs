@@ -192,7 +192,7 @@ test('a failed bookmark save never starts a capture and standalone files never r
 });
 
 test('settings section links retain library context and reject unknown sections', () => {
-  for (const section of ['api-keys', '2fa', 'sessions', 'backup', 'password', 'sync', 'mobile']) {
+  for (const section of ['overview', 'api-keys', '2fa', 'sessions', 'backup', 'password', 'sync', 'mobile', 'preferences', 'transfer']) {
     const route = readRoute(`?settings=${section}&filter=favorite&q=reading&page=3&view=tags&tagQuery=go`);
     assert.equal(route.settingsSection, section);
     assert.deepEqual(readRoute(routeSearch(route)), route);

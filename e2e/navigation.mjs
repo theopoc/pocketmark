@@ -3,10 +3,7 @@ import assert from 'node:assert/strict';
 export async function openNavigation(page) {
   if (await page.locator('.showing-settings').count()) return; // Settings keeps its navigation visible.
   const desktop = await page.evaluate(() => matchMedia('(min-width: 901px) and (hover: hover) and (pointer: fine)').matches);
-  if (desktop) {
-    await page.mouse.move(2, 200);
-    await page.locator('#sidebar-mode').focus();
-  } else if (!await page.locator('#navigation-dialog').evaluate(node => node.open)) {
+  if (!desktop && !await page.locator('#navigation-dialog').evaluate(node => node.open)) {
     await page.locator('#open-navigation').click();
   }
 }
@@ -20,6 +17,9 @@ export async function openWorkspaceActions(page) {
 }
 
 export async function clickNavigation(page, selector) {
+  if (await page.locator('.showing-settings').count() && /\[data-settings-(?:section|back)\b/.test(selector) && !await page.locator(selector).first().isVisible()) {
+    await page.locator('#settings-overview').click();
+  }
   if (['#import-button', '#export-button', '#logout-button'].includes(selector)) {
     await openWorkspaceActions(page);
   } else await openNavigation(page);
@@ -83,39 +83,16 @@ export async function navigationJourney(page) {
   const original = page.viewportSize();
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.mouse.move(500, 400);
-  assert.equal(await page.locator('#sidebar').isVisible(), false);
+  const left = () => page.locator('#main-content').evaluate(node => node.getBoundingClientRect().left);
+  assert.equal(await page.locator('#sidebar').isVisible(), true, 'wide screens show library navigation immediately');
+  const initialLeft = await left();
   await page.mouse.move(2, 400);
-  await page.locator('#sidebar').waitFor({ state: 'visible' });
-  await page.locator('#sidebar-mode').click();
-  assert.equal(await page.locator('#sidebar-mode').getAttribute('aria-pressed'), 'true');
-  await page.mouse.move(600, 400);
-  await page.reload();
-  assert.equal(await page.locator('#sidebar-mode').getAttribute('aria-pressed'), 'true');
-  await page.locator('#sidebar-mode').click();
-  await page.locator('#sidebar').waitFor({ state: 'hidden' });
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'open-navigation');
-  await page.mouse.move(600, 400);
-  await page.mouse.move(2, 400);
-  await page.locator('#sidebar').waitFor({ state: 'visible' });
-  await page.locator('#sidebar-mode').click();
-  await page.locator('#sidebar-mode').focus();
-  await page.keyboard.press('Enter');
-  await page.locator('#sidebar').waitFor({ state: 'hidden' });
-  await page.mouse.move(600, 400);
-  await page.mouse.move(2, 400);
-  await page.locator('#sidebar').waitFor({ state: 'visible' });
-  await page.locator('#sidebar-mode').click();
-  await page.mouse.move(600, 400);
-  await page.locator('#sidebar-mode').focus();
-  await page.keyboard.press('Enter');
-  await page.locator('#sidebar').waitFor({ state: 'hidden' });
-  await page.mouse.move(2, 400);
-  await page.locator('#sidebar').waitFor({ state: 'visible' });
-  await page.locator('#main-content').click({ position: { x: 500, y: 200 } });
-  await page.mouse.move(600, 400);
-  await page.locator('#sidebar').waitFor({ state: 'hidden' });
-  await page.locator('#open-navigation').click();
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'sidebar-mode');
+  await openWorkspaceActions(page);
+  await page.locator('#import-button').hover();
+  assert.equal(await left(), initialLeft, 'hover and open menu keep content in place');
+  await page.keyboard.press('Escape');
+  await page.mouse.move(680, 320);
+  assert.equal(await left(), initialLeft);
   await page.locator('#main-content').focus();
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 800 });
@@ -147,6 +124,7 @@ export async function navigationJourney(page) {
   }
   await page.setViewportSize(original);
   await page.locator('#add-bookmark').click();
+  await page.locator('#bookmark-options > summary').click();
   await page.locator('#bookmark-title').fill('Unsaved sign-out draft');
   await page.mouse.click(0, 0);
   await page.locator('#bookmark-dialog').waitFor({ state: 'hidden' });
@@ -217,4 +195,9 @@ export async function breadcrumbJourney(page, ids) {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
   }
   await page.setViewportSize(original);
+}
+
+export async function openDisplay(page) {
+  if (!await page.locator('#display-settings').evaluate(node => node.open))
+    await page.locator('#display-settings > summary').click();
 }

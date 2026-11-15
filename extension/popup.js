@@ -13,12 +13,13 @@ if (chrome.extension?.getViews({ type: "popup" }).includes(window)) {
 }
 const collectionNameLimit = PocketmarkNameLimit.create($("collection-name"), $("collection-name-hint"));
 let activeTab, connected = false, connecting = false, loaded = false, ready = false, settingsOpen = false, task = null, tags = [], collections = [], poll, tagTimer, tagQuery = 0, taskSignature, collectionSession = 0;
-function status(message, error = false, success = false) {
+let libraryServer = "", credentialServer = "", savedLink = null;
+function status(message, error = false) {
   const changed = $("status").textContent !== message;
   $("status").setAttribute("role", error ? "alert" : "status");
   $("status").setAttribute("aria-live", error ? "assertive" : "polite");
-  $("status").textContent = message; $("status").className = error ? "notice error" : success ? "notice success" : "notice";
-  if ((error || success) && changed) $("status").scrollIntoView?.({ block: "nearest" });
+  $("status").textContent = message; $("status").className = error ? "notice error" : "notice";
+  if (error && changed) $("status").scrollIntoView?.({ block: "nearest" });
 }
 async function send(type, values = {}) {
   const response = await chrome.runtime.sendMessage({ type, ...values });
@@ -36,7 +37,7 @@ function controls() {
   $("task-actions").hidden = settingsOpen || !paused;
   $("background-note").hidden = settingsOpen || !running;
   $("footer").hidden = !(editing || settingsOpen || running || paused);
-  $("task").hidden = settingsOpen || !task || (task.status === "done" && task.fields.url !== activeTab?.url);
+  $("task").hidden = settingsOpen || !task || (task.status === "done" && !currentReceipt());
   $("unsupported").hidden = settingsOpen || !ready || !connected || loaded || running || paused;
   $("connection-toggle").hidden = !connected;
   $("connection-toggle").textContent = settingsOpen ? "Back to bookmark" : "Connection";
@@ -52,10 +53,12 @@ function showSettings(open) {
 }
 function captureHint() {
   const count = Object.keys(formats).filter((mode) => $("capture-" + mode).checked).length;
-  $("capture-count").textContent = count ? `${count} selected` : "Optional";
-  $("save-hint").textContent = count ? `Bookmark + ${count} capture${count === 1 ? "" : "s"}` : "Bookmark only";
+  $("capture-count").textContent = count ? `${count} selected` : "";
+  const action = savedLink ? "Save changes" : "Save bookmark";
+  $("save").textContent = count ? `${action} + ${count} ${count === 1 ? "copy" : "copies"}` : action;
 }
 function renderTags() {
+  $("tag-count").textContent = tags.length ? String(tags.length) : "";
   $("selected-tags").replaceChildren();
   for (const tag of tags) {
     const item = document.createElement("li"), label = document.createElement("span"), button = document.createElement("button");
@@ -96,17 +99,29 @@ function tagOptions(values) {
 }
 async function load() {
   loaded = false; controls();
-  if (!activeTab?.url || !/^https?:\/\//i.test(activeTab.url)) { status("Open a regular http(s) page to save it.", true); return; }
+  if (!activeTab?.url || !/^https?:\/\//i.test(activeTab.url)) { status(""); return; }
   const data = await send("load", { tabId: activeTab.id });
+  libraryServer = data.server;
+  savedLink = data.link;
   collections = data.collections;
   renderCollections(data.link?.collectionId);
   $("title").value = data.link?.title || activeTab.title || activeTab.url;
   tags = data.link?.tags || []; renderTags();
   tagOptions(data.tags);
-  $("save").textContent = data.link ? "Save changes" : "Save bookmark";
-  status(task && (task.status !== "done" || task.fields.url === activeTab?.url) ? "" : data.link ? "Already saved. Edit its title, collection or tags." : "Ready to save this page.");
-  if (data.link && task?.status === "done" && task.server === data.server && task.fields.url === activeTab.url) status("Saved to Pocketmark.", false, true);
+  $("editor-heading").textContent = savedLink ? "Edit bookmark" : "Save this page";
+  if (currentReceipt()) receiptHeading();
+  status(savedLink && !currentReceipt() && (!task || task.status === "done") ? `Saved in ${destination(savedLink.collectionId)}` : "");
   loaded = true; controls();
+}
+function currentReceipt() {
+  return task?.status === "done" && task.fields.url === activeTab?.url && task.server === libraryServer && savedLink && task.linkId === savedLink.id;
+}
+function destination(id) {
+  const collection = collections.find(value => value.id === id);
+  return collection ? collectionPath(collection) : id ? "your library" : "Inbox";
+}
+function receiptHeading() {
+  $("task-heading").textContent = `Saved in ${destination(savedLink.collectionId)}`;
 }
 function renderTask(job) {
   const signature = JSON.stringify(job);
@@ -117,16 +132,25 @@ function renderTask(job) {
   const changedState = task?.status !== job?.status || task?.id !== job?.id;
   task = job;
   if (job) {
+    if (ready && changedState && job.status === "done" && job.linkId && job.server === libraryServer && job.fields.url === activeTab?.url) {
+      savedLink = { id: job.linkId, collectionId: job.fields.collectionId };
+      $("editor-heading").textContent = "Edit bookmark";
+    }
     $("task").setAttribute("data-state", job.status);
     if (changedState) $("task").open = job.status !== "done";
-    $("task-heading").textContent = job.status === "done" ? (job.fields.url === activeTab?.url ? "Saved to Pocketmark" : "Previous save") : job.status === "paused" ? "Save needs attention" : "Saving to Pocketmark";
+    if (currentReceipt()) receiptHeading();
+    else $("task-heading").textContent = job.status === "paused" ? (job.linkId ? "Bookmark saved · copies need attention" : "Bookmark needs attention") : job.status === "done" ? "Bookmark saved" : "Saving to Pocketmark";
     const saved = job.items.filter((item) => item.status === "saved").length;
-    $("task-count").textContent = job.items.length ? `${saved}/${job.items.length}` : "";
-    $("task-count").setAttribute("aria-label", `${saved} of ${job.items.length} captures saved`);
+    $("task-count").textContent = job.items.length ? (job.status === "done" ? `${saved} ${saved === 1 ? "copy" : "copies"}` : `${saved}/${job.items.length}`) : "";
+    $("task-count").setAttribute("aria-label", `${saved} of ${job.items.length} copies saved`);
     $("task-icon").setAttribute("d", job.status === "done" ? "m5 12 4 4L19 6" : job.status === "paused" ? "M12 4v9m0 5v1" : "M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-2l2 2M4 17l2 2a7 7 0 0 0 12-2");
     $("task-title").textContent = job.fields.title || job.fields.url;
-    $("task-message").textContent = job.message;
+    $("task-message").textContent = job.status === "done" ? "" : job.message;
     $("task-message").className = job.status === "paused" ? "error" : "";
+    if (job.status === "running") {
+      const capturing = job.items.some(item => item.status === "capturing" || item.status === "pending");
+      $("background-note").textContent = capturing ? "Keep the source tab open. You can close this popup." : "You can close this popup. Work continues in Chrome.";
+    }
     $("task-items").replaceChildren();
     for (const item of job.items) {
       const li = document.createElement("li");
@@ -139,11 +163,8 @@ function renderTask(job) {
     }
     $("retry").hidden = job.status !== "paused";
     $("discard").hidden = job.status !== "paused";
-    if (job.linkId && job.fields.url === activeTab?.url) $("save").textContent = "Save changes";
     if (changedState && ready) {
-      if (job.status === "done" && job.fields.url === activeTab?.url) status("Saved to Pocketmark.", false, true);
-      else if (job.status === "paused") status(job.message, true);
-      else status("");
+      status("");
       if (job.status === "done") window.close();
     }
   }
@@ -152,9 +173,30 @@ function renderTask(job) {
 async function refresh() { renderTask(await send("state")); }
 async function finishConnection(candidate) {
   await send("connect", { connection: candidate });
+  credentialServer = candidate.server;
   connected = true; showSettings(false);
   await load();
 }
+function updateKeysLink() {
+  const link = $("open-keys");
+  try { link.href = origin($("server").value.trim()) + "/?settings=api-keys"; link.hidden = false; }
+  catch { link.hidden = true; link.href = "#"; }
+}
+$("server").addEventListener("input", () => {
+  updateKeysLink();
+  if (credentialServer && !$("open-keys").hidden && origin($("server").value.trim()) !== credentialServer) {
+    $("token").value = "";
+    credentialServer = "";
+  }
+});
+$("open-keys").addEventListener("click", async event => {
+  event.preventDefault();
+  try {
+    const address = origin($("server").value.trim());
+    await chrome.storage.local.set({ apiKeySetupServer: address });
+    await chrome.tabs.create({ url: address + "/?settings=api-keys" });
+  } catch (error) { status(error.message, true); }
+});
 $("settings-form").addEventListener("submit", async (event) => {
   event.preventDefault(); if (connecting) return;
   connecting = true; connected = false; controls();
@@ -176,6 +218,7 @@ $("connection-toggle").addEventListener("click", () => {
   showSettings(!settingsOpen);
   status("");
   if (settingsOpen) $("server").focus();
+  else chrome.storage.local.set({ apiKeySetupServer: null }).catch(error => status(error.message, true));
 });
 for (const mode of Object.keys(formats)) $("capture-" + mode).addEventListener("change", captureHint);
 $("add-tag").addEventListener("click", () => { addTags(); $("tag-input").focus(); });
@@ -257,12 +300,22 @@ async function initialize() {
     $("page-title").textContent = activeTab?.url && /^https?:\/\//i.test(activeTab.url) ? new URL(activeTab.url).hostname : "Your current page";
     $("page-title").title = activeTab?.url || "";
     await refresh();
-    const stored = await chrome.storage.local.get(["server", "token", "pendingConnection"]), candidate = stored.pendingConnection || stored;
-    $("server").value = candidate.server || ""; $("token").value = candidate.token || "";
+    const stored = await chrome.storage.local.get(["server", "token", "pendingConnection", "apiKeySetupServer"]), candidate = stored.pendingConnection || stored;
+    $("server").value = candidate.server || stored.apiKeySetupServer || ""; $("token").value = candidate.token || "";
+    credentialServer = candidate.token ? candidate.server : "";
+    updateKeysLink();
     if (stored.pendingConnection) {
       if (await chrome.permissions.contains({ origins: [origin(candidate.server) + "/*"] })) await finishConnection(candidate);
       else { await chrome.storage.local.set({ pendingConnection: null }); throw new Error("Server access was not granted. Click Connect to retry."); }
-    } else if (stored.server && stored.token) { connected = true; await load(); }
+    } else if (stored.server && stored.token) {
+      connected = true;
+      if (stored.apiKeySetupServer && stored.apiKeySetupServer !== stored.server) {
+        // Keep “Back to bookmark” available when the previous instance still works.
+        try { await load(); } catch { connected = false; }
+        $("server").value = stored.apiKeySetupServer; $("token").value = ""; credentialServer = "";
+        updateKeysLink(); showSettings(true); status("");
+      } else await load();
+    }
     else { showSettings(true); status(""); }
   } catch (error) { showSettings(true); status(error.message, true); }
   finally {

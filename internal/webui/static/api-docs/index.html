@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
-  <meta name="theme-color" content="#15161b">
+  <meta name="theme-color" content="#1a1b1d">
   <title>API documentation — Pocketmark</title>
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <script src="/theme.js"></script>
@@ -29,22 +29,29 @@
   </header>
   <main class="docs-main">
     <section class="docs-intro" aria-labelledby="docs-title">
-      <div><h1 id="docs-title">API documentation</h1><p class="muted">Explore Pocketmark’s API and try requests on this instance.</p></div>
+      <div><h1 id="docs-title">API documentation</h1></div>
       <a class="button subtle" href="/api-docs/openapi.json" download="pocketmark-openapi.json">Download OpenAPI</a>
+    </section>
+    <section id="operation-search" class="docs-search" aria-label="Operation search" hidden>
+      <label for="docs-query">Find an operation</label>
+      <div class="query-controls"><input id="docs-query" type="search" placeholder="Method, path or keyword" autocomplete="off" spellcheck="false"><button id="clear-query" class="button subtle" type="button" hidden>Clear</button></div>
+      <a id="quick-operation" class="quick-operation" href="#/Bookmarks/listLinks"><strong>GET</strong> <code>/api/links</code> <span>Search bookmarks →</span></a>
+      <p id="result-count" role="status" class="muted"></p>
+      <ul id="operation-results" aria-label="Matching operations" hidden></ul>
     </section>
     <section class="docs-access" aria-labelledby="docs-access-title">
       <details>
-        <summary><h2 id="docs-access-title">Use your session or an API key</h2></summary>
+        <summary><h2 id="docs-access-title">Authentication and access</h2></summary>
         <p>Your signed-in session works here automatically. For an integration, create a dedicated key under <a href="/?settings=api-keys">Settings → API keys in the library</a>, then enter it in <strong>Authorize</strong>. Keys are kept in this tab’s memory and cleared on reload.</p>
         <p class="muted">Account settings, key management and full backups require the owner session.</p>
       </details>
-      <p class="muted">“Try it out” sends real requests to your library.</p>
+      <p class="muted">“Execute” sends a real request to this library.</p>
     </section>
     <p id="docs-status" class="muted" role="status">Loading API reference…</p>
     <div id="docs-error" class="error-banner" role="alert" hidden>The API reference could not load. <button id="docs-retry" class="button primary" type="button">Try again</button> or <a href="/api-docs/openapi.json">open the OpenAPI specification</a>.</div>
     <noscript><p>Enable JavaScript to use Swagger UI, or <a href="/api-docs/openapi.json">read the OpenAPI specification</a>.</p></noscript>
     <div id="swagger-ui" tabindex="-1" aria-label="API reference" aria-busy="true"></div>
-    <footer class="docs-footer muted">Swagger UI · Native HTTP API. <span>Floccus uses WebDAV at <code>/dav/</code>; WebDAV is outside this OpenAPI reference.</span></footer>
+    <footer class="docs-footer muted">Floccus uses <code>/dav/</code>. Standard HTTP methods appear under WebDAV. Additional WebDAV methods are listed in the downloadable specification.</footer>
   </main>
 </body>
 </html>

@@ -1,13 +1,32 @@
 import { Button } from "../../components/ui/button";
 
-const sections = [
-  ["api-keys", "key", "API keys"],
-  ["2fa", "shield", "Two-factor authentication"],
-  ["sessions", "monitor", "Browser sessions"],
-  ["password", "lock", "Password"],
-  ["backup", "download", "Backup & restore"],
-  ["sync", "refresh", "Browser bookmark sync"],
-  ["mobile", "book", "Mobile & browser"],
+import "../../forms.css";
+
+const groups = [
+  [
+    "Account & security",
+    [
+      ["password", "lock", "Password"],
+      ["2fa", "shield", "Two-factor authentication"],
+      ["sessions", "monitor", "Browser sessions"],
+    ],
+  ],
+  [
+    "Apps & devices",
+    [
+      ["mobile", "book", "Phone & browser extension"],
+      ["api-keys", "key", "API keys"],
+      ["sync", "refresh", "Browser bookmark sync"],
+    ],
+  ],
+  [
+    "Library & data",
+    [
+      ["preferences", "settings", "Preferences"],
+      ["transfer", "folder-input", "Import & export"],
+      ["backup", "download", "Backup & restore"],
+    ],
+  ],
 ];
 
 export function SettingsFrame({ children }) {
@@ -32,7 +51,9 @@ export function SettingsFrame({ children }) {
           />
           <span>Pocketmark</span>
         </Button>
-        <span className="muted">Personal library</span>
+        <Button type="button" className="text-button" id="settings-overview">
+          All settings
+        </Button>
         <Button
           className="button subtle theme-toggle"
           data-theme-toggle
@@ -50,17 +71,31 @@ export function SettingsFrame({ children }) {
           className="settings-navigation"
           aria-label="Settings sections"
         >
-          {sections.map(([section, icon, label]) => (
-            <Button
-              key={section}
-              type="button"
-              className="nav-item"
-              data-settings-section={section}
-            >
-              <span data-icon={icon} aria-hidden="true"></span>
-              {label}
-            </Button>
-          ))}
+          <h2 id="settings-index-title" tabIndex="-1">
+            Settings
+          </h2>
+          <div className="settings-groups">
+            {groups.map(([label, sections]) => (
+              <section
+                className="settings-group"
+                key={label}
+                aria-label={label}
+              >
+                <h3>{label}</h3>
+                {sections.map(([section, icon, title]) => (
+                  <Button
+                    type="button"
+                    key={section}
+                    className="nav-item"
+                    data-settings-section={section}
+                  >
+                    <span data-icon={icon} aria-hidden="true" />
+                    {title}
+                  </Button>
+                ))}
+              </section>
+            ))}
+          </div>
           <Button
             type="button"
             className="nav-item settings-library-back"

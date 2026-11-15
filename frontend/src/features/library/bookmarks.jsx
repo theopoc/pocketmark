@@ -1,5 +1,5 @@
 import { SiteIcon } from "./site-icon";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { Icon } from "../../components/icon";
 import { renderRegion } from "../../lib/render";
@@ -7,6 +7,78 @@ import { renderRegion } from "../../lib/render";
 // The tested workspace rules also serve the standalone browser adapters.
 import workspace from "../workspace.js";
 const { domain, safeURL, searchExcerpt } = workspace;
+const shortDate = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
+
+function CardMenu({ id, title, children }) {
+  const menu = useRef(null);
+  const trigger = useRef(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const close = () => {
+      if (menu.current?.matches(":popover-open")) menu.current.hidePopover();
+    };
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close);
+    return () => {
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close);
+    };
+  }, [open]);
+  return (
+    <div className="card-actions">
+      <Button
+        type="button"
+        ref={trigger}
+        className="card-actions-toggle icon-button"
+        data-focus-key={`link:${id}:more`}
+        aria-label={`Actions for ${title}`}
+        aria-controls={`link-${id}-actions`}
+        aria-expanded={open}
+        popoverTarget={`link-${id}-actions`}
+        title="More actions"
+      >
+        <span aria-hidden="true">•••</span>
+      </Button>
+      <div
+        ref={menu}
+        id={`link-${id}-actions`}
+        className="card-overflow-actions"
+        popover="auto"
+        role="group"
+        aria-label={`Actions for ${title}`}
+        onBeforeToggle={(event) => {
+          if (event.newState !== "open") return;
+          const rect = trigger.current.getBoundingClientRect();
+          const panel = event.currentTarget;
+          const max = Math.min(215, window.innerWidth - 16);
+          const above =
+            window.innerHeight - rect.bottom < 190 &&
+            rect.top > window.innerHeight - rect.bottom;
+          panel.style.left = `${Math.min(window.innerWidth - max - 8, Math.max(8, rect.right - max))}px`;
+          panel.style.top = above ? "auto" : `${rect.bottom + 3}px`;
+          panel.style.bottom = above
+            ? `${window.innerHeight - rect.top + 3}px`
+            : "auto";
+          panel.style.maxHeight = `${Math.max(44, (above ? rect.top : window.innerHeight - rect.bottom) - 10)}px`;
+        }}
+        onToggle={(event) => setOpen(event.newState === "open")}
+        onClickCapture={(event) => {
+          if (event.target.closest("button,a")) {
+            event.currentTarget.hidePopover();
+            trigger.current.focus({ preventScroll: true });
+          }
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
 
 function BookmarkAction({
   link,
@@ -52,14 +124,14 @@ export function BookmarkCard({ link, model }) {
   const {
     view,
     query,
-    expandedActions,
     expandedTags,
     onOpen,
     onEdit,
     onUpdate,
     onTag,
     onMoreTags,
-    onActions,
+    onSelect,
+    collectionLabel,
     onDelete,
   } = model;
   const host = link.type === "file" ? "Saved file" : domain(link.url);
@@ -95,8 +167,10 @@ export function BookmarkCard({ link, model }) {
     ready: "Captured",
     failed: "Capture failed",
   };
+  const captureStatus = statuses[link.status] || "Link only";
   const url = safeURL(link.url);
-  const expanded = expandedActions === link.id;
+  const saved = new Date(link.createdAt);
+  const title = link.title || link.url;
   return (
     <article
       className="bookmark-card"
@@ -108,6 +182,14 @@ export function BookmarkCard({ link, model }) {
       aria-keyshortcuts="Space Shift+Space"
       aria-description="Press Space to toggle selection. Shift+Space selects a range."
     >
+      <label className="row-selection">
+        <input
+          type="checkbox"
+          className="row-checkbox"
+          aria-label={`Select ${title}`}
+          onChange={(event) => onSelect(link, event.currentTarget.checked)}
+        />
+      </label>
       <div className="card-top">
         {view === "grid" && (
           <>
@@ -124,7 +206,6 @@ export function BookmarkCard({ link, model }) {
           view={view}
         />
         <div className="card-title-row">
-          {view !== "grid" && favorite}
           <h2 className="card-title">
             <Button
               data-focus-key={`link:${link.id}:open`}
@@ -147,6 +228,30 @@ export function BookmarkCard({ link, model }) {
         )}
         <div className="card-metadata">
           {view !== "grid" && hostLabel}
+          {!link.read && <span className="card-unread">Unread</span>}
+          <Button
+            type="button"
+            onClick={() => onOpen(link, "copies")}
+            title="Inspect saved copies"
+            aria-label={`${captureStatus}. Inspect saved copies: ${title}`}
+            data-focus-key={`link:${link.id}:copies`}
+            className={`card-state ${statuses[link.status] ? link.status : "saved"}`}
+          >
+            {link.status === "processing" || !statuses[link.status] ? (
+              <span className="capture-indicator" aria-hidden="true" />
+            ) : (
+              <Icon
+                name={
+                  link.status === "ready"
+                    ? "check"
+                    : link.status === "failed"
+                      ? "warning"
+                      : "clock"
+                }
+              />
+            )}
+            {captureStatus}
+          </Button>
           <div className="card-tags">
             {(link.tags || [])
               .slice(0, expandedTags.has(link.id) ? undefined : 5)
@@ -173,82 +278,60 @@ export function BookmarkCard({ link, model }) {
           </div>
         </div>
       </div>
-      <div className="card-footer">
-        <span
-          className={`card-state ${statuses[link.status] ? link.status : "saved"}`}
-        >
-          {link.status === "processing" || !statuses[link.status] ? (
-            <span className="capture-indicator" aria-hidden="true" />
-          ) : (
-            <Icon
-              name={
-                link.status === "ready"
-                  ? "check"
-                  : link.status === "failed"
-                    ? "warning"
-                    : "clock"
-              }
-            />
-          )}
-          {statuses[link.status] || "Not captured"}
+      <div className="catalog-location">
+        <span>
+          {link.collectionId == null
+            ? "Inbox"
+            : collectionLabel(link.collectionId)}
         </span>
-        <div className="card-actions">
-          <Button
-            type="button"
-            className="card-actions-toggle button subtle"
-            data-focus-key={`link:${link.id}:more`}
-            aria-label={`Actions for ${link.title || link.url}`}
-            aria-controls={`link-${link.id}-actions`}
-            aria-expanded={expanded}
-            onClick={() => onActions(link)}
-          >
-            Actions
-          </Button>
-          <div
-            className={`card-overflow-actions${expanded ? " is-open" : ""}`}
-            id={`link-${link.id}-actions`}
-          >
-            <BookmarkAction
-              link={link}
-              name={link.read ? "check" : "clock"}
-              label={link.read ? "Mark unread" : "Mark as read"}
-              index={1}
-              className={link.read ? "read" : ""}
-              onClick={(event) =>
-                onUpdate(link, { read: !link.read }, event.currentTarget)
-              }
-            />
-            <BookmarkAction
-              link={link}
-              name="edit"
-              label="Edit bookmark"
-              index={2}
-              onClick={() => onEdit(link)}
-            />
-            <BookmarkAction
-              link={link}
-              name="trash"
-              label="Delete bookmark"
-              index={3}
-              onClick={() => onDelete(link)}
-            />
-            {url && (
-              <Button asChild className="card-action">
-                <a
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Visit original"
-                  aria-label={`Visit original: ${link.title || link.url}`}
-                  data-focus-key={`link:${link.id}:action:4`}
-                >
-                  <Icon name="external" />
-                  <span className="mobile-action-label">Visit original</span>
-                </a>
-              </Button>
-            )}
-          </div>
-        </div>
+        {Number.isFinite(saved.valueOf()) && (
+          <time dateTime={link.createdAt}>{shortDate.format(saved)}</time>
+        )}
+      </div>
+      <div className="card-footer">
+        {view !== "grid" && favorite}
+
+        <CardMenu id={link.id} title={title}>
+          <BookmarkAction
+            link={link}
+            name={link.read ? "check" : "clock"}
+            label={link.read ? "Mark unread" : "Mark as read"}
+            index={1}
+            className={link.read ? "read" : ""}
+            onClick={(event) =>
+              onUpdate(link, { read: !link.read }, event.currentTarget)
+            }
+          />
+          <BookmarkAction
+            link={link}
+            name="edit"
+            label="Edit bookmark"
+            index={2}
+            onClick={() => onEdit(link)}
+          />
+          {url && (
+            <Button asChild className="card-action">
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Visit original"
+                aria-label={`Visit original: ${link.title || link.url}`}
+                data-focus-key={`link:${link.id}:action:4`}
+              >
+                <Icon name="external" />
+                <span className="mobile-action-label">Visit original</span>
+              </a>
+            </Button>
+          )}
+          <BookmarkAction
+            link={link}
+            name="trash"
+            label="Delete bookmark"
+            index={3}
+            onClick={() => onDelete(link)}
+          />
+        </CardMenu>
       </div>
     </article>
   );

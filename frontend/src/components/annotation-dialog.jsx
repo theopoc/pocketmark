@@ -10,7 +10,7 @@ export function AnnotationDialog() {
     >
       <form id="annotation-form">
         <div className="dialog-heading">
-          <h2 id="annotation-title">{"Annotation"}</h2>
+          <h2 id="annotation-title">{"Highlight"}</h2>
           <Button
             type="button"
             className="icon-button close-dialog"
@@ -38,7 +38,7 @@ export function AnnotationDialog() {
             {"Cancel"}
           </Button>
           <Button className="button primary" type="submit">
-            {"Save annotation"}
+            {"Save highlight"}
           </Button>
         </div>
       </form>

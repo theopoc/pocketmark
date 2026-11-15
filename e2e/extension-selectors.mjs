@@ -48,6 +48,8 @@ try {
     assert.equal(await page.getByRole('listbox', { name: 'Inside' }).count(), 1);
     await page.keyboard.press('End'); await page.keyboard.press('Enter');
     assert.equal(await page.locator('#collection-parent').inputValue(), '8');
+    assert.equal(await page.locator('#tag-input').isVisible(), false);
+    await page.locator('#tag-details summary').click();
     await page.locator('#tag-input').focus();
     assert.equal(await page.getByRole('listbox', { name: 'Tags' }).count(), 1);
     assert.equal(await page.locator('.choice-panel [role=option]').count(), 2);

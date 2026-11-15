@@ -65,7 +65,8 @@ test('docs use the local spec without external validation, URL overrides or save
   assert.equal(config.tryItOutEnabled, false);
   assert.equal(elements.get('docs-status').hidden, true);
   assert.equal(elements.get('swagger-ui').attributes['aria-busy'], 'false');
-  assert.equal(elements.get('filter').attributes['aria-label'], 'Filter API operations');
+  assert.equal(config.filter, false);
+  assert.equal(elements.get('operation-search').hidden, false);
   assert.equal(elements.get('auth-close').attributes['aria-label'], 'Close authorizations');
   const wrap = config.plugins[0]().statePlugins.auth.wrapSelectors.definitionsToAuthorize;
   const bearer = { has: () => false };

@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Icon } from "../../components/icon";
+import workspace from "../workspace.js";
 
 // Bound network work without retaining a favicon cache in application memory.
 let active = 0;
@@ -62,7 +62,9 @@ export function SiteIcon({ link, view }) {
       ) : loaded ? (
         <img src={url} alt="" decoding="async" />
       ) : (
-        <Icon name="bookmark" />
+        (
+          workspace.domain(link.url).replace(/^www\./, "")[0] || "B"
+        ).toUpperCase()
       )}
     </span>
   );

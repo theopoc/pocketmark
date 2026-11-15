@@ -32,7 +32,7 @@ indexed for search with a 256 KiB extracted-text limit and a 2 MiB individual HT
 token limit; a failed extraction leaves the original download intact and returns
 an `X-Pocketmark-Warning` header. PDF/image OCR is not performed.
 
-The library's **Upload file** action also creates a standalone document without
+Choose **Save bookmark → Upload a file** to create a standalone document without
 a website URL. Its opaque `pocketmark-file:` identifier is never fetched over the
 network. Metadata and payload are committed together; interrupted uploads leave
 no empty record. Full backups preserve standalone bytes; JSON preserves metadata
@@ -59,17 +59,18 @@ rendered markup. Larger files remain downloadable.
 Native attachment uploads, manual preservation, rich-reader generation and backup
 share one work slot; standalone uploads share the import slot.
 A competing operation on the same slot receives HTTP 409. Original downloads
-always use attachment disposition. Bookmarks open on **Saved formats**, with
-labeled HTML, Screenshot and PDF icons and explicit availability states. No article
-or description is displayed automatically. A shortcut opens the newest attachment
-of its format, with earlier copies available in the selector; Screenshot also
-includes saved raster images. When no HTML attachment exists, the basic archive
-opens as a simplified sandboxed page. Its source remains downloadable under
-Reading options when attachments exist. The **View** action in
-**Saved formats → Manage files** also opens the integrated viewer for raster images, PDFs and HTML,
-including standalone files. Its selector switches between saved attachments;
-**Download original** remains available. PDF display uses the browser's native
-viewer and may depend on browser settings.
+always use attachment disposition. Opening a bookmarked article displays its
+saved text and highlights immediately. **Copies** shows the latest HTML, image
+or PDF alongside a dated history of attachments. Choose a format to open the
+latest version or use the version selector for earlier copies of that format.
+**View** opens a specific attachment. **Download original** saves its bytes.
+When no HTML attachment exists, the basic archive opens as a simplified
+sandboxed page. Its source is downloadable under **Reading options**.
+
+A standalone file opens directly in the integrated preview. Its **Notes** and
+**Copies** buttons return to the bookmark notebook and copy history. When a web
+bookmark has no saved text, **Open original** opens its website in a new tab.
+PDF previews use the browser's built-in viewer.
 
 HTML previews retain saved styles and embedded images/fonts up to the full
 20 MiB attachment limit, independently of the structural reader's 2 MiB limit.

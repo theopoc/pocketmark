@@ -80,10 +80,17 @@ async function expandedDocumentation(page, theme, engine) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto(new URL('/api-docs/', base).href);
     await page.locator('#swagger-ui[aria-busy=false]').waitFor();
-    await page.locator('.opblock-tag').filter({ hasText: 'Bookmarks' }).click();
+    const query = page.getByRole('searchbox', { name: 'Find an operation' });
+    await query.fill('missing-operation');
+    assert.match(await page.locator('#result-count').textContent(), /No operations match/);
+    await page.getByRole('button', { name: 'Clear', exact: true }).click();
+    assert.ok(await query.evaluate(node => node === document.activeElement), 'clearing search restores keyboard focus');
+    await query.fill('GET /api/links');
+    await page.locator('#operation-results a[href="#/Bookmarks/listLinks"]').press('Enter');
     const operation = page.locator('#operations-Bookmarks-listLinks');
     const toggle = operation.locator('.opblock-summary-control');
-    await toggle.click();
+    await operation.locator('.opblock-body').waitFor();
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
     assert.equal(await page.locator('.opblock-summary-control a[href], .opblock-summary-control button').count(), 0, 'summary buttons contain no interactive controls');
     await expectThemeColor(operation.locator('tbody .header-col').first(), 'color', '--ink');
     await expectThemeColor(operation.locator('.header-example').first(), 'color', '--muted');
@@ -138,6 +145,7 @@ async function expandedDocumentation(page, theme, engine) {
     await shot(page, `${theme}-api-schema-${width}`, engine);
     await page.getByRole('button', { name: 'Authorize', exact: true }).first().click();
     await page.locator('.modal-ux').waitFor();
+    assert.equal(await page.getByRole('textbox', { name: 'API key', exact: true }).count(), 1);
     await expectThemeColor(page.locator('.auth-container').first(), 'borderBottomColor', '--line');
     for (const form of await page.locator('.modal-ux .auth-btn-wrapper').all()) {
       await expectThemeColor(form.getByRole('button', { name: 'Authorize', exact: true }), 'backgroundColor', '--accent');
@@ -179,7 +187,7 @@ for (const name of selected) {
       await expectThemeColor(page.getByRole('button', { name: 'Rename or move Reading & references', exact: true }), 'color', '--ink');
       await page.goto(base.href); await page.locator('#bookmark-grid .bookmark-card').first().waitFor();
       const card = page.locator('.bookmark-card').filter({ has: page.getByRole('button', { name: link.title, exact: true }) });
-      assert.equal(await card.locator('.card-actions-toggle').isVisible(), false, 'desktop retains its icon actions');
+      await card.locator('.card-actions-toggle').click();
       assert.equal(await card.locator('.card-overflow-actions .card-action').count(), 4);
       await card.locator('.card-overflow-actions .card-action').nth(1).hover();
       await settleControl(card.locator('.card-overflow-actions .card-action').nth(1));
@@ -202,14 +210,17 @@ for (const name of selected) {
       assert.equal(await editAction.evaluate(node => getComputedStyle(node).color), desktopEditHover, 'mobile hover preserves its themed desktop action color');
       const readAction = card.locator('.card-overflow-actions .card-action').first();
       await readAction.click();
+      await card.locator('.card-actions-toggle').click();
       await card.locator('.card-action.read').waitFor();
       await expectThemeColor(card.locator('.card-action.read'), 'color', '--success');
       await page.locator('#toast .toast-action').click();
       await card.locator('.card-action.read').waitFor({ state: 'detached' });
       await page.getByRole('button', { name: 'library-notes.html', exact: true }).click();
+      await page.locator('#asset-viewer').waitFor();
+      await page.locator('#asset-viewer-copies').click();
       await page.locator('#reader-format-html').waitFor();
       assert.equal(await page.locator('#reader-format-pdf').isVisible(), false);
-      await page.locator('#reader-files-toggle').click(); await page.locator('#asset-upload-button').waitFor();
+      await page.locator('#asset-upload-button').waitFor();
       assert.equal(await page.locator('#reader-notebook').isVisible(), false, 'file management does not open Notes');
       const deleteFile = page.getByRole('button', { name: 'Delete library-notes.html', exact: true });
       await deleteFile.hover(); await expectThemeColor(deleteFile, 'color', '--danger');
@@ -225,7 +236,7 @@ for (const name of selected) {
       await page.locator('#reader-notebook-toggle').click(); await page.locator('#reader-notebook').waitFor();
       assert.equal(await page.locator('#reader-section-nav [role=tab]').count(), 2);
       await audit(page, `${theme}-notes`, name);
-      await page.getByRole('button', { name: 'Close reader', exact: true }).click();
+      await page.getByRole('button', { name: 'Back to library', exact: true }).click();
       await clickNavigation(page, '#settings-button');
       for (const section of ['api-keys', '2fa', 'sessions', 'password', 'backup', 'sync', 'mobile']) {
         await clickNavigation(page, `[data-settings-section="${section}"]`);
@@ -293,7 +304,8 @@ for (const name of selected) {
     }));
     await motion.locator('#bookmark-dialog .close-dialog').first().click();
     await motion.getByRole('button', { name: 'library-notes.html', exact: true }).click();
-    await motion.locator('#reader-notebook-toggle').click();
+    await motion.locator('#asset-viewer-notes').click();
+    await motion.locator('#reader-notebook').waitFor();
     const notebookDuration = () => motion.locator('#reader-notebook').evaluate(n => Math.max(...getComputedStyle(n).transitionDuration.split(',').map(parseFloat)) * 1000);
     const notebookTransitionMs = await notebookDuration();
     await motion.emulateMedia({ reducedMotion: 'reduce' });

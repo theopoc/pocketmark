@@ -8,7 +8,7 @@ async function setup({ stored, permissionCloses = false, granted = true, hostGra
   const context = vm.createContext({ document: { getElementById: element, createElement: () => node(), createElementNS: () => node() }, URL, TextEncoder, setTimeout, clearTimeout, setInterval: () => 1, clearInterval() {}, window: { addEventListener() {}, close() { closeCount++; } },
     chrome: {
       storage: { local: { setAccessLevel: async () => {}, get: async () => data, set: async (value) => { writes.push(value); Object.assign(data, value); } } },
-      tabs: { query: async () => [{ id: 3, url: "https://example.org", title: "Page title" }] },
+      tabs: { create: async ({ url }) => calls.push({ type: "tab", url }), query: async () => [{ id: 3, url: "https://example.org", title: "Page title" }] },
       permissions: { contains: async () => hostGranted, request: async (value) => { permissions.push(value); return permissionCloses ? new Promise(() => {}) : granted; } },
       runtime: { sendMessage: async (message) => {
         calls.push(message);
@@ -170,51 +170,61 @@ test("pending work shows recovery actions, then collapses on completion without 
 });
 test("capture selection updates its summary without starting capture work", async () => {
   const env = await setup();
-  assert.equal(env.element("save-hint").textContent, "Bookmark only");
+  assert.equal(env.element("save").textContent, "Save bookmark");
   env.element("capture-pdf").checked = true; env.element("capture-pdf").listeners.change();
-  assert.equal(env.element("capture-count").textContent, "1 selected"); assert.equal(env.element("save-hint").textContent, "Bookmark + 1 capture");
+  assert.equal(env.element("capture-count").textContent, "1 selected"); assert.equal(env.element("save").textContent, "Save bookmark + 1 copy");
   assert.equal(env.calls.some((call) => call.type === "save"), false);
 });
-
-test("completed save shows a success notice and clears it on the next save", async () => {
-  const env = await setup();
-  await env.submit("save-form");
-  const job = { id: "saved", fields: { url: "https://example.org", title: "Article" }, items: [], status: "done", linkId: 17, message: "Saved to Pocketmark." };
-  env.context.renderTask(job);
-  assert.equal(env.element("status").textContent, "Saved to Pocketmark.");
-  assert.equal(env.element("status").className, "notice success");
-  await env.submit("save-form");
-  assert.equal(env.element("status").textContent, "");
-  assert.equal(env.element("status").className, "notice");
-});
-
-test("reopening a completed save confirms only the current article", async () => {
-  const job = { id: "saved", fields: { url: "https://example.org", title: "Article" }, items: [], status: "done", linkId: 17, message: "Saved to Pocketmark." };
-  job.server = "https://library.example";
+test("a completed save shows a single receipt with its current destination", async () => {
+  const job = { id: "saved", server: "https://library.example", fields: { url: "https://example.org", title: "Article" }, items: [{ mode: "html", status: "saved" }], status: "done", linkId: 17 };
   const current = await setup({ job, existing: true });
-  assert.equal(current.element("status").className, "notice success");
-  assert.equal(current.element("status").textContent, "Saved to Pocketmark.");
-  const other = await setup({ job: { ...job, fields: { ...job.fields, url: "https://other.example" } } });
-  assert.equal(other.element("status").className, "notice");
-  assert.equal(other.element("status").textContent, "Ready to save this page.");
+  assert.equal(current.element("task").hidden, false);
+  assert.equal(current.element("task-heading").textContent, "Saved in Reading");
+  assert.equal(current.element("task-count").textContent, "1 copy");
+  assert.equal(current.element("status").textContent, "");
+  for (const difference of [{ server: "https://another.example" }, { fields: { url: "https://other.example" } }, { linkId: 19 }]) {
+    const other = await setup({ job: { ...job, ...difference }, existing: true });
+    assert.equal(other.element("task").hidden, true);
+    assert.equal(other.element("status").textContent, "Saved in Reading");
+  }
+  const deleted = await setup({ job });
+  assert.equal(deleted.element("task").hidden, true);
+  assert.equal(deleted.element("status").textContent, "");
+  await current.submit("save-form");
+  assert.equal(current.element("task-heading").textContent, "Saving to Pocketmark");
 });
-test("partial and unconfirmed saves show attention instead of success, then retry confirms completion", async () => {
+test("failed copies and an unconfirmed bookmark have different receipts", async () => {
   const env = await setup();
-  const job = { id: "save", fields: { url: "https://example.org", title: "Article" }, items: [{ mode: "pdf", status: "failed" }], status: "paused", linkId: 17, message: "Bookmark saved. Some captures need attention; retry or discard them." };
+  const job = { id: "save", fields: { url: "https://example.org" }, items: [{ mode: "pdf", status: "failed" }], status: "paused", linkId: 17, message: "Temporary error" };
   env.context.renderTask(job);
-  assert.equal(env.element("status").className, "notice error");
-  assert.equal(env.element("status").textContent, job.message);
-  env.context.renderTask({ ...job, status: "running" });
+  assert.match(env.element("task-heading").textContent, /bookmark saved/i);
+  assert.equal(env.element("task-message").textContent, job.message);
   assert.equal(env.element("status").textContent, "");
-  env.context.renderTask({ ...job, status: "done", items: [{ mode: "pdf", status: "saved" }] });
-  assert.equal(env.element("status").className, "notice success");
-  const failed = { ...job, id: "failed", linkId: undefined, message: "Bookmark not confirmed. Retry manually." };
-  env.context.renderTask(failed);
-  assert.equal(env.element("status").className, "notice error");
-  assert.equal(env.element("status").textContent, failed.message);
+  env.context.renderTask({ ...job, linkId: undefined });
+  assert.equal(env.element("task-heading").textContent, "Bookmark needs attention");
 });
-
-test("a completed task from another server cannot confirm the current library save", async () => {
-  const env = await setup({ job: { id: "old", server: "https://old.example", fields: { url: "https://example.org" }, items: [], status: "done", linkId: 17 } });
-  assert.notEqual(env.element("status").className, "notice success");
+test("API key setup opens the validated origin and remembers only the address", async () => {
+  const env = await setup({ stored: {} }), el = env.element;
+  el("server").value = "https://user:password@example.org/path"; el("server").listeners.input();
+  assert.equal(el("open-keys").hidden, true);
+  el("server").value = "https://reading.example"; el("server").listeners.input();
+  assert.equal(el("open-keys").hidden, false); el("token").value = "draft-key";
+  await el("open-keys").listeners.click({ preventDefault() {} });
+  assert.equal(env.calls.find(call => call.type === "tab").url, "https://reading.example/?settings=api-keys");
+  assert.deepEqual(Object.keys(env.writes.at(-1)), ["apiKeySetupServer"]);
+  const reopened = await setup({ stored: env.data });
+  assert.equal(reopened.element("server").value, "https://reading.example"); assert.equal(reopened.element("token").value, "");
+});
+test("changing servers never carries the first server's API key into the new setup", async () => {
+  const env = await setup(), el = env.element;
+  el("server").value = "https://reading.example"; el("server").listeners.input();
+  assert.equal(el("token").value, "");
+  await el("open-keys").listeners.click({ preventDefault() {} });
+  const reopened = await setup({ stored: env.data });
+  assert.equal(reopened.element("settings").hidden, false);
+  assert.equal(reopened.element("server").value, "https://reading.example");
+  assert.equal(reopened.element("token").value, "");
+  reopened.element("connection-toggle").listeners.click();
+  assert.equal(reopened.element("save-form").hidden, false);
+  assert.equal(reopened.data.apiKeySetupServer, null);
 });
