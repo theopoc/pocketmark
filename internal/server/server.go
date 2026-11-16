@@ -53,13 +53,22 @@ func New(s *store.Store, token, origin string, secure bool, observers ...*observ
 	} else {
 		a.observer = observability.New(nil, nil)
 	}
-	a.mux.HandleFunc("GET /metrics", a.observer.Metrics)
+	a.mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) {
+		m, e := s.BackupMetrics(r.Context())
+		if e != nil {
+			handleError(w, e)
+			return
+		}
+		a.observer.Metrics(w, r)
+		observability.WriteBackupMetrics(w, m)
+	})
 	a.registerAccount(a.mux)
 	a.registerMFA(a.mux)
 	a.registerSessionSecurity(a.mux)
 	a.registerLibrary(a.mux)
 	a.registerDAV(a.mux)
 	a.registerAssets(a.mux)
+	a.registerBackups(a.mux)
 	a.registerFiles(a.mux)
 	a.mux.HandleFunc("POST /api/login", a.login)
 	a.mux.HandleFunc("POST /api/logout", func(w http.ResponseWriter, r *http.Request) {

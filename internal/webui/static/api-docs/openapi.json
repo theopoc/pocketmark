@@ -4849,6 +4849,525 @@
           }
         }
       ]
+    },
+    "/api/backups": {
+      "get": {
+        "operationId": "get_api_backups",
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Read backup settings and recent runs",
+        "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "200": {
+            "description": "Read backup settings and recent runs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "settings": {
+                      "$ref": "#/components/schemas/BackupSettingsState"
+                    },
+                    "runs": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/BackupRun"
+                      }
+                    },
+                    "lastSuccess": {
+                      "type": "integer",
+                      "format": "int64"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-owner-only": true,
+        "description": "Requires a signed-in owner session.",
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
+      }
+    },
+    "/api/backups/settings": {
+      "put": {
+        "operationId": "put_api_backups_settings",
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Save the schedule and S3 destination",
+        "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "200": {
+            "description": "Save the schedule and S3 destination",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid schedule, destination, retention, recipient or credentials"
+          }
+        },
+        "x-owner-only": true,
+        "description": "Requires a signed-in owner session. Recent password confirmation is required.",
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ],
+        "x-reauthentication-required": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupSettingsInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/backups/test": {
+      "post": {
+        "operationId": "post_api_backups_test",
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Test S3 write, read and delete access",
+        "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "200": {
+            "description": "Test S3 write, read and delete access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid destination or credentials"
+          },
+          "502": {
+            "description": "S3 probe failed"
+          }
+        },
+        "x-owner-only": true,
+        "description": "Requires a signed-in owner session. Recent password confirmation is required.",
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ],
+        "x-reauthentication-required": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupSettingsInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/backups/preview": {
+      "post": {
+        "operationId": "post_api_backups_preview",
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Preview three scheduled occurrences",
+        "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "200": {
+            "description": "Preview three scheduled occurrences",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid cron expression or time zone"
+          }
+        },
+        "x-owner-only": true,
+        "description": "Requires a signed-in owner session.",
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Cron": {
+                    "type": "string"
+                  },
+                  "Zone": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/backups/key": {
+      "post": {
+        "operationId": "post_api_backups_key",
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Generate an age recovery identity",
+        "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "200": {
+            "description": "Generate an age recovery identity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "identity": {
+                      "type": "string"
+                    },
+                    "recipient": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-owner-only": true,
+        "description": "Requires a signed-in owner session. Recent password confirmation is required.",
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ],
+        "x-reauthentication-required": true
+      }
+    },
+    "/api/backups/run": {
+      "post": {
+        "operationId": "post_api_backups_run",
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Queue a manual backup",
+        "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "202": {
+            "description": "Queue a manual backup",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Configure a destination or wait for the active run"
+          }
+        },
+        "x-owner-only": true,
+        "description": "Requires a signed-in owner session. Recent password confirmation is required.",
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ],
+        "x-reauthentication-required": true
+      }
+    },
+    "/api/backups/{id}/cancel": {
+      "post": {
+        "operationId": "post_api_backups_id_cancel",
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Cancel the active run",
+        "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "200": {
+            "description": "Cancel the active run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Run has finished"
+          },
+          "400": {
+            "description": "Invalid run ID"
+          }
+        },
+        "x-owner-only": true,
+        "description": "Requires a signed-in owner session. Recent password confirmation is required.",
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ],
+        "x-reauthentication-required": true
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "in": "path"
+        }
+      ]
+    },
+    "/api/backups/library": {
+      "post": {
+        "operationId": "post_api_backups_library",
+        "tags": [
+          "Backups"
+        ],
+        "summary": "Preview or restore a decrypted custom library ZIP",
+        "responses": {
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "200": {
+            "description": "Preview or restore a decrypted custom library ZIP",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "Format": {
+                      "type": "string"
+                    },
+                    "Version": {
+                      "type": "integer",
+                      "format": "int64"
+                    },
+                    "Mode": {
+                      "type": "string"
+                    },
+                    "Text": {
+                      "type": "boolean"
+                    },
+                    "Archives": {
+                      "type": "boolean"
+                    },
+                    "Files": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Target library is occupied or import already running"
+          },
+          "400": {
+            "description": "Invalid or unsupported archive"
+          }
+        },
+        "x-owner-only": true,
+        "description": "Requires a signed-in owner session. Recent password confirmation is required.",
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ],
+        "x-reauthentication-required": true,
+        "parameters": [
+          {
+            "name": "confirm",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "description": "Omit to preview. Send 1 to import into an empty library."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/zip": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5814,6 +6333,251 @@
           }
         },
         "additionalProperties": false
+      },
+      "BackupConfig": {
+        "type": "object",
+        "properties": {
+          "Cron": {
+            "type": "string"
+          },
+          "Zone": {
+            "type": "string"
+          },
+          "Endpoint": {
+            "type": "string"
+          },
+          "Region": {
+            "type": "string"
+          },
+          "Bucket": {
+            "type": "string"
+          },
+          "Prefix": {
+            "type": "string"
+          },
+          "Recipient": {
+            "type": "string"
+          },
+          "Enabled": {
+            "type": "boolean"
+          },
+          "AllowHTTP": {
+            "type": "boolean"
+          },
+          "Text": {
+            "type": "boolean"
+          },
+          "Archives": {
+            "type": "boolean"
+          },
+          "Files": {
+            "type": "boolean"
+          },
+          "Keep": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "Mode": {
+            "type": "string",
+            "enum": [
+              "full",
+              "library"
+            ]
+          }
+        }
+      },
+      "BackupSettingsInput": {
+        "type": "object",
+        "properties": {
+          "Cron": {
+            "type": "string"
+          },
+          "Zone": {
+            "type": "string"
+          },
+          "Endpoint": {
+            "type": "string"
+          },
+          "Region": {
+            "type": "string"
+          },
+          "Bucket": {
+            "type": "string"
+          },
+          "Prefix": {
+            "type": "string"
+          },
+          "Recipient": {
+            "type": "string"
+          },
+          "Enabled": {
+            "type": "boolean"
+          },
+          "AllowHTTP": {
+            "type": "boolean"
+          },
+          "Text": {
+            "type": "boolean"
+          },
+          "Archives": {
+            "type": "boolean"
+          },
+          "Files": {
+            "type": "boolean"
+          },
+          "Keep": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "Mode": {
+            "type": "string",
+            "enum": [
+              "full",
+              "library"
+            ]
+          },
+          "AccessKey": {
+            "type": "string",
+            "writeOnly": true
+          },
+          "SecretKey": {
+            "type": "string",
+            "format": "password",
+            "writeOnly": true
+          }
+        }
+      },
+      "BackupSettingsState": {
+        "type": "object",
+        "properties": {
+          "Cron": {
+            "type": "string"
+          },
+          "Zone": {
+            "type": "string"
+          },
+          "Endpoint": {
+            "type": "string"
+          },
+          "Region": {
+            "type": "string"
+          },
+          "Bucket": {
+            "type": "string"
+          },
+          "Prefix": {
+            "type": "string"
+          },
+          "Recipient": {
+            "type": "string"
+          },
+          "Enabled": {
+            "type": "boolean"
+          },
+          "AllowHTTP": {
+            "type": "boolean"
+          },
+          "Text": {
+            "type": "boolean"
+          },
+          "Archives": {
+            "type": "boolean"
+          },
+          "Files": {
+            "type": "boolean"
+          },
+          "Keep": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "Mode": {
+            "type": "string",
+            "enum": [
+              "full",
+              "library"
+            ]
+          },
+          "HasCredentials": {
+            "type": "boolean"
+          },
+          "Next": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "Upcoming": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        }
+      },
+      "BackupRun": {
+        "type": "object",
+        "properties": {
+          "ID": {
+            "type": "string"
+          },
+          "Trigger": {
+            "type": "string"
+          },
+          "Status": {
+            "type": "string"
+          },
+          "Stage": {
+            "type": "string"
+          },
+          "ObjectKey": {
+            "type": "string"
+          },
+          "Started": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "Finished": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "Due": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "Attempt": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "Bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "Total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "Removed": {
+            "type": "boolean"
+          },
+          "Config": {
+            "$ref": "#/components/schemas/BackupConfig"
+          },
+          "Diagnostic": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "Timings": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        }
       }
     },
     "responses": {
@@ -5822,13 +6586,19 @@
         "headers": {
           "X-Request-ID": {
             "description": "Log ID",
-            "schema": {"type": "string"}
+            "schema": {
+              "type": "string"
+            }
           }
         },
         "content": {
           "application/json": {
-            "schema": {"$ref": "#/components/schemas/Error"},
-            "example": {"error": "server could not complete the request; try again later"}
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "server could not complete the request; try again later"
+            }
           }
         }
       },

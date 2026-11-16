@@ -1,3 +1,4 @@
+import { showBackups } from "./backups.jsx";
 import { renderTokenList, renderTokenStatus } from "./tokens.jsx";
 import { createLifecycle } from "../../lib/lifecycle.js";
 export function createSettings(
@@ -255,6 +256,12 @@ export function createSettings(
       if (selected) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
     });
+    showBackups(
+      $("scheduled-backups"),
+      state.settingsSection === "backup",
+      api,
+      toast,
+    );
     syncSettingsNavigation();
     if (!active) {
       [$("settings-page"), $("settings-navigation")].forEach((element) =>
@@ -698,6 +705,7 @@ export function createSettings(
     }
   });
   function clearSettings() {
+    showBackups($("scheduled-backups"), false, api, toast);
     security.clear();
     state.settingsSession++;
     editingTokenID = null;

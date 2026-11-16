@@ -43,13 +43,23 @@ PostgreSQL provides shared durable storage. Replicas using the same database and
 
 On the first upgrade from schema 1, challenges already issued by the older binary exist only in its memory. Older pods also cannot verify a challenge issued by a new pod. While versions are mixed, a sign-in may need to restart; cross-pod verification works once all serving pods use the new version. The migration is additive, but the older binary cannot start against schema 2. Take a backup before upgrading.
 
+### Scheduled S3 backups
+
+Open **Settings → Backup & restore → Configure**. Set a five-field cron expression and choose a country and city. The time zone menu groups places with matching clock changes. Each choice saves its own IANA identifier. The form previews three occurrences in that zone. Choose an existing bucket, its region and an object prefix. For Garage, use the S3 API endpoint and the region configured on the server. Use HTTPS or explicitly enable HTTP for a trusted private endpoint. **Test connection** writes, reads and deletes a small probe with the supplied credentials.
+
+Choose **Full instance** for a PostgreSQL snapshot, or **Custom library** for bookmarks, collections, notes, tags and annotations with optional extracted text, archived pages, attachments and thumbnails. Enter an age X25519 public recipient or generate a recovery key and store the downloaded private key offline. Keep the original Pocketmark server secret separately for full-instance recovery. Save the settings and enable the schedule. **Back up now** also works while the schedule is paused.
+
+A single replica claims each run. After downtime, one overdue run is queued. Transient failures retry after 1, 5 and 15 minutes. Pausing lets an active transfer finish and suppresses its future retries. History shows the latest 20 runs with stage, timestamps, destination, retry and diagnostic details. Copy the backup ID to find its structured log events. Each verified upload triggers retention for its instance and destination. The default keeps seven verified objects. Delete permission is required. On versioned buckets, deletion hides an object with a delete marker. Set bucket lifecycle expiration for noncurrent versions to reclaim storage, including old probes. A retention warning means the new object passed verification and pruning needs attention.
+
+To recover, download the object and run `age --decrypt -i recovery-key.txt -o backup.zip object.zip.age`. For a full instance, stop Pocketmark and follow RESTORE.txt in the ZIP to restore PostgreSQL and the server secret. Sign in, generate new recovery codes and configure backups again. For a custom library, use **Import a custom library**, select the decrypted ZIP, preview its contents and confirm. The destination library must be empty. The import is transactional. Provide sufficient local disk space for staging, including a temporary SQL dump during a full backup.
+
 ### Route backups during a Kubernetes rollout
 
 Install the [backup Service, Ingress paths and NetworkPolicy](../deploy/kubernetes/backup-routing.yaml) **before** starting pods that migrate the schema. The exact path `/api/backup` selects only ready pods bearing the target revision label. The ordinary `pocketmark` ClusterIP Service continues to select all application pods for other requests.
 
 Adapt the example to your namespace, existing host, TLS secret, Service port and controller labels. Merge the paths into the existing Ingress for that host and preserve its authentication and TLS settings. For Traefik, enable `providers.kubernetesIngress.allowEmptyServices=true` so that the exact path returns 503 while its Service is empty. With a controller that drops empty backends, the catch-all path could otherwise send the request to an old pod. Use a CNI enforcing NetworkPolicy, allow only the trusted ingress controller to reach the app port, and remove other access paths or additive policies that allow clients to reach the pods directly.
 
-1. Set the backup Service selector to the incoming revision (`mfa-schema-2` in the example). Keep this label off the running pods. Before the image rollout, verify that the backup Service has no ready endpoints. Check every serving ingress-controller replica individually with the production Host and TLS server name: an authenticated backup request must return 503 and an authenticated library read must succeed on each. Recheck any controller that joins during this step. Once the routing change has converged, let any backup requests already accepted by old pods finish.
+1. Set the backup Service selector to the incoming revision (`backup-schema-3` in the example). Keep this label off the running pods. Before the image rollout, verify that the backup Service has no ready endpoints. Check every serving ingress-controller replica individually with the production Host and TLS server name: an authenticated backup request must return 503 and an authenticated library read must succeed on each. Recheck any controller that joins during this step. Once the routing change has converged, let any backup requests already accepted by old pods finish.
 2. Change the pinned image and the revision label **together** in the Deployment pod template. For example, with the verified image reference in `POCKETMARK_IMAGE` and a container named `pocketmark`:
 
    ```sh
@@ -58,7 +68,7 @@ Adapt the example to your namespace, existing host, TLS secret, Service port and
      template:
        metadata:
          labels:
-           pocketmark-backup-revision: mfa-schema-2
+           pocketmark-backup-revision: backup-schema-3
        spec:
          containers:
            - name: pocketmark
@@ -85,7 +95,7 @@ Adapt the example to your namespace, existing host, TLS secret, Service port and
 
 Default capture fetches one HTML response, with a 20-second timeout, at most five redirects, a 2 MiB response/decompressed-body limit and up to 256 KiB of extracted text. When adding or editing a bookmark, select **Save an HTML copy** for bounded resource embedding, or use the extension for an already-rendered page and a visible-tab PNG screenshot. The same Chrome extension generates PDF and full-page screenshots on demand, using an explicit debugger permission; [installation and limits](../extension/README.md). Existing PDF, image and HTML files can be attached under **Saved formats → Manage files**. No Chromium instance runs on the server. Private, loopback and reserved network destinations can be bookmarked, but server capture refuses them. See [archive limits](ARCHIVES.md).
 
-Collaboration/public sharing, SSO/OIDC, RSS, AI automation, scheduled recapture and automatic backups are intentionally excluded. Screenshots and PDF rendering consume memory in the user's browser; their memory is not included in server measurements. See [client compatibility and verification](REAL_CLIENTS.md) for observed workflows and qualification limits. The supported integration paths are the Pocketmark Chrome extension and Floccus WebDAV; older Linkwarden client observations do not qualify the new extension.
+Collaboration/public sharing, SSO/OIDC, RSS, AI automation and scheduled recapture are intentionally excluded. Screenshots and PDF rendering consume memory in the user's browser; their memory is not included in server measurements. See [client compatibility and verification](REAL_CLIENTS.md) for observed workflows and qualification limits. The supported integration paths are the Pocketmark Chrome extension and Floccus WebDAV; older Linkwarden client observations do not qualify the new extension.
 
 ## Configuration
 

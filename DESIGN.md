@@ -358,3 +358,7 @@ Dialogs use theme-matched panels, a dimmed backdrop, labeled headings and separa
 - Don’t add team or public-sharing visual concepts to this personal workspace.
 - Reuse the existing React/shadcn primitives and authored icons. Keep fonts local; justify additional runtime dependencies against the frontend guide.
 - Don’t use color alone to communicate capture status.
+
+## Scheduled backup settings
+
+Use the existing Settings shell and shared success/error toasts. Center recent-run headers and values in the same columns, with Status last. On narrow screens keep Started and Status visible and expose every value in the expandable detail. Use icons and text for each status, amber for retry or retention warnings. Center numbered pagination below the table with chevrons and ellipses. The active page uses the theme's violet accent and white text. Use the same accent for Test connection and the enabled switch. Retention uses a number input between decrement and increment buttons. The overview switch controls the schedule. In Configure, the native time zone select groups countries and cities with matching clock changes. Backup mode uses a styled native select.
