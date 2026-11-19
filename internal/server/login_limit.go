@@ -39,12 +39,12 @@ func (a *Server) trustedProxy(addr netip.Addr) bool {
 	return false
 }
 
-func (a *Server) clientSource(r *http.Request) netip.Addr {
+func (a *Server) clientAddress(r *http.Request) netip.Addr {
 	peer, err := netip.ParseAddrPort(r.RemoteAddr)
 	if err != nil {
 		return netip.Addr{}
-	} // Unknown peers share one bounded bucket.
-	addr := peer.Addr().Unmap()
+	}
+	addr := peer.Addr().WithZone("").Unmap()
 	if a.trustedProxy(addr) {
 		forwarded := strings.Join(r.Header.Values("X-Forwarded-For"), ",")
 		hops := strings.Split(forwarded, ",")
@@ -52,14 +52,19 @@ func (a *Server) clientSource(r *http.Request) netip.Addr {
 			for i := len(hops) - 1; i >= 0 && a.trustedProxy(addr); i-- {
 				next, err := netip.ParseAddr(strings.TrimSpace(hops[i]))
 				if err != nil || next.Zone() != "" {
-					addr = peer.Addr().Unmap()
+					addr = peer.Addr().WithZone("").Unmap()
 					break
 				}
 				addr = next.Unmap()
 			}
 		}
 	}
-	// One IPv6 client cannot evade its limit by rotating interface addresses.
+	return addr
+}
+
+// Limits share one bucket per IPv6 /64, or a single bucket for unknown peers.
+func (a *Server) clientSource(r *http.Request) netip.Addr {
+	addr := a.clientAddress(r)
 	if addr.Is6() {
 		addr = netip.PrefixFrom(addr, 64).Masked().Addr()
 	}

@@ -52,6 +52,10 @@ export const iconPaths = {
     "M16 7h.01",
   ],
   shield: ["m12 3 9 4v5c0 5-9 10-9 10S3 17 3 12V7l9-4Z"],
+  phone: [
+    "M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z",
+    "M11 18h2",
+  ],
   monitor: ["M3 3h18v14H3Z", "M12 17v4M8 21h8"],
   pause: ["M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z", "m6 6 12 12"],
   "chevron-right": ["m9 5 7 7-7 7"],

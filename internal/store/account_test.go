@@ -29,6 +29,13 @@ func TestAPIKeyLimitAndRevocation(t *testing.T) {
 	if !apiKeyAuthenticates(t, s, ctx, hash) {
 		t.Fatal("created key missing")
 	}
+	if err = s.DeleteAPIKey(ctx, keys[0].ID); !errors.Is(err, ErrAPIKeyActive) {
+		t.Fatalf("active key should require disabling: %v", err)
+	}
+	active := false
+	if err = s.UpdateAPIKey(ctx, keys[0].ID, nil, &active); err != nil {
+		t.Fatal(err)
+	}
 	if err = s.DeleteAPIKey(ctx, keys[0].ID); err != nil {
 		t.Fatal(err)
 	}

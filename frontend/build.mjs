@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 
 process.chdir(import.meta.dirname);
-await build();
+await build({ base: "/app/" });
 // Only the empty shell is rendered at build time. Private library data is fetched
 // and rendered in the browser; production never needs Node or a renderer process.
 const server = await createServer({

@@ -1,3 +1,4 @@
+import { selectSettings } from './settings.mjs';
 // Disposable UI evidence across engines. This is test tooling, never served by Pocketmark.
 import assert from 'node:assert/strict';
 import { chromium, firefox, webkit, request } from 'playwright';
@@ -223,17 +224,17 @@ for (const name of selected) {
       await audit(page, `${theme}-notes`, name);
       await page.getByRole('button', { name: 'Close reader', exact: true }).click();
       await clickNavigation(page, '#settings-button');
-      for (const section of ['api-keys', '2fa', 'sessions', 'password', 'backup', 'sync', 'mobile']) {
-        await clickNavigation(page, `[data-settings-section="${section}"]`);
+      for (const section of ['overview', 'appearance', 'api-keys', '2fa', 'sessions', 'password', 'backup', 'sync', 'mobile']) {
+        await selectSettings(page, section);
         await noOverflow(page, section); await audit(page, `${theme}-settings-${section}`, name);
         await shot(page, `${theme}-settings-${section}`, name);
       }
       await shot(page, `${theme}-settings-mobile`, name);
       await page.setViewportSize({ width: 1280, height: 720 });
       await page.goto(new URL('/?settings=2fa', base).href);
-      await page.locator('#mfa-settings-title').waitFor();
-      assert.ok(await page.locator('#mfa-settings-title').evaluate(n => n === document.activeElement && n.getBoundingClientRect().top >= 12), 'direct settings focus stays inside the viewport');
-      await expectThemeColor(page.locator('#mfa-settings-title'), 'outlineColor', '--focus');
+      await page.locator('#settings-detail-title').waitFor();
+      assert.ok(await page.locator('#settings-detail-title').evaluate(n => n === document.activeElement && n.getBoundingClientRect().top >= 12), 'direct settings focus stays inside the viewport');
+      await expectThemeColor(page.locator('#settings-detail-title'), 'outlineColor', '--focus');
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto(base.href); await clickNavigation(page, '#help-button');
       await page.locator('#help-search').fill('capture');

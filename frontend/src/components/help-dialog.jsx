@@ -263,9 +263,9 @@ export function HelpDialog() {
                 {"Create a dedicated key under "}
                 <strong>{"Settings → API keys"}</strong>
                 {" for each extension or sync app. Choose "}
-                <strong>{"Add, edit & capture"}</strong>
+                <strong>{"Editor"}</strong>
                 {" for the Pocketmark extension, or "}
-                <strong>{"Floccus sync"}</strong>
+                <strong>{"Sync"}</strong>
                 {
                   " for Floccus. Browser sign-in uses your password and an authentication or recovery code."
                 }
@@ -274,7 +274,7 @@ export function HelpDialog() {
               <p>
                 <strong>{"Settings"}</strong>
                 {
-                  " contains Floccus WebDAV instructions and mobile installation guidance."
+                  " contains Floccus sync instructions for WebDAV and mobile installation guidance."
                 }
               </p>
               {"\n            "}

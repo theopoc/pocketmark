@@ -1,4 +1,4 @@
-"use strict";
+import { settingsEntries } from "./settings/catalog.js";
 
 // Shared, dependency-free state rules; draft contents stay in this tab's memory.
 const positive = (value, fallback = 1, max = 1000000) =>
@@ -7,15 +7,10 @@ const positive = (value, fallback = 1, max = 1000000) =>
   Number(value) > 0
     ? Math.min(Number(value), max)
     : fallback;
-const settingsSections = [
-  "api-keys",
-  "2fa",
-  "sessions",
-  "backup",
-  "password",
-  "sync",
-  "mobile",
-];
+const settingsSections = new Set([
+  "overview",
+  ...settingsEntries.map(({ id }) => id),
+]);
 function readRoute(search) {
   const params = new URLSearchParams(search);
   let filter = ["all", "inbox", "favorite", "unread", "collection"].includes(
@@ -32,9 +27,9 @@ function readRoute(search) {
   const tag = (params.get("tag") || "").trim();
   return {
     settingsSection: params.has("settings")
-      ? settingsSections.includes(params.get("settings"))
+      ? settingsSections.has(params.get("settings"))
         ? params.get("settings")
-        : "api-keys"
+        : "overview"
       : null,
     filter: tag ? "all" : filter,
     collection: !tag && filter === "collection" ? collection : null,
@@ -53,7 +48,7 @@ function readRoute(search) {
 }
 function routeSearch(route) {
   const params = new URLSearchParams();
-  if (settingsSections.includes(route.settingsSection))
+  if (settingsSections.has(route.settingsSection))
     params.set("settings", route.settingsSection);
   if (route.filter !== "all") params.set("filter", route.filter);
   if (route.filter === "collection" && route.collection)

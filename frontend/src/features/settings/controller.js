@@ -1,4 +1,6 @@
+import { keyRoles } from "./key-roles";
 import { renderTokenList, renderTokenStatus } from "./tokens.jsx";
+import { createSettingsDesk } from "./desk.js";
 import { createLifecycle } from "../../lib/lifecycle.js";
 export function createSettings(
   {
@@ -24,17 +26,48 @@ export function createSettings(
   const window = browser;
   const $ = (id) => document.getElementById(id);
   const lifecycle = createLifecycle(browser);
-  const profileHelp = {
-    read: "Can read and export library data, including saved files. Cannot change it.",
-    capture:
-      "For the browser extension: read bookmark metadata, add or edit bookmarks, create collections and upload captures. Cannot delete, bulk edit, import, export or download saved files.",
-    sync: "WebDAV only. Floccus can read and replace the bookmark tree, including deletions. Cannot access the native library API or saved files.",
-    full: "Can read, export, change and delete library data, including WebDAV sync. Cannot manage your account, keys, sessions or full backups.",
-  };
-  lifecycle.listen($("token-profile"), "change", () => {
-    $("token-permissions-help").textContent =
-      profileHelp[$("token-profile").value];
+  const showSection = createSettingsDesk({
+    document,
+    history,
+    lifecycle,
+    icon,
+    navigateSettings,
   });
+  const navigationControls = document.querySelectorAll(
+    "[data-settings-section], [data-settings-go]",
+  );
+  function updateRoleHelp() {
+    $("token-permissions-help").textContent =
+      keyRoles[$("token-profile").value].description;
+  }
+  lifecycle.listen($("token-profile"), "change", updateRoleHelp);
+  function discardTokenForm() {
+    $("token-create").open = false;
+    // The enhanced selects also listen to the native form reset.
+    $("token-form").reset();
+    updateRoleHelp();
+  }
+  function setCreationPending(pending) {
+    $("token-form").setAttribute("aria-busy", String(pending));
+    $("token-create")
+      .querySelector("summary")
+      .setAttribute("aria-disabled", String(pending));
+    for (const field of ["token-name", "token-profile", "token-expiry"])
+      $(field).disabled = pending;
+  }
+  lifecycle.listen(
+    $("token-create").querySelector("summary"),
+    "click",
+    (event) => {
+      if ($("token-name").disabled) {
+        event.preventDefault();
+      } else if ($("token-create").open) {
+        event.preventDefault();
+        discardTokenForm();
+        $("tokens-error").textContent = "";
+      }
+    },
+  );
   let tokenCount = 0;
   let tokensBusy = false;
   let editingTokenID = null;
@@ -89,15 +122,14 @@ export function createSettings(
     renderTokenList($("token-list"), {
       ...tokenSnapshot,
       busy: tokensBusy,
+      editingID: editingTokenID,
       isCurrent: () => session === state.settingsSession,
       onEditing: (id) => {
         editingTokenID = id;
         $("tokens-error").textContent = "";
         $("tokens-feedback").textContent = "";
-        $("token-form").querySelector("button[type='submit']").disabled =
-          tokensBusy || id !== null || tokenCount >= 32;
+        setTokensBusy(tokensBusy);
       },
-      onRefresh: (next, id, action) => renderTokens(next, session, id, action),
       onRename: async (token, name) => {
         if (tokensBusy || session !== state.settingsSession) return;
         setTokensBusy(true);
@@ -123,17 +155,26 @@ export function createSettings(
         }
       },
       onChange: async (token, remove) => {
-        if (tokensBusy || editingTokenID !== null) return;
+        if (
+          tokensBusy ||
+          editingTokenID !== null ||
+          session !== state.settingsSession ||
+          (remove && token.active)
+        )
+          return;
         if (
           remove &&
           (!(await confirmAction(
-            "Delete API key?",
-            `Delete API key “${token.name}” permanently? Apps using it will lose access. This cannot be undone. To pause access, cancel and disable the key instead.`,
-            "Delete API key",
+            `Revoke ${token.name}?`,
+            "Apps using this key will need a new one to reconnect.",
+            "Revoke key",
           )) ||
             session !== state.settingsSession ||
             tokensBusy ||
-            editingTokenID !== null)
+            editingTokenID !== null ||
+            !tokenSnapshot?.tokens.some(
+              (item) => item.id === token.id && !item.active,
+            ))
         )
           return;
         $("tokens-error").textContent = "";
@@ -158,9 +199,16 @@ export function createSettings(
           if (remove && !next.length)
             $("token-create").querySelector("summary").focus();
           $("tokens-feedback").textContent =
-            `“${token.name}” ${remove ? "deleted permanently" : active ? "reactivated" : "disabled. Apps using this key can no longer connect"}.`;
+            `“${token.name}” ${remove ? "revoked" : active ? "enabled" : "disabled. Apps using this key can no longer connect"}.`;
         } catch (error) {
-          if (session === state.settingsSession) showTokenError(error.message);
+          if (session === state.settingsSession) {
+            showTokenError(error.message);
+            if (error.status === 404 || error.status === 409) {
+              await loadTokens(session).catch((failure) =>
+                tokenLoadError(failure, session),
+              );
+            }
+          }
         } finally {
           if (session === state.settingsSession) setTokensBusy(false);
         }
@@ -200,31 +248,32 @@ export function createSettings(
     });
   }
   function renderTokens(tokens, session, focusID, focusAction = "toggle") {
-    const rows = [...$("token-list").querySelectorAll(".token-accordion")];
     tokenCount = tokens.length;
+    $("token-limit").hidden = tokenCount < 32;
     const usable = (token) =>
       token.active &&
       !(token.expiresAt > 0 && token.expiresAt * 1000 <= Date.now());
-    $("token-count").textContent =
-      `${tokens.filter(usable).length} active · ${tokens.length} of 32 keys`;
+    const activeCount = tokens.filter(usable).length;
+    $("token-count").textContent = `${tokens.length}`;
+    $("token-count").title = `${tokens.length} of 32 keys`;
+    document.querySelectorAll("[data-settings-key-count]").forEach((count) => {
+      count.textContent = `${activeCount} active`;
+    });
     tokenSnapshot = {
       tokens,
       session,
       focusID,
       focusAction,
-      openIDs: new Set(
-        rows.filter((row) => row.open).map((row) => row.dataset.tokenId),
-      ),
-      initial: rows.length === 0,
       epoch: ++tokenEpoch,
     };
     setTokensBusy(tokensBusy);
   }
   function syncSettingsNavigation() {
-    document.querySelectorAll("[data-settings-section]").forEach((button) => {
+    navigationControls.forEach((button) => {
       button.disabled =
         (state.mfaManagementBusy || state.deferredLogin) &&
-        button.dataset.settingsSection !== state.settingsSection;
+        (button.dataset.settingsSection || button.dataset.settingsGo) !==
+          state.settingsSection;
     });
     document
       .querySelectorAll("[data-settings-back], [data-settings-home]")
@@ -246,6 +295,7 @@ export function createSettings(
     $("settings-navigation").hidden = !active;
     $("app-view").classList.toggle("showing-settings", active);
     renderBreadcrumb();
+    showSection(state.settingsSection);
     document.querySelectorAll("[data-settings-panel]").forEach((panel) => {
       panel.hidden = panel.dataset.settingsPanel !== state.settingsSection;
     });
@@ -301,10 +351,11 @@ export function createSettings(
     .observe(new browser.ResizeObserver(revealSettingsSection))
     .observe($("settings-navigation"));
   function focusSettings() {
-    const heading = document.querySelector(
-      `[data-settings-panel="${state.settingsSection}"] h2`,
+    const heading = $(
+      state.settingsSection === "overview"
+        ? "settings-overview-title"
+        : "settings-detail-title",
     );
-    heading.tabIndex = -1;
     heading.focus({ preventScroll: true });
     revealSettingsSection();
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -319,13 +370,13 @@ export function createSettings(
     );
     restoreRoute();
   }
-  document
-    .querySelectorAll("[data-settings-section]")
-    .forEach((button) =>
-      lifecycle.listen(button, "click", () =>
-        navigateSettings(button.dataset.settingsSection),
+  navigationControls.forEach((button) =>
+    lifecycle.listen(button, "click", () =>
+      navigateSettings(
+        button.dataset.settingsSection || button.dataset.settingsGo,
       ),
-    );
+    ),
+  );
   function leaveSettings(libraryRoot = false) {
     if (state.mfaManagementBusy) return;
     const destination = { ...route(), settingsSection: null };
@@ -353,7 +404,7 @@ export function createSettings(
       lifecycle.listen(button, "click", () => leaveSettings()),
     );
   lifecycle.listen($("settings-button"), "click", () =>
-    navigateSettings("api-keys"),
+    navigateSettings("overview"),
   );
   document
     .querySelectorAll('#settings-page a[href="/?settings=api-keys"]')
@@ -376,6 +427,11 @@ export function createSettings(
   });
   async function loadSettings() {
     const session = ++state.settingsSession;
+    document
+      .querySelectorAll("[data-settings-key-count], [data-settings-mfa-status]")
+      .forEach((node) => {
+        node.textContent = "";
+      });
     $("settings-error").textContent = "";
     $("tokens-error").textContent = "";
     $("tokens-feedback").textContent = "";
@@ -383,6 +439,7 @@ export function createSettings(
     tokenCount = 0;
     editingTokenID = null;
     $("token-count").textContent = "";
+    $("token-limit").hidden = true;
     $("token-form").querySelector("button[type='submit']").disabled = true;
     tokenSnapshot = null;
     renderTokenStatus($("token-list"), "Loading API keys…");
@@ -394,6 +451,13 @@ export function createSettings(
       api("/api/account")
         .then((account) => {
           if (session !== state.settingsSession) return;
+          document
+            .querySelectorAll("[data-settings-mfa-status]")
+            .forEach((node) => {
+              if (typeof account.mfaEnabled !== "boolean") return;
+              node.textContent = account.mfaEnabled ? "Enabled" : "Disabled";
+              node.dataset.enabled = String(account.mfaEnabled);
+            });
           $("account-username").value = account.username || "";
           $("account-status").textContent = account.passwordEnabled
             ? "Password sign-in is enabled."
@@ -426,10 +490,19 @@ export function createSettings(
       event.submitter.disabled = false;
     }
   });
+  lifecycle.listen($("mfa-manage-start"), "click", () => {
+    if (state.mfaManagementBusy || state.deferredLogin) return;
+    $("mfa-manage-start").setAttribute("aria-expanded", "true");
+    $("mfa-manage-start").hidden = true;
+    $("mfa-manage-form").hidden = false;
+    $("mfa-manage-password").focus();
+  });
   function clearMFAManagement() {
     $("mfa-manage-form").reset();
     $("mfa-manage-verify").reset();
-    $("mfa-manage-form").hidden = false;
+    $("mfa-manage-form").hidden = true;
+    $("mfa-manage-start").hidden = false;
+    $("mfa-manage-start").setAttribute("aria-expanded", "false");
     $("mfa-manage-enrollment").hidden = $("mfa-manage-codes").hidden = true;
     $("mfa-manage-secret").value = "";
     $("mfa-manage-qr").removeAttribute("src");
@@ -651,11 +724,25 @@ export function createSettings(
         "Select and copy the recovery codes shown above.";
     }
   });
+  lifecycle.listen($("token-create"), "toggle", () => {
+    const open = $("token-create").open;
+    const button = $("token-create").querySelector("summary");
+    button.classList.toggle("primary", !open);
+    button.classList.toggle("subtle", open);
+    $("token-create-label").textContent = open ? "Cancel" : "Create API key";
+    if (
+      open &&
+      !state.mfaManagementBusy &&
+      state.settingsSection === "api-keys"
+    )
+      $("token-name").focus();
+  });
   lifecycle.listen($("token-form"), "submit", async (event) => {
     const session = state.settingsSession;
     event.preventDefault();
     if (tokensBusy || editingTokenID !== null || tokenCount >= 32) return;
     setTokensBusy(true);
+    setCreationPending(true);
     $("tokens-error").textContent = "";
     $("tokens-feedback").textContent = "";
     try {
@@ -674,14 +761,22 @@ export function createSettings(
       setTokenVisibility(false);
       $("new-token-value").value = token.token;
       $("new-token").hidden = false;
-      $("token-name").value = "";
-      $("token-create").open = false;
+      discardTokenForm();
       $("new-token-value").focus();
       await loadTokens(session);
     } catch (error) {
-      if (session === state.settingsSession) showTokenError(error.message);
+      if (session === state.settingsSession) {
+        showTokenError(error.message);
+        if (error.status === 409)
+          await loadTokens(session).catch((failure) =>
+            tokenLoadError(failure, session),
+          );
+      }
     } finally {
-      if (session === state.settingsSession) setTokensBusy(false);
+      if (session === state.settingsSession) {
+        setCreationPending(false);
+        setTokensBusy(false);
+      }
     }
   });
   lifecycle.listen($("toggle-token"), "click", () =>
@@ -702,6 +797,8 @@ export function createSettings(
     state.settingsSession++;
     editingTokenID = null;
     $("account-password").value = "";
+    discardTokenForm();
+    setCreationPending(false);
     clearNewToken();
     clearMFAManagement();
   }

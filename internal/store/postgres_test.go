@@ -46,7 +46,7 @@ func TestConcurrentAccountEnrollmentAndAttachmentLimit(t *testing.T) {
 		if err := s.CreateMFAChallenge(ctx, key, MFAChallenge{Kind: "enroll", Salt: "salt"}); err != nil {
 			return err
 		}
-		return s.ActivateMFA(ctx, key, "salt", 0, 1, []byte{1}, nil, "", fmt.Sprintf("session-%d", i), time.Now().Add(time.Hour), "test", false)
+		return s.ActivateMFA(ctx, key, "salt", 0, 1, []byte{1}, nil, "", fmt.Sprintf("session-%d", i), time.Now().Add(time.Hour), SessionClient{UserAgent: "test"}, false)
 	})
 	if len(failed) != 7 {
 		t.Fatalf("enrollment must have one winner: %v", failed)

@@ -1,21 +1,23 @@
 import { Button } from "../../components/ui/button";
+import { Icon } from "../../components/icon";
+import { settingsGroups } from "./catalog";
+import { Appearance, SettingsOverview } from "./overview";
+import "./desk.css";
 
-const sections = [
-  ["api-keys", "key", "API keys"],
-  ["2fa", "shield", "Two-factor authentication"],
-  ["sessions", "monitor", "Browser sessions"],
-  ["password", "lock", "Password"],
-  ["backup", "download", "Backup & restore"],
-  ["sync", "refresh", "Browser bookmark sync"],
-  ["mobile", "book", "Mobile & browser"],
-];
-
+function NavItem({ id, icon, name }) {
+  return (
+    <Button type="button" className="nav-item" data-settings-section={id}>
+      <Icon name={icon} />
+      {name}
+    </Button>
+  );
+}
 export function SettingsFrame({ children }) {
   return (
     <>
-      <h1 id="settings-title" className="sr-only">
+      <span id="settings-title" className="sr-only">
         Settings
-      </h1>
+      </span>
       <header className="settings-topbar">
         <Button
           type="button"
@@ -34,13 +36,22 @@ export function SettingsFrame({ children }) {
         </Button>
         <span className="muted">Personal library</span>
         <Button
+          type="button"
+          className="desk-library"
+          data-settings-back
+          aria-label="Back to library"
+        >
+          <Icon name="library" />
+          <span>Library</span>
+        </Button>
+        <Button
           className="button subtle theme-toggle"
           data-theme-toggle
           aria-label="Dark mode"
           aria-pressed="true"
           title="Switch to light mode"
         >
-          <span data-theme-icon aria-hidden="true"></span>
+          <span data-theme-icon aria-hidden="true" />
           <span data-theme-label>Dark</span>
         </Button>
       </header>
@@ -50,27 +61,45 @@ export function SettingsFrame({ children }) {
           className="settings-navigation"
           aria-label="Settings sections"
         >
-          {sections.map(([section, icon, label]) => (
-            <Button
-              key={section}
-              type="button"
-              className="nav-item"
-              data-settings-section={section}
-            >
-              <span data-icon={icon} aria-hidden="true"></span>
-              {label}
-            </Button>
+          <NavItem id="overview" icon="grid" name="Overview" />
+          {settingsGroups.map((group) => (
+            <div key={group.name} role="group" aria-label={group.name}>
+              <p>{group.name}</p>
+              {group.entries.map((entry) => (
+                <NavItem {...entry} key={entry.id} />
+              ))}
+            </div>
           ))}
-          <Button
-            type="button"
-            className="nav-item settings-library-back"
-            data-settings-back
-          >
-            <span data-icon="arrow-left" aria-hidden="true"></span>
-            Back to library
-          </Button>
         </nav>
-        <div className="settings-workspace">{children}</div>
+        <div className="settings-workspace">
+          <SettingsOverview />
+          <div id="settings-detail-intro" hidden>
+            <nav aria-label="Settings breadcrumb" className="desk-path">
+              <Button data-settings-go="overview" type="button">
+                <Icon name="arrow-left" />
+                Overview
+              </Button>
+              <span aria-hidden="true">/</span>
+              <span id="settings-detail-group" />
+            </nav>
+            <header className="desk-intro">
+              <span id="settings-detail-icon" className="desk-emblem" />
+              <div>
+                <h1 id="settings-detail-title" tabIndex="-1" />
+                <p id="settings-detail-description" />
+              </div>
+            </header>
+          </div>
+          <section
+            data-settings-panel="appearance"
+            className="settings-section"
+            aria-label="Appearance"
+            hidden
+          >
+            <Appearance />
+          </section>
+          {children}
+        </div>
       </div>
     </>
   );

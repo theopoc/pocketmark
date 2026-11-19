@@ -31,7 +31,8 @@ export async function securityJourney({ browser, page, base, username, password,
     await clickNavigation(page, '#settings-button');
     await settingsNavigationJourney(page);
     await selectSettings(page, 'sessions');
-    await page.locator('#sessions-list .token-row').nth(1).waitFor();
+    await page.locator('#sessions-list .session-card').nth(1).waitFor();
+    assert.equal(await page.locator('#sessions-list').getByText('127.0.0.1', { exact: true }).count(), 2);
     await page.setViewportSize({ width: 320, height: 700 });
     for (const [section, selectors] of [['api-keys', ['#token-name', '#token-profile-trigger']], ['sessions', ['#sessions-refresh']], ['backup', ['#settings-page a[href="/api/backup"]']]]) {
       await selectSettings(page, section);
@@ -42,10 +43,10 @@ export async function securityJourney({ browser, page, base, username, password,
     await page.setViewportSize({ width: 1280, height: 720 });
     await openNavigation(page);
     await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: 'Backup & restore' }).click();
-    assert.equal(await page.locator('#backup-title').evaluate(node => document.activeElement === node), true);
+    assert.equal(await page.locator('#settings-detail-title').evaluate(node => document.activeElement === node), true);
     await openNavigation(page);
     await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: 'API keys' }).click();
-    assert.equal(await page.locator('#api-keys-title').evaluate(node => document.activeElement === node), true);
+    assert.equal(await page.locator('#settings-detail-title').evaluate(node => document.activeElement === node), true);
     if (process.env.E2E_SCREENSHOTS) {
       await mkdir(process.env.E2E_SCREENSHOTS, { recursive: true });
       for (const [name, width, height, theme] of [['desktop', 1280, 1000, 'dark'], ['mobile', 390, 844, 'dark'], ['mobile-light', 390, 844, 'light']]) {
@@ -62,10 +63,16 @@ export async function securityJourney({ browser, page, base, username, password,
     }
     await selectSettings(page, 'api-keys');
     if (!await page.locator('#token-create').evaluate(node => node.open)) await page.locator('#token-create summary').click();
+    await page.locator('#token-name').fill('Abandoned key');
+    await chooseOption(page, 'token-profile', 'Full Access');
+    await chooseOption(page, 'token-expiry', 'Never');
+    await page.locator('#token-create summary').click();
+    await page.locator('#token-create summary').click();
+    assert.equal(await page.locator('#token-name').inputValue(), '');
     assert.equal(await page.locator('#token-profile').inputValue(), 'read');
     assert.equal(await page.locator('#token-expiry').inputValue(), '30');
     await page.locator('#token-name').fill('Synthetic extension');
-    await chooseOption(page, 'token-profile', 'Add, edit & capture');
+    await chooseOption(page, 'token-profile', 'Editor');
     assert.equal(await page.locator('#token-profile').inputValue(), 'capture');
     await page.setViewportSize({ width: 320, height: 700 });
     await page.waitForFunction(() => !document.querySelector('#token-form button[type=submit]').disabled);
@@ -73,6 +80,8 @@ export async function securityJourney({ browser, page, base, username, password,
     await page.route('**/api/tokens', failCreate, { times: 1 });
     await page.locator('#token-form').getByRole('button', { name: 'Create key', exact: true }).click();
     await page.locator('#tokens-error').filter({ hasText: 'Synthetic failure' }).waitFor();
+    assert.equal(await page.locator('#token-name').inputValue(), 'Synthetic extension');
+    assert.equal(await page.locator('#token-profile').inputValue(), 'capture');
     assert.equal(await page.locator('#tokens-error').evaluate(node => document.activeElement === node && node.getBoundingClientRect().top >= 0 && node.getBoundingClientRect().top < innerHeight), true);
     await page.setViewportSize({ width: 1280, height: 720 });
     const expired = expireConfirmation();
@@ -90,29 +99,20 @@ export async function securityJourney({ browser, page, base, username, password,
     const keys = await (await request.get(url('/api/tokens'))).json();
     const key = keys.find(key => key.name === 'Synthetic extension');
     assert.equal(key.profile, 'capture'); assert.ok(key.expiresAt > Date.now() / 1000);
-    const keyRow = page.locator('#token-list .token-accordion').filter({ hasText: 'Synthetic extension' });
-    const keySummary = keyRow.locator('summary');
-    assert.equal(await keyRow.locator('.token-name').evaluate(n => getComputedStyle(n).fontSize), '14px', 'API key names use the shared compact title scale');
-    assert.equal(await keyRow.locator('.token-permissions').evaluate(n => getComputedStyle(n).fontSize), '13px');
-    assert.equal(await keyRow.locator('.token-metadata dd').first().evaluate(n => getComputedStyle(n).fontSize), '14px');
-    assert.equal(await keyRow.locator('.token-row-actions .button').first().evaluate(n => getComputedStyle(n).fontSize), '13px');
-    const apiTitle = await page.locator('#api-keys-title').boundingBox();
-    const createAction = await page.locator('#token-create > summary').boundingBox();
-    assert.ok(createAction.x > apiTitle.x && Math.abs(createAction.y - apiTitle.y) < 8,
-      'desktop creation action is aligned to the right of the API keys title');
-    assert.equal(await page.locator('#settings-title').evaluate(node => getComputedStyle(node).clip), 'rect(0px, 0px, 0px, 0px)',
-      'Settings retains an accessible heading without duplicating the visible page title');
-    assert.equal(await keyRow.evaluate(node => node.open), true);
+    const keyRow = page.locator('#token-list tbody[data-token-id]').filter({ hasText: 'Synthetic extension' });
+    const keySummary = keyRow.getByRole('button', { name: 'Details for Synthetic extension' });
+    assert.equal(await keyRow.getByRole('switch').getAttribute('aria-checked'), 'true');
+    assert.equal(await keyRow.getByRole('button', { name: 'Revoke Synthetic extension' }).isDisabled(), true);
+    assert.equal(await keyRow.getByRole('cell', { name: 'Editor', exact: true }).count(), 1);
+    assert.equal(await keySummary.getAttribute('aria-expanded'), 'false');
     await keySummary.press('Enter');
-    assert.equal(await keyRow.evaluate(node => node.open), false);
-    assert.equal(await keyRow.getByRole('button', { name: 'Rotate Synthetic extension', exact: true }).isVisible(), false);
+    assert.equal(await keySummary.getAttribute('aria-expanded'), 'true');
     await keySummary.press('Space');
-    assert.equal(await keyRow.evaluate(node => node.open), true);
-    await keyRow.getByRole('button', { name: 'Rename Synthetic extension', exact: true }).click();
+    assert.equal(await keyRow.getByRole('button', { name: 'Rotate Synthetic extension' }).isVisible(), false);
     await keySummary.click();
-    assert.equal(await keyRow.evaluate(node => node.open), true, 'keep the rename form reachable while editing');
+    await keyRow.getByRole('button', { name: 'Rename Synthetic extension', exact: true }).click();
     await keyRow.locator('input').press('Escape');
-    assert.equal(await keyRow.getByRole('button', { name: 'Rename Synthetic extension', exact: true }).evaluate(node => document.activeElement === node), true);
+    assert.equal(await keyRow.getByRole('button', { name: 'Rename Synthetic extension', exact: true }).evaluate(n => document.activeElement === n), true);
     assert.equal((await request.delete(url('/api/links/99999'), { headers: { Authorization: `Bearer ${original}` } })).status(), 403);
     expireConfirmation();
     await page.getByRole('button', { name: 'Rotate Synthetic extension', exact: true }).click();
@@ -126,11 +126,18 @@ export async function securityJourney({ browser, page, base, username, password,
     const rotated = await page.locator('#new-token-value').inputValue();
     assert.equal((await request.get(url('/api/session'), { headers: { Authorization: `Bearer ${original}` } })).status(), 401);
     assert.equal((await request.get(url('/api/session'), { headers: { Authorization: `Bearer ${rotated}` } })).status(), 200);
-    await page.getByRole('button', { name: 'Disable Synthetic extension', exact: true }).click();
-    await page.getByRole('button', { name: 'Reactivate Synthetic extension', exact: true }).waitFor();
+    const access = keyRow.getByRole('switch', { name: 'Access for Synthetic extension' });
+    const revoke = keyRow.getByRole('button', { name: 'Revoke Synthetic extension' });
+    await access.click();
+    await revoke.waitFor();
+    await page.waitForFunction(() => !document.querySelector('#token-list [aria-label="Revoke Synthetic extension"]').disabled);
+    assert.equal(await access.getAttribute('aria-checked'), 'false');
     assert.equal((await request.get(url('/api/session'), { headers: { Authorization: `Bearer ${rotated}` } })).status(), 401);
-    await page.getByRole('button', { name: 'Reactivate Synthetic extension', exact: true }).click();
-    await page.getByRole('button', { name: 'Disable Synthetic extension', exact: true }).waitFor();
+    await revoke.click();
+    await page.locator('#confirm-action-cancel').click();
+    await access.click();
+    await page.waitForFunction(() => document.querySelector('#token-list [role=switch]').getAttribute('aria-checked') === 'true');
+    assert.equal(await revoke.isDisabled(), true);
 
     // The backup link always requests password confirmation, even after login.
     await selectSettings(page, 'backup');
@@ -168,11 +175,15 @@ export async function securityJourney({ browser, page, base, username, password,
     await page.locator('#settings-page [data-settings-back]:visible').click();
     await page.locator('#settings-page').waitFor({ state: 'hidden' });
     await clickNavigation(page, '#settings-button');
-    const expiredRow = page.locator('#token-list .token-row').filter({ hasText: 'Synthetic expired key' });
+    await selectSettings(page, 'api-keys');
+    const expiredRow = page.locator('#token-list tbody[data-token-id]').filter({ hasText: 'Synthetic expired key' });
     await expiredRow.waitFor();
-    assert.equal(await page.locator('#token-count').textContent(), '1 active · 2 of 32 keys');
-    assert.equal(await expiredRow.locator('.token-status').textContent(), 'Expired');
-    assert.equal(await expiredRow.locator('.is-active').count(), 0);
+    assert.equal(await page.locator('#token-count').textContent(), '2');
+    assert.equal(await page.locator('#token-count').getAttribute('title'), '2 of 32 keys');
+    assert.equal(await page.locator('[data-settings-key-count]').first().textContent(), '1 active');
+    assert.equal(await expiredRow.getByRole('switch').innerText(), 'Expired');
+    assert.equal(await expiredRow.getByRole('switch').getAttribute('aria-checked'), 'true');
+    assert.equal(await expiredRow.getByRole('button', { name: 'Revoke Synthetic expired key' }).isDisabled(), true);
     assert.equal(await expiredRow.getByRole('button', { name: 'Rotate Synthetic expired key' }).isVisible(), false);
     if (process.env.E2E_SCREENSHOTS) {
       await expiredRow.scrollIntoViewIfNeeded(); await settle();
@@ -197,9 +208,16 @@ export async function securityJourney({ browser, page, base, username, password,
     }
     await selectSettings(page, 'sessions');
     await page.locator('#sessions-others').click();
+    await page.locator('#confirm-action-submit').click();
     await page.locator('#sessions-feedback').filter({ hasText: 'All other browsers' }).waitFor();
     assert.equal((await peer.request.get(url('/api/session'))).status(), 401);
     assert.equal((await request.get(url('/api/session'))).status(), 200);
+    await selectSettings(page, 'api-keys');
+    await access.click();
+    await revoke.click();
+    await page.locator('#confirm-action-submit').click();
+    await keyRow.waitFor({state: 'detached'});
+    assert.equal((await (await request.get(url('/api/tokens'))).json()).some(token => token.id === key.id), false);
     // Clicking outside must cancel without starting a download or retaining the password.
     await selectSettings(page, 'backup');
     await page.getByRole('link', { name: 'Download full backup', exact: true }).click();
