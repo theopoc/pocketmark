@@ -453,7 +453,7 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Collection before save', exact: true, includeHidden: true }).count(), 0);
 
   const original = 'Browser integration bookmark';
-  const revised = 'Browser revised bookmark';
+  const revised = 'Browser revised bookmark - Example';
   await page.locator('#add-bookmark').click();
   // A private destination is deliberately rejected by the capture worker: no public network.
   await page.locator('#bookmark-url').fill('http://127.0.0.1/e2e-fixture');
@@ -622,29 +622,22 @@ try {
   await card(original).getByRole('button', { name: original, exact: true }).click();
   await page.locator('#reader-dialog').waitFor({ state: 'visible' });
   await page.locator('#reader-retry-open').waitFor({ state: 'visible' });
-  assert.equal(await page.locator('#reader-files').isVisible(), false, 'unavailable reader actions are hidden after an opening failure');
   assert.equal(await page.locator('#reader-section-nav').isVisible(), false);
   await page.unroute(readerURL, failReader);
   await page.locator('#reader-retry-open').click();
   await page.locator('#reader-title').filter({ hasText: original }).waitFor();
   assert.equal(await page.locator('#reader-retry-open').isVisible(), false);
-  assert.equal(await page.locator('#reader-files').isVisible(), false);
   assert.equal(await page.locator('#reader-formats').isVisible(), true);
-  assert.equal(await page.locator('#reader-content').isVisible(), false);
+  await page.locator('#reader-formats-summary').filter({ hasText: 'No saved copies yet.' }).waitFor({ state: 'attached' });
   for (const format of ['html', 'image', 'pdf']) {
-    const saved = await page.locator(`#reader-format-${format}`).getAttribute('data-saved') === 'true';
-    assert.equal(await page.locator(`#reader-format-${format}`).isVisible(), saved);
-    if (saved) assert.ok(await page.locator(`#reader-format-${format}`).evaluate(node => node.getBoundingClientRect().height >= 44));
+    const shortcut = page.locator(`#reader-format-${format}`);
+    assert.equal(await shortcut.isVisible(), true);
+    assert.equal(await shortcut.isDisabled(), true, 'This bookmark has no captures or attached files');
+    assert.ok(await shortcut.evaluate(node => node.getBoundingClientRect().height >= 44));
   }
-  await page.locator('#reader-options summary').click();
-  for (const selector of ['#reader-original', '#reader-notebook-toggle', '#reader-text-mode', '#reader-size-trigger']) {
+  for (const selector of ['#reader-original', '#reader-notebook-toggle', '#reader-page-toggle', '#reader-size-trigger']) {
     assert.ok(await page.locator(selector).evaluate(node => node.getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
   }
-  await page.locator('#reader-files-toggle').click();
-  assert.ok(await page.locator('#asset-upload-button').evaluate(node => node.getBoundingClientRect().height >= 44));
-  const chooser = page.waitForEvent('filechooser');
-  await page.locator('#asset-upload-button').click();
-  await (await chooser).setFiles([]);
   await page.getByRole('button', { name: 'Close reader', exact: true }).click();
   await page.setViewportSize({ width: 1280, height: 720 });
   await card(original).getByRole('button', { name: original, exact: true }).click();
@@ -801,12 +794,13 @@ try {
   const png = await fixture.screenshot();
   await fixture.close();
   const html = `<!doctype html><style>h1 { color: rgb(12, 34, 56); } body { background: rgb(245, 240, 230); }</style>
-    <h1>Original saved appearance</h1><img id="embedded" src="data:image/png;base64,${png.toString('base64')}">
+    <article><h1>Browser revised bookmark</h1><h2>Original saved appearance</h2><figure><img id="embedded" alt="Rendered sample" src="data:image/png;base64,${png.toString('base64')}"><figcaption>Sample diagram</figcaption></figure>
+    <pre><code class="language-json">{"format": "HTML"}</code></pre></article>
     <script>parent.previewCompromised = true</script><img src="/preview-leak">
     <iframe src="/preview-frame-leak"></iframe><style>@import url('/preview-style-leak');</style>
     <meta http-equiv="refresh" content="0;url=${new URL('/preview-navigation-leak', base).href}"><base href="${base.href}">
     <noscript><a id="noscript-link" href="${new URL('/preview-noscript-leak', base).href}">No-script navigation</a></noscript>
-    <a href="${new URL('/preview-link-leak', base).href}" target="_top">External link</a><a id="popup-link" href="${new URL('/preview-popup-leak', base).href}" target="_blank">Popup</a><form action="${new URL('/preview-form-leak', base).href}"><button>Submit saved form</button></form><iframe srcdoc="&lt;script&gt;parent.previewCompromised=true&lt;/script&gt;&lt;img src='${new URL('/preview-srcdoc-leak', base).href}'&gt;"></iframe><svg xmlns:xlink="http://www.w3.org/1999/xlink"><a href="#safe"><set attributeName="href" to="/preview-svg-leak"/><text y="20">SVG link</text></a><a id="xlink" xlink:href="${new URL('/preview-xlink-leak', base).href}"><text y="60">Namespaced link</text></a></svg>` + '<!-- padding -->'.repeat(145000);
+    <a href="${new URL('/preview-link-leak', base).href}" target="_top">External link</a><a id="popup-link" href="${new URL('/preview-popup-leak', base).href}" target="_blank">Popup</a><form action="${new URL('/preview-form-leak', base).href}"><button>Submit saved form</button></form><iframe srcdoc="&lt;script&gt;parent.previewCompromised=true&lt;/script&gt;&lt;img src='${new URL('/preview-srcdoc-leak', base).href}'&gt;"></iframe><svg xmlns:xlink="http://www.w3.org/1999/xlink"><a href="#safe"><set attributeName="href" to="/preview-svg-leak"/><text y="20">SVG link</text></a><a id="xlink" xlink:href="${new URL('/preview-xlink-leak', base).href}"><text y="60">Namespaced link</text></a></svg>` + '<!--' + 'x'.repeat(2 * 1024 * 1024) + '-->';
   const legacy = Buffer.concat([Buffer.from('<!doctype html><meta charset="windows-1252"><h1>Caf'), Buffer.from([0xe9, 0x20, 0x80]), Buffer.from('</h1>')]);
   let htmlAsset;
   for (const [name, media, data] of [['legacy.html', 'text/html', legacy], ['capture.html', 'text/html', Buffer.from(html)], ['capture.png', 'image/png', png], ['capture.pdf', 'application/pdf', pdf]]) {
@@ -821,6 +815,26 @@ try {
   page.on('download', () => downloads++);
   page.on('response', response => { if (new URL(response.url()).pathname.startsWith('/preview-')) leakedRequests.push(response.url()); });
   await card(revised).getByRole('button', { name: revised, exact: true }).click();
+  const article = page.locator('#reader-rich-article');
+  await article.getByText('Sample diagram', { exact: true }).waitFor();
+  assert.equal(await article.getByRole('heading', { name: 'Browser revised bookmark', exact: true }).count(), 0);
+  assert.equal(await article.getByRole('heading', { name: 'Original saved appearance' }).isVisible(), true);
+  assert.equal(await article.locator('pre code').innerText(), '{"format": "HTML"}');
+  await page.waitForFunction(() => document.querySelector('#reader-rich-article img')?.naturalWidth > 0);
+  for (const [size, pixels] of [['M', '20px'], ['L', '24px'], ['S', '17px']]) {
+    await chooseOption(page, 'reader-size', size);
+    assert.equal(await article.evaluate(node => getComputedStyle(node).fontSize), pixels);
+  }
+  const layout = page.locator('#reader-page-toggle');
+  await layout.click();
+  await page.locator('#reader-page-breadcrumb [aria-current="page"]').filter({ hasText: revised }).waitFor();
+  assert.equal(await page.evaluate(() => document.fullscreenElement), null);
+  await article.getByRole('button', {name: /Enlarge image/}).click();
+  await page.getByRole('button', {name: 'Close image', exact: true}).press('Escape');
+  assert.equal(await page.locator('#reader-page-breadcrumb').isVisible(), true);
+  await layout.press('Escape');
+  await page.locator('#reader-page-breadcrumb').waitFor({state: 'hidden'});
+  assert.equal(await article.isVisible(), true);
   const previews = '**/api/assets/*/view';
   await page.route(previews, route => route.request().method() === 'GET'
     ? route.fulfill({ status: 422, contentType: 'application/json', body: '{"error":"Synthetic preparation failure"}' })
