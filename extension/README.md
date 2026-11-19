@@ -8,7 +8,7 @@ no Linkwarden extension or service is involved. Requires Chrome 120 or newer.
 1. Open `chrome://extensions` and enable **Developer mode**.
 2. Choose **Load unpacked**, then select this `extension/` directory. Alternatively,
    extract `pocketmark-extension.zip` and select the extracted folder.
-3. In Pocketmark, sign in and create a dedicated key under **API keys**.
+3. In Pocketmark, sign in and open **Settings → API keys** and create a dedicated key with the **Editor** role.
 4. Open the extension on a regular HTTP(S) page. Under **Connection settings**,
    enter the Pocketmark server origin and the key, then click **Connect**.
 5. Approve access to that server. Chrome may close the popup while asking;
@@ -16,7 +16,7 @@ no Linkwarden extension or service is involved. Requires Chrome 120 or newer.
 
 The key stays in this browser profile's local extension storage, never Chrome
 Sync. It grants library access, not account/key administration or full backups.
-Revoke it from Pocketmark if needed. Use HTTPS except on this computer (localhost or a loopback IP).
+To revoke it permanently, turn off the key in Pocketmark, then choose **Revoke**. Use HTTPS except on this computer (localhost or a loopback IP).
 A task with pending files stays bound to its original server; retry or discard
 that task before connecting to another server.
 
@@ -98,7 +98,7 @@ python3 extension/package.py /tmp/pocketmark-extension.zip
 Run `make test-extension` for deterministic regressions. Actual browser observations
 are recorded separately in [docs/REAL_CLIENTS.md](../docs/REAL_CLIENTS.md).
 
-For a new API key, choose **Add, edit & capture — browser extension** in Settings. Read-only keys cannot save pages; Floccus keys only support WebDAV. After rotating a key, reconnect the extension with its new value.
+After rotating an API key, reconnect the extension with its new value.
 
 
 The popup offers Dark and Light appearance in its header; the choice stays in

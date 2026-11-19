@@ -1,6 +1,7 @@
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
+import { keyRoles } from "../features/settings/key-roles";
 import { SettingsFrame } from "../features/settings/frame";
 
 export function AppView() {
@@ -63,8 +64,7 @@ export function AppView() {
               aria-labelledby="password-title"
               hidden
             >
-              <h2 id="password-title">{"Password"}</h2>
-              <p className="small muted">{"Manage your sign-in details."}</p>
+              <h2 id="password-title">{"Sign-in details"}</h2>
               <form id="account-form">
                 <p id="account-status" className="small muted"></p>
                 <label htmlFor="account-username">{"Username"}</label>
@@ -91,15 +91,27 @@ export function AppView() {
               hidden
             >
               {"\n    "}
-              <h2 id="mfa-settings-title">{"Two-factor authentication"}</h2>
+              <h2 id="mfa-settings-title">
+                Authenticator app{" "}
+                <span className="desk-mfa-status" data-settings-mfa-status />
+              </h2>
               {"\n    "}
               <p className="small muted">
                 {
-                  "Use an authenticator app when signing in. Replacing it signs out your other browsers."
+                  "Replace your authenticator or generate new recovery codes. Replacing the authenticator signs out your other browsers."
                 }
               </p>
               {"\n    "}
-              <form id="mfa-manage-form">
+              <Button
+                id="mfa-manage-start"
+                type="button"
+                variant="default"
+                aria-controls="mfa-manage-form"
+                aria-expanded="false"
+              >
+                Manage authenticator
+              </Button>
+              <form id="mfa-manage-form" hidden>
                 {"\n      "}
                 <label htmlFor="mfa-manage-password">
                   {"Current password"}
@@ -135,7 +147,7 @@ export function AppView() {
                 {"\n      "}
                 <div className="token-actions">
                   <Button
-                    className="button subtle"
+                    className="button primary"
                     type="submit"
                     value="replace"
                   >
@@ -248,13 +260,18 @@ export function AppView() {
               hidden
             >
               {"\n    "}
-              <h2 id="sessions-title">{"Browser sessions"}</h2>
+              <h2 id="sessions-title">
+                Signed-in devices{" "}
+                <span className="settings-count" id="sessions-count" />
+              </h2>
               {"\n    "}
               <p className="small muted">
                 {
-                  "Review signed-in browsers and revoke access. All sessions expire after seven days. Browser details are reported by the device and may be unavailable or inaccurate."
+                  "IP addresses are recorded at sign-in. Browsers report their own device details."
                 }
               </p>
+              {"\n    "}
+              <ul id="sessions-list" aria-label="Browser sessions"></ul>
               {"\n    "}
               <div className="token-actions">
                 <Button
@@ -272,8 +289,6 @@ export function AppView() {
                   {"Sign out other browsers"}
                 </Button>
               </div>
-              {"\n    "}
-              <ul id="sessions-list" aria-label="Browser sessions"></ul>
               {"\n    "}
               <form id="session-idle-form">
                 <label htmlFor="session-idle">
@@ -311,16 +326,10 @@ export function AppView() {
               hidden
             >
               {"\n    "}
-              <div className="token-heading">
-                <div>
-                  <h2 id="api-keys-title">{"API keys"}</h2>
-                  <p className="small muted">
-                    {"Connect each app with its own key."}
-                  </p>
-                </div>
-                <span id="token-count" className="small muted"></span>
+              <div className="key-heading">
+                <h2 id="api-keys-title">Your keys</h2>
+                <span id="token-count" className="key-count"></span>
               </div>
-              {"\n    "}
               <div id="new-token" hidden>
                 {"\n      "}
                 <label htmlFor="new-token-value">{"New API key"}</label>
@@ -366,10 +375,24 @@ export function AppView() {
               {"\n    "}
               <p id="tokens-error" className="form-error" role="alert"></p>
               {"\n    "}
-              <details id="token-create" className="token-create">
-                <summary className="button subtle">
-                  <span data-icon="plus" aria-hidden="true"></span>
-                  {"Create API key"}
+              <div id="token-list"></div>
+              <p id="token-limit" className="small muted" hidden>
+                All 32 key slots are in use. Revoke a disabled key to create
+                another.
+              </p>
+              <details id="token-create" className="key-create">
+                <summary className="button primary">
+                  <span
+                    className="key-create-plus"
+                    data-icon="plus"
+                    aria-hidden="true"
+                  ></span>
+                  <span
+                    className="key-create-close"
+                    data-icon="close"
+                    aria-hidden="true"
+                  ></span>
+                  <span id="token-create-label">Create API key</span>
                 </summary>
                 {"    "}
                 <form id="token-form">
@@ -378,7 +401,7 @@ export function AppView() {
                     {"Choose a name and the access this app needs."}
                   </p>
                   {"\n      "}
-                  <label htmlFor="token-name">{"Key name"}</label>
+                  <label htmlFor="token-name">Name</label>
                   {"\n      "}
                   <Input
                     id="token-name"
@@ -388,22 +411,20 @@ export function AppView() {
                     aria-describedby="token-help"
                   />
                   {"\n      "}
-                  <label htmlFor="token-profile">{"Permissions"}</label>
+                  <label htmlFor="token-profile">Role</label>
                   {"\n      "}
                   <select
                     id="token-profile"
                     aria-describedby="token-permissions-help"
                   >
-                    <option value="read">{"Read only"}</option>
-                    <option value="capture">{"Add, edit & capture"}</option>
-                    <option value="sync">{"Floccus sync"}</option>
-                    <option value="full">{"Full library access"}</option>
+                    {Object.entries(keyRoles).map(([value, role]) => (
+                      <option key={value} value={value}>
+                        {role.label}
+                      </option>
+                    ))}
                   </select>
-                  {"\n      "}
                   <p id="token-permissions-help" className="small muted">
-                    {
-                      "Read only can read and export your library. No profile can manage your account, keys, sessions or full backups."
-                    }
+                    {keyRoles.read.description}
                   </p>
                   {"\n      "}
                   <label htmlFor="token-expiry">{"Expires after"}</label>
@@ -422,18 +443,6 @@ export function AppView() {
                 {"\n    "}
               </details>
               {"\n    "}
-              <ul
-                id="token-list"
-                aria-label="API keys"
-                aria-describedby="token-activity-help"
-              ></ul>
-              {"\n    "}
-              <p id="token-activity-help" className="small muted">
-                {
-                  "Last used includes connected apps and bookmark sync. Earlier activity may be unavailable."
-                }
-              </p>
-              {"\n    "}
               <p id="tokens-feedback" className="small muted" role="status"></p>
               {"\n      "}
             </section>
@@ -443,7 +452,7 @@ export function AppView() {
               aria-labelledby="backup-title"
               hidden
             >
-              <h2 id="backup-title">{"Backup & restore"}</h2>
+              <h2 id="backup-title">{"Full library backup"}</h2>
               <p className="small muted">
                 {
                   "A full backup keeps your bookmarks, captures, attachments, highlights and account settings together."
@@ -481,7 +490,7 @@ export function AppView() {
               hidden
             >
               {"\n    "}
-              <h2 id="sync-title">{"Browser bookmark sync"}</h2>
+              <h2 id="sync-title">{"Connect Floccus"}</h2>
               <p className="small muted">
                 {
                   "Use a dedicated Floccus API key to sync bookmarks and collection folders."
@@ -491,9 +500,9 @@ export function AppView() {
               <ol className="setup-steps">
                 <li>
                   <a href="/?settings=api-keys">{"Create an API key"}</a>
-                  {" with "}
-                  <strong>{"Floccus sync"}</strong>
-                  {" permissions."}
+                  {" with the "}
+                  <strong>{"Sync"}</strong>
+                  {" role."}
                 </li>
                 <li>
                   {"In Floccus, add a "}
@@ -534,9 +543,7 @@ export function AppView() {
               hidden
             >
               {"\n    "}
-              <h2 id="mobile-title">{"Mobile & browser"}</h2>
-              {"\n    "}
-              <h3>{"Install on your phone"}</h3>
+              <h2 id="mobile-title">{"Install on your phone"}</h2>
               <p className="small muted">
                 {
                   "Open Pocketmark in your phone’s browser, then choose its install or Add to Home Screen command. Availability depends on your browser and operating system."
@@ -548,33 +555,18 @@ export function AppView() {
                 }
               </p>
               {"\n    "}
-              <h3>{"Save from Chrome"}</h3>
+              <h2>{"Save from Chrome"}</h2>
               <p className="small muted">
                 {
-                  "The companion extension can save a link, rendered HTML, screenshots or a PDF. Connect it to this server with a dedicated API key using "
+                  "The companion extension can save a link, rendered HTML, screenshots or a PDF. Connect it to this server with a dedicated API key using the "
                 }
-                <strong>{"Add, edit & capture"}</strong>
-                {" permissions."}
+                <strong>{"Editor"}</strong>
+                {" role."}
               </p>
               <a className="button subtle" href="/?settings=api-keys">
                 {"Manage API keys"}
               </a>
               {"\n    "}
-              <h3>{"Keyboard shortcuts"}</h3>
-              <label className="inline-check">
-                <Input id="keyboard-shortcuts" type="checkbox" defaultChecked />
-                {" Enable single-key shortcuts"}
-              </label>
-              <p className="small muted">
-                {"Use "}
-                <kbd>{"N"}</kbd>
-                {" to add a bookmark and "}
-                <kbd>{"/"}</kbd>
-                {
-                  " to search while browsing your library. Turn these off when using dictation or if they interrupt your work. This preference stays in this browser."
-                }
-              </p>
-              {"\n  "}
             </section>
           </SettingsFrame>
           {"\n      "}

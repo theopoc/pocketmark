@@ -15,6 +15,7 @@ import PocketmarkBulk from "./features/bulk.js";
 import PocketmarkSelection from "./features/selection.js";
 import PocketmarkTagPicker from "./features/tag-picker.js";
 import PocketmarkSecurity from "./features/security.js";
+import { renderSessions } from "./features/settings/sessions.jsx";
 import PocketmarkSelect from "../../internal/webui/static/select.js";
 import PocketmarkThemeSwitch from "../../internal/webui/static/theme-switch.js";
 import PocketmarkNameLimit from "../../internal/webui/static/name-limit.js";
@@ -266,6 +267,12 @@ export function createApplication() {
 
   function applyTheme(theme) {
     const dark = theme === "dark";
+    document.querySelectorAll("[data-settings-theme]").forEach((button) => {
+      button.setAttribute(
+        "aria-pressed",
+        String(button.dataset.settingsTheme === theme),
+      );
+    });
     document.documentElement.dataset.theme = theme;
     document.querySelector('meta[name="theme-color"]').content = dark
       ? "#15161b"
@@ -288,17 +295,21 @@ export function createApplication() {
     apply: applyTheme,
   });
   applyTheme(themeSwitch.requested);
-  document.querySelectorAll("[data-theme-toggle]").forEach((button) =>
-    lifecycle.listen(button, "click", () => {
-      const theme = themeSwitch.requested === "dark" ? "light" : "dark";
-      themeSwitch.set(theme);
-      try {
-        localStorage.setItem("pocketmark-theme", theme);
-      } catch {
-        /* Keep the session choice when storage is unavailable. */
-      }
-    }),
-  );
+  document
+    .querySelectorAll("[data-theme-toggle], [data-settings-theme]")
+    .forEach((button) =>
+      lifecycle.listen(button, "click", () => {
+        const theme =
+          button.dataset.settingsTheme ||
+          (themeSwitch.requested === "dark" ? "light" : "dark");
+        themeSwitch.set(theme);
+        try {
+          localStorage.setItem("pocketmark-theme", theme);
+        } catch {
+          /* Keep the session choice when storage is unavailable. */
+        }
+      }),
+    );
 
   let libraryView = "list";
   try {
@@ -700,6 +711,8 @@ export function createApplication() {
 
   const security = PocketmarkSecurity.create({
     api,
+    renderSessions,
+    confirmAction,
     toast,
     onSessionExpired: showLogin,
   });
@@ -2311,25 +2324,32 @@ export function createApplication() {
   } catch {
     /* Optional preference storage. */
   }
+  const shortcutControls = document.querySelectorAll(
+    "[data-settings-shortcuts]",
+  );
   function syncShortcuts() {
-    $("keyboard-shortcuts").checked = shortcutsEnabled;
+    shortcutControls.forEach((control) => {
+      control.checked = shortcutsEnabled;
+    });
     document.querySelectorAll("[data-shortcut-hint]").forEach((node) => {
       node.hidden = !shortcutsEnabled;
     });
   }
   syncShortcuts();
-  lifecycle.listen($("keyboard-shortcuts"), "change", () => {
-    shortcutsEnabled = $("keyboard-shortcuts").checked;
-    try {
-      localStorage.setItem(
-        "pocketmark-shortcuts",
-        shortcutsEnabled ? "on" : "off",
-      );
-    } catch {
-      /* Keep this session's choice. */
-    }
-    syncShortcuts();
-  });
+  shortcutControls.forEach((control) =>
+    lifecycle.listen(control, "change", () => {
+      shortcutsEnabled = control.checked;
+      try {
+        localStorage.setItem(
+          "pocketmark-shortcuts",
+          shortcutsEnabled ? "on" : "off",
+        );
+      } catch {
+        /* Keep this session's choice. */
+      }
+      syncShortcuts();
+    }),
+  );
   lifecycle.listen(document, "keydown", (event) => {
     if (
       !shortcutsEnabled ||

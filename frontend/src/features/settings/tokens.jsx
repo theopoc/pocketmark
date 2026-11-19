@@ -3,25 +3,13 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Icon } from "../../components/icon";
 import { renderRegion } from "../../lib/render";
+import { SettingsTimestamp } from "./timestamp";
+import { keyRoles } from "./key-roles";
+import "./keys.css";
 
-function TokenDate({ value }) {
-  const date = new Date(value);
-  if (!value || Number.isNaN(date.getTime()))
-    return <span className="muted">No recorded use</span>;
-  return (
-    <time
-      dateTime={value}
-      title={date.toLocaleString(undefined, { timeZoneName: "short" })}
-    >
-      {date.toLocaleString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })}
-    </time>
-  );
+function TokenDate({ value, fallback = "No recorded use" }) {
+  const date = value ? new Date(value) : null;
+  return <SettingsTimestamp date={date} fallback={fallback} />;
 }
 
 function RenameForm({ token, model, onCancel }) {
@@ -69,7 +57,7 @@ function RenameForm({ token, model, onCancel }) {
         }
       }}
     >
-      <label htmlFor={`token-rename-${token.id}`}>Key name</label>
+      <label htmlFor={`token-rename-${token.id}`}>Name</label>
       <Input
         ref={input}
         id={`token-rename-${token.id}`}
@@ -107,188 +95,198 @@ function RenameForm({ token, model, onCancel }) {
   );
 }
 
-export function TokenList({ model }) {
-  const [editingID, setEditingID] = useState(null);
-  const refs = useRef(new Map());
+function TokenRows({ token, model }) {
+  const [open, setOpen] = useState(false);
+  const nameButton = useRef(null);
+  const renameButton = useRef(null);
+  const toggleButton = useRef(null);
+  const expired = token.expiresAt > 0 && token.expiresAt * 1000 <= Date.now();
+  const locked = model.busy || model.editingID !== null;
+  const detailsID = `token-details-${token.id}`;
   useLayoutEffect(() => {
-    if (!model.focusID) return;
-    const row = refs.current.get(model.focusID);
-    (model.focusAction === "rename"
-      ? row?.querySelector(".token-rename")
-      : row?.querySelector("[data-token-toggle]:not([hidden])") ||
-        row?.querySelector(".token-rename")
-    )?.focus();
-  }, [model.focusID, model.focusAction]);
-  if (!model.tokens.length)
-    return (
-      <li className="token-empty muted">
-        No API keys yet. Create a key to connect your first app.
-      </li>
-    );
-  return model.tokens.map((token, index) => {
-    const expired = token.expiresAt > 0 && token.expiresAt * 1000 <= Date.now();
-    const disabled = model.busy || editingID !== null;
-    const permissions = {
-      read: "Read only",
-      capture: "Add, edit & capture",
-      sync: "Floccus sync",
-      full: "Full library access",
-    };
-    const expiryDate = token.expiresAt
-      ? new Date(token.expiresAt * 1000).toLocaleDateString()
-      : "No expiry";
-    function cancelRename() {
-      model.onEditing(null);
-      setEditingID(null);
-      model.onRefresh(model.tokens, token.id, "rename");
-    }
-    return (
-      <li
-        className="token-row"
-        key={token.id}
-        ref={(node) => {
-          if (node) refs.current.set(token.id, node);
-          else refs.current.delete(token.id);
-        }}
-      >
-        <details
-          className="token-accordion"
-          data-token-id={token.id}
-          open={
-            model.openIDs.has(String(token.id)) ||
-            model.focusID === token.id ||
-            (model.initial && index === 0)
-          }
-        >
-          <summary
-            className="token-summary"
-            aria-disabled={disabled}
-            onClick={(event) => {
-              if (disabled) event.preventDefault();
+    if (model.focusID !== token.id) return;
+    const toggle = toggleButton.current;
+    const target =
+      model.focusAction === "rename"
+        ? renameButton.current
+        : toggle.disabled
+          ? nameButton.current
+          : toggle;
+    target?.focus();
+  }, [model.focusID, model.focusAction, model.epoch, token.id]);
+
+  return (
+    <tbody data-token-id={token.id}>
+      <tr className="key-line">
+        <th scope="row">
+          <Button
+            ref={nameButton}
+            className="key-name-button"
+            type="button"
+            aria-label={`Details for ${token.name}`}
+            aria-expanded={open}
+            aria-controls={detailsID}
+            aria-disabled={locked}
+            onClick={() => {
+              if (!locked) setOpen(!open);
             }}
           >
-            <Icon name="chevron-right" className="icon token-chevron" />
-            <span className="token-overview">
-              <span className="token-name-row">
-                <span className="token-name-group">
-                  <strong className="token-name">{token.name}</strong>
-                </span>
-                <span
-                  className={`token-status${token.active && !expired ? " is-active" : ""}`}
-                >
-                  {expired ? "Expired" : token.active ? "Active" : "Disabled"}
-                </span>
-              </span>
-              <span className="token-permissions small muted">
-                {permissions[token.profile] || token.profile}
-              </span>
-              <span className="token-summary-activity small muted">
-                Last used: <TokenDate value={token.lastUsedAt} />
-              </span>
-            </span>
-            <span className="token-summary-expiry small muted">
-              {token.expiresAt
-                ? `${expired ? "Expired" : "Expires"} ${expiryDate}`
-                : "No expiry"}
-            </span>
-          </summary>
-          <div className="token-details">
-            {editingID === token.id && (
-              <RenameForm token={token} model={model} onCancel={cancelRename} />
-            )}
-            <dl className="token-metadata">
-              <div>
-                <dt>Created</dt>
-                <dd>
-                  <TokenDate value={token.createdAt} />
-                </dd>
-              </div>
-              <div>
-                <dt>Last used</dt>
-                <dd>
-                  <TokenDate value={token.lastUsedAt} />
-                </dd>
-              </div>
-              <div>
-                <dt>{expired ? "Expired" : "Expires"}</dt>
-                <dd>{expiryDate}</dd>
-              </div>
-            </dl>
-            {expired && (
-              <p className="small muted">
-                Create a new key to reconnect this app.
-              </p>
-            )}
-            <div className="token-row-actions">
-              <Button
-                className="button subtle token-rename"
-                type="button"
-                title={`Rename ${token.name}`}
-                aria-label={`Rename ${token.name}`}
-                disabled={disabled}
-                onClick={() => {
-                  model.onEditing(token.id);
-                  setEditingID(token.id);
-                }}
-              >
-                <Icon name="edit" />
-                Rename
-              </Button>
-              <Button
-                data-token-toggle=""
-                variant="outline"
-                type="button"
-                hidden={expired}
-                title={
-                  token.active
-                    ? "Pause access without changing the key"
-                    : "Restore access with the same key"
-                }
-                aria-label={`${token.active ? "Disable" : "Reactivate"} ${token.name}`}
-                disabled={disabled}
-                onClick={() => model.onChange(token, false)}
-              >
-                <Icon name={token.active ? "pause" : "refresh"} />
-                {token.active ? "Disable" : "Reactivate"}
-              </Button>
-              <Button
-                variant="outline"
-                type="button"
-                hidden={!token.active || expired}
-                aria-label={`Rotate ${token.name}`}
-                disabled={disabled}
-                onClick={() => model.onRotate(token)}
-              >
-                <Icon name="refresh" />
-                Rotate key
-              </Button>
-              <Button
-                className="button subtle token-revoke"
-                type="button"
-                title="Permanently remove this key and its access"
-                aria-label={`Delete ${token.name} permanently`}
-                disabled={disabled}
-                onClick={() => model.onChange(token, true)}
-              >
-                <Icon name="trash" />
-                Delete key
-              </Button>
+            <Icon name="chevron-right" />
+            <span>{token.name}</span>
+          </Button>
+        </th>
+        <td className="key-role">
+          <span className="key-caption" aria-hidden="true">
+            Role
+          </span>
+          {keyRoles[token.profile]?.label || token.profile}
+        </td>
+        <td className="key-activity">
+          <span className="key-caption" aria-hidden="true">
+            Last activity
+          </span>
+          <TokenDate value={token.lastUsedAt} />
+        </td>
+        <td className="key-status">
+          <Button
+            type="button"
+            className="key-toggle"
+            role="switch"
+            ref={toggleButton}
+            aria-label={`Access for ${token.name}`}
+            aria-checked={token.active}
+            aria-describedby="token-access-hint"
+            title={
+              token.active && expired
+                ? "Turn off this expired key to revoke it"
+                : undefined
+            }
+            disabled={locked || (expired && !token.active)}
+            onClick={() => model.onChange(token, false)}
+          >
+            <span className="key-switch-track" aria-hidden="true" />
+            {token.active ? (expired ? "Expired" : "Active") : "Disabled"}
+          </Button>
+        </td>
+        <td className="key-actions">
+          <Button
+            type="button"
+            variant="destructive"
+            className="key-revoke"
+            aria-label={`Revoke ${token.name}`}
+            disabled={locked || token.active}
+            onClick={() => model.onChange(token, true)}
+          >
+            <Icon name="trash" /> Revoke
+          </Button>
+        </td>
+      </tr>
+      <tr id={detailsID} className="key-detail-row" hidden={!open}>
+        <td colSpan={5}>
+          <dl className="key-metadata">
+            <div>
+              <dt>Created</dt>
+              <dd>
+                <TokenDate value={token.createdAt} fallback="Unavailable" />
+              </dd>
             </div>
-          </div>
-        </details>
-      </li>
+            <div>
+              <dt>{expired ? "Expired" : "Expires"}</dt>
+              <dd>
+                {token.expiresAt ? (
+                  <TokenDate
+                    value={token.expiresAt * 1000}
+                    fallback="Unavailable"
+                  />
+                ) : (
+                  "No expiry"
+                )}
+              </dd>
+            </div>
+          </dl>
+          {expired && (
+            <p className="small muted">
+              Create a new key to reconnect this app.
+            </p>
+          )}
+          {model.editingID === token.id ? (
+            <RenameForm
+              token={token}
+              model={model}
+              onCancel={() => {
+                model.onEditing(null);
+                renameButton.current?.focus();
+              }}
+            />
+          ) : (
+            <div className="key-detail-actions">
+              <Button
+                type="button"
+                ref={renameButton}
+                variant="outline"
+                aria-label={`Rename ${token.name}`}
+                disabled={locked}
+                onClick={() => model.onEditing(token.id)}
+              >
+                <Icon name="edit" /> Rename
+              </Button>
+              {token.active && !expired && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-label={`Rotate ${token.name}`}
+                  disabled={locked}
+                  onClick={() => model.onRotate(token)}
+                >
+                  <Icon name="refresh" /> Rotate key
+                </Button>
+              )}
+            </div>
+          )}
+        </td>
+      </tr>
+    </tbody>
+  );
+}
+
+export function TokenList({ model }) {
+  if (!model.tokens.length)
+    return (
+      <p className="token-empty muted">
+        No API keys yet. Create a key to connect your first app.
+      </p>
     );
-  });
+  return (
+    <>
+      <p className="small muted" id="token-access-hint">
+        Turn off a key to revoke it.
+      </p>
+      <table className="key-table" role="table" aria-label="API keys">
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Role</th>
+            <th scope="col">Last activity</th>
+            <th scope="col">Status</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        {model.tokens.map((token) => (
+          <TokenRows key={token.id} token={token} model={model} />
+        ))}
+      </table>
+    </>
+  );
 }
 
 export function renderTokenList(element, model) {
-  renderRegion(element, <TokenList key={model.epoch} model={model} />);
+  renderRegion(element, <TokenList key={model.session} model={model} />);
 }
 
 function TokenStatus({ message, onRetry }) {
   const [busy, setBusy] = useState(false);
   return (
-    <li className={`token-empty${onRetry ? "" : " muted"}`}>
+    <div className={`token-empty${onRetry ? "" : " muted"}`}>
       {onRetry ? (
         <Button
           variant="default"
@@ -308,7 +306,7 @@ function TokenStatus({ message, onRetry }) {
       ) : (
         message
       )}
-    </li>
+    </div>
   );
 }
 

@@ -216,6 +216,7 @@ try {
     assert.equal((await peer.request.post(new URL('/api/login', base).href, { data: { username, password } })).status(), 200);
     assert.equal((await peer.request.post(new URL('/api/mfa/verify', base).href, { data: { code: recoveryCodes[2] } })).status(), 200);
     await openSettings(page, '2fa');
+    if (await page.locator('#mfa-manage-start').isVisible()) await page.locator('#mfa-manage-start').click();
     assert.equal(await page.getByText('Generating recovery codes invalidates all previous recovery codes.').isVisible(), true);
     assert.equal(await page.locator('#mfa-manage-form button[value="codes"]').getAttribute('aria-describedby'), 'mfa-codes-warning');
     await page.locator('#mfa-manage-password').fill(password);
@@ -225,6 +226,7 @@ try {
     await page.locator('#settings-page [data-settings-back]:visible').click();
     await page.locator('#settings-page').waitFor({ state: 'hidden' });
     await openSettings(page, '2fa');
+    if (await page.locator('#mfa-manage-start').isVisible()) await page.locator('#mfa-manage-start').click();
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-form button[value="replace"]').click();
     await page.locator('#mfa-manage-enrollment').waitFor({ state: 'visible' });
@@ -246,6 +248,7 @@ try {
     assert.equal(replacementCodes.length, 10);
     await assertRecoveryDownload(page, '#mfa-manage-download', replacementCodes);
     assert.equal((await peer.request.get(new URL('/api/session', base).href)).status(), 401);
+    if (await page.locator('#mfa-manage-start').isVisible()) await page.locator('#mfa-manage-start').click();
     // A displayed recovery code used for replacement is consumed by the real server.
     const replaceURL = new URL('/api/mfa/replace', base).href;
     const verifyURL = new URL('/api/mfa/verify', base).href;
@@ -323,6 +326,7 @@ try {
       await page.reload();
       await page.locator('#app-view').waitFor({ state: 'visible' });
       await openSettings(page, '2fa');
+    if (await page.locator('#mfa-manage-start').isVisible()) await page.locator('#mfa-manage-start').click();
     }
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-code').fill(replacementCodes[4]);
@@ -372,6 +376,7 @@ try {
     // either order. Previously displayed codes may no longer be valid.
     for (const sessionFirst of [true, false]) {
       await openSettings(page, '2fa');
+    if (await page.locator('#mfa-manage-start').isVisible()) await page.locator('#mfa-manage-start').click();
       await page.route(codesURL, route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ recoveryCodes: replacementCodes.slice(4) }) }));
       await page.locator('#mfa-manage-password').fill(password);
       await page.locator('#mfa-manage-code').fill('123456');
@@ -956,6 +961,7 @@ try {
       await page.locator('#app-view').waitFor({ state: 'visible' });
     }
     await openSettings(page, '2fa');
+    if (await page.locator('#mfa-manage-start').isVisible()) await page.locator('#mfa-manage-start').click();
     const expiredRequest = await holdUnauthorized(page, '/api/sessions');
     await refreshSessionsBeforeMFA(page);
     await expiredRequest.ready;

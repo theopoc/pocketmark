@@ -1,0 +1,92 @@
+#sessions-list {
+  container-type: inline-size;
+  display: grid;
+  gap: 12px;
+  margin: 16px 0;
+}
+.session-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.session-card-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+#settings-page .session-card-heading h3 {
+  margin: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.session-card-heading .button {
+  margin-inline-start: auto;
+}
+.session-card-icon {
+  display: grid;
+  place-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+.session-card-icon .icon {
+  width: 16px;
+  height: 16px;
+}
+.session-card-current {
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--accent-soft);
+  color: var(--secondary-link);
+  font-size: 12px;
+  font-weight: 550;
+}
+.session-card-metadata {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+  margin: 12px 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+.session-card-metadata dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+.session-card-metadata dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.session-card-details {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.session-card-details summary {
+  width: fit-content;
+  align-content: center;
+  min-height: 32px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+}
+.session-card-details p {
+  overflow-wrap: anywhere;
+}
+.session-card-details .button {
+  margin-top: 8px;
+}
+@media (max-width: 600px) {
+  .session-card {
+    padding: 12px;
+  }
+  .session-card-details summary {
+    min-height: 44px;
+  }
+}

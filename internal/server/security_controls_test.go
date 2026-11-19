@@ -243,6 +243,17 @@ func TestSessionManagementHTTP(t *testing.T) {
 	if len(sessions) != 2 {
 		t.Fatalf("expected two browser sessions, got %d", len(sessions))
 	}
+	for _, session := range sessions {
+		if session.Current && session.IPAddress != "192.0.2.1" || !session.Current && session.IPAddress != "" {
+			t.Fatalf("unexpected session address: current=%v ip=%q", session.Current, session.IPAddress)
+		}
+	}
+	w = request(a, "GET", "/api/account", "", false, headers)
+	requireStatus(t, w, 200)
+	var profile store.AccountProfile
+	if err := json.Unmarshal(w.Body.Bytes(), &profile); err != nil || !profile.MFAEnabled {
+		t.Fatalf("enrolled authenticator status missing: %+v (%v)", profile, err)
+	}
 	requireStatus(t, request(a, "PATCH", "/api/sessions/current", `{"idleTimeoutMinutes":15}`, false, headers), 200)
 	requireStatus(t, request(a, "PATCH", "/api/sessions/current", `{"idleTimeoutMinutes":1}`, false, headers), 400)
 	requireStatus(t, request(a, "DELETE", "/api/sessions/others", "", false, headers), 200)

@@ -16,6 +16,12 @@ type SetupState struct {
 	PasswordEnabled bool `json:"passwordEnabled"`
 }
 
+type AccountProfile struct {
+	Username        string `json:"username"`
+	PasswordEnabled bool   `json:"passwordEnabled"`
+	MFAEnabled      bool   `json:"mfaEnabled"`
+}
+
 type APIKey struct {
 	ID         int64  `json:"id"`
 	Name       string `json:"name"`
@@ -27,6 +33,7 @@ type APIKey struct {
 }
 
 var ErrAPIKeyLimit = errors.New("at most 32 API keys")
+var ErrAPIKeyActive = errors.New("disable the API key before revoking it")
 
 const setupEligible = `EXISTS(SELECT 1 FROM account_setup WHERE allowed=1)
  AND NOT EXISTS(SELECT 1 FROM account) AND NOT EXISTS(SELECT 1 FROM links)
@@ -36,6 +43,12 @@ func (s *Store) Account(ctx context.Context) (Account, error) {
 	var account Account
 	err := s.db.QueryRowContext(ctx, "SELECT username,salt,hash FROM account WHERE id=1").Scan(&account.Username, &account.Salt, &account.Hash)
 	return account, err
+}
+
+func (s *Store) AccountProfile(ctx context.Context) (AccountProfile, error) {
+	var profile AccountProfile
+	err := s.db.QueryRowContext(ctx, "SELECT username,hash!='',EXISTS(SELECT 1 FROM mfa WHERE id=1 AND length(secret)>0) FROM account WHERE id=1").Scan(&profile.Username, &profile.PasswordEnabled, &profile.MFAEnabled)
+	return profile, err
 }
 
 func (s *Store) SetupStatus(ctx context.Context) (SetupState, error) {
@@ -72,7 +85,7 @@ func (s *Store) SaveAccount(ctx context.Context, a Account) error {
 
 // SaveAccountFromSession retains a fully authenticated browser only if that
 // session and the enrolled factor still exist at the moment of the change.
-func (s *Store) SaveAccountFromSession(ctx context.Context, a Account, oldHash, newHash, device string) (time.Time, error) {
+func (s *Store) SaveAccountFromSession(ctx context.Context, a Account, oldHash, newHash string, client SessionClient) (time.Time, error) {
 	tx, err := s.beginAccountChange(ctx)
 	if err != nil {
 		return time.Time{}, err
@@ -94,7 +107,7 @@ func (s *Store) SaveAccountFromSession(ctx context.Context, a Account, oldHash, 
 		return time.Time{}, err
 	}
 	expires := time.Unix(expiry, 0)
-	if err = insertSessionTx(ctx, tx, a.Salt, newHash, expires, device, false); err != nil {
+	if err = insertSessionTx(ctx, tx, a.Salt, newHash, expires, client, false); err != nil {
 		return time.Time{}, err
 	}
 	if _, err = tx.ExecContext(ctx, "UPDATE sessions SET idle_minutes=$1,recovery_until=$2 WHERE hash=$3", idleMinutes, recoveryUntil, newHash); err != nil {
@@ -156,8 +169,22 @@ func (s *Store) CreateScopedAPIKey(ctx context.Context, name, hash, profile stri
 }
 
 func (s *Store) DeleteAPIKey(ctx context.Context, id int64) error {
-	r, err := s.db.ExecContext(ctx, "DELETE FROM api_tokens WHERE id=$1", id)
-	return affected(r, err)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var active bool
+	if err = tx.QueryRowContext(ctx, "SELECT active FROM api_tokens WHERE id=$1 FOR UPDATE", id).Scan(&active); err != nil {
+		return err
+	}
+	if active {
+		return ErrAPIKeyActive
+	}
+	if _, err = tx.ExecContext(ctx, "DELETE FROM api_tokens WHERE id=$1", id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // RotateAPIKey atomically replaces the verifier, preserving permissions and expiry.

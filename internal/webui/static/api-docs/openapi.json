@@ -567,7 +567,7 @@
         "tags": [
           "Account & keys"
         ],
-        "summary": "Revoke an API key",
+        "summary": "Revoke a disabled API key",
         "responses": {
           "5XX": {
             "$ref": "#/components/responses/ServerError"
@@ -594,6 +594,16 @@
           "404": {
             "$ref": "#/components/responses/404"
           },
+          "409": {
+            "description": "Disable the API key before revoking it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "503": {
             "$ref": "#/components/responses/503"
           },
@@ -602,7 +612,7 @@
           }
         },
         "x-owner-only": true,
-        "description": "Owner only: a signed-in owner session is required. Named API keys receive 403. Revocation takes effect immediately. Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry.",
+        "description": "Disable the key before revoking it. DELETE returns 409 while the key is active. Revocation takes effect immediately. Owner session required; named keys are forbidden. Browser sessions require password confirmation within five minutes; otherwise 403 with code reauth_required, before any action. Use POST /api/reauth then retry.",
         "x-reauthentication-required": true,
         "security": [
           {
@@ -3049,7 +3059,7 @@
           "Account & keys"
         ],
         "summary": "List active browser sessions",
-        "description": "At most 32 sessions, newest first. Omits expired and idle sessions. Contains no credentials or IP addresses. Legacy timestamps may be zero. Owner session required; named keys are forbidden.",
+        "description": "At most 32 sessions, newest first. Omits expired and idle sessions. Includes the client IP at session creation when available. Forwarded addresses are accepted only from configured trusted proxies. Legacy timestamps may be zero. Owner session required; named keys are forbidden.",
         "responses": {
           "5XX": {
             "$ref": "#/components/responses/ServerError"
@@ -4959,11 +4969,16 @@
           },
           "passwordEnabled": {
             "type": "boolean"
+          },
+          "mfaEnabled": {
+            "type": "boolean",
+            "description": "Whether an authenticator is enrolled."
           }
         },
         "required": [
           "username",
-          "passwordEnabled"
+          "passwordEnabled",
+          "mfaEnabled"
         ]
       },
       "APIKey": {
@@ -5790,6 +5805,11 @@
           },
           "current": {
             "type": "boolean"
+          },
+          "ipAddress": {
+            "type": "string",
+            "maxLength": 45,
+            "description": "IPv4 or IPv6 address at session creation. Empty for older sessions or an unknown peer."
           }
         },
         "required": [
@@ -5799,7 +5819,8 @@
           "expiresAt",
           "idleTimeoutMinutes",
           "device",
-          "current"
+          "current",
+          "ipAddress"
         ],
         "additionalProperties": false
       },

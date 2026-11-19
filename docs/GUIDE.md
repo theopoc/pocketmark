@@ -15,7 +15,7 @@ make build
 ./bin/pocketmark
 ```
 
-Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account. Register an authenticator app with the local QR code or setup key, verify a code and save the single-use recovery codes. On later visits, sign in with your username, password and an authentication or recovery code. Once signed in, open **Settings → API keys** to create or revoke a key for each extension or client.
+Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account. Register an authenticator app with the local QR code or setup key, verify a code and save the single-use recovery codes. On later visits, sign in with your username, password and an authentication or recovery code. In **Settings → API keys**, create an **Editor** key for the Pocketmark extension or a **Sync** key for Floccus. To revoke a key permanently, turn off its access switch and choose **Revoke**.
 
 Existing installations keep their credentials and keys. Existing MFA and browser sessions remain valid when the original server secret is preserved. Legacy administrator bearer access is removed; create named API keys and update integrations before upgrading to avoid interruption. If no password was configured before upgrading, follow [account recovery](API.md#existing-installations-and-account-recovery); public account creation cannot claim an existing library.
 
@@ -42,6 +42,8 @@ The supplied Compose configuration sets a **128 MiB application container memory
 PostgreSQL provides shared durable storage. Replicas using the same database and server secret can finish each other’s pending MFA sign-ins without session affinity. Configure readiness on `/healthz`; for an application rolling update, use at least two replicas and `maxUnavailable: 0`. Password and HTTP request limits remain per process; enforce ingress limits across replicas if needed.
 
 On the first upgrade from schema 1, challenges already issued by the older binary exist only in its memory. Older pods also cannot verify a challenge issued by a new pod. While versions are mixed, a sign-in may need to restart; cross-pod verification works once all serving pods use the new version. The migration is additive, but the older binary cannot start against schema 2. Take a backup before upgrading.
+
+Schema 3 adds an optional sign-in IP address to browser sessions. Existing sessions remain valid with an unknown address. A schema 2 binary cannot restart against schema 3. Finish upgrading all serving replicas to enforce the disable-before-revoke rule on every API key request.
 
 ### Route backups during a Kubernetes rollout
 

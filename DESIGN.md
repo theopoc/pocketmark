@@ -241,7 +241,7 @@ and menu rows retain their documented left-aligned layout.
 
 Compact and direct. Primary actions use indigo and white, subtle actions use the active theme’s neutral control surface and border, and icon actions use transparent backgrounds. Primary and subtle controls use the shared control radius and label type. Hover changes background or border with (160ms ease-out) transitions. Keyboard focus has a (2px) outline and (3px) offset; disabled buttons use (.48) opacity. Phone actions increase their target dimensions where the layout requires it.
 
-Choose the variant by task: saving a form or recovering from an empty view uses the primary action. Navigation, disclosures and alternative actions stay quiet. Destructive confirmations use the danger treatment; quiet discard controls signal danger on hover and keyboard focus. Selection and focus keep their own cues without promoting a control to primary.
+Use the primary button to start or submit a panel’s main task, or to recover from an empty view. “Create API key” opens the form with an indigo background and white text in both themes. When it is open, the submit button takes the primary treatment and “Cancel” uses the neutral treatment. Navigation, informational disclosures and alternative actions stay quiet. Destructive confirmations use the danger treatment; quiet discard controls signal danger on hover and keyboard focus. Selection and focus keep their own cues without promoting a control to primary.
 
 ### Chips
 Small rectangular tags use neutral fill, short padding and compact type. Hover or active filter states use the soft accent and indigo text. Long labels truncate rather than widening the navigation drawer.
@@ -307,30 +307,15 @@ Opening a bookmark displays its article in a right-hand reader panel. The header
 Settings is directly available in the library navigation. Library tools groups import, export and sign-out. Import first explains JSON/browser HTML metadata files and the 8 MiB limit, then leaves a durable result in the library. Sync provides a copyable WebDAV address and ordered instructions; mobile/browser settings explain installation, extension access and the local single-key shortcut preference.
 
 
-Settings is a workspace page with one shared frame and navigation for every destination. Its menu always offers API keys, Two-factor authentication, Browser sessions, Password, Backup & restore, Browser bookmark sync, and Mobile & browser, in that order. Each destination displays only its own panel and identifies exactly one active menu entry; changing sections retains the same header, menu labels and positions. API keys puts existing keys first and reveals the creation form on demand. A query parameter preserves the section across reload and browser history, including older links. Back to library restores filters and scroll position. Authentication changes block departure while pending; displayed recovery codes survive session expiration until explicitly dismissed by returning to the library. Leaving Settings clears credentials held in the page.
+The Settings overview opens from library navigation. Its searchable index groups Appearance and Backup & restore under Library, Two-factor authentication, Browser sessions and Password under Account & security, and API keys, Browser bookmark sync and Mobile & browser under Connected apps. Appearance shows theme previews and the single-key shortcut switch. The backup card uses a local illustration for each theme and opens the backup panel.
 
-Settings shares the library's compact typography and density: 13px navigation
-labels, 17px navigation icons, 38px minimum desktop entries and 44px phone targets.
-Reuse the base navigation and brand sizes rather than defining a larger Settings
-scale. The desktop header is 64px tall and the rail is 280px wide, matching the
-library; at 900px and below the header is 58px and the menu becomes a horizontally
-scrollable row. The header stays visible while scrolling. The desktop rail stays
-below it, is bounded to the viewport and scrolls independently on short screens;
-long content never moves its entries. Keep the active destination in view after
-navigation, reload, history or viewport changes.
+Every destination shares the Pocketmark header, its theme switch and a return to the library. On desktop the 280px grouped rail sits below the sticky 64px header. It scrolls independently on short screens. At 900px and below, the 58px header and Overview breadcrumb give access to the index. The active section has a shareable URL and survives reload and browser history. Returning to the library restores its filters and scroll position.
 
-Page titles match library headings: 26px on desktop and 24px on phones. Labels,
-hints and secondary copy use the existing 13px secondary-surface rule, with 14px
-body copy and 16px phone fields. API keys retains its expandable list and creation
-form, using 14px semibold key names, 13px permission/activity descriptions, 14px
-metadata values and the normal Settings buttons. Do not enlarge these on phones;
-increase target sizes instead. Desktop metadata has three columns and phone
-metadata two; actions wrap and Delete remains separate. The workspace does not
-repeat the generic Settings heading. The brand and Back to library preserve
-library context and respect pending authentication changes. Styles remain scoped
-to Settings in `secondary.css`; library controls and geometry remain unchanged.
+Use a single page title, 26px on desktop and 24px on phones, with compact 13px navigation and metadata labels. Phone controls have 44px targets and fields use 16px text. Scoped settings styles share the library’s palette, type and brand dimensions. Keyboard navigation moves focus to the destination title.
 
-Direct Settings headings reserve 16px of scroll space for visible keyboard focus. Phone Settings disclosures have 44px targets. Session dates use a definition list, with raw device details disclosed on demand.
+The API keys table displays Name, Role, Last activity, Status and Actions. On narrow screens each key uses a stacked row with labels. Use Reader, Editor, Sync and Full Access wherever owners choose a role. The status switch toggles access. Revoke uses a red destructive button, becomes available after disabling the key and asks for confirmation. Keep expiry, renaming and rotation accessible from key details. At creation, the owner sees the key value once.
+
+Session cards show the device, the current-browser marker, sign-in IP, last activity, sign-in time and expiration. Use a definition list for metadata and disclose the raw browser description on demand. Confirm the selected browser before revocation. For MFA, keep the default panel compact and open the credentials form on request. Newly issued recovery codes remain directly available until explicitly dismissed by returning to the library. Pending authentication changes block departure, and leaving Settings clears credentials held in the page.
 
 Entering Settings settles the workspace 12px from the right over 220ms with a light fade, paired with a 180ms navigation fade. Initial loads and section changes remain still; leaving cancels the entrance. Focus and controls update immediately. Reduced motion skips both effects.
 

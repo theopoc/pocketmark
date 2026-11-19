@@ -4,14 +4,21 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"net/netip"
 	"pocketmark/internal/fault"
 	"time"
 	"unicode/utf8"
 )
 
+type SessionClient struct {
+	UserAgent string
+	Address   netip.Addr
+}
+
 // insertSessionTx keeps at most 32 sessions and rejects a credential change
 // racing sign-in. The caller consumes MFA proof in the same transaction.
-func insertSessionTx(ctx context.Context, tx *sql.Tx, salt, hash string, expires time.Time, label string, recovery bool) error {
+func insertSessionTx(ctx context.Context, tx *sql.Tx, salt, hash string, expires time.Time, client SessionClient, recovery bool) error {
+	label := client.UserAgent
 	if len(label) > 256 {
 		label = label[:256]
 		for !utf8.ValidString(label) {
@@ -35,7 +42,11 @@ func insertSessionTx(ctx context.Context, tx *sql.Tx, salt, hash string, expires
 	if recovery {
 		recoveryUntil = time.Now().Add(5 * time.Minute).Unix()
 	}
-	_, err := tx.ExecContext(ctx, "INSERT INTO sessions(hash,expires_at,created_at,last_used_at,confirmed_at,idle_minutes,device,recovery_until) VALUES($1,$2,epoch_seconds(),epoch_seconds(),epoch_seconds(),1440,$3,$4)", hash, expires.Unix(), label, recoveryUntil)
+	var address any
+	if client.Address.IsValid() {
+		address = client.Address.String()
+	}
+	_, err := tx.ExecContext(ctx, "INSERT INTO sessions(hash,expires_at,created_at,last_used_at,confirmed_at,idle_minutes,device,recovery_until,ip_address) VALUES($1,$2,epoch_seconds(),epoch_seconds(),epoch_seconds(),1440,$3,$4,$5)", hash, expires.Unix(), label, recoveryUntil, address)
 	return err
 }
 
@@ -58,11 +69,12 @@ type Session struct {
 	ExpiresAt          int64  `json:"expiresAt"`
 	IdleTimeoutMinutes int    `json:"idleTimeoutMinutes"`
 	Device             string `json:"device"`
+	IPAddress          string `json:"ipAddress"`
 	Current            bool   `json:"current"`
 }
 
 func (s *Store) Sessions(ctx context.Context, current string) ([]Session, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT id,created_at,last_used_at,expires_at,idle_minutes,device,hash=$1 FROM sessions WHERE "+liveSession+" ORDER BY id DESC", current)
+	rows, err := s.db.QueryContext(ctx, "SELECT id,created_at,last_used_at,expires_at,idle_minutes,device,COALESCE(host(ip_address),''),hash=$1 FROM sessions WHERE "+liveSession+" ORDER BY id DESC", current)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +82,7 @@ func (s *Store) Sessions(ctx context.Context, current string) ([]Session, error)
 	sessions := []Session{}
 	for rows.Next() {
 		var session Session
-		if err = rows.Scan(&session.ID, &session.CreatedAt, &session.LastUsedAt, &session.ExpiresAt, &session.IdleTimeoutMinutes, &session.Device, &session.Current); err != nil {
+		if err = rows.Scan(&session.ID, &session.CreatedAt, &session.LastUsedAt, &session.ExpiresAt, &session.IdleTimeoutMinutes, &session.Device, &session.IPAddress, &session.Current); err != nil {
 			return nil, err
 		}
 		sessions = append(sessions, session)

@@ -128,7 +128,7 @@ func fixtureOwnerCookie(a *testServer) *http.Cookie {
 		if e = a.Store.CreateMFAChallenge(ctx, "fixture-"+hash, store.MFAChallenge{Kind: "enroll", Salt: account.Salt, Generation: state.Generation}); e != nil {
 			panic(e)
 		}
-		if e = a.Store.ActivateMFA(ctx, "fixture-"+hash, account.Salt, state.Generation, 0, secret, nil, "", hash, time.Now().Add(time.Hour), "fixture", false); e != nil {
+		if e = a.Store.ActivateMFA(ctx, "fixture-"+hash, account.Salt, state.Generation, 0, secret, nil, "", hash, time.Now().Add(time.Hour), store.SessionClient{UserAgent: "fixture"}, false); e != nil {
 			panic(e)
 		}
 	}

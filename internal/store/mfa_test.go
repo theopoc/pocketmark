@@ -120,10 +120,10 @@ func TestMFANativeBackupInvalidatesCodesOnlyOnRestore(t *testing.T) {
 	if err = restored.db.QueryRow("SELECT last_counter FROM mfa WHERE id=1").Scan(&restoredCounter); err != nil || restoredCounter < minimumCounter {
 		t.Fatal("restore did not invalidate the current TOTP window", err)
 	}
-	if err = restored.SignInMFA(ctx, "after", "salt", state.Generation, restoredCounter, "", "replayed-session", time.Now().Add(time.Hour), ""); err == nil {
+	if err = restored.SignInMFA(ctx, "after", "salt", state.Generation, restoredCounter, "", "replayed-session", time.Now().Add(time.Hour), SessionClient{}); err == nil {
 		t.Fatal("restore accepted a TOTP counter from the invalidated window")
 	}
-	if err = restored.SignInMFA(ctx, "after", "salt", state.Generation, restoredCounter+1, "", "fresh-session", time.Now().Add(time.Hour), ""); err != nil {
+	if err = restored.SignInMFA(ctx, "after", "salt", state.Generation, restoredCounter+1, "", "fresh-session", time.Now().Add(time.Hour), SessionClient{}); err != nil {
 		t.Fatal("later TOTP counter rejected after restore", err)
 	}
 	if _, err = restored.db.Exec("INSERT INTO mfa_recovery(hash) VALUES('new-code')"); err != nil {

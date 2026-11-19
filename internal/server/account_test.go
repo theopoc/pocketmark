@@ -43,7 +43,11 @@ func TestPasswordKeysAndRevocation(t *testing.T) {
 	if _, err := a.Store.AuthenticateAPIKeyProfile(context.Background(), key.Token); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("raw key must not authenticate as its stored verifier: %v", err)
 	}
+	requireStatus(t, request(a, "DELETE", "/api/tokens/1", "", true, nil), 409)
+	requireStatus(t, request(a, "GET", "/api/links", "", false, h), 200)
+	requireStatus(t, request(a, "PATCH", "/api/tokens/1", `{"active":false}`, true, nil), 200)
 	requireStatus(t, request(a, "DELETE", "/api/tokens/1", "", true, nil), 200)
+	requireStatus(t, request(a, "DELETE", "/api/tokens/1", "", true, nil), 404)
 	requireStatus(t, request(a, "GET", "/api/links", "", false, h), 401)
 }
 
@@ -103,6 +107,8 @@ func TestAPIKeyDisableReactivateAndActivity(t *testing.T) {
 	requireStatus(t, request(a, "PATCH", path, `{"active":true}`, false, map[string]string{"Cookie": owner}), 200)
 	requireStatus(t, request(a, "GET", "/api/stats", "", false, bearer), 200)
 	requireStatus(t, request(a, "GET", "/dav/bookmarks.xbel", "", false, basic), 200)
+	requireStatus(t, request(a, "DELETE", path, "", true, nil), 409)
+	requireStatus(t, request(a, "PATCH", path, `{"active":false}`, true, nil), 200)
 	requireStatus(t, request(a, "DELETE", path, "", true, nil), 200)
 	requireStatus(t, request(a, "PATCH", path, `{"active":true}`, true, nil), 404)
 	requireStatus(t, request(a, "GET", "/api/stats", "", false, bearer), 401)
