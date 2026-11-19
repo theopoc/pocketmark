@@ -1,0 +1,250 @@
+#reader-rich-article {
+  --reader-code-key: #5447a7;
+  --reader-code-string: #216c5e;
+  --reader-image-badge: #171a21c9;
+  min-width: 0;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+#reader-rich-article p {
+  margin: 0 0 1em;
+}
+#reader-rich-article > p:first-child {
+  font-size: 1.1em;
+  line-height: 1.55;
+}
+#reader-rich-article :is(h2, h3, h4, h5, h6) {
+  margin: 1.45em 0 0.45em;
+  font-size: 1.2em;
+  font-weight: 650;
+  line-height: 1.28;
+}
+#reader-rich-article figure {
+  margin: 1.15em 0 1.3em;
+}
+#reader-rich-article figcaption {
+  margin: 7px 1px 0;
+  font-size: max(0.74em, 12px);
+  color: var(--muted);
+}
+#reader-rich-article blockquote {
+  margin: 1em 0;
+  padding-inline-start: 1em;
+  border-inline-start: 3px solid var(--focus);
+}
+#reader-rich-article :is(ol, ul) {
+  padding-inline-start: 1.6em;
+}
+#reader-rich-article :is(code, kbd) {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-variant-ligatures: none;
+}
+#reader-rich-article :not(pre) > code,
+#reader-rich-article kbd {
+  border-radius: 4px;
+  padding: 0.1em 0.3em;
+  font-size: 0.88em;
+  background: var(--surface);
+}
+#reader-rich-article .reader-article-image {
+  display: block;
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  margin-inline: auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: zoom-in;
+}
+#reader-rich-article .reader-article-image img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+#reader-rich-article .reader-article-image::after {
+  content: "+";
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 22px;
+  line-height: 22px;
+  border-radius: 4px;
+  color: white;
+  background: var(--reader-image-badge);
+  font: 18px/22px var(--font-ui);
+}
+#reader-rich-article .reader-article-code {
+  margin-block: 1em;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+}
+#reader-rich-article .reader-article-code > div {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px 4px 12px;
+  gap: 6px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font: 550 12px/1.35 var(--font-ui);
+}
+#reader-rich-article .reader-article-code > div > span:first-child {
+  margin-right: auto;
+}
+#reader-rich-article .reader-article-code [role="status"]:empty {
+  display: none;
+}
+#reader-rich-article .reader-article-code button,
+#reader-dialog .reader-image-dialog button {
+  padding: 5px 8px;
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--control-ink);
+  font: 550 12px var(--font-ui);
+  cursor: pointer;
+}
+#reader-rich-article .reader-article-code button:is(:hover, :focus-visible),
+#reader-dialog .reader-image-dialog button:is(:hover, :focus-visible) {
+  background: var(--control-hover);
+  border-color: var(--control-border);
+}
+#reader-rich-article .reader-article-code button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+#reader-rich-article pre {
+  margin: 0;
+  overflow: auto;
+  padding: 16px;
+  white-space: pre;
+  overflow-wrap: normal;
+  font-size: 0.88em;
+  line-height: 1.65;
+  tab-size: 2;
+}
+#reader-rich-article pre.wrap-lines {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+#reader-rich-article .reader-code-key {
+  color: var(--reader-code-key);
+}
+#reader-rich-article .reader-code-string {
+  color: var(--reader-code-string);
+}
+[data-theme="dark"] #reader-rich-article {
+  --reader-code-key: #c3baff;
+  --reader-code-string: #a4d9c8;
+}
+#reader-rich-article .reader-article-table {
+  overflow: auto;
+}
+#reader-rich-article table {
+  border-collapse: collapse;
+}
+#reader-rich-article :is(th, td) {
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+}
+#reader-dialog .reader-image-dialog {
+  width: min(1150px, calc(100vw - 32px));
+  height: min(840px, calc(100dvh - 32px));
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  border: 1px solid var(--control-border);
+  border-radius: 10px;
+  color: var(--ink);
+  background: var(--paper);
+}
+#reader-dialog .reader-image-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+#reader-dialog .reader-image-dialog::backdrop {
+  background: #080910bb;
+}
+#reader-dialog .reader-image-dialog > header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  font: 550 13px/1.4 var(--font-ui);
+}
+#reader-dialog .reader-image-dialog header span {
+  margin-right: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#reader-dialog .reader-image-dialog button {
+  flex: none;
+}
+#reader-dialog .reader-image-stage {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+}
+#reader-dialog .reader-image-stage img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: contain;
+}
+#reader-dialog .reader-image-stage.zoomed {
+  display: block;
+}
+#reader-dialog .reader-image-stage.zoomed img {
+  display: block;
+  width: auto;
+  min-width: 175%;
+  max-width: none;
+  height: auto;
+}
+@media print {
+  #reader-rich-article .reader-article-code button,
+  #reader-rich-article .reader-article-code [role="status"],
+  #reader-rich-article .reader-article-image::after {
+    display: none;
+  }
+  #reader-rich-article .reader-article-code,
+  #reader-rich-article .reader-article-table {
+    overflow: visible;
+  }
+  #reader-rich-article pre {
+    overflow: visible;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  #reader-dialog
+    #reader-rich-article
+    :is(.reader-code-key, .reader-code-string) {
+    color: #000;
+  }
+}
+@media (max-width: 680px), (pointer: coarse) {
+  #reader-rich-article .reader-article-code button,
+  #reader-dialog .reader-image-dialog button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+@media (max-width: 680px) {
+  #reader-dialog .reader-image-dialog {
+    width: 100vw;
+    height: 100dvh;
+    border: none;
+    border-radius: 0;
+  }
+}

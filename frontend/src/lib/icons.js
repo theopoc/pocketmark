@@ -39,6 +39,12 @@ export const iconPaths = {
   logout: ["M10 4H3v16h7M8 12h13m-5-5 5 5-5 5"],
   "panel-open": ["M4 4h16v16H4zM9 4v16", "m14 9 3 3-3 3"],
   "panel-close": ["M4 4h16v16H4zM9 4v16", "m17 9-3 3 3 3"],
+  "fit-page": ["M3 7V3h4m10 0h4v4m0 10v4h-4M7 21H3v-4", "M8 5.5h8v13H8z"],
+  "side-panel": ["M3 4h18v16H3zM15.5 4v16", "M5.5 12h6.5m-3-3 3 3-3 3"],
+  "file-code": [
+    "M4 2.5h10l6 6v13H4zM14 2.5v6h6",
+    "m8.7 11.7-2.6 2.7 2.6 2.7m4.6-5.8-2.5 6.6m4.5-6.2 2.6 2.7-2.6 2.7",
+  ],
   menu: ["M4 6h16M4 12h16M4 18h16"],
   lock: ["M5 10h14v11H5V10Z", "M8 10V6a4 4 0 0 1 8 0v4"],
   key: [

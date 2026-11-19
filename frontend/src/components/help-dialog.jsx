@@ -129,11 +129,11 @@ export function HelpDialog() {
               {"\n            "}
               <p>
                 {
-                  "Open a bookmark’s title to see its saved HTML, screenshots and PDFs. Choose a format to open the latest copy and use the file selector for earlier copies. To read extracted text, choose "
+                  "Open a bookmark’s title to read its article. Choose HTML, screenshot or PDF to open a saved copy. Use "
                 }
-                <strong>{"Reading options → Text & highlights"}</strong>
+                <strong>{"Aa"}</strong>
                 {
-                  ". Reading options also contains text size, formatted view and capture controls."
+                  " to change the text size, or expand the reader to fill the page."
                 }
               </p>
               {"\n            "}
@@ -170,16 +170,12 @@ export function HelpDialog() {
                 <li>
                   {"If it failed, choose "}
                   <strong>{"Retry capture"}</strong>
-                  {". You can also use "}
-                  <strong>{"Reading options → Refresh capture"}</strong>
                   {"."}
                 </li>
                 <li>
                   {"If the site requires signing in or blocks capture, use "}
-                  <strong>{"Visit original"}</strong>
-                  {", then attach an HTML snapshot or PDF under "}
-                  <strong>{"Files"}</strong>
-                  {"."}
+                  <strong>{"Open original"}</strong>
+                  {" and save a copy with the Pocketmark extension."}
                 </li>
               </ol>
               {"\n            "}

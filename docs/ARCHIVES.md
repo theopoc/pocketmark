@@ -38,11 +38,11 @@ network. Metadata and payload are committed together; interrupted uploads leave
 no empty record. Full backups preserve standalone bytes; JSON preserves metadata
 only, and HTML/XBEL browser exports exclude these records.
 
-The structured reader retains headings, paragraphs, lists, tables, code and
-safe links. It removes scripts, forms, styles and remote images, and is protected
-by an HTTP CSP sandbox. Uploaded HTML is preferred over a basic network capture.
-The reader currently accepts HTML archives up to 2 MiB, with at most 1 MiB of
-rendered markup. Larger files remain downloadable.
+The structured reader API (`GET /api/links/{id}/reader`) retains headings,
+paragraphs, lists, tables, code and safe links in an HTTP CSP sandbox. It omits
+scripts, forms, styles and remote images. It accepts HTML archives up to 2 MiB
+and returns up to 1 MiB of markup. Uploaded HTML takes priority over a basic
+network capture.
 
 | Endpoint | Behavior |
 | --- | --- |
@@ -56,23 +56,24 @@ rendered markup. Larger files remain downloadable.
 | `GET /api/links/{id}/reader?asset=123` | Sandboxed reader; `asset` is optional |
 | `GET /api/backup` | Owner-only ZIP (recent password confirmation for browser sessions) containing a consistent PostgreSQL dump and restore instructions |
 
-Native attachment uploads, manual preservation, rich-reader generation and backup
+Native attachment uploads, manual preservation, structured reader API requests and backup
 share one work slot; standalone uploads share the import slot.
 A competing operation on the same slot receives HTTP 409. Original downloads
-always use attachment disposition. Bookmarks open on **Saved formats**, with
-labeled HTML, Screenshot and PDF icons and explicit availability states. No article
-or description is displayed automatically. A shortcut opens the newest attachment
-of its format, with earlier copies available in the selector; Screenshot also
-includes saved raster images. When no HTML attachment exists, the basic archive
-opens as a simplified sandboxed page. Its source remains downloadable under
-Reading options when attachments exist. The **View** action in
-**Saved formats → Manage files** also opens the integrated viewer for raster images, PDFs and HTML,
-including standalone files. Its selector switches between saved attachments;
-**Download original** remains available. PDF display uses the browser's native
+always use attachment disposition.
+
+The bookmark panel reconstructs the article in the browser from a saved HTML
+copy of up to 20 MiB. It shows embedded images, diagrams, code and captions
+without fetching remote media. When rich content is unavailable or exceeds the
+reader's processing limits, the panel shows the bookmark's indexed text when
+available. HTML, screenshot and PDF shortcuts show
+which formats are available. A shortcut opens the latest saved copy of its
+format, including standalone files. Earlier copies and original downloads are
+available in the viewer. A basic HTML capture can also be opened when there is
+no HTML attachment. PDF display uses the browser's native
 viewer and may depend on browser settings.
 
 HTML previews retain saved styles and embedded images/fonts up to the full
-20 MiB attachment limit, independently of the structural reader's 2 MiB limit.
+20 MiB attachment limit, independently of the structured reader API's 2 MiB limit.
 They use an opaque CSP sandbox with scripts, forms, frames and network resources
 blocked. The parent shell’s `frame-src blob:` policy blocks network navigation from the nested frame, including navigation initiated by saved markup. Direct HTML `/view` responses use attachment disposition: rendering requires the integrated viewer. Missing resources
 stay missing; this preserves the saved appearance, not live-site interactivity.

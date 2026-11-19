@@ -709,7 +709,7 @@ export function createApplication() {
     drafts,
     toast,
     confirmAction,
-    onEdit: openEditor,
+    breadcrumbs: libraryBreadcrumbs,
     onChange: () => refresh(true),
     onSessionExpired: showLogin,
   });
@@ -841,9 +841,7 @@ export function createApplication() {
     { passive: true },
   );
 
-  function renderBreadcrumb() {
-    const root = $("breadcrumb"),
-      key = focusedKey(root);
+  function libraryBreadcrumbs() {
     const crumbs = [
       {
         label: "My library",
@@ -901,6 +899,13 @@ export function createApplication() {
         action: () => selectFilter(state.filter, state.collection, state.tag),
       });
     }
+    return crumbs;
+  }
+
+  function renderBreadcrumb() {
+    const root = $("breadcrumb"),
+      key = focusedKey(root);
+    const crumbs = libraryBreadcrumbs();
     const signature = JSON.stringify(
       crumbs.map((crumb) => [crumb.key, crumb.label]),
     );
