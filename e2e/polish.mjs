@@ -232,9 +232,10 @@ for (const name of selected) {
       await shot(page, `${theme}-settings-mobile`, name);
       await page.setViewportSize({ width: 1280, height: 720 });
       await page.goto(new URL('/?settings=2fa', base).href);
-      await page.locator('#settings-detail-title').waitFor();
-      assert.ok(await page.locator('#settings-detail-title').evaluate(n => n === document.activeElement && n.getBoundingClientRect().top >= 12), 'direct settings focus stays inside the viewport');
-      await expectThemeColor(page.locator('#settings-detail-title'), 'outlineColor', '--focus');
+      const settingsHeading = page.locator('#settings-page').getByRole('heading', { level: 1 });
+      await settingsHeading.waitFor();
+      assert.ok(await settingsHeading.evaluate(n => n === document.activeElement && n.getBoundingClientRect().top >= 12), 'direct settings focus stays inside the viewport');
+      await expectThemeColor(settingsHeading, 'outlineColor', '--focus');
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto(base.href); await clickNavigation(page, '#help-button');
       await page.locator('#help-search').fill('capture');

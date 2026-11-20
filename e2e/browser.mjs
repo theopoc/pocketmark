@@ -1,14 +1,14 @@
 import { clickNavigation, openNavigation, navigationJourney, dialogDismissalJourney, breadcrumbJourney } from './navigation.mjs';
 // Real Chromium, real HTTP and PostgreSQL. Run only against the disposable smoke instance.
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { selectionJourney } from './selection.mjs';
 import { reactJourney } from './react.mjs';
 import { securityJourney } from './security.mjs';
-import { openSettings, refreshSessionsBeforeMFA } from './settings.mjs';
+import { openSettings, refreshSessionsBeforeMFA, selectSettings } from './settings.mjs';
 
 const base = new URL(process.env.E2E_BASE_URL);
 assert.equal(base.hostname, '127.0.0.1', 'E2E requires a disposable loopback instance');
@@ -45,6 +45,14 @@ async function assertRecoveryDownload(page, button, codes) {
   for await (const chunk of await download.createReadStream()) chunks.push(chunk);
   assert.equal(Buffer.concat(chunks).toString('utf8'), codes.join('\n') + '\n');
 }
+async function openMFAProof(page, action) {
+  const submit = page.locator(`#mfa-manage-form button[value="${action}"]`);
+  if (await submit.isVisible()) return;
+  if (await page.locator('#mfa-codes-back').isVisible()) await page.locator('#mfa-codes-back').click();
+  if (await page.locator('#mfa-proof-cancel').isVisible()) await page.locator('#mfa-proof-cancel').click();
+  await page.locator(action === 'replace' ? '#mfa-manage-start' : '#mfa-codes-start').click();
+  await submit.waitFor();
+}
 async function captureMFA(page, name) {
   if (!process.env.E2E_SCREENSHOTS) return;
   await mkdir(process.env.E2E_SCREENSHOTS, { recursive: true });
@@ -60,7 +68,7 @@ async function captureMFA(page, name) {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${name}-${suffix} overflows`);
     if (name === 'mfa-manage-replacement') {
       await page.locator('#mfa-manage-enrollment').evaluate(node => node.scrollIntoView({ block: 'start' }));
-      assert.ok(await page.locator('#settings-page').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), `${name}-${suffix} dialog overflows`);
+      assert.ok(await page.locator('#mfa-manage-dialog').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), `${name}-${suffix} dialog overflows`);
     }
     if (name === 'mfa-enrollment' || name === 'mfa-manage-replacement') {
       const key = name === 'mfa-enrollment' ? '#mfa-secret' : '#mfa-manage-secret';
@@ -216,17 +224,20 @@ try {
     assert.equal((await peer.request.post(new URL('/api/login', base).href, { data: { username, password } })).status(), 200);
     assert.equal((await peer.request.post(new URL('/api/mfa/verify', base).href, { data: { code: recoveryCodes[2] } })).status(), 200);
     await openSettings(page, '2fa');
-    if (await page.locator('#mfa-manage-start').isVisible()) await page.locator('#mfa-manage-start').click();
+    await openMFAProof(page, 'codes');
     assert.equal(await page.getByText('Generating recovery codes invalidates all previous recovery codes.').isVisible(), true);
     assert.equal(await page.locator('#mfa-manage-form button[value="codes"]').getAttribute('aria-describedby'), 'mfa-codes-warning');
+    await openMFAProof(page, 'replace');
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-form button[value="replace"]').click();
     await page.locator('#mfa-manage-enrollment').waitFor({ state: 'visible' });
-    // Closing settings must not spend the recovery grant before confirmation.
+    // Discarding enrollment leaves the one-time lost-authenticator grant intact.
+    await page.locator('#mfa-manage-cancel').click();
+    await page.locator('#confirm-action-submit').click();
     await page.locator('#settings-page [data-settings-back]:visible').click();
     await page.locator('#settings-page').waitFor({ state: 'hidden' });
     await openSettings(page, '2fa');
-    if (await page.locator('#mfa-manage-start').isVisible()) await page.locator('#mfa-manage-start').click();
+    await openMFAProof(page, 'replace');
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-form button[value="replace"]').click();
     await page.locator('#mfa-manage-enrollment').waitFor({ state: 'visible' });
@@ -248,10 +259,21 @@ try {
     assert.equal(replacementCodes.length, 10);
     await assertRecoveryDownload(page, '#mfa-manage-download', replacementCodes);
     assert.equal((await peer.request.get(new URL('/api/session', base).href)).status(), 401);
-    if (await page.locator('#mfa-manage-start').isVisible()) await page.locator('#mfa-manage-start').click();
+    // Hidden issued codes survive internal navigation and a cancelled departure.
+    await page.locator('#mfa-codes-back').click();
+    await page.goBack();
+    await page.locator('[data-settings-panel="overview"]').waitFor({ state: 'visible' });
+    await page.goBack();
+    await page.locator('#confirm-action-cancel').click();
+    await page.locator('#settings-page [data-settings-back]').click();
+    await page.locator('#confirm-action-cancel').click();
+    await selectSettings(page, '2fa');
+    await page.locator('#mfa-codes-view-start').click();
+    assert.equal(await page.locator('#mfa-manage-codes-value').textContent(), replacementCodes.join('\n'));
     // A displayed recovery code used for replacement is consumed by the real server.
     const replaceURL = new URL('/api/mfa/replace', base).href;
     const verifyURL = new URL('/api/mfa/verify', base).href;
+    await openMFAProof(page, 'replace');
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-code').fill(replacementCodes[0].replaceAll('-', '').toLowerCase());
     await page.locator('#mfa-manage-form button[value="replace"]').click();
@@ -264,9 +286,11 @@ try {
     await page.locator('#mfa-manage-error').filter({ hasText: 'invalid authentication code' }).waitFor();
     assert.equal((await page.locator('#mfa-manage-codes-value').textContent()).trim(), replacementCodes.slice(1).join('\n'));
     await page.locator('#mfa-manage-cancel').click();
+    await page.locator('#confirm-action-submit').click();
     await page.unroute(verifyURL);
     // A failure may follow consumption of the proof, so do not present it as unused.
     await page.route(replaceURL, route => route.fulfill({ status: 429, contentType: 'application/json', body: '{"error":"Synthetic challenge limit"}' }));
+    await openMFAProof(page, 'replace');
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-code').fill(replacementCodes[1]);
     await page.locator('#mfa-manage-form button[value="replace"]').click();
@@ -274,6 +298,7 @@ try {
     assert.equal((await page.locator('#mfa-manage-codes-value').textContent()).trim(), replacementCodes.slice(2).join('\n'));
     await page.unroute(replaceURL);
     await page.route(replaceURL, route => route.fulfill({ status: 403, contentType: 'application/json', body: '{"error":"invalid or already used authentication code"}' }));
+    await openMFAProof(page, 'replace');
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-code').fill(replacementCodes[2]);
     await page.locator('#mfa-manage-form button[value="replace"]').click();
@@ -282,6 +307,7 @@ try {
     await page.unroute(replaceURL);
     const codesURL = new URL('/api/mfa/recovery-codes', base).href;
     await page.route(codesURL, route => route.fulfill({ status: 403, contentType: 'application/json', body: '{"error":"invalid or already used authentication code"}' }));
+    await openMFAProof(page, 'codes');
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-code').fill(replacementCodes[3]);
     await page.locator('#mfa-manage-form button[value="codes"]').click();
@@ -289,6 +315,7 @@ try {
     assert.equal((await page.locator('#mfa-manage-codes-value').textContent()).trim(), replacementCodes.slice(4).join('\n'));
     await page.unroute(codesURL);
     await page.route(codesURL, route => route.fulfill({ status: 403, contentType: 'application/json', body: '{"error":"incorrect password or authentication unavailable"}' }));
+    await openMFAProof(page, 'codes');
     await page.locator('#mfa-manage-password').fill('incorrect-password');
     await page.locator('#mfa-manage-code').fill(replacementCodes[4]);
     await page.locator('#mfa-manage-form button[value="codes"]').click();
@@ -302,11 +329,13 @@ try {
     await page.unroute(codesURL);
     // A 429 after proof consumption must retain its warning through a concurrent 401.
     for (const sessionFirst of [true, false]) {
-      await page.locator('#mfa-manage-password').fill(password);
-      await page.locator('#mfa-manage-code').fill(replacementCodes[4]);
+      if (await page.locator('#mfa-proof-cancel').isVisible()) await page.locator('#mfa-proof-cancel').click();
       const expired = await holdUnauthorized(page, '/api/sessions');
       await refreshSessionsBeforeMFA(page);
       await expired.ready;
+      await openMFAProof(page, 'replace');
+      await page.locator('#mfa-manage-password').fill(password);
+      await page.locator('#mfa-manage-code').fill(replacementCodes[4]);
       const limited = await holdUnauthorized(page, '/api/mfa/replace', 'Synthetic challenge limit', 429);
       await page.locator('#mfa-manage-form button[value="replace"]').click();
       await limited.ready;
@@ -326,14 +355,14 @@ try {
       await page.reload();
       await page.locator('#app-view').waitFor({ state: 'visible' });
       await openSettings(page, '2fa');
-    if (await page.locator('#mfa-manage-start').isVisible()) await page.locator('#mfa-manage-start').click();
     }
-    await page.locator('#mfa-manage-password').fill(password);
-    await page.locator('#mfa-manage-code').fill(replacementCodes[4]);
     // A concurrent expired-session response must not hide codes already committed.
     const heldSession = await holdUnauthorized(page, '/api/sessions');
     await refreshSessionsBeforeMFA(page);
     await heldSession.ready;
+    await openMFAProof(page, 'codes');
+    await page.locator('#mfa-manage-password').fill(password);
+    await page.locator('#mfa-manage-code').fill(replacementCodes[4]);
     const heldCodes = await holdResponse(page, '/api/mfa/recovery-codes');
     await page.locator('#mfa-manage-form button[value="codes"]').click();
     await heldCodes.ready;
@@ -363,7 +392,7 @@ try {
     freshRecoveryCodes = (await page.locator('#mfa-manage-codes-value').textContent()).trim().split('\n');
     assert.equal(freshRecoveryCodes.length, 10);
     await page.locator('#mfa-manage-feedback').filter({ hasText: 'These recovery codes may have changed' }).waitFor();
-    await page.locator('#settings-page [data-settings-back]:visible').click();
+    await page.locator('#mfa-codes-done').click();
     await page.waitForFunction(() => document.getElementById('mfa-manage-codes-value').textContent === '');
     assert.equal(await page.locator('#mfa-manage-codes-value').textContent(), '');
     assert.equal(await page.locator('#mfa-manage-secret').inputValue(), '');
@@ -376,22 +405,24 @@ try {
     // either order. Previously displayed codes may no longer be valid.
     for (const sessionFirst of [true, false]) {
       await openSettings(page, '2fa');
-    if (await page.locator('#mfa-manage-start').isVisible()) await page.locator('#mfa-manage-start').click();
       await page.route(codesURL, route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ recoveryCodes: replacementCodes.slice(4) }) }));
+      await openMFAProof(page, 'codes');
       await page.locator('#mfa-manage-password').fill(password);
       await page.locator('#mfa-manage-code').fill('123456');
       await page.locator('#mfa-manage-form button[value="codes"]').click();
       await page.locator('#mfa-manage-codes').waitFor({ state: 'visible' });
       await page.unroute(codesURL);
+      await page.locator('#mfa-codes-back').click();
+      const expired = await holdUnauthorized(page, '/api/sessions');
+      await refreshSessionsBeforeMFA(page);
+      await expired.ready;
       await page.route(replaceURL, route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ secret: replacementSecret, qr: replacementQR }) }));
+      await openMFAProof(page, 'replace');
       await page.locator('#mfa-manage-password').fill(password);
       await page.locator('#mfa-manage-code').fill('123456');
       await page.locator('#mfa-manage-form button[value="replace"]').click();
       await page.locator('#mfa-manage-enrollment').waitFor({ state: 'visible' });
       await page.unroute(replaceURL);
-      const expired = await holdUnauthorized(page, '/api/sessions');
-      await refreshSessionsBeforeMFA(page);
-      await expired.ready;
       const invalid = await holdUnauthorized(page, '/api/mfa/verify', 'invalid authentication code');
       await page.locator('#mfa-manage-new-code').fill('000000');
       await page.locator('#mfa-manage-verify button[type="submit"]').click();
@@ -409,13 +440,15 @@ try {
       assert.equal((await page.locator('#mfa-manage-codes-value').textContent()).trim(), replacementCodes.slice(4).join('\n'));
       await invalid.remove();
       await expired.remove();
-      await page.locator('#settings-page [data-settings-back]:visible').click();
+      await page.locator('#mfa-codes-done').click();
       await page.locator('#login-view').waitFor({ state: 'visible' });
       await page.reload();
       await page.locator('#app-view').waitFor({ state: 'visible' });
     }
   } finally { await peer.close(); }
 
+  await page.locator('#settings-page [data-settings-back]').click();
+  await page.locator('#library-content').waitFor({ state: 'visible' });
   await clickNavigation(page, '#add-collection');
   await page.locator('#collection-name').fill('é'.repeat(61));
   await page.locator('#save-collection').click();
@@ -961,10 +994,10 @@ try {
       await page.locator('#app-view').waitFor({ state: 'visible' });
     }
     await openSettings(page, '2fa');
-    if (await page.locator('#mfa-manage-start').isVisible()) await page.locator('#mfa-manage-start').click();
     const expiredRequest = await holdUnauthorized(page, '/api/sessions');
     await refreshSessionsBeforeMFA(page);
     await expiredRequest.ready;
+    await openMFAProof(page, 'codes');
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-code').fill(sessionFirst ? freshRecoveryCodes[1] : authenticatorCode(currentSecret, 30));
     const gatewayFailure = await holdGatewayFailureAfterCommit(page, '/api/mfa/recovery-codes');
@@ -984,6 +1017,39 @@ try {
     await gatewayFailure.remove();
     await expiredRequest.remove();
   }
+  // A real password change validates the current password and accepts UTF-8 byte lengths.
+  await page.reload();
+  await page.locator('#app-view').waitFor({ state: 'visible' });
+  await openSettings(page, 'password');
+  await page.locator('[data-settings-panel="password"] [data-edit-password]').click();
+  await page.locator('#account-current').fill(password);
+  await page.locator('#account-password').fill('é'.repeat(6));
+  await page.locator('#account-confirm').fill('different');
+  assert.equal(await page.locator('#account-save').isDisabled(), true);
+  await page.locator('#account-confirm').fill('é'.repeat(6));
+  assert.equal(await page.locator('#account-save').isEnabled(), true);
+  const nextPassword = randomBytes(24).toString('hex');
+  await page.locator('#account-password').fill(nextPassword);
+  await page.locator('#account-confirm').fill(nextPassword);
+  await page.locator('[data-password-visibility][aria-controls="account-password"]').click();
+  assert.equal(await page.locator('#account-password').getAttribute('type'), 'text');
+  await page.locator('#account-save').click();
+  await page.locator('#account-dialog').waitFor({ state: 'hidden' });
+  assert.equal(await page.locator('#account-password').inputValue(), '');
+  assert.equal((await page.request.post(new URL('/api/reauth', base).href, { data: {password: nextPassword} })).status(), 200);
+  await page.locator('#account-edit-username').click();
+  await page.locator('#account-username').fill('renamed-owner');
+  await page.locator('#account-password').fill(nextPassword);
+  const heldRename = await holdResponse(page, '/api/account');
+  await page.locator('#account-save').click();
+  await heldRename.ready;
+  await page.goBack();
+  assert.equal(await page.locator('#account-dialog').isVisible(), true);
+  assert.equal(new URL(page.url()).searchParams.get('settings'), 'password');
+  heldRename.release();
+  await page.locator('#account-dialog').waitFor({ state: 'hidden' });
+  await heldRename.remove();
+  assert.equal(await page.locator('#account-username-value').textContent(), 'renamed-owner');
   assert.deepEqual(errors, [], 'browser must not throw uncaught JavaScript errors');
   console.log('Browser E2E passed: setup, login rejection/login, CRUD, search, reload persistence, image/PDF/HTML previews and isolation, logout.');
 } finally {

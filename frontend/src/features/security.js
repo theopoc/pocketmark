@@ -3,7 +3,7 @@ import { createLifecycle } from "../lib/lifecycle.js";
 ("use strict");
 const security = {
   create(
-    { api, toast, confirmAction, onSessionExpired, renderSessions },
+    { api, toast, confirmAction, signOutCurrent, renderSessions },
     browser = globalThis,
   ) {
     const lifecycle = createLifecycle(browser);
@@ -11,6 +11,11 @@ const security = {
     const window = browser;
     const $ = (id) => document.getElementById(id);
     const dialog = $("reauth-dialog");
+    const timeoutDialog = $("session-idle-dialog");
+    const timeoutSelect = $("session-idle");
+    let savedTimeout = null,
+      savingTimeout = false,
+      timeoutRevision = 0;
     let pending,
       resolveConfirmation,
       rejectConfirmation,
@@ -68,7 +73,6 @@ const security = {
       }
     });
     function updateCount(count) {
-      $("sessions-count").textContent = count ?? "";
       document
         .querySelectorAll("[data-settings-session-count]")
         .forEach((node) => {
@@ -80,27 +84,23 @@ const security = {
     }
     async function sessionAction(session, title, button) {
       const visit = view;
-      const action = session.current ? "Sign out" : "Revoke session";
       const target =
         title + (session.ipAddress ? " (" + session.ipAddress + ")" : "");
+      if (session.current) {
+        signOutCurrent(target, button);
+        return;
+      }
       const accepted = await confirmAction(
-        action + "?",
+        "Sign out this session?",
         target + " will need to sign in again.",
-        action,
+        "Sign out",
       );
       if (!accepted || visit !== view) return;
       clearSessionMessages();
       button.disabled = true;
       try {
-        await api(
-          session.current ? "/api/logout" : "/api/sessions/" + session.id,
-          {
-            method: session.current ? "POST" : "DELETE",
-          },
-        );
-        if (session.current) {
-          onSessionExpired();
-        } else if (visit === view) {
+        await api("/api/sessions/" + session.id, { method: "DELETE" });
+        if (visit === view) {
           $("sessions-refresh").focus();
           await loadSessions(
             "Session revoked. That browser must sign in again.",
@@ -115,17 +115,24 @@ const security = {
     }
     async function loadSessions(notice = "") {
       const attempt = ++generation;
+      const timeoutAtStart = timeoutRevision;
       clearSessionMessages();
       updateCount(null);
       $("sessions-others").disabled = true;
+      $("session-idle-open").disabled = true;
       const container = $("sessions-list");
       renderSessions(container, [], sessionAction, "Loading sessions…");
       try {
         const sessions = await api("/api/sessions");
         if (attempt !== generation || $("settings-page").hidden) return;
         const current = sessions.find((session) => session.current);
-        $("session-idle").value = String(current?.idleTimeoutMinutes ?? 1440);
-        PocketmarkSelect.sync($("session-idle"));
+        if (timeoutAtStart === timeoutRevision) {
+          savedTimeout = current
+            ? String(current.idleTimeoutMinutes ?? 1440)
+            : null;
+          if (!timeoutDialog.open) syncTimeout();
+        }
+        $("session-idle-open").disabled = !current;
         $("sessions-others").disabled = !sessions.some(
           (session) => !session.current,
         );
@@ -136,7 +143,8 @@ const security = {
           sessions.length ? "" : "No signed-in devices.",
         );
         updateCount(sessions.length);
-        $("sessions-feedback").textContent = notice;
+        if (notice || timeoutAtStart === timeoutRevision)
+          $("sessions-feedback").textContent = notice;
       } catch (error) {
         if (attempt === generation) {
           renderSessions(container, [], sessionAction);
@@ -150,9 +158,9 @@ const security = {
       const visit = view;
       if (
         !(await confirmAction(
-          "Sign out other browsers?",
+          "Sign out all other sessions?",
           "All other browsers will need to sign in again.",
-          "Sign out other browsers",
+          "Sign out other sessions",
         )) ||
         visit !== view
       )
@@ -169,23 +177,59 @@ const security = {
         $("sessions-others").disabled = false;
       }
     });
+    function syncTimeout() {
+      timeoutSelect.value = savedTimeout ?? "";
+      PocketmarkSelect.sync(timeoutSelect);
+      $("session-idle-value").textContent =
+        timeoutSelect.selectedOptions?.[0]?.textContent || "";
+    }
+    lifecycle.listen($("session-idle-open"), "click", () => {
+      if (savedTimeout === null) return;
+      syncTimeout();
+      $("session-idle-error").textContent = "";
+      timeoutDialog.showModal();
+      ($("session-idle-trigger") || timeoutSelect).focus();
+    });
+    lifecycle.listen($("session-idle-cancel"), "click", () => {
+      if (!savingTimeout) timeoutDialog.close();
+    });
+    lifecycle.listen(timeoutDialog, "cancel", (event) => {
+      if (savingTimeout) event.preventDefault();
+    });
     lifecycle.listen($("session-idle-form"), "submit", async (event) => {
       event.preventDefault();
+      if (savingTimeout) return;
+      const visit = view,
+        value = timeoutSelect.value;
+      savingTimeout = true;
       clearSessionMessages();
-      event.submitter.disabled = true;
+      $("session-idle-error").textContent = "";
+      event.submitter.disabled =
+        timeoutSelect.disabled =
+        $("session-idle-cancel").disabled =
+          true;
+      PocketmarkSelect.sync(timeoutSelect);
       try {
         await api("/api/sessions/current", {
           method: "PATCH",
-          body: JSON.stringify({
-            idleTimeoutMinutes: Number($("session-idle").value),
-          }),
+          body: JSON.stringify({ idleTimeoutMinutes: Number(value) }),
         });
+        if (visit !== view) return;
+        timeoutRevision++;
+        savedTimeout = value;
+        syncTimeout();
+        if (timeoutDialog.open) timeoutDialog.close();
         $("sessions-feedback").textContent =
           "Inactivity timeout saved for this browser.";
       } catch (error) {
-        $("sessions-error").textContent = error.message;
+        if (visit === view) $("session-idle-error").textContent = error.message;
       } finally {
-        event.submitter.disabled = false;
+        savingTimeout = false;
+        event.submitter.disabled =
+          timeoutSelect.disabled =
+          $("session-idle-cancel").disabled =
+            false;
+        PocketmarkSelect.sync(timeoutSelect);
       }
     });
     document.querySelectorAll('a[href="/api/backup"]').forEach((link) =>
@@ -199,9 +243,19 @@ const security = {
         }
       }),
     );
+    function closeSessionDialogs() {
+      if (timeoutDialog.open) timeoutDialog.close();
+      if ($("session-details-dialog").open) $("session-details-dialog").close();
+    }
     function clear() {
       view++;
       generation++;
+      savedTimeout = null;
+      $("session-idle-open").disabled = true;
+      $("session-idle-value").textContent = $(
+        "session-idle-error",
+      ).textContent = "";
+      closeSessionDialogs();
       updateCount(null);
       renderSessions($("sessions-list"), [], sessionAction);
       clearSessionMessages();
@@ -209,6 +263,7 @@ const security = {
     return {
       confirm: confirmPassword,
       loadSessions,
+      closeSessionDialogs,
       clear,
       dispose() {
         view++;

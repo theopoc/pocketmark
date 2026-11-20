@@ -57,7 +57,7 @@ export async function settingsDensityJourney(page) {
           brand: getComputedStyle(document.querySelector('.settings-topbar .brand')).fontSize,
           mark: document.querySelector('.settings-topbar .brand-mark').getBoundingClientRect().toJSON(),
           header: document.querySelector('.settings-topbar').getBoundingClientRect().height,
-          title: font(document.querySelector("#settings-detail-title")),
+          title: font(document.querySelector("[data-settings-panel]:not([hidden]) h1") || document.querySelector("#settings-detail-title")),
           rail: document.querySelector('#settings-navigation').getBoundingClientRect().width,
         };
       }, section);
@@ -126,7 +126,7 @@ export async function settingsNavigationJourney(page) {
         assert.equal(await page.locator(`[data-settings-section="${section}"]`).getAttribute('aria-current'), 'page');
         assert.deepEqual(await page.locator('.settings-topbar').boundingBox(), header);
         assert.equal(await page.locator('.main-content > .topbar').isVisible(), false);
-        assert.equal(await page.locator("#settings-detail-title").evaluate(n => n === document.activeElement), true);
+        assert.equal(await page.locator("#settings-page").getByRole("heading", { level: 1 }).evaluate(n => n === document.activeElement), true);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${theme}/${width}/${section} overflows`);
         if (width > 900) assert.ok(await page.locator(`[data-settings-section="${section}"]`).evaluate(n => {
           const item = n.getBoundingClientRect(), menu = n.closest('nav').getBoundingClientRect();
@@ -170,7 +170,7 @@ export async function settingsNavigationJourney(page) {
   });
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.locator('[data-settings-go="overview"]:visible').count(), 1);
-  assert.equal(await page.locator('#settings-detail-title').evaluate(n => n === document.activeElement), true);
+  assert.equal(await page.locator('#settings-page').getByRole('heading', { level: 1 }).evaluate(n => n === document.activeElement), true);
   await page.setViewportSize(viewport);
   await selectSettings(page, 'api-keys');
   // Optional character shortcuts must stay off in settings and persist per browser.
@@ -193,7 +193,7 @@ export async function settingsNavigationJourney(page) {
   legacy.searchParams.set('settings', '2fa');
   await page.goto(legacy.href);
   await page.locator('#mfa-settings-title').waitFor({ state: 'visible' });
-  assert.equal(await page.locator('#settings-detail-title').evaluate(node => document.activeElement === node && node.getBoundingClientRect().top >= 0 && node.getBoundingClientRect().top < innerHeight), true);
+  assert.equal(await page.locator('#settings-page').getByRole('heading', { level: 1 }).evaluate(node => document.activeElement === node && node.getBoundingClientRect().top >= 0 && node.getBoundingClientRect().top < innerHeight), true);
   await selectSettings(page, 'backup');
   await page.reload();
   await page.locator('[data-settings-panel="backup"]').waitFor({ state: 'visible' });
