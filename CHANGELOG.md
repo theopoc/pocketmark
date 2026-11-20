@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.0.0](https://github.com/theopoc/pocketmark/compare/v1.3.4...v2.0.0) (2026-11-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **storage:** configure PostgreSQL 18 and import existing SQLite libraries offline before starting the new server. Preserve the original server secret to retain MFA and sessions.
+
+### Features
+
+* **reader:** open saved articles in a reading panel ([32c5c12](https://github.com/theopoc/pocketmark/commit/32c5c1297635ed2c9a3412e04e0d94300b53d349))
+* **settings:** redesign account security, sessions and API keys ([e1480d3](https://github.com/theopoc/pocketmark/commit/e1480d3bbda57b9d1ad77bb1dbc5d1718ea77397))
+* **settings:** redesign the personal library settings workspace ([e1d3b05](https://github.com/theopoc/pocketmark/commit/e1d3b052a61bdf29bb7387d3f4e8c454abec6fc4))
+* **storage:** replace SQLite with PostgreSQL ([1693bf7](https://github.com/theopoc/pocketmark/commit/1693bf7a38932c7e370fb1f9848ab30c215254bf))
+
+
+### Bug Fixes
+
+* **auth:** share MFA challenges across replicas ([2defb51](https://github.com/theopoc/pocketmark/commit/2defb51fae60a66f3004e31fac17e4047c406d08))
+* **backup:** route rolling exports to the target revision ([518fe5e](https://github.com/theopoc/pocketmark/commit/518fe5efc8e1aabc5581e761e3247bb0d70fa01e))
+* **ui:** align components with design system ([e025b4e](https://github.com/theopoc/pocketmark/commit/e025b4e7f4252afc0953205a7f9a1e72c9a685fc))
+* **ui:** center quick-filter labels ([a479eb0](https://github.com/theopoc/pocketmark/commit/a479eb022818bb0366cf6e0c11480094b50aa162))
+* **ui:** match button colors to action roles ([25a4b89](https://github.com/theopoc/pocketmark/commit/25a4b898c57641889b78732b11f8c9b4b21aaafb))
+* **ui:** unify toast design ([54be708](https://github.com/theopoc/pocketmark/commit/54be70879c622d49021b8c0bc27412c7ef06e646))
+
 ## [1.3.4](https://github.com/theopoc/pocketmark/compare/v1.3.3...v1.3.4) (2026-11-09)
 
 
