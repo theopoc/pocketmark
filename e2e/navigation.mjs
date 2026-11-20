@@ -29,6 +29,13 @@ export async function clickNavigation(page, selector) {
 // Exercise every actual dialog template, including nested overlays, with native pointer events.
 export async function dialogDismissalJourney(page) {
   const original = page.viewportSize();
+  const libraryURL = page.url();
+  const settingsOpeners = new Map([
+    ['account-dialog', ['password', '#account-edit-username']],
+    ['mfa-manage-dialog', ['2fa', '#mfa-manage-start']],
+    ['session-details-dialog', ['sessions', '.session-device-button']],
+    ['session-idle-dialog', ['sessions', '#session-idle-open']],
+  ]);
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -36,7 +43,16 @@ export async function dialogDismissalJourney(page) {
     for (const id of ids) {
       if (id === 'navigation-dialog' && width > 900) continue;
       const dialog = page.locator(`#${id}`);
-      await dialog.evaluate(node => node.showModal());
+      const opener = settingsOpeners.get(id);
+      if (opener) {
+        const destination = new URL(libraryURL);
+        destination.searchParams.set('settings', opener[0]);
+        if (page.url() !== destination.href) await page.goto(destination.href);
+        await page.locator(opener[1]).first().click();
+      } else {
+        if (page.url() !== libraryURL) await page.goto(libraryURL);
+        await dialog.evaluate(node => node.showModal());
+      }
       // Wait for the entry animation before measuring the visible boundary.
       await dialog.evaluate(async node => { await Promise.all(node.getAnimations().map(animation => animation.finished.catch(() => {}))); });
       const bounds = await dialog.boundingBox();
@@ -57,6 +73,7 @@ export async function dialogDismissalJourney(page) {
       await dialog.waitFor({ state: 'hidden' });
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     }
+    if (page.url() !== libraryURL) await page.goto(libraryURL);
   }
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.locator('#help-dialog').evaluate(node => node.showModal());

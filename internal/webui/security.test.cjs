@@ -14,9 +14,9 @@ test("session settings replace stale feedback when saving succeeds or fails", as
   const submit = () => form.events.submit({ preventDefault() {}, submitter });
   await submit(); assert.match(nodes.get("sessions-feedback").textContent, /saved/);
   fail = true; await submit();
-  assert.equal(nodes.get("sessions-feedback").textContent, ""); assert.equal(nodes.get("sessions-error").textContent, "Save failed");
+  assert.equal(nodes.get("sessions-feedback").textContent, ""); assert.equal(nodes.get("session-idle-error").textContent, "Save failed");
   fail = false; await submit();
-  assert.equal(nodes.get("sessions-error").textContent, ""); assert.match(nodes.get("sessions-feedback").textContent, /saved/);
+  assert.equal(nodes.get("session-idle-error").textContent, ""); assert.match(nodes.get("sessions-feedback").textContent, /saved/);
 });
 
 test("leaving settings prevents an old session response from populating a reopened page", async () => {
@@ -80,4 +80,41 @@ test("revoking a session refreshes the list even after another refresh finishes"
   requests.shift().resolve([]);
   await removal;
   assert.deepEqual(records, []);
+});
+
+test("a refresh started before a saved timeout does not restore the old value", async () => {
+  const nodes = new Map();
+  const document = {
+    getElementById(id) {
+      if (!nodes.has(id)) nodes.set(id, {
+        value: "", events: {}, addEventListener(type, handler) { this.events[type] = handler; },
+        close() { this.open = false; },
+      });
+      return nodes.get(id);
+    },
+    querySelectorAll: () => [],
+  };
+  const requests = [];
+  const security = require("../../frontend/src/features/security.js").default.create({
+    api: (path, options) => new Promise(resolve => requests.push({ path, options, resolve })),
+    renderSessions() {},
+  }, { document });
+  const original = [{ current: true, idleTimeoutMinutes: 1440 }];
+  const opening = security.loadSessions();
+  requests.shift().resolve(original);
+  await opening;
+  nodes.get("session-idle-dialog").open = true;
+  const refresh = security.loadSessions();
+  const pendingRefresh = requests.shift();
+  const input = nodes.get("session-idle");
+  input.value = "60";
+  const saving = nodes.get("session-idle-form").events.submit({ preventDefault() {}, submitter: {} });
+  const patch = requests.shift();
+  assert.equal(patch.options.body, '{"idleTimeoutMinutes":60}');
+  patch.resolve({});
+  await saving;
+  pendingRefresh.resolve(original);
+  await refresh;
+  assert.equal(input.value, "60");
+  assert.equal(nodes.get("session-idle-dialog").open, false);
 });

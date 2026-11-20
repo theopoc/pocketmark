@@ -1,0 +1,609 @@
+/* Creation, one-time disclosure and the device-width key inspector. */
+#key-dialog[open]:has(.akd-form) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  width: min(452px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  border-radius: 14px;
+}
+#key-dialog[open]:has(.akd-create) {
+  width: min(530px, calc(100% - 24px));
+}
+#key-dialog:has(.akd-form) .key-dialog-head {
+  flex: none;
+  padding: 16px 22px;
+}
+#key-dialog:has(.akd-form) .key-dialog-body {
+  display: flex;
+  flex: 0 1 auto;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+#key-dialog .akd-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  color: var(--ink);
+}
+#key-dialog .akd-body {
+  display: grid;
+  align-content: start;
+  gap: 19px;
+  padding: 20px 22px;
+  overflow: auto;
+  min-height: 0;
+}
+#key-dialog .akd-body p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+#key-dialog .akd-body strong {
+  color: var(--ink);
+}
+#key-dialog .akd-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+#key-dialog .akd-field label,
+#key-dialog .akd-fieldset legend {
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 640;
+  color: var(--ink);
+}
+#key-dialog .akd-fieldset {
+  padding: 0;
+  margin: 0;
+  border: none;
+  min-width: 0;
+}
+#key-dialog .akd-fieldset legend {
+  margin-bottom: 8px;
+}
+#key-dialog .akd-field :is(input[type="text"], input[type="password"]) {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 11px;
+  margin: 0;
+  border: 1px solid var(--control-line);
+  border-radius: 7px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 14px/1.45 var(--font-ui);
+}
+#key-dialog .akd-roles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+#key-dialog .akd-roles label,
+#key-dialog .akd-expiries label {
+  display: block;
+  position: relative;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+}
+#key-dialog :is(.akd-option, .akd-expiry-option) input[type="radio"] {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  min-width: 0;
+  min-height: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  white-space: nowrap;
+  border: 0;
+}
+#key-dialog .akd-card {
+  display: block;
+  padding: 11px 12px 10px;
+  border: 1px solid var(--control-border);
+  border-radius: 9px;
+  background: var(--paper);
+  height: 100%;
+}
+#key-dialog .akd-card-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+#key-dialog .akd-card-icon {
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+  flex: none;
+}
+#key-dialog .akd-card-line strong {
+  font-size: 14px;
+  font-weight: 620;
+  letter-spacing: -0.17px;
+}
+#key-dialog .akd-radio-dot {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--control-line);
+  margin-left: auto;
+}
+#key-dialog .akd-summary {
+  display: block;
+  color: var(--muted);
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+#key-dialog .akd-option input:checked + .akd-card {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+#key-dialog .akd-option input:checked + .akd-card .akd-radio-dot {
+  background: var(--accent);
+  border: 3px solid var(--paper);
+  outline: 1px solid var(--accent);
+}
+#key-dialog .akd-option input:checked + .akd-card .akd-card-icon {
+  color: var(--secondary-link);
+}
+#key-dialog .akd-option:hover input:not(:checked) + .akd-card,
+#key-dialog .akd-expiry-option:hover input:not(:checked) + span {
+  border-color: var(--control-line);
+  background: var(--surface);
+}
+#key-dialog .akd-option input:focus-visible + .akd-card,
+#key-dialog .akd-expiry-option input:focus-visible + span {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+#key-dialog .akd-privilege {
+  margin: 9px 0 0;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+#key-dialog .akd-expiries {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+#key-dialog .akd-expiry-option > span {
+  display: grid;
+  place-items: center;
+  min-height: 34px;
+  border: 1px solid var(--control-border);
+  border-radius: 6px;
+  font-weight: 500;
+  font-size: 12px;
+}
+#key-dialog .akd-expiry-option input:checked + span {
+  color: var(--secondary-link);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 650;
+}
+#key-dialog .akd-body .akd-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+#key-dialog .akd-body .akd-error {
+  color: var(--danger);
+  font-size: 13px;
+}
+#key-dialog .akd-footer {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: none;
+  padding: 13px 22px;
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+}
+#key-dialog .akd-footer .button:disabled {
+  opacity: 0.48;
+}
+#key-dialog .akd-reveal-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+#key-dialog .akd-reveal-title > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#key-dialog .akd-reveal-title p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+#key-dialog .akd-success {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  color: var(--success);
+  background: var(--ak-green-soft);
+  border: 1px solid var(--ak-green-line);
+  border-radius: 10px;
+}
+#key-dialog .akd-value {
+  display: flex;
+  align-items: stretch;
+  gap: 7px;
+}
+#key-dialog .akd-value input[readonly] {
+  background: var(--surface);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  user-select: all;
+}
+#key-dialog .akd-value .button {
+  flex: none;
+}
+@media (max-width: 600px) {
+  #key-dialog:has(.akd-form) .key-dialog-head {
+    padding: 12px 16px;
+  }
+  #key-dialog .akd-body {
+    padding: 15px 16px;
+    gap: 15px;
+  }
+  #key-dialog .akd-card {
+    padding: 10px;
+  }
+  #key-dialog .akd-card-line {
+    gap: 5px;
+  }
+  #key-dialog .akd-field :is(input[type="text"], input[type="password"]) {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  #key-dialog .akd-expiry-option > span,
+  #key-dialog .akd-footer button {
+    min-height: 44px;
+  }
+  #key-dialog .akd-footer {
+    padding: 10px 16px;
+  }
+}
+@media (max-width: 345px) {
+  #key-dialog .akd-card {
+    padding: 8px;
+  }
+  #key-dialog .akd-radio-dot {
+    width: 11px;
+    height: 11px;
+  }
+  #key-dialog .akd-card-line strong {
+    font-size: 13px;
+  }
+}
+@media (max-height: 380px) {
+  #key-dialog[open]:has(.akd-form),
+  #key-dialog:has(.akd-form) .key-dialog-body {
+    overflow: auto;
+    display: block;
+  }
+}
+
+/* API key detail sheet. Native dialog keeps focus and backdrop behavior. */
+#key-dialog:has(.ak-inspector) {
+  position: fixed;
+  inset: 0 0 0 auto;
+  margin: 0;
+  width: min(448px, 100vw);
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: -12px 0 42px rgb(13 18 32 / 0.11);
+}
+#key-dialog[open]:has(.ak-inspector) {
+  display: flex;
+  flex-direction: column;
+}
+#key-dialog:has(.ak-inspector) .key-dialog-head {
+  flex: none;
+  padding: calc(20px + env(safe-area-inset-top, 0px)) 24px 19px;
+  gap: 12px;
+  min-height: 78px;
+}
+#key-dialog:has(.ak-inspector) #key-dialog-title {
+  font-size: 22px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+#key-dialog:has(.ak-inspector) .key-close {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+#key-dialog:has(.ak-inspector) .key-close:hover {
+  background: var(--surface);
+}
+#key-dialog:has(.ak-inspector) .key-dialog-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0;
+}
+.ak-inspector {
+  flex: 1;
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 100%;
+  padding: 0 24px;
+}
+.ak-inspector .aki-overview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 0 18px;
+}
+.ak-inspector .aki-badges,
+.ak-inspector .aki-role,
+.ak-inspector .aki-status,
+.ak-inspector .aki-text-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ak-inspector .aki-badges {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ak-inspector .aki-status,
+.ak-inspector .aki-role {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 550;
+}
+.ak-inspector .aki-role {
+  color: var(--muted);
+  background: var(--paper);
+}
+.ak-inspector .aki-status i {
+  display: block;
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+  border-radius: 50%;
+}
+.ak-inspector .aki-active {
+  background: var(--ak-green-soft);
+  border-color: var(--ak-green-line);
+  color: var(--success);
+}
+.ak-inspector .aki-disabled {
+  background: var(--surface);
+  color: var(--muted);
+}
+.ak-inspector .aki-expired {
+  background: var(--surface);
+  color: var(--danger);
+}
+.ak-inspector .aki-text-btn {
+  flex: none;
+  padding: 5px 7px;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: var(--secondary-link);
+  font: 600 13px/1.4 var(--font-ui);
+}
+.ak-inspector .aki-text-btn:hover {
+  background: var(--accent-soft);
+}
+.ak-inspector .aki-rename-form {
+  display: grid;
+  gap: 7px;
+  margin: 0 0 17px;
+}
+.ak-inspector .aki-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+}
+.ak-inspector .aki-rename-form p,
+.ak-inspector .aki-note,
+.ak-inspector .aki-permissions p,
+.ak-inspector .aki-revoke-section p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.ak-inspector .aki-section {
+  padding: 19px 0;
+  border-top: 1px solid var(--line);
+}
+.ak-inspector h3 {
+  margin: 0;
+  color: var(--ink);
+  font: 630 15px/1.4 var(--font-ui);
+  letter-spacing: -0.15px;
+}
+.ak-inspector .aki-facts {
+  display: grid;
+  margin: 8px 0 0;
+  gap: 0;
+}
+.ak-inspector .aki-facts > div {
+  display: grid;
+  grid-template-columns: minmax(74px, 0.68fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: baseline;
+  padding: 6px 0;
+}
+.ak-inspector .aki-facts dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+.ak-inspector .aki-facts dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  text-align: right;
+}
+.ak-inspector .aki-facts time {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0 7px;
+}
+.ak-inspector .aki-facts small {
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--muted);
+}
+.ak-inspector .aki-permissions {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-top: 12px;
+  padding: 13px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.ak-inspector .aki-role-icon {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--secondary-link);
+}
+.ak-inspector .aki-permissions strong {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.ak-inspector .aki-permissions p {
+  margin-top: 3px;
+}
+.ak-inspector .aki-access-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.ak-inspector .aki-note {
+  margin: 4px 0 0;
+}
+
+.ak-inspector .aki-rotate {
+  margin-top: 13px;
+}
+.ak-inspector .aki-revoke-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: auto;
+  border-top: 1px solid var(--line);
+  padding: 18px 0 max(20px, env(safe-area-inset-bottom, 0px));
+}
+.ak-inspector .aki-revoke-section p {
+  margin-top: 3px;
+}
+.ak-inspector .aki-revoke {
+  flex: none;
+}
+@media (max-width: 600px) {
+  #key-dialog:has(.ak-inspector) {
+    width: min(100vw, 448px);
+  }
+  #key-dialog:has(.ak-inspector) .key-dialog-head {
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;
+    min-height: 66px;
+  }
+  .ak-inspector {
+    padding: 0 16px;
+  }
+  .ak-inspector .aki-overview {
+    padding: 7px 0 10px;
+  }
+  .ak-inspector .aki-section {
+    padding: 16px 0;
+  }
+}
+
+#key-dialog {
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+#key-dialog:has(.ak-inspector) {
+  border: 0;
+  border-left: 1px solid var(--line);
+}
+.key-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+}
+#key-dialog-title {
+  margin: 0;
+  font: 650 20px/1.3 var(--font-ui);
+  overflow-wrap: anywhere;
+}
+#key-dialog .key-close {
+  flex: none;
+  color: var(--muted);
+}
+#key-dialog .aki-access-line .ak-toggle {
+  min-width: 44px;
+  justify-content: center;
+}
+#key-dialog .aki-permissions .icon {
+  width: 18px;
+  height: 18px;
+}
+#key-dialog .aki-role .icon,
+#key-dialog .aki-text-btn .icon {
+  width: 14px;
+  height: 14px;
+}
+#key-dialog .aki-rename-form input {
+  width: 100%;
+}

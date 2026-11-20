@@ -1,3 +1,4 @@
+import { bindDialogBackdrop } from "./lib/dialog-backdrop";
 import { disposeRegions } from "./lib/render.jsx";
 import { createSettings } from "./features/settings/controller.js";
 import { createLifecycle } from "./lib/lifecycle.js";
@@ -122,15 +123,36 @@ export function createApplication() {
     const restored = workspace.readRoute(location.search);
     if (
       state.settingsSection &&
-      (state.mfaManagementBusy || state.deferredLogin) &&
-      restored.settingsSection !== state.settingsSection
+      (settings.keyValueProtected() || settings.passwordChangePending())
     ) {
-      history.replaceState(
-        { ...history.state },
-        "",
-        location.pathname + workspace.routeSearch(route()),
-      );
+      // Keep the dialog and the original Back destination until the operation finishes.
+      const current = location.pathname + workspace.routeSearch(route());
+      if (current !== location.pathname + location.search)
+        history.pushState({ ...history.state }, "", current);
       return;
+    }
+    const changingSection =
+      state.settingsSection &&
+      restored.settingsSection !== state.settingsSection;
+    if (changingSection) {
+      const leavingSettings = !restored.settingsSection;
+      const needsConfirmation =
+        $("mfa-manage-dialog").open ||
+        (leavingSettings && !$("mfa-manage-codes").hidden);
+      const blocked =
+        state.mfaManagementBusy ||
+        state.deferredLogin ||
+        (needsConfirmation &&
+          !(await settings.allowAccountNavigation(leavingSettings)));
+      if (request !== routeRequest) return;
+      if (blocked) {
+        history.replaceState(
+          { ...history.state },
+          "",
+          location.pathname + workspace.routeSearch(route()),
+        );
+        return;
+      }
     }
     const wasSettings = Boolean(state.settingsSection);
     if (!wasSettings && restored.settingsSection)
@@ -160,7 +182,8 @@ export function createApplication() {
     reader.close();
     bulk.close();
     document.querySelectorAll("dialog[open]").forEach((dialog) => {
-      dialog.close();
+      if (dialog.id !== "mfa-manage-dialog" || state.settingsSection !== "2fa")
+        dialog.close();
     });
     if (state.settingsSection) {
       lifecycle.cancelTimeout(state.timer);
@@ -201,8 +224,11 @@ export function createApplication() {
   lifecycle.listen(window, "beforeunload", (event) => {
     if (
       drafts.size ||
+      settings.keyValueProtected() ||
+      settings.passwordChangePending() ||
       state.mfaManagementBusy ||
-      (Boolean(state.settingsSection) && !$("mfa-manage-codes").hidden)
+      (Boolean(state.settingsSection) &&
+        (!$("mfa-manage-codes").hidden || !$("mfa-manage-enrollment").hidden))
     ) {
       event.preventDefault();
       event.returnValue = "";
@@ -592,6 +618,7 @@ export function createApplication() {
       );
       renderSettings();
       if (!state.mfaManagementBusy) {
+        settings.showIssuedCodes();
         document
           .querySelectorAll("[data-settings-panel]")
           .forEach((section) => {
@@ -714,7 +741,7 @@ export function createApplication() {
     renderSessions,
     confirmAction,
     toast,
-    onSessionExpired: showLogin,
+    signOutCurrent: openLogoutDialog,
   });
 
   const reader = PocketmarkReader.create({
@@ -1964,22 +1991,37 @@ export function createApplication() {
 
   const logoutDialog = $("logout-dialog");
   let signingOut = false;
-  lifecycle.listen($("logout-button"), "click", () => {
+  let logoutReturnFocus;
+  function openLogoutDialog(device, trigger) {
+    logoutReturnFocus = trigger || $("open-navigation");
+    const signInMessage = device
+      ? device + " will need to sign in again."
+      : "You’ll need to sign in again to access your library.";
     $("logout-confirm").className = drafts.size
       ? "button danger"
       : "button primary";
     $("logout-description").textContent = drafts.size
-      ? "Signing out will discard the unsaved drafts kept in this tab. You’ll need to sign in again to access your library."
-      : "You’ll need to sign in again to access your library.";
+      ? "Signing out will discard the unsaved drafts kept in this tab. " +
+        signInMessage
+      : signInMessage;
     $("logout-error").textContent = "";
     logoutDialog.showModal();
     $("logout-cancel").focus();
-  });
+  }
+  lifecycle.listen($("logout-button"), "click", () => openLogoutDialog());
   lifecycle.listen(logoutDialog, "cancel", (event) => {
     if (signingOut) event.preventDefault();
   });
   lifecycle.listen(logoutDialog, "close", () => {
-    if (state.signedIn) $("open-navigation").focus({ preventScroll: true });
+    if (state.signedIn) {
+      const target = logoutReturnFocus?.isConnected
+        ? logoutReturnFocus
+        : state.settingsSection === "sessions"
+          ? $("sessions-refresh")
+          : $("open-navigation");
+      target.focus({ preventScroll: true });
+    }
+    logoutReturnFocus = null;
   });
   lifecycle.listen($("logout-form"), "submit", async (event) => {
     event.preventDefault();
@@ -2014,37 +2056,9 @@ export function createApplication() {
       selectFilter(button.dataset.quickFilter, null, "", false);
     }),
   );
-  // Treat an outside click like Escape so each dialog keeps its cancellation guards.
-  document.querySelectorAll("dialog").forEach((dialog) => {
-    let backdropPress = false;
-    function outside(event) {
-      const rect = dialog.getBoundingClientRect();
-      return (
-        event.target === dialog &&
-        (event.clientX < rect.left ||
-          event.clientX > rect.right ||
-          event.clientY < rect.top ||
-          event.clientY > rect.bottom)
-      );
-    }
-    lifecycle.listen(dialog, "pointerdown", (event) => {
-      backdropPress = event.button === 0 && outside(event);
-    });
-    lifecycle.listen(dialog, "pointercancel", () => {
-      backdropPress = false;
-    });
-    lifecycle.listen(dialog, "close", () => {
-      backdropPress = false;
-    });
-    lifecycle.listen(dialog, "click", (event) => {
-      const dismiss = backdropPress && outside(event);
-      backdropPress = false;
-      if (!dismiss || !dialog.open) return;
-      if (typeof dialog.requestClose === "function") dialog.requestClose();
-      else if (dialog.dispatchEvent(new Event("cancel", { cancelable: true })))
-        dialog.close();
-    });
-  });
+  document
+    .querySelectorAll("dialog")
+    .forEach((dialog) => bindDialogBackdrop(dialog, lifecycle));
   document
     .querySelectorAll(".close-dialog")
     .forEach((button) =>

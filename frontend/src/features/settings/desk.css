@@ -25,18 +25,47 @@
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 22px 24px;
+  margin: 0;
 }
-#settings-page
-  .settings-workspace
-  > .settings-section[data-settings-panel="api-keys"] {
-  max-width: none;
+.settings-feature {
+  min-width: 0;
 }
 #settings-page .settings-workspace > .settings-section > h2 {
   font-size: 15px;
   margin: 0 0 12px;
 }
-#settings-page .settings-section[data-settings-panel="mobile"] > h2 ~ h2 {
-  margin-top: 24px;
+#settings-page
+  .settings-workspace:has(> .settings-feature:not([hidden]))
+  .desk-intro,
+#settings-page
+  .settings-workspace:has(> .settings-guide:not([hidden]))
+  .desk-emblem {
+  display: none;
+}
+#settings-page
+  .settings-layout:has(
+    .settings-feature:not([hidden], [data-settings-panel="api-keys"])
+  ) {
+  background: var(--paper);
+}
+#settings-page
+  .settings-workspace:has(
+    > .settings-feature:not([hidden], [data-settings-panel="api-keys"])
+  ) {
+  max-width: 1192px;
+  padding: clamp(40px, 5vw, 70px) clamp(34px, 4.8vw, 76px) 60px;
+}
+.settings-workspace:has(> .settings-feature:not([hidden])) .desk-path {
+  margin-bottom: 22px;
+}
+.settings-guide h2 {
+  font-size: 15px;
+  margin: 0 0 12px;
+}
+.settings-guide > section + section {
+  padding-top: 20px;
+  margin-top: 20px;
+  border-top: 1px solid var(--line);
 }
 #settings-page
   :is(
@@ -103,6 +132,7 @@
   margin: 22px 0 24px;
 }
 .desk-intro h1,
+.settings-feature h1,
 .desk-page-heading h1 {
   margin: 0;
   width: fit-content;
@@ -110,7 +140,9 @@
   letter-spacing: -0.75px;
   line-height: 1.3;
 }
-#settings-page :is(.desk-intro, .desk-page-heading) h1:focus-visible {
+#settings-page
+  :is(.desk-intro, .settings-feature, .desk-page-heading)
+  h1:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 4px;
   border-radius: 3px;
@@ -207,6 +239,12 @@
   padding: 0;
 }
 @media (max-width: 900px) {
+  #settings-page
+    .settings-workspace:has(
+      > .settings-feature:not([hidden], [data-settings-panel="api-keys"])
+    ) {
+    padding: 20px clamp(18px, 4.6vw, 42px) 48px;
+  }
   #settings-page .settings-navigation {
     display: none;
   }
@@ -215,6 +253,9 @@
   }
 }
 @media (max-width: 650px) {
+  .settings-workspace:has(> .settings-feature:not([hidden])) .desk-path {
+    margin-bottom: 14px;
+  }
   #settings-page .settings-workspace > .settings-section {
     padding: 16px;
   }
@@ -229,6 +270,7 @@
     display: none;
   }
   .desk-intro h1,
+  .settings-feature h1,
   .desk-page-heading h1 {
     font-size: 24px;
   }

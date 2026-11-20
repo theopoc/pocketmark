@@ -1,0 +1,261 @@
+.account-section-heading {
+  padding: 0 0 24px;
+  border-bottom: 1px solid var(--line);
+}
+#settings-page .account-section-heading p {
+  margin: 7px 0 0;
+  color: var(--muted);
+}
+#settings-page .account-setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 93px;
+  gap: 18px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
+}
+.account-setting-row > div:first-child {
+  min-width: 0;
+}
+#settings-page .account-setting-row h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+#settings-page .account-setting-row p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.account-setting-label,
+.account-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.account-row-actions {
+  justify-content: flex-end;
+}
+.modal.account-dialog {
+  width: min(448px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  padding: 0;
+}
+.account-dialog-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--line);
+}
+.account-dialog-head h2 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -0.4px;
+}
+.account-dialog-head > .button {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+}
+.account-dialog-body {
+  display: grid;
+  gap: 15px;
+  padding: 18px 22px;
+}
+.account-dialog .account-dialog-body :is(label, input, textarea, p) {
+  margin: 0;
+}
+.account-dialog .form-error:empty,
+.account-dialog [role="status"]:empty {
+  display: none;
+}
+.account-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.account-dialog .account-secret-input {
+  position: relative;
+}
+.account-dialog .account-secret-input input {
+  width: 100%;
+  padding-right: 43px;
+}
+.account-peek {
+  position: absolute;
+  inset: 1px 1px 1px auto;
+  width: 38px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+}
+.account-peek:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+.account-peek[aria-pressed="false"] .account-eye-slash {
+  display: none;
+}
+.account-checks {
+  margin-top: -8px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--accent));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.account-meter {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 9px;
+}
+.account-meter i {
+  flex: 1;
+  height: 4px;
+  background: var(--control-border);
+  border-radius: 4px;
+}
+.account-meter i.filled:first-child {
+  background: var(--danger);
+}
+.account-meter i.filled:nth-child(2) {
+  background: light-dark(#b77919, #dba54b);
+}
+.account-meter i.filled:nth-child(3) {
+  background: var(--success);
+}
+.account-checks ul {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.account-checks li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.account-check-mark {
+  width: 15px;
+  height: 15px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+}
+.account-checks .met .account-check-mark {
+  color: var(--success);
+}
+.account-check-mark::after {
+  content: "×";
+}
+.account-checks .met .account-check-mark::after {
+  content: "✓";
+}
+.account-dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding: 13px 22px;
+}
+.account-dialog-body .account-dialog-actions {
+  margin-top: 5px;
+  padding: 14px 0 0;
+}
+#account-dialog .primary:disabled {
+  background: var(--accent-soft);
+  color: var(--muted);
+  opacity: 1;
+  border-color: var(--line);
+}
+#mfa-manage-dialog
+  :is(
+    #mfa-manage-form,
+    #mfa-manage-verify,
+    #mfa-manage-enrollment,
+    #mfa-manage-codes
+  ) {
+  display: grid;
+  gap: 14px;
+}
+#mfa-manage-dialog .account-dialog-actions button {
+  justify-self: auto;
+}
+.account-setup {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+.account-setup .account-field {
+  flex: 1;
+  min-width: min(160px, 100%);
+}
+.account-setup .button {
+  justify-self: start;
+}
+#mfa-manage-dialog .mfa-qr {
+  display: block;
+  width: clamp(124px, 33vw, 165px);
+  height: auto;
+  margin: 0;
+  background: white;
+}
+#mfa-manage-dialog .mfa-codes {
+  min-width: 0;
+  max-height: min(35dvh, 250px);
+  overflow: auto;
+  margin: 0;
+}
+@media (max-width: 600px) {
+  #settings-page .account-setting-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    gap: 10px;
+  }
+  .account-setting-row .account-row-actions {
+    display: grid;
+    justify-items: end;
+  }
+  #settings-page .account-setting-row .button,
+  .account-dialog .button,
+  .account-peek {
+    min-height: 44px;
+  }
+  .account-dialog-head,
+  .account-dialog-actions {
+    padding: 12px 16px;
+  }
+  .account-dialog-body {
+    padding: 16px;
+  }
+  .account-dialog-head > .button,
+  .account-peek {
+    width: 44px;
+  }
+  .account-dialog .account-secret-input input {
+    padding-right: 48px;
+  }
+}
+@media (max-width: 349px) {
+  #settings-page .account-setting-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .account-setting-row .account-row-actions {
+    display: flex;
+    justify-content: flex-start;
+  }
+}
