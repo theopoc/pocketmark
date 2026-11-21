@@ -81,6 +81,89 @@ export async function settingsDensityJourney(page) {
     await page.locator('.main-content > .topbar [data-theme-toggle]').click();
 }
 
+// Exercise the overview with deterministic run states without sending external backups or alerts.
+export async function backupOverviewJourney(page) {
+  const template = {
+    Revision: '', Enabled: true, Cron: '0 3 * * *', Zone: 'Europe/Paris', WindowMinutes: 120,
+    RetentionDays: 7, Next: '2026-11-22T02:00:00Z', Mode: 'full', Endpoint: 'https://s3.example.test',
+    Region: 'us-east-1', Bucket: 'backups', Prefix: 'owner', HasCredentials: true,
+    HasTelegramToken: true, TelegramChatID: '123', Managed: { Endpoint: true },
+  };
+  const run = {
+    ID: '387dfc5c-6e55-4470-8bac-ce59027fc4d9', Trigger: 'scheduled', Status: 'running',
+    Stage: 'upload', Config: template, Requested: '2026-11-21T02:00:00Z', Started: '2026-11-21T02:00:10Z',
+  };
+  const failed = {
+    ...run, ID: '78cb3dfd-ad1c-4366-8e58-c8de40d63110', Status: 'failed', Stage: 'retention',
+    Started: '2026-11-20T02:00:01Z', VerifiedAt: '2026-11-20T02:03:01Z', Finished: '2026-11-20T02:04:01Z', Notification: 'sent',
+  };
+  const queued = {
+    ...run, ID: 'bab95a7d-1f04-43cb-8505-44be09980a2b', Status: 'queued', Trigger: 'manual',
+    Stage: '', Started: '0001-01-01T00:00:00Z',
+  };
+  let settings = template, runs = [run, failed], submitted;
+  const handler = async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/backups') return route.fulfill({ json: { settings, runs } });
+    if (path.endsWith('/run')) {
+      if (!runs.includes(queued)) runs = [queued, ...runs];
+      return route.fulfill({ status: 202, json: { id: queued.ID } });
+    }
+    if (path.endsWith('/preview')) return route.fulfill({ json: ['2026-11-22T02:00:00Z'] });
+    if (path.endsWith('/settings')) {
+      submitted = route.request().postDataJSON();
+      settings = { ...settings, ...submitted };
+      return route.fulfill({ json: { ok: true } });
+    }
+    await route.abort();
+  };
+  await page.route('**/api/backups**', handler);
+  try {
+    await selectSettings(page, 'backup');
+    const panel = page.locator('#scheduled-backups');
+    await panel.getByText('7 days', { exact: true }).waitFor();
+    assert.deepEqual(await panel.getByRole('columnheader', { includeHidden: true }).allTextContents(),
+      ['Backup ID', 'Source', 'Duration', 'Result', 'Started']);
+    await panel.getByRole('button', { name: 'Back up now' }).click();
+    const row = panel.getByRole('row').filter({ has: page.getByRole('button', { name: 'Details for ' + queued.ID }) });
+    await row.waitFor();
+    assert.equal(await row.locator('td').last().innerText(), '—');
+    assert.equal(await row.locator('td').last().evaluate(node => getComputedStyle(node).textAlign), 'right');
+    const filter = panel.getByRole('combobox', { name: 'Filter backup history' });
+    await filter.press('Enter');
+    await filter.press('End');
+    await filter.press('Enter');
+    await panel.getByRole('button', { name: 'Details for ' + failed.ID }).press('Enter');
+    const detail = page.getByRole('dialog', { name: 'Backup details' });
+    await detail.getByText('Retention failed').waitFor();
+    await detail.getByText(/SHA-256 verified/).waitFor();
+    await detail.getByText('Delivered', { exact: true }).waitFor();
+    await page.keyboard.press('Escape');
+    assert.equal(await panel.getByRole('button', { name: 'Details for ' + failed.ID }).evaluate(node => document.activeElement === node), true);
+    await panel.getByRole('button', { name: 'Configure' }).click();
+    const configure = page.getByRole('dialog', { name: 'Configure remote backups' });
+    assert.equal(await configure.getByRole('switch').count(), 0);
+    const zone = configure.getByRole('combobox', { name: 'Time zone' });
+    await zone.press('Enter');
+    await configure.getByRole('group', { name: /GMT/ }).first().waitFor();
+    await zone.press('ArrowDown');
+    await zone.press('Enter');
+    await configure.getByLabel('Retention (days)', { exact: false }).fill('9');
+    await configure.getByRole('button', { name: 'Storage', exact: true }).click();
+    assert.equal(await configure.getByLabel(/S3 API endpoint/).evaluate(node => node.readOnly), true);
+    await configure.getByRole('button', { name: 'Telegram', exact: true }).click();
+    await configure.getByLabel('Send failure alerts').uncheck();
+    await configure.getByRole('button', { name: 'Save settings' }).click();
+    await panel.getByText('9 days', { exact: true }).waitFor();
+    assert.equal(submitted.ClearTelegram, true);
+    assert.equal(submitted.Revision, '');
+    assert.equal(submitted.RetentionDays, 9);
+    assert.equal(Object.hasOwn(submitted, 'Managed'), false);
+  } finally {
+    await page.unroute('**/api/backups**', handler);
+  }
+}
+
 export async function settingsNavigationJourney(page) {
   const original = new URL(page.url());
   original.searchParams.delete('settings');
@@ -194,7 +277,7 @@ export async function settingsNavigationJourney(page) {
   await page.goto(legacy.href);
   await page.locator('#mfa-settings-title').waitFor({ state: 'visible' });
   assert.equal(await page.locator('#settings-page').getByRole('heading', { level: 1 }).evaluate(node => document.activeElement === node && node.getBoundingClientRect().top >= 0 && node.getBoundingClientRect().top < innerHeight), true);
-  await selectSettings(page, 'backup');
+  await backupOverviewJourney(page);
   await page.reload();
   await page.locator('[data-settings-panel="backup"]').waitFor({ state: 'visible' });
   await selectSettings(page, '2fa');

@@ -21,13 +21,34 @@ func (s *Store) TemporaryFile(pattern string) (*os.File, error) {
 	return os.CreateTemp(s.directory, pattern)
 }
 
+// AnonymousFile lets the OS reclaim partial archives after a crash.
+func (s *Store) AnonymousFile(pattern string) (*os.File, error) {
+	f, e := s.TemporaryFile(pattern)
+	if e != nil {
+		return nil, e
+	}
+	if e = os.Remove(f.Name()); e != nil {
+		f.Close()
+		return nil, e
+	}
+	return f, nil
+}
+func (s *Store) BackupSnapshot(ctx context.Context) (*os.File, error) { return s.snapshot(ctx, true) }
+
 // Snapshot writes a consistent logical dump of the dedicated application database.
 // pg_dump opens its own snapshot, leaving the application pool available.
 func (s *Store) Snapshot(ctx context.Context) (*os.File, error) {
+	return s.snapshot(ctx, false)
+}
+func (s *Store) snapshot(ctx context.Context, anonymous bool) (*os.File, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	f, err := s.TemporaryFile(".backup-*.sql")
+	create := s.TemporaryFile
+	if anonymous {
+		create = s.AnonymousFile
+	}
+	f, err := create(".backup-*.sql")
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +56,9 @@ func (s *Store) Snapshot(ctx context.Context) (*os.File, error) {
 	defer func() {
 		if !success {
 			f.Close()
-			os.Remove(f.Name())
+			if !anonymous {
+				os.Remove(f.Name())
+			}
 		}
 	}()
 	// libpq accepts a connection URI as --dbname. Keep credentials out of argv.
@@ -53,7 +76,7 @@ func (s *Store) Snapshot(ctx context.Context) (*os.File, error) {
 	}
 	u.RawQuery = query.Encode()
 	cmd := exec.CommandContext(ctx, "pg_dump", "--no-owner", "--no-acl", "--no-password",
-		"--exclude-table-data=*.mfa_challenges", "--exclude-table-data=*.sessions", "--exclude-table-data=*.mfa_recovery", "--dbname="+u.String())
+		"--exclude-table-data=*.backup_notifications", "--exclude-table-data=*.backup_settings", "--exclude-table-data=*.backup_runs", "--exclude-table-data=*.backup_objects", "--exclude-table-data=*.backup_pending", "--exclude-table-data=*.backup_metrics", "--exclude-table-data=*.mfa_challenges", "--exclude-table-data=*.sessions", "--exclude-table-data=*.mfa_recovery", "--dbname="+u.String())
 	cmd.Env = os.Environ()
 	if user != "" {
 		cmd.Env = append(cmd.Env, "PGUSER="+user)

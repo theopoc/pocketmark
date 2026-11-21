@@ -232,17 +232,16 @@ const security = {
         PocketmarkSelect.sync(timeoutSelect);
       }
     });
-    document.querySelectorAll('a[href="/api/backup"]').forEach((link) =>
-      lifecycle.listen(link, "click", async (event) => {
-        event.preventDefault();
-        try {
-          await confirmPassword();
-          window.location.assign("/api/backup");
-        } catch (error) {
-          toast(error.message, true);
-        }
-      }),
-    );
+    lifecycle.listen(document, "click", async (event) => {
+      if (!event.target.closest?.('a[href="/api/backup"]')) return;
+      event.preventDefault();
+      try {
+        await confirmPassword();
+        window.location.assign("/api/backup");
+      } catch (error) {
+        toast(error.message, true);
+      }
+    });
     function closeSessionDialogs() {
       if (timeoutDialog.open) timeoutDialog.close();
       if ($("session-details-dialog").open) $("session-details-dialog").close();

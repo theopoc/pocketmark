@@ -227,10 +227,15 @@ func (s *Store) ResetMFA(ctx context.Context) error {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err = tx.ExecContext(ctx, `UPDATE mfa SET secret=''::bytea,generation=generation+1,last_counter=-1,attempts=0,window_start='-infinity' WHERE id=1;
- DELETE FROM mfa_challenges;
- DELETE FROM mfa_recovery; DELETE FROM sessions`); err != nil {
+	if err = resetMFATx(ctx, tx); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+func resetMFATx(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `UPDATE mfa SET secret=''::bytea,generation=generation+1,last_counter=-1,attempts=0,window_start='-infinity' WHERE id=1;
+ DELETE FROM mfa_challenges;
+ DELETE FROM mfa_recovery; DELETE FROM sessions`)
+	return err
 }

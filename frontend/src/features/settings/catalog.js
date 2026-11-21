@@ -14,7 +14,7 @@ export const settingsGroups = [
         id: "backup",
         icon: "download",
         name: "Backup & restore",
-        description: "Download a full library backup",
+        description: "Schedule remote backups, review runs and restore a copy",
         keywords: "archive export",
       },
     ],

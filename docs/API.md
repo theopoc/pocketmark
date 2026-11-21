@@ -338,3 +338,9 @@ for capture, invalidation and image limits.
 ### Bookmark site icon
 
 `GET /api/links/{id}/favicon` retrieves a site icon for a saved URL. It requires library read access and returns a supported raster icon up to 128 KiB, or 404 when unavailable. Responses are privately cached in the browser for one hour. At most two icon fetches run concurrently; excess requests receive 503. See [archive boundaries](ARCHIVES.md) for network and privacy details.
+
+### Remote backups
+
+The owner session can read `GET /api/backups` for effective settings, environment-managed fields, last successful timestamp and the latest 20 runs. Credentials are write-only. Preview the next three occurrences with `POST /api/backups/preview` and the fields `Cron` and `Zone`. Other backup mutations require recent owner password confirmation.
+
+Use `PUT /api/backups/settings` to save settings, `POST /api/backups/test` to probe S3 and `POST /api/backups/telegram/test` to send a test message. The probes accept unsaved settings. `POST /api/backups/run` queues one manual request and returns its ID (HTTP 202). Further requests return the existing waiting ID. `POST /api/backups/{id}/cancel` cancels an unfinished run. Submit a decrypted custom ZIP to `POST /api/backups/library` for manifest review, then repeat with `?confirm=1` to restore into an empty library. Full ZIP recovery uses PostgreSQL. [Owner guide](GUIDE.md#scheduled-remote-backups).

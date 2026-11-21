@@ -27,7 +27,7 @@
     svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("aria-hidden", "true"); path.setAttribute("d", "m6 9 6 6 6-6"); svg.append(path); trigger.append(svg);
     const supportsPopover = typeof panel.showPopover === "function";
     if (supportsPopover) panel.setAttribute("popover", "manual");
-    let active = -1, typing = "", typingTimer;
+    let active = -1, typing = "", typingTimer, rows = [];
     const options = () => [...source.options];
     const enabled = option => option && !option.matches(":disabled");
     function sync() {
@@ -42,6 +42,8 @@
     }
     function render() {
       panel.replaceChildren();
+      rows = [];
+      const groups = new Map();
       options().forEach((option, index) => {
         const row = document.createElement("div"), label = document.createElement("span"), check = document.createElementNS("http://www.w3.org/2000/svg", "svg"), mark = document.createElementNS("http://www.w3.org/2000/svg", "path");
         row.className = "app-select-option"; row.id = `${source.id}-option-${index}`; row.setAttribute("role", "option");
@@ -53,9 +55,21 @@
         row.addEventListener("mousedown", event => event.preventDefault());
         row.addEventListener("mousemove", () => { if (enabled(option) && active !== index) highlight(index); });
         row.addEventListener("click", () => { if (enabled(option)) choose(index); });
-        panel.append(row);
+        const group = option.parentElement;
+        let container = panel;
+        if (group.tagName === "OPTGROUP") {
+          if (!groups.has(group)) {
+            const wrapper = document.createElement("div"), heading = document.createElement("div");
+            wrapper.setAttribute("role", "group"); wrapper.setAttribute("aria-label", group.label);
+            heading.className = "app-select-group-heading"; heading.setAttribute("aria-hidden", "true");
+            heading.textContent = group.label; wrapper.append(heading); panel.append(wrapper);
+            groups.set(group, wrapper);
+          }
+          container = groups.get(group);
+        }
+        container.append(row); rows.push(row);
       });
-      if (active >= 0 && panel.children[active]) trigger.setAttribute("aria-activedescendant", panel.children[active].id);
+      if (active >= 0 && rows[active]) trigger.setAttribute("aria-activedescendant", rows[active].id);
       else trigger.removeAttribute("aria-activedescendant");
       position();
     }
@@ -71,8 +85,8 @@
     }
     function highlight(index) {
       active = index;
-      [...panel.children].forEach((row, i) => row.classList.toggle("is-active", i === index));
-      const row = panel.children[index];
+      rows.forEach((row, i) => row.classList.toggle("is-active", i === index));
+      const row = rows[index];
       if (row) { trigger.setAttribute("aria-activedescendant", row.id); row.scrollIntoView({ block: "nearest" }); }
       else trigger.removeAttribute("aria-activedescendant");
     }

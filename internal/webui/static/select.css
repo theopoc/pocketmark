@@ -20,6 +20,7 @@
 .app-select-panel[popover] { position: fixed; inset: auto; margin: 0; }
 .app-select-panel[hidden] { display: none !important; }
 .app-select-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; padding: 8px 10px; border-radius: 4px; text-align: left; cursor: pointer; }
+.app-select-group-heading { padding: 8px 10px 4px; color: var(--muted); font-size: 12px; font-weight: 600; }
 .app-select-option > span { min-width: 0; overflow-wrap: anywhere; }
 .app-select-option[aria-selected="true"], .app-select-option.is-active { background: var(--accent-soft); }
 .app-select-option[aria-disabled="true"] { opacity: .48; cursor: not-allowed; }

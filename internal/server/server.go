@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"pocketmark/internal/backup"
 	"pocketmark/internal/fault"
 	"pocketmark/internal/observability"
 	"pocketmark/internal/store"
@@ -26,23 +27,25 @@ import (
 )
 
 type Server struct {
-	Store          *store.Store
-	observer       *observability.Observer
-	token          string
-	secure         bool
-	origin         string
-	mux            *http.ServeMux
-	requests       chan struct{}
-	iconRequests   chan struct{}
-	imports        chan struct{}
-	loginMu        sync.Mutex
-	loginAttempts  map[netip.Addr]loginWindow
-	trustedProxies []netip.Prefix
-	authRequests   chan struct{}
-	healthRequests chan struct{}
-	passwordMu     sync.Mutex
-	totpNow        func() time.Time
-	rateLimit      *requestLimiter
+	backupEnv         backup.Environment
+	telegramTransport http.RoundTripper
+	Store             *store.Store
+	observer          *observability.Observer
+	token             string
+	secure            bool
+	origin            string
+	mux               *http.ServeMux
+	requests          chan struct{}
+	iconRequests      chan struct{}
+	imports           chan struct{}
+	loginMu           sync.Mutex
+	loginAttempts     map[netip.Addr]loginWindow
+	trustedProxies    []netip.Prefix
+	authRequests      chan struct{}
+	healthRequests    chan struct{}
+	passwordMu        sync.Mutex
+	totpNow           func() time.Time
+	rateLimit         *requestLimiter
 }
 
 func New(s *store.Store, token, origin string, secure bool, observers ...*observability.Observer) *Server {
@@ -53,13 +56,22 @@ func New(s *store.Store, token, origin string, secure bool, observers ...*observ
 	} else {
 		a.observer = observability.New(nil, nil)
 	}
-	a.mux.HandleFunc("GET /metrics", a.observer.Metrics)
+	a.mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) {
+		m, e := s.BackupMetrics(r.Context())
+		if e != nil {
+			handleError(w, e)
+			return
+		}
+		a.observer.Metrics(w, r)
+		observability.WriteBackupMetrics(w, m)
+	})
 	a.registerAccount(a.mux)
 	a.registerMFA(a.mux)
 	a.registerSessionSecurity(a.mux)
 	a.registerLibrary(a.mux)
 	a.registerDAV(a.mux)
 	a.registerAssets(a.mux)
+	a.registerBackups(a.mux)
 	a.registerFiles(a.mux)
 	a.mux.HandleFunc("POST /api/login", a.login)
 	a.mux.HandleFunc("POST /api/logout", func(w http.ResponseWriter, r *http.Request) {
