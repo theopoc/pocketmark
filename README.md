@@ -25,17 +25,13 @@ Personal use only: collaboration, public sharing, SSO and library automations ar
 
 ## Quick start
 
-Use Docker Compose, or [download a Linux binary](docs/RELEASE_INSTALL.md).
-
-For a new installation, set a database password before starting Compose. Existing SQLite installations must first follow the [PostgreSQL migration guide](docs/MIGRATION_POSTGRESQL.md).
+With Docker Compose v2, Make and Python 3 installed, run this from the cloned repository. Existing SQLite installations must first follow the [PostgreSQL migration guide](docs/MIGRATION_POSTGRESQL.md).
 
 ```sh
-git clone https://github.com/theopoc/pocketmark.git
-cd pocketmark
-umask 077
-printf 'POCKETMARK_DB_PASSWORD=%s\n' "$(openssl rand -hex 32)" > .env
-docker compose up -d --build
+make up
 ```
+
+On a fresh checkout, `make up` generates a database password in a private `.env` file. If you already have a database, supply its original `POCKETMARK_DB_PASSWORD` in `.env` or your shell. The command returns when both services are healthy. Stop them with `docker compose stop` and run `make up` again to restart. A [standalone Linux binary](docs/RELEASE_INSTALL.md) is also available.
 
 Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account before exposing the instance to untrusted networks. Register an authenticator app and save the single-use recovery codes. On later visits, sign in with your password and an authentication or recovery code. PostgreSQL stores the library in its own persistent volume. By default the application volume holds the server secret. To supply it from the environment, set `POCKETMARK_SERVER_SECRET` in your private Compose `.env` or shell. On an existing installation, use the original secret value to preserve MFA and sessions. The Go container has a 128 MiB memory limit, with PostgreSQL using additional memory; see [memory measurement methodology](docs/BENCHMARK.md) for workload boundaries.
 
@@ -83,8 +79,7 @@ Build and run locally:
 
 ```sh
 export POCKETMARK_DATABASE_URL=postgresql://pocketmark@localhost/pocketmark
-make build
-./bin/pocketmark
+make run
 ```
 
 For integration tests, set `POCKETMARK_TEST_DATABASE_URL` to a disposable PostgreSQL cluster where the role can create databases. Install PostgreSQL 18 client tools, then run:

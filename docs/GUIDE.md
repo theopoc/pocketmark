@@ -11,8 +11,7 @@ Requirements include Go from `go.mod`, Node.js 24, npm and Make. Start PostgreSQ
 ```sh
 export POCKETMARK_DATABASE_URL='postgresql://pocketmark@localhost/pocketmark'
 # Configure the password in a private libpq password file.
-make build
-./bin/pocketmark
+make run
 ```
 
 Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account. Register an authenticator app with the local QR code or setup key, verify a code and save the single-use recovery codes. On later visits, sign in with your username, password and an authentication or recovery code. In **Settings → API keys**, create an **Editor** key for the Pocketmark extension or a **Sync** key for Floccus. To revoke a key permanently, turn off its access switch and choose **Revoke**.
@@ -29,10 +28,10 @@ Restrict access to an empty instance until account and MFA setup are complete. S
 
 ## Docker Compose
 
-Set the database password as described in the [quick start](../README.md#quick-start).
+From the cloned repository, follow the [quick start](../README.md#quick-start) to launch PostgreSQL and Pocketmark together:
 
 ```sh
-docker compose up --build -d
+make up
 ```
 
 Open the same local URL. Compose uses separate named volumes for PostgreSQL and the application work directory and publishes port 8090 on host loopback only. The image runs as UID/GID `10001:10001`; a custom bind-mounted data directory must be writable by that user.
