@@ -4,10 +4,12 @@ import { navigationLayoutJourney } from './navigation-layout.mjs';
 export async function openNavigation(page) {
   if (await page.locator('.showing-settings').count()) return; // Settings keeps its navigation visible.
   const desktop = await page.evaluate(() => matchMedia('(min-width: 901px) and (hover: hover) and (pointer: fine)').matches);
+  // A viewport resize can precede the media-query event that moves the navigation.
+  const opener = page.locator(`#open-navigation[aria-controls="${desktop ? 'sidebar' : 'navigation-dialog'}"]`);
   if (desktop) {
-    await page.locator('#open-navigation').press('Enter');
+    await opener.press('Enter');
   } else if (!await page.locator('#navigation-dialog').evaluate(node => node.open)) {
-    await page.locator('#open-navigation').click();
+    await opener.click();
   }
 }
 
