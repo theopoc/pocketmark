@@ -96,10 +96,25 @@ function create(
     $("reader-notebook-toggle").focus({ preventScroll: true });
   });
 
-  function emptyReaderText() {
-    return safeURL(state.reading?.url)
-      ? "No article text was saved. Open the original page to read it."
-      : "No article text was saved. Choose an available copy to view this file.";
+  function setReaderState(kind, title = "", detail = "") {
+    const panel = $("reader-state");
+    panel.dataset.kind = kind;
+    panel.hidden = !title;
+    $("reader-status").textContent = title;
+    $("reader-status-detail").textContent = detail;
+  }
+
+  function finishArticleState() {
+    const link = state.reading;
+    if (
+      !link ||
+      link.content ||
+      ["failed", "pending", "processing"].includes(link.status)
+    )
+      return;
+    if (assetsState === "error" || $("reader-rich-article").hasChildNodes())
+      setReaderState("");
+    else setReaderState("empty", "Article text unavailable");
   }
 
   function closeViewer() {
@@ -188,14 +203,9 @@ function create(
     readerDialog.scrollTop = 0;
     $("reader-title").textContent = "Opening your bookmark…";
     page.setTitle($("reader-title").textContent);
-    for (const field of [
-      "reader-source-mark",
-      "reader-source",
-      "reader-read-time",
-      "reader-content",
-      "reader-status",
-    ])
+    for (const field of ["reader-source", "reader-read-time", "reader-content"])
       $(field).textContent = "";
+    setReaderState("");
     for (const field of [
       "reader-content",
       "reader-rich-article",
@@ -237,22 +247,24 @@ function create(
       const url = safeURL(link.url);
       const source = url ? domain(url) : "Saved file";
       $("reader-source").textContent = source;
-      $("reader-source-mark").textContent = url
-        ? source.slice(0, 2).toUpperCase()
-        : "";
       showReadTime(link.content);
       $("reader-original").hidden = !url;
       if (url) $("reader-original").href = url;
       else $("reader-original").removeAttribute("href");
-      $("reader-content").textContent = link.content || emptyReaderText();
-      $("reader-content").hidden = false;
+      $("reader-content").textContent = link.content || "";
+      $("reader-content").hidden = !link.content;
       setTextSizeAvailable(true);
-      $("reader-status").textContent =
-        {
-          failed: `Page capture failed. ${workspace.captureFailure(link.error)} Saved files remain available.`,
-          pending: "Capture queued. You can check its status here.",
-          processing: "Capture in progress. You can check its status here.",
-        }[link.status] || "";
+      if (link.status === "failed")
+        setReaderState(
+          "failed",
+          "Capture failed",
+          link.error ? workspace.captureFailure(link.error) : "",
+        );
+      else if (link.status === "pending")
+        setReaderState("pending", "Capture queued");
+      else if (link.status === "processing")
+        setReaderState("pending", "Capture in progress");
+      else if (!link.content) setReaderState("loading", "Opening article…");
       $("reader-retry-capture").hidden =
         link.status !== "failed" || link.type === "file";
       $("reader-recheck").hidden = !["pending", "processing"].includes(
@@ -283,8 +295,7 @@ function create(
       if (!isCurrent(request)) return;
       $("reader-title").textContent = "Could not open this bookmark";
       page.setTitle($("reader-title").textContent);
-      $("reader-error").textContent = error.message;
-      $("reader-status").textContent = error.message;
+      setReaderState("failed", error.message || "Bookmark unavailable");
       retryReaderID = id;
       $("reader-retry-open").hidden = false;
     }
@@ -301,6 +312,7 @@ function create(
   function readerSectionError(section, error) {
     if (section === "assets") {
       assetsState = "error";
+      finishArticleState();
       renderFormats();
       $("reader-formats-error").textContent = "Could not check saved formats.";
       $("reader-formats-error").hidden = false;
@@ -397,20 +409,17 @@ function create(
       if (isCurrent(request)) {
         const retryFocused =
           document.activeElement === $("reader-retry-capture");
-        $("reader-status").textContent =
-          "Capture queued. Check its status here without closing the reader.";
+        setReaderState("pending", "Capture queued");
         $("reader-retry-capture").hidden = true;
         $("reader-recheck").hidden = false;
         if (retryFocused) $("reader-recheck").focus({ preventScroll: true });
-        toast("Capture queued.");
       }
       await onChange();
     } catch (error) {
       if (isCurrent(request)) {
-        $("reader-error").textContent = error.message;
         if (!$("reader-retry-capture").hidden)
-          $("reader-status").textContent =
-            `Could not retry capture. ${error.message}`;
+          setReaderState("failed", "Could not retry capture", error.message);
+        else $("reader-error").textContent = error.message;
       }
     } finally {
       if (isCurrent(request)) {
@@ -468,7 +477,6 @@ function create(
     root.replaceChildren();
     highlightAnchors.clear();
     if (!content) {
-      root.textContent = emptyReaderText();
       if (focusedMark) {
         root.tabIndex = -1;
         root.focus({ preventScroll: true });
@@ -617,11 +625,7 @@ function create(
     }
     if (!state.annotations.length)
       $("annotation-list").append(
-        el(
-          "p",
-          "reader-section-empty muted",
-          "No highlights yet. Select a passage in the text reader, then choose Highlight. Highlights stay with the captured version.",
-        ),
+        el("p", "reader-section-empty muted", "No highlights yet."),
       );
     if (focusedEdit) {
       if (restoredEdit) restoredEdit.focus({ preventScroll: true });
@@ -825,14 +829,14 @@ function create(
       : "";
   }
   function setHighlighting(active) {
-    highlighting = active;
+    highlighting = active && Boolean(state.reading?.content);
     const rich = $("reader-rich-article");
     const hasArticle = rich.hasChildNodes();
-    rich.hidden = !hasArticle || active;
-    $("reader-content").hidden = !rich.hidden;
+    rich.hidden = !hasArticle || highlighting;
+    $("reader-content").hidden = !rich.hidden || !state.reading?.content;
     $("reader-text-mode").hidden =
-      !hasArticle || active || !state.reading?.content;
-    $("reader-article-mode").hidden = !hasArticle || !active;
+      !hasArticle || highlighting || !state.reading?.content;
+    $("reader-article-mode").hidden = !hasArticle || !highlighting;
     clearReaderSelection();
   }
   lifecycle.listen($("reader-text-mode"), "click", () => {
@@ -949,13 +953,6 @@ function create(
     $("asset-viewer-status").textContent = "Opening saved file…";
     $("asset-viewer-retry").hidden = true;
     $("asset-viewer-retry").className = "text-button";
-    $("asset-viewer-hint").textContent = asset.basicArchive
-      ? "Basic HTML capture shown as a simplified page. Download the original HTML to keep the saved source."
-      : asset.mediaType === "text/html"
-        ? "Saved appearance with embedded styles, images and fonts. Scripts, external resources and navigation are blocked; missing resources stay missing."
-        : asset.mediaType === "application/pdf"
-          ? "PDF preview uses your browser’s built-in viewer. If unavailable, download the file to open it."
-          : "Scroll to explore the saved image.";
     const failed = (message) => {
       if (current()) {
         $("asset-viewer-status").textContent = message;
@@ -1078,6 +1075,9 @@ function create(
     } catch (error) {
       if (error.status === 401) expireSession();
       // Text and the independent, sandboxed file viewer stay available.
+    } finally {
+      if (!controller.signal.aborted && isCurrent(request))
+        finishArticleState();
     }
   }
   return {

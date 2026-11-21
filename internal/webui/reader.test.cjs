@@ -132,6 +132,7 @@ test("a failed reader opening can retry the same bookmark", async () => {
   await env.reader.open(1);
   assert.equal(env.get("reader-retry-open").hidden, false);
   assert.match(env.get("reader-status").textContent, /Temporarily unavailable/);
+  assert.equal(env.get("reader-error").textContent, "");
   for (const id of ["reader-section-nav", "reader-content", "annotations-section", "reader-rich-article"]) assert.equal(env.get(id).hidden, true);
   failing = false;
   await fire(env.get("reader-retry-open"), "click");
@@ -212,7 +213,9 @@ test("a rejected direct capture retry remains available with a visible error", a
   await fire(env.get("reader-retry-capture"), "click");
   assert.equal(env.get("reader-retry-capture").hidden, false);
   assert.equal(env.get("reader-retry-capture").attributes["aria-disabled"], undefined);
-  assert.match(env.get("reader-status").textContent, /Try again later/);
+  assert.equal(env.get("reader-status").textContent, "Could not retry capture");
+  assert.equal(env.get("reader-status-detail").textContent, "Try again later");
+  assert.equal(env.get("reader-error").textContent, "");
 });
 
 test("notes saved while typing preserve newer notes and unrelated editor drafts", async () => {
@@ -679,19 +682,20 @@ test("basic HTML archives remain available without attachments and use the sandb
   assert.equal(frame.src, "/api/links/1/reader");
   assert.equal(frame.attributes.sandbox, "");
   assert.equal(env.get("asset-viewer-download").href, "/api/links/1/archive");
-  assert.match(env.get("asset-viewer-hint").textContent, /simplified/);
 });
 
 test("format states distinguish loading and failed checks from absent files, with a direct retry", async () => {
   const files = deferred();
   let failing = true;
   const env = setup({ handler: (path, options, fallback) => path.endsWith("/assets") && failing ? files.promise : fallback() });
+  env.records.set(1, link(1, { content: "", status: "ready" }));
   const opening = env.reader.open(1);
   await tick();
   assert.equal(env.get("reader-format-pdf-status").textContent, "PDF · Checking…");
   files.reject(Error("Files unavailable"));
   await opening;
   assert.equal(env.get("reader-format-pdf-status").textContent, "PDF · Unknown");
+  assert.equal(env.get("reader-state").hidden, true, "format lookup failed before article availability was known");
   assert.equal(env.get("reader-formats-error").hidden, false);
   assert.equal(env.get("reader-formats-retry").hidden, false);
   failing = false;
@@ -700,6 +704,7 @@ test("format states distinguish loading and failed checks from absent files, wit
   await tick();
   assert.equal(env.get("reader-format-pdf-status").textContent, "Open saved PDF");
   assert.equal(env.get("reader-format-html-status").textContent, "HTML · Not saved");
+  assert.equal(env.get("reader-status").textContent, "Article text unavailable");
   assert.equal(env.get("reader-formats-error").hidden, true);
   assert.equal(env.get("reader-formats-retry").hidden, true);
   await env.reader.open(2);
@@ -741,15 +746,25 @@ test("full-page reading preserves the source path and Escape returns to the same
   assert.equal(returned,1);
 });
 
-test("an empty or failed capture keeps a direct original link and distinguishes absent article text", async () => {
+test("failed and empty captures show one status, keep the original link, and never insert prose into article text", async () => {
   const env = setup();
-  env.records.set(1, link(1, { content: "", description: "Only a bookmark summary", status: "failed" }));
+  env.records.set(1, link(1, { content: "", description: "Only a bookmark summary", status: "failed", error: "HTTP 404" }));
   await env.reader.open(1);
-  assert.match(env.get("reader-content").textContent, /No article text was saved/);
-  assert.doesNotMatch(env.get("reader-content").textContent, /Only a bookmark summary/);
+  assert.equal(env.get("reader-status").textContent, "Capture failed");
+  assert.match(env.get("reader-status-detail").textContent, /not found/);
+  assert.equal(env.get("reader-content").textContent, "");
+  assert.equal(env.get("reader-content").hidden, true);
   assert.equal(env.get("reader-original").href, "https://example.com/1");
   assert.equal(env.get("reader-original").hidden, false);
   assert.equal(env.get("reader-notebook").hidden, true);
+  env.records.set(1, link(1, { content: "", status: "ready" }));
+  await env.reader.open(1);
+  assert.equal(env.get("reader-status").textContent, "Article text unavailable");
+  assert.equal(env.get("reader-status-detail").textContent, "");
+  assert.equal(env.get("reader-retry-capture").hidden, true);
+  await env.reader.open(2);
+  assert.equal(env.get("reader-state").hidden, true);
+  assert.equal(env.get("reader-content").textContent, "Text 2");
 });
 
 test("show in text restores an anchored passage without losing the article position in a notebook switch", async () => {
