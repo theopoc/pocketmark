@@ -75,6 +75,7 @@ Adapt the example to your namespace, existing host, TLS secret, Service port and
 
 - Bookmarks with descriptions, personal notes, favorite/read flags and tags.
 - Nested collections, an inbox, filtering and 40-item paginated lists.
+- Click a tag on a bookmark to filter the current view. Selecting more tags shows bookmarks that carry all of them. Use the × beside a tag above the results to remove that filter while keeping the others.
 - PostgreSQL full-text search across title, URL, description, notes, tags and captured text. Search terms are combined with AND and match token prefixes; matching ignores case and common diacritics.
 - A persistent, sequential capture queue; failed captures can be retried. Interrupted jobs resume after restart.
 - Plain-text reading and downloadable original HTML for public HTML pages.

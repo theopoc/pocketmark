@@ -27,15 +27,23 @@ test('tags directory retains its query and the library context it returns to', (
   assert.deepEqual(readRoute(routeSearch(route)), route);
   const tag = readRoute('?tag=R%26D+%2F+web&q=cache');
   assert.deepEqual(readRoute(routeSearch(tag)), tag);
-  assert.equal(tag.tag, 'R&D / web');
+  assert.deepEqual(tag.activeTags, ['R&D / web']);
 });
 
-test('untrusted URL state has safe defaults and canonical tag destinations', () => {
+test('tag filters round trip exact names together with the library destination', () => {
+  const route = readRoute('?filter=collection&collection=42&tag=R%26D+%2F+web&tag=caf%C3%A9%2C+go&tag=R%26D+%2F+web&tag=&q=cache&sort=oldest&page=2');
+  assert.deepEqual(route.activeTags, ['R&D / web', 'café, go']);
+  assert.equal(route.collection, 42);
+  assert.deepEqual(readRoute(routeSearch(route)), route);
+  assert.deepEqual(new URLSearchParams(routeSearch(route)).getAll('tag'), route.activeTags);
+});
+
+test('untrusted URL state has safe defaults', () => {
   assert.equal(readRoute('?filter=collection&collection=-2').filter, 'all');
   assert.equal(readRoute('?filter=collection&collection=1000002').collection, 1000002);
   assert.equal(readRoute('?filter=unknown&page=Infinity&sort=bad').page, 1);
   assert.equal(readRoute('?page=9999999999').page, 1000000);
-  assert.equal(readRoute('?filter=favorite&tag=go').filter, 'all');
+  assert.equal(readRoute('?filter=favorite&tag=go').filter, 'favorite');
   assert.equal(routeSearch(readRoute('')), '');
 });
 

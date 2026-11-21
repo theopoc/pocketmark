@@ -56,9 +56,15 @@
       if (button.getAttribute("aria-label") !== name) button.setAttribute("aria-label", name);
     }
     for (const row of reference.querySelectorAll("tr[data-param-name]")) {
+      const parameter = `${row.dataset.paramName} (${row.dataset.paramIn})`;
+      for (const [index, item] of row.querySelectorAll(".json-schema-form-item").entries()) {
+        const label = `${parameter} value ${index + 1}`;
+        item.querySelector("input, select, textarea")?.setAttribute("aria-label", label);
+        item.querySelector(".json-schema-form-item-remove")?.setAttribute("aria-label", `Remove ${label}`);
+      }
       for (const field of row.querySelectorAll("input, select, textarea")) {
         if (!field.getAttribute("aria-label") && !field.getAttribute("aria-labelledby") && !field.labels?.length) {
-          field.setAttribute("aria-label", `${row.dataset.paramName} (${row.dataset.paramIn})`);
+          field.setAttribute("aria-label", parameter);
         }
       }
     }

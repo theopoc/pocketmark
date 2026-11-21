@@ -276,6 +276,7 @@ export async function securityJourney({ browser, page, base, username, password,
     await page.waitForFunction(() => document.querySelector('#key-dialog [role=switch]')?.getAttribute('aria-checked') === 'true');
     assert.equal(await revoke.isDisabled(), true);
     await inspector.getByRole('button', {name:'Close dialog'}).click();
+    await page.waitForFunction(id => document.activeElement?.id === `manage-key-${id}`, key.id);
 
     await checkConcurrentKeyChanges(page, peer, url, key, password);
 

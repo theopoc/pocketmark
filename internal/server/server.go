@@ -386,7 +386,7 @@ func (a *Server) links(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "page out of range")
 		return
 	}
-	v, e := a.Store.List(r.Context(), store.Filter{Query: q.Get("q"), Collection: q.Get("collection"), Tag: q.Get("tag"), Favorite: q.Get("favorite") == "1", Unread: q.Get("unread") == "1", Page: page, Sort: q.Get("sort"), Fuzzy: q.Get("fuzzy") == "1"})
+	v, e := a.Store.List(r.Context(), store.Filter{Query: q.Get("q"), Collection: q.Get("collection"), Tags: q["tag"], Favorite: q.Get("favorite") == "1", Unread: q.Get("unread") == "1", Page: page, Sort: q.Get("sort"), Fuzzy: q.Get("fuzzy") == "1"})
 	if e != nil {
 		handleError(w, e)
 		return

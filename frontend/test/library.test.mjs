@@ -34,6 +34,7 @@ function render(changes = {}, view = "list") {
       model: {
         view,
         query: "query",
+        activeTags: [],
         expandedTags: new Set(),
         ...changes.model,
       },
@@ -72,4 +73,21 @@ test("standalone files retain their label and have no original-site link", () =>
   const html = render({ type: "file", url: "pocketmark-file:123" });
   assert.ok(html.includes("Saved file"));
   assert.ok(!html.includes("Visit original"));
+});
+
+test("article tags expose each filter's selected state in both layouts", () => {
+  for (const view of ["list", "grid"]) {
+    const html = render(
+      { tags: ["go", "reading"], model: { activeTags: ["go"] } },
+      view,
+    );
+    assert.match(
+      html,
+      /aria-pressed="true" data-focus-key="link:7:tag:go"[^>]*><svg/,
+    );
+    assert.match(
+      html,
+      /aria-pressed="false" data-focus-key="link:7:tag:reading"[^>]*><span>#reading/,
+    );
+  }
 });

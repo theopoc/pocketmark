@@ -55,10 +55,11 @@ type Collection struct {
 	Description *string `json:"description,omitempty"`
 }
 type Filter struct {
-	Query, Collection, Tag, Sort string
-	Fuzzy                        bool
-	Favorite, Unread             bool
-	Page                         int
+	Query, Collection, Sort string
+	Tags                    []string
+	Fuzzy                   bool
+	Favorite, Unread        bool
+	Page                    int
 }
 type Page struct {
 	Links    []Link `json:"links"`
@@ -274,8 +275,8 @@ func (s *Store) List(ctx context.Context, f Filter) (Page, error) {
 	} else if f.Collection != "" {
 		where += " AND l.collection_id=" + bind(f.Collection)
 	}
-	if f.Tag != "" {
-		where += " AND jsonb_exists(l.tags::jsonb," + bind(f.Tag) + ")"
+	if len(f.Tags) > 0 {
+		where += " AND l.tags::jsonb ?& array_remove(" + bind(f.Tags) + "::text[],'')"
 	}
 	if f.Favorite {
 		where += " AND l.favorite"
