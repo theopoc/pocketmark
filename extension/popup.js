@@ -13,7 +13,7 @@ if (chrome.extension?.getViews({ type: "popup" }).includes(window)) {
 }
 const collectionNameLimit = PocketmarkNameLimit.create($("collection-name"), $("collection-name-hint"));
 let activeTab, connected = false, connecting = false, loaded = false, ready = false, settingsOpen = false, task = null, tags = [], collections = [], poll, tagTimer, tagQuery = 0, taskSignature, collectionSession = 0;
-let watchedJobId, closing = false, stateRequest = 0, appliedState = 0;
+let watchedJobId, closeTimer = null, stateRequest = 0, appliedState = 0;
 function status(message, error = false, success = false) {
   const changed = $("status").textContent !== message;
   $("status").setAttribute("role", error ? "alert" : "status");
@@ -37,7 +37,7 @@ function controls() {
   $("task-actions").hidden = settingsOpen || !paused;
   $("background-note").hidden = settingsOpen || !running;
   $("footer").hidden = !(editing || settingsOpen || running || paused);
-  $("task").hidden = settingsOpen || !task || (task.status === "done" && task.fields.url !== activeTab?.url);
+  $("task").hidden = settingsOpen || !task || (task.status === "done" && (closeTimer !== null || task.fields.url !== activeTab?.url));
   $("unsupported").hidden = settingsOpen || !ready || !connected || loaded || running || paused;
   $("connection-toggle").hidden = !connected;
   $("connection-toggle").textContent = settingsOpen ? "Back to bookmark" : "Connection";
@@ -112,7 +112,7 @@ async function load() {
 function renderTask(job) {
   if (job && watchedJobId === job.id && (job.status === "done" || job.status === "paused")) {
     watchedJobId = null;
-    closeAfterToast(PocketmarkSaveToast.outcome(job), job.toastShown && activeTab?.id === job.tabId);
+    closeAfterToast(job);
   }
   const signature = JSON.stringify(job);
   // Background polling must not recreate focused controls, re-announce the
@@ -146,24 +146,31 @@ function renderTask(job) {
     $("discard").hidden = job.status !== "paused";
     if (job.linkId && job.fields.url === activeTab?.url) $("save").textContent = "Save changes";
     if (changedState && ready) {
-      if (job.status === "done" && job.fields.url === activeTab?.url) status("Saved to Pocketmark.", false, true);
+      if (closeTimer !== null) status("");
+      else if (job.status === "done" && job.fields.url === activeTab?.url) status("Saved to Pocketmark.", false, true);
       else if (job.status === "paused") status(job.message, true);
       else status("");
     }
   }
   controls();
 }
-function closeAfterToast(feedback, shownInCurrentTab) {
-  if (closing) return;
-  closing = true;
-  if (shownInCurrentTab) { window.close(); return; }
-  // Protected pages and navigated tabs cannot host the toast. Give the same
-  // feedback a readable lifetime inside the popup before closing it.
-  document.body.inert = true;
+function closeAfterToast(job) {
+  if (closeTimer !== null) return;
+  const feedback = PocketmarkSaveToast.outcome(job, "popup");
   PocketmarkSaveToast.render(null, feedback, document.documentElement.dataset.theme);
-  setTimeout(() => window.close(), feedback.duration);
+  closeTimer = setTimeout(() => window.close(), feedback.duration);
 }
+function keepPopupOpen() {
+  if (closeTimer === null) return;
+  clearTimeout(closeTimer);
+  closeTimer = null;
+  controls();
+}
+window.addEventListener("click", keepPopupOpen, true);
+window.addEventListener("keydown", keepPopupOpen, true);
 async function submitTask(type, values, sourceURL) {
+  keepPopupOpen();
+  PocketmarkSaveToast.dismiss();
   const theme = document.documentElement.dataset.theme;
   let job;
   appliedState = ++stateRequest;
@@ -171,9 +178,9 @@ async function submitTask(type, values, sourceURL) {
     job = await send(type, { ...values, tabId: activeTab?.id, theme });
   } catch (error) {
     status(error.message, true);
-    const feedback = PocketmarkSaveToast.outcome(type === "retry" ? task : null);
-    const shown = sourceURL === activeTab?.url && await PocketmarkSaveToast.showInTab(activeTab.id, sourceURL, feedback, theme);
-    closeAfterToast(feedback, shown);
+    const failedJob = type === "retry" ? task : null;
+    closeAfterToast(failedJob);
+    if (sourceURL === activeTab?.url) await PocketmarkSaveToast.showInTab(activeTab.id, sourceURL, PocketmarkSaveToast.outcome(failedJob), theme);
     return;
   }
   // Ignore snapshots taken before this attempt, including reads started
@@ -291,7 +298,7 @@ $("retry").addEventListener("click", async () => {
   finally { $("retry").disabled = false; }
 });
 $("discard").addEventListener("click", async () => {
-  try { await send("discard"); renderTask(null); status("Pending local files discarded. Saved bookmarks and captures are unchanged."); }
+  try { await send("discard"); PocketmarkSaveToast.dismiss(); renderTask(null); status("Pending local files discarded. Saved bookmarks and captures are unchanged."); }
   catch (error) { status(error.message, true); }
 });
 async function initialize() {

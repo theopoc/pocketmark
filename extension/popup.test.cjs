@@ -3,13 +3,24 @@ const { test } = require("node:test"), assert = require("node:assert/strict"), v
 async function setup({ stored, permissionCloses = false, granted = true, hostGranted = true, authenticated = true, existing = false, job = null, collectionResult, tagsFail = false, tagsResult, saveError, loadError, toastAllowed = true } = {}) {
   const elements = new Map(), calls = [], writes = [], permissions = [], data = stored || { server: "https://library.example", token: "key" };
   let closeCount = 0;
-  const longTimers = [], popupToasts = [], pageToasts = [];
+  const longTimers = new Map(), windowListeners = new Map(), popupToasts = [], pageToasts = [];
+  let now = 0;
+  function advance(ms) {
+    now += ms;
+    for (const [timer, due] of longTimers) {
+      if (due <= now) { longTimers.delete(timer); timer(); }
+    }
+  }
   const tab = { id: 3, url: "https://example.org", title: "Page title", active: true };
   function node(id = "") { return { id, value: "", hidden: true, children: [], listeners: {}, classList: { toggle() {} }, setCustomValidity() {}, reportValidity() {}, addEventListener(type, fn) { this.listeners[type] = fn; }, setAttribute() {}, replaceChildren() { this.children = []; }, append(child) { this.children.push(child); }, focus() {} }; }
   const element = (id) => { if (!elements.has(id)) elements.set(id, node(id)); return elements.get(id); };
   const context = vm.createContext({ document: { body: {}, documentElement: { dataset: { theme: "light" } }, getElementById: element, createElement: () => node(), createElementNS: () => node() }, URL, TextEncoder,
-    setTimeout(fn, ms) { if (ms >= 1000) longTimers.push(fn); else return setTimeout(fn, ms); },
-    clearTimeout, setInterval: () => 1, clearInterval() {}, window: { addEventListener() {}, close() { closeCount++; } },
+    setTimeout(fn, ms) {
+      if (ms < 1000) return setTimeout(fn, ms);
+      longTimers.set(fn, now + ms); return fn;
+    },
+    clearTimeout(timer) { if (!longTimers.delete(timer)) clearTimeout(timer); },
+    setInterval: () => 1, clearInterval() {}, window: { addEventListener: (type, fn) => windowListeners.set(type, fn), close() { closeCount++; } },
     chrome: {
       storage: { local: { setAccessLevel: async () => {}, get: async () => data, set: async (value) => { writes.push(value); Object.assign(data, value); } } },
       tabs: { query: async () => [tab], get: async () => tab },
@@ -39,7 +50,7 @@ async function setup({ stored, permissionCloses = false, granted = true, hostGra
   context.PocketmarkSaveToast.render = (...args) => { popupToasts.push(args); return true; };
   await new Promise(setImmediate);
   const submit = async (id) => element(id).listeners.submit({ preventDefault() {} });
-  return { element, calls, writes, permissions, data, submit, context, popupToasts, pageToasts, finishTimers() { longTimers.splice(0).forEach(fn => fn()); }, get closeCount() { return closeCount; }, setJob(value) { job = value; } };
+  return { element, calls, writes, permissions, data, submit, context, popupToasts, pageToasts, advance, interact: (type) => windowListeners.get(type)(), get closeCount() { return closeCount; }, setJob(value) { job = value; } };
 }
 test("adding a tag invalidates an outstanding suggestions request", async () => {
   let resolve; const pending = new Promise(done => { resolve = done; });
@@ -88,18 +99,23 @@ test("save sends edited metadata and only user-selected capture formats", async 
   assert.deepEqual(Array.from(message.fields.tags), ["new", "docs"]); assert.deepEqual(Array.from(message.modes), ["pdf"]);
   assert.equal(env.element("editor").disabled, true); assert.equal(env.element("capture-pdf").checked, false);
 });
-for (const modes of [[], ["pdf", "screenshot"]]) test(`popup closes only after successful save (${modes.length} captures)`, async () => {
+for (const modes of [[], ["pdf", "screenshot"]]) test(`confirmed popup result stays visible for 3.5 seconds (${modes.length} captures)`, async () => {
   const env = await setup();
   for (const mode of modes) env.element("capture-" + mode).checked = true;
   await env.submit("save-form");
   assert.equal(env.closeCount, 0);
   const job = { id: "task", tabId: 3, fields: { url: "https://example.org", title: "Page title" }, status: "running", message: "Uploading", linkId: 17, items: modes.map((mode) => ({ mode, status: "uploading" })) };
   env.setJob(job); await env.context.refresh();
+  env.advance(6000);
   assert.equal(env.closeCount, 0);
-  env.setJob({ ...job, status: "done", toastShown: true, items: modes.map((mode) => ({ mode, status: "saved" })) });
+  env.setJob({ ...job, status: "done", items: modes.map((mode) => ({ mode, status: "saved" })) });
   await env.context.refresh();
-  assert.equal(env.closeCount, 1);
+  assert.equal(env.popupToasts[0][1].message, "Saved to Pocketmark.");
+  env.advance(3499);
+  assert.equal(env.closeCount, 0);
   await env.context.refresh();
+  assert.equal(env.popupToasts.length, 1);
+  env.advance(1);
   assert.equal(env.closeCount, 1);
 });
 test("reopening a completed save keeps the popup open for editing", async () => {
@@ -107,11 +123,16 @@ test("reopening a completed save keeps the popup open for editing", async () => 
   await env.context.refresh();
   assert.equal(env.closeCount, 0); assert.equal(env.element("save-form").hidden, false);
 });
-test("partial failure closes after its page toast; recovery and retry are available on reopen", async () => {
+test("partial failure closes after eight seconds and recovery is available on reopen", async () => {
   const env = await setup(); env.element("capture-pdf").checked = true;
   await env.submit("save-form");
   const job = { id: "task", tabId: 3, toastShown: true, fields: { url: "https://example.org", title: "Page title" }, status: "paused", message: "Capture failed", linkId: 17, items: [{ mode: "pdf", status: "failed" }] };
   env.setJob(job); await env.context.refresh();
+  assert.equal(env.popupToasts[0][1].message, "Bookmark saved. Some captures need attention.");
+  assert.equal(env.element("task-actions").hidden, false);
+  env.advance(7999);
+  assert.equal(env.closeCount, 0);
+  env.advance(1);
   assert.equal(env.closeCount, 1);
   const reopened = await setup({ job });
   assert.equal(reopened.element("task-actions").hidden, false); assert.equal(reopened.closeCount, 0);
@@ -119,6 +140,7 @@ test("partial failure closes after its page toast; recovery and retry are availa
   assert.equal(reopened.closeCount, 0);
   reopened.setJob({ ...job, status: "done", items: [{ mode: "pdf", status: "saved" }] });
   await reopened.context.refresh();
+  reopened.advance(3500);
   assert.equal(reopened.closeCount, 1);
 });
 test("when Chrome denies the page toast the popup shows the result before closing", async () => {
@@ -128,7 +150,21 @@ test("when Chrome denies the page toast the popup shows the result before closin
   assert.equal(env.closeCount, 0); assert.equal(env.popupToasts.length, 1);
   assert.match(env.popupToasts[0][1].message, /couldn’t confirm/i);
   assert.equal(env.popupToasts[0][2], "light");
-  env.finishTimers(); assert.equal(env.closeCount, 1);
+  env.advance(8000); assert.equal(env.closeCount, 1);
+});
+for (const interaction of ["click", "keydown"]) test(`${interaction} keeps the popup open during the result`, async () => {
+  const env = await setup();
+  await env.submit("save-form");
+  env.setJob({ id: "task", fields: { url: "https://example.org" }, status: "paused", items: [] });
+  await env.context.refresh();
+  env.advance(7500); env.interact(interaction);
+  env.advance(1000);
+  assert.equal(env.closeCount, 0);
+  await env.element("retry").listeners.click();
+  env.setJob({ id: "task", fields: { url: "https://example.org" }, status: "done", items: [] });
+  await env.context.refresh();
+  env.advance(3500);
+  assert.equal(env.closeCount, 1);
 });
 test("delayed paused snapshots from before a retry acknowledgement cannot close the new attempt", async () => {
   const job = { id: "task", tabId: 3, toastShown: true, status: "paused", fields: { url: "https://example.org" }, items: [] };
@@ -154,6 +190,7 @@ test("delayed paused snapshots from before a retry acknowledgement cannot close 
   assert.equal(env.element("background-note").hidden, false);
   runtime.sendMessage = send;
   env.setJob({ ...job, status: "done" }); await env.context.refresh();
+  env.advance(3500);
   assert.equal(env.closeCount, 1);
 });
 test("concurrent polls keep the newest applied response", async () => {
@@ -185,7 +222,9 @@ for (const status of ["paused", "running"]) test(`reopening an offline library p
 test("save rejected before creating a job shows failure then closes without exposing the server error", async () => {
   const env = await setup({ saveError: "Private server detail" });
   await env.submit("save-form");
-  assert.equal(env.closeCount, 1); assert.equal(env.pageToasts.length, 1);
+  assert.equal(env.closeCount, 0); assert.equal(env.pageToasts.length, 1);
+  assert.equal(env.popupToasts.length, 1);
+  env.advance(8000); assert.equal(env.closeCount, 1);
   const [url, feedback, theme] = env.pageToasts[0];
   assert.equal(url, "https://example.org"); assert.equal(theme, "light");
   assert.equal(feedback.error, true); assert.doesNotMatch(feedback.message, /Private/);

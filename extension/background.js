@@ -197,7 +197,7 @@ async function run(job) {
   } finally {
     if (target) { try { await chrome.debugger.detach(target); } catch {} }
     try {
-      job.toastShown = await PocketmarkSaveToast.showInTab(job.tabId, job.fields.url, PocketmarkSaveToast.outcome(job), toastTheme);
+      await PocketmarkSaveToast.showInTab(job.tabId, job.fields.url, PocketmarkSaveToast.outcome(job), toastTheme);
       await jobStore.write({ job }, job.status === "done" ? blobKeys : []);
     } finally { busy = false; }
   }
@@ -253,7 +253,6 @@ async function dispatch(message) {
         if (tab.url === job.fields.url) job.tabId = tab.id;
       }
       job.status = "running"; job.message = "Retrying…";
-      delete job.toastShown;
       updateToastTheme(message.theme);
       await jobStore.write({ job });
       launched = true;
