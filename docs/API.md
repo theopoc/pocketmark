@@ -79,7 +79,7 @@ curl --fail-with-body -H "Authorization: Bearer $POCKETMARK_ACCESS_TOKEN" "$POCK
 ```sh
 curl --fail-with-body --get "$POCKETMARK_URL/api/links" \
   -H "Authorization: Bearer $POCKETMARK_ACCESS_TOKEN" \
-  --data-urlencode 'q=concurrency go' --data-urlencode 'tag=reference' \
+  --data-urlencode 'q=concurrency go' --data-urlencode 'tag=go' --data-urlencode 'tag=reference' \
   --data-urlencode 'favorite=1' --data-urlencode 'unread=1' --data-urlencode 'page=1'
 ```
 
@@ -89,7 +89,7 @@ Query parameters combine with AND:
 | --- | --- |
 | `q` | Space-separated literal prefix terms; case/diacritic insensitive. Searches title, URL, description, notes, tags and captured text. |
 | `collection` | Exact collection ID; `0` selects the inbox. Does not include descendant collections automatically. |
-| `tag` | Exact tag string. |
+| `tag` | Exact, case-sensitive tag name. Repeat `tag` to require every selected tag. Empty values are ignored. |
 | `favorite=1` | Favorites only. |
 | `unread=1` | Unread only. |
 | `page` | One-based page; omitted or nonpositive values become 1. |

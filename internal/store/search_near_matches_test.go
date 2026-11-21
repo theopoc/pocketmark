@@ -23,7 +23,7 @@ func TestNearMatchesIncludeFullTextAndPreserveFilters(t *testing.T) {
 		}
 	}
 	createLink(t, s, Link{URL: "https://example.com/excluded", Title: "Browser elsewhere"})
-	filter := Filter{Query: "browser", Fuzzy: true, Collection: "1", Tag: "reading", Favorite: true, Unread: true, Sort: "oldest"}
+	filter := Filter{Query: "browser", Fuzzy: true, Collection: "1", Tags: []string{"reading"}, Favorite: true, Unread: true, Sort: "oldest"}
 	page, err := s.List(ctx, filter)
 	if err != nil || page.Total != 4 || len(page.Links) != 4 {
 		t.Fatalf("combined search: %+v, %v", page, err)

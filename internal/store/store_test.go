@@ -196,10 +196,10 @@ func TestFiltersAndPagination(t *testing.T) {
 	}{
 		{"inbox", Filter{Collection: "0"}, []int64{inbox}},
 		{"collection", Filter{Collection: strconv.FormatInt(collection, 10)}, []int64{other, filed}},
-		{"tag", Filter{Tag: "exact"}, []int64{filed, inbox}},
+		{"tag", Filter{Tags: []string{"exact"}}, []int64{filed, inbox}},
 		{"favorite", Filter{Favorite: true}, []int64{other, inbox}},
 		{"unread", Filter{Unread: true}, []int64{other, inbox}},
-		{"combined", Filter{Tag: "exact", Favorite: true, Unread: true}, []int64{inbox}},
+		{"combined", Filter{Tags: []string{"exact"}, Favorite: true, Unread: true}, []int64{inbox}},
 		{"missing", Filter{Collection: "999"}, []int64{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

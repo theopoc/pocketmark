@@ -104,7 +104,7 @@ test('late-rendered API fields get names without replacing existing labels', asy
   fields[3].labels = [{}];
   const example = view.element('example');
   view.elements.get('swagger-ui').querySelectorAll = selector => selector === 'tr[data-param-name]' ? [{
-    dataset: { paramName: 'favorite', paramIn: 'query' }, querySelectorAll: () => fields,
+    dataset: { paramName: 'favorite', paramIn: 'query' }, querySelectorAll: selector => selector === 'input, select, textarea' ? fields : [],
   }] : selector === '.highlight-code .microlight' ? [example] : [];
   view.mutation(); view.mutation();
   assert.equal(fields[0].attributes['aria-label'], 'favorite (query)');
@@ -114,6 +114,29 @@ test('late-rendered API fields get names without replacing existing labels', asy
   assert.equal(example.attributes.tabindex, '0');
   assert.equal(example.attributes.role, 'region');
   assert.equal(example.attributes['aria-label'], 'API example');
+});
+
+test('repeated query values and removal buttons are named and renumbered together', async () => {
+  const view = await loadDocs();
+  let items = ['first', 'second'].map(id => {
+    const input = view.element(id + '-input');
+    const remove = view.element(id + '-remove');
+    return { input, remove, querySelector: selector => selector === '.json-schema-form-item-remove' ? remove : input };
+  });
+  const row = {
+    dataset: { paramName: 'tag', paramIn: 'query' },
+    querySelectorAll: selector => selector === '.json-schema-form-item' ? items : items.map(item => item.input),
+  };
+  view.element('swagger-ui').querySelectorAll = selector => selector === 'tr[data-param-name]' ? [row] : [];
+  view.mutation();
+  const labels = () => items.map(({ input, remove }) => [input.getAttribute('aria-label'), remove.getAttribute('aria-label')]);
+  assert.deepEqual(labels(), [
+    ['tag (query) value 1', 'Remove tag (query) value 1'],
+    ['tag (query) value 2', 'Remove tag (query) value 2'],
+  ]);
+  items = items.slice(1);
+  view.mutation();
+  assert.deepEqual(labels(), [['tag (query) value 1', 'Remove tag (query) value 1']]);
 });
 
 test('late Swagger selectors are enhanced once, synchronized and disposed when React removes them', async () => {
