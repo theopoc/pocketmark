@@ -272,8 +272,12 @@ and a visible `focus` outline. Preserve the existing durations, focus pause,
 Undo and HTML retry behavior.
 
 The Chrome extension uses a check in its success color for a confirmed save
-and a warning icon for a failed or partial save. Its toast follows the extension
-theme, including when displayed over a website. In Chrome’s toolbar, a white
+and a warning icon for a failed or partial save. Confirmation appears below the
+popup header for 3.5 seconds after success or 8 seconds after failure. Keyboard
+or pointer interaction keeps the popup open. The source page retains its own
+bottom toast. Both use the extension theme, enter and leave with a short fade
+and slide, and appear without motion when reduced motion is requested.
+In Chrome’s toolbar, a white
 check on the fixed success-green badge marks a saved URL beside the app mark.
 
 ### Cards / Containers

@@ -56,12 +56,13 @@ No persistent content script or automatic capture scans your browsing activity.
 ## Progress, failures and manual retry
 
 One background task runs at a time. You can close the popup while it works.
-When saving finishes, a toast on the source page reports the result and the
-popup closes. If Chrome prevents the page from displaying the toast, the open
-popup shows it briefly before closing. A partial result tells you the bookmark
-was saved and a capture needs attention. Reopen Pocketmark to inspect the result,
-retry failed items or discard pending files. Reopening a completed save on the
-same page lets you edit the bookmark.
+When saving finishes, the popup shows the result for 3.5 seconds after a
+successful save or 8 seconds after a failed or partial save, then closes.
+Click or use the keyboard in the popup to keep it open. If a capture fails
+after the bookmark is saved, you can retry the capture from there.
+A toast also remains visible on the source page when the browser permits it.
+Reopen Pocketmark to inspect the result, retry failed items or discard pending
+files. Reopening a completed save on the same page lets you edit the bookmark.
 Keep the source tab open and on the same URL until acquisition finishes. After acquisition, uploads do not need that tab.
 Closing Chrome interrupts work; reopening the popup marks it interrupted and
 requires a manual retry, rather than silently resuming or recapturing.

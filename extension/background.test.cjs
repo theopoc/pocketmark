@@ -92,7 +92,7 @@ test("save feedback follows theme changes during capture and while a toast is vi
   await env.send("save", { tabId: 3, fields, modes: ["pdf"], theme: "dark" });
   await env.send("theme", { theme: "light" });
   release();
-  assert.equal((await env.idle()).toastShown, true);
+  assert.equal((await env.idle()).status, "done");
   assert.deepEqual(shown, ["light"]);
 
   const received = [];
