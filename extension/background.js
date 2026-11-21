@@ -1,5 +1,5 @@
 "use strict";
-importScripts("common.js", "job-store.js", "capture.js", "save-toast.js");
+importScripts("name-limit.js", "common.js", "job-store.js", "capture.js", "save-toast.js");
 const { formats, origin, request, json, validate, validateURL } = Pocketmark;
 const blobKeys = Object.keys(formats);
 let busy = false;

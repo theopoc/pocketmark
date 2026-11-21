@@ -15,7 +15,7 @@ import { Input } from "../../components/ui/input";
 import { createLifecycle } from "../../lib/lifecycle";
 import { bindDialogBackdrop } from "../../lib/dialog-backdrop";
 import { backupZoneGroups, savedZoneLabel } from "./backup-zones";
-import PocketmarkSelect from "../../../../internal/webui/static/select.js";
+import { Picker } from "../../components/ui/picker";
 import "./backups.css";
 
 const base = "/api/backups";
@@ -178,22 +178,6 @@ function Modal({ title, busy, close, children }) {
       )}
       {children}
     </dialog>
-  );
-}
-// The shared picker owns its portaled menu and listeners while this field is mounted.
-function Picker({ label, children, ...props }) {
-  const ref = useRef(null);
-  useLayoutEffect(() => {
-    const picker = PocketmarkSelect.enhance(ref.current);
-    return () => picker.destroy();
-  }, []);
-  useLayoutEffect(() => {
-    PocketmarkSelect.sync(ref.current);
-  }, [props.value, props.disabled]);
-  return (
-    <select ref={ref} aria-label={label} {...props}>
-      {children}
-    </select>
   );
 }
 function History({ runs, zone, inspect }) {

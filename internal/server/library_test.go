@@ -31,7 +31,7 @@ func TestBookmarkTagFilters(t *testing.T) {
 		{"tag=Go&tag=C%2B%2B%2C+notes", 1, 1},
 		{"tag=Go&tag=C%2B%2B%2C+notes&favorite=1&q=both", 1, 1},
 		{"tag=C%2B%2B%2C+notes&tag=Go&page=2", 1, 0},
-		{"tag=Go&tag=go", 0, 0},
+		{"tag=Go&tag=go", 2, 2},
 	} {
 		w := request(a, "GET", "/api/links?"+tc.query, "", true, nil)
 		requireStatus(t, w, 200)

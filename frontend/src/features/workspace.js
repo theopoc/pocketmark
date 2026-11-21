@@ -1,4 +1,5 @@
 import { settingsEntries } from "./settings/catalog.js";
+import nameRules from "../../../internal/webui/static/name-limit.js";
 
 // Shared, dependency-free state rules; draft contents stay in this tab's memory.
 const positive = (value, fallback = 1, max = 1000000) =>
@@ -154,7 +155,7 @@ function tagValues(selected, pending = "") {
   return [
     ...new Set(
       [...selected, ...pending.split(",")]
-        .map((name) => name.trim())
+        .map(nameRules.tagName)
         .filter(Boolean),
     ),
   ];
@@ -235,7 +236,7 @@ function bookmarkIssues(value) {
   const tags = tagValues(value.tags || []);
   if (tags.length > 32)
     issues.tags = "Choose up to 32 tags. Remove a tag before adding another.";
-  else if (tags.some((tag) => bytes(tag) > 80))
+  else if (tags.some((tag) => nameRules.tagBytes(tag) > 80))
     issues.tags =
       "Shorten each tag to 80 bytes or less. Accented characters and emoji can use several bytes.";
   return issues;
@@ -319,6 +320,7 @@ const workspace = {
   createDrafts,
   readerSnapshot,
   tagValues,
+  tagName: nameRules.tagName,
   searchExcerpt,
   captureFailure,
   bookmarkIssues,

@@ -42,6 +42,7 @@ func (s *Store) ImportHTML(ctx context.Context, r io.Reader) (ImportResult, erro
 	mode := ""
 	folders, links := 0, 0
 	seenDL := false
+	pocketmarkExport := false
 	flush := func() error {
 		if current == nil {
 			return nil
@@ -100,6 +101,11 @@ func (s *Store) ImportHTML(ctx context.Context, r io.Reader) (ImportResult, erro
 		case nethtml.StartTagToken, nethtml.SelfClosingTagToken:
 			token := z.Token()
 			switch token.Data {
+			case "title", "h1":
+				if !seenDL {
+					mode = "generator"
+					text.Reset()
+				}
 			case "dl":
 				if e = flush(); e != nil {
 					return ImportResult{}, e
@@ -127,8 +133,13 @@ func (s *Store) ImportHTML(ctx context.Context, r io.Reader) (ImportResult, erro
 				mode = "link"
 				text.Reset()
 				current = &Link{CollectionID: parent}
+				if pocketmarkExport {
+					current.aiPrivate = privateAIFields("")
+				}
 				for _, a := range token.Attr {
 					switch a.Key {
+					case "data-pocketmark-ai-public":
+						current.aiPrivate = privateAIFields(a.Val)
 					case "href":
 						current.URL = a.Val
 					case "tags":
@@ -162,6 +173,11 @@ func (s *Store) ImportHTML(ctx context.Context, r io.Reader) (ImportResult, erro
 		case nethtml.EndTagToken:
 			name, _ := z.TagName()
 			switch string(name) {
+			case "title", "h1":
+				if mode == "generator" {
+					pocketmarkExport = pocketmarkExport || strings.EqualFold(strings.TrimSpace(text.String()), "Pocketmark bookmarks")
+					mode = ""
+				}
 			case "h3":
 				if mode == "folder" {
 					folders++
@@ -232,20 +248,21 @@ func (s *Store) ExportHTML(ctx context.Context, w io.Writer) error {
 		if depth > 100 {
 			return fault.New("export", "hierarchy_limit", "folder nesting exceeds 100")
 		}
-		rows, e := tx.QueryContext(ctx, "SELECT url,title,description,tags,created_at FROM links WHERE collection_id IS NOT DISTINCT FROM $1 AND url NOT LIKE 'pocketmark-file:%' ORDER BY id", parent)
+		rows, e := tx.QueryContext(ctx, "SELECT url,title,description,tags,created_at,ai_private_title,ai_private_description FROM links WHERE collection_id IS NOT DISTINCT FROM $1 AND url NOT LIKE 'pocketmark-file:%' ORDER BY id", parent)
 		if e != nil {
 			return e
 		}
 		for rows.Next() {
 			var url, title, desc, tags, created string
-			if e = rows.Scan(&url, &title, &desc, &tags, &created); e != nil {
+			var fields aiPrivateFields
+			if e = rows.Scan(&url, &title, &desc, &tags, &created, &fields.title, &fields.description); e != nil {
 				rows.Close()
 				return e
 			}
 			t, _ := time.Parse(time.RFC3339Nano, created)
 			var taglist []string
 			_ = json.Unmarshal([]byte(tags), &taglist)
-			if _, e = fmt.Fprintf(w, "<DT><A HREF=\"%s\" ADD_DATE=\"%d\" TAGS=\"%s\">%s</A>\n", html.EscapeString(url), t.Unix(), html.EscapeString(strings.Join(taglist, ",")), html.EscapeString(title)); e != nil {
+			if _, e = fmt.Fprintf(w, "<DT><A HREF=\"%s\" ADD_DATE=\"%d\" TAGS=\"%s\" DATA-POCKETMARK-AI-PUBLIC=\"%s\">%s</A>\n", html.EscapeString(url), t.Unix(), html.EscapeString(strings.Join(taglist, ",")), fields.publicMarker(), html.EscapeString(title)); e != nil {
 				rows.Close()
 				return e
 			}

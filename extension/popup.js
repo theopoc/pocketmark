@@ -71,7 +71,7 @@ function renderTags() {
 function addTags() {
   clearTimeout(tagTimer); tagQuery++; tagOptions([]);
   $("tag-hint").textContent = "Press Enter or use commas to add tags.";
-  tags = [...new Set([...tags, ...$("tag-input").value.split(",").map((tag) => tag.trim()).filter(Boolean)])];
+  tags = [...new Set([...tags, ...$("tag-input").value.split(",")].map(PocketmarkNameLimit.tagName).filter(Boolean))];
   $("tag-input").value = ""; renderTags();
 }
 function options(select, label, value) { const option = document.createElement("option"); option.textContent = label; option.value = value; select.append(option); }
