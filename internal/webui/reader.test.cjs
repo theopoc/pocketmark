@@ -59,8 +59,8 @@ function setup({ handler, head, breadcrumbs = () => [], confirmAction = async ()
   for (const match of html.matchAll(/<([a-z][a-z0-9]*)\b[^>]*\bid="([^"]+)"[^>]*>/g)) elements.set(match[2], new Element(match[1], match[2]));
   for (const match of html.matchAll(/data-reader-section="([^"]+)"/g)) { const node = new Element("button"); node.dataset.readerSection = match[1]; sections.push(node); }
   const get = id => { assert.ok(elements.has(id), `unknown shipped element ${id}`); return elements.get(id); };
-  get("reader-size").value = "17";
-  get("reader-size").selectedOptions = [{ textContent: "S" }];
+  get("reader-size-panel").hidePopover = () => {};
+  get("reader-size").value = "1";
   const document = new Element("document");
   Object.assign(document, {
     getElementById: get, createElement: tag => new Element(tag), createTextNode: text => { const node = new Element("#text"); node.textContent = text; return node; }, createDocumentFragment: () => new Element("#fragment"),
@@ -152,6 +152,22 @@ test("checking capture status keeps a keyboard focus target", async () => {
   await tick();
   assert.equal(env.get("reader-title").focused, true);
   assert.equal(env.get("reader-recheck").hidden, false);
+});
+
+test("text size applies immediately to both article modes and carries to the next bookmark", async () => {
+  const env = setup();
+  const slider = env.get("reader-size");
+  const sizes = () => ["reader-content", "reader-rich-article"].map(id => env.get(id).style.fontSize);
+  await env.reader.open(1);
+  assert.deepEqual(sizes(), ["17px", "17px"]);
+  slider.value = "5";
+  await fire(slider, "input");
+  assert.deepEqual(sizes(), ["28px", "28px"]);
+  assert.equal(slider.attributes["aria-valuetext"], "28 pixels");
+  env.reader.close();
+  await env.reader.open(2);
+  assert.equal(slider.value, "5");
+  assert.deepEqual(sizes(), ["28px", "28px"]);
 });
 
 test("partial section errors leave text usable and retry only the failed section", async () => {

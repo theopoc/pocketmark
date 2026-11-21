@@ -1,6 +1,7 @@
 import PocketmarkSelect from "../../../internal/webui/static/select.js";
 import { createLifecycle } from "../lib/lifecycle.js";
 import { createReaderPage } from "./reader-page.js";
+import { bindReaderTextSize } from "./reader-text-size.js";
 import { loadReaderArticle } from "./reader-article.js";
 
 import workspace from "./workspace.js";
@@ -23,6 +24,7 @@ function create(
   const document = browser.document,
     window = browser;
   const $ = (id) => document.getElementById(id);
+  const setTextSizeAvailable = bindReaderTextSize($, lifecycle, window);
   const {
     editableBookmark: editable,
     bookmarkDraftKey: draftKey,
@@ -131,6 +133,7 @@ function create(
     return token === state.readerRequest && $("reader-dialog").open;
   }
   function invalidate() {
+    setTextSizeAvailable(false);
     closeViewer();
     state.readerRequest++;
     articleRequest?.abort();
@@ -224,7 +227,7 @@ function create(
     $("reader-retry-capture").removeAttribute("aria-disabled");
     $("reader-formats-retry").disabled = false;
     $("annotations-retry").disabled = false;
-    $("reader-size").disabled = true;
+    setTextSizeAvailable(false);
     renderFormats();
     $("reader-notes").value = "";
     $("reader-notes-form").querySelector("button[type=submit]").disabled =
@@ -250,8 +253,7 @@ function create(
       else $("reader-original").removeAttribute("href");
       $("reader-content").textContent = link.content || "";
       $("reader-content").hidden = !link.content;
-      $("reader-size").disabled = false;
-      updateSize();
+      setTextSizeAvailable(true);
       if (link.status === "failed")
         setReaderState(
           "failed",
@@ -826,15 +828,6 @@ function create(
       ? `${Math.ceil(words / 220)} min read`
       : "";
   }
-  function updateSize() {
-    const select = $("reader-size");
-    for (const root of [$("reader-content"), $("reader-rich-article")])
-      root.style.fontSize = `${select.value}px`;
-    const label = `Text size, ${select.selectedOptions[0].textContent}`;
-    select.setAttribute("aria-label", label);
-    PocketmarkSelect.sync(select);
-  }
-  lifecycle.listen($("reader-size"), "change", updateSize);
   function setHighlighting(active) {
     highlighting = active && Boolean(state.reading?.content);
     const rich = $("reader-rich-article");

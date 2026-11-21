@@ -28,7 +28,7 @@ try {
       PocketmarkSelect.enhanceAll(document);
       document.getElementById('bookmark-dialog').showModal();
     }, theme);
-    const selectIDs = ['session-idle', 'tags-letter-picker', 'bookmark-collection', 'collection-parent', 'reader-size', 'asset-viewer-select', 'annotation-color'];
+    const selectIDs = ['session-idle', 'tags-letter-picker', 'bookmark-collection', 'collection-parent', 'asset-viewer-select', 'annotation-color'];
     assert.deepEqual(await page.locator('.app-select-trigger').evaluateAll(nodes => nodes.map(node => node.id).sort()),
       selectIDs.map(id => id + '-trigger').sort(), 'all single-select controls in the app shell are enhanced');
     assert.equal(await page.locator('#bulk-collection-trigger').count(), 0, 'hidden bulk picker remains untouched');
