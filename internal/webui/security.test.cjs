@@ -6,7 +6,7 @@ test("session settings replace stale feedback when saving succeeds or fails", as
   for (const match of fs.readFileSync(`${__dirname}/static/index.html`, "utf8").matchAll(/\bid="([^"]+)"/g)) {
     nodes.set(match[1], { value: "", textContent: "", disabled: false, events: {}, addEventListener(type, fn) { this.events[type] = fn; } });
   }
-  const document = { getElementById: id => nodes.get(id), querySelectorAll: () => [] };
+  const document = { addEventListener() {}, getElementById: id => nodes.get(id), querySelectorAll: () => [] };
   const context = { document, PocketmarkSecurity: require("../../frontend/src/features/security.js").default };
   let fail = false;
   context.PocketmarkSecurity.create({ api: async () => { if (fail) throw Error("Save failed"); }, toast() {}, onSessionExpired() {} }, context);
@@ -24,7 +24,7 @@ test("leaving settings prevents an old session response from populating a reopen
   for (const match of fs.readFileSync(`${__dirname}/static/index.html`, "utf8").matchAll(/\bid="([^"]+)"/g)) {
     nodes.set(match[1], { value: "", textContent: "", hidden: false, children: [], addEventListener() {}, replaceChildren(...children) { this.children = children; } });
   }
-  const document = {
+  const document = { addEventListener() {},
     getElementById: id => nodes.get(id), querySelectorAll: () => [],
     createElement: () => ({ textContent: "", className: "" }),
   };
@@ -46,7 +46,7 @@ test("leaving settings prevents an old session response from populating a reopen
 
 test("revoking a session refreshes the list even after another refresh finishes", async () => {
   const nodes = new Map();
-  const document = {
+  const document = { addEventListener() {},
     getElementById(id) {
       if (!nodes.has(id)) nodes.set(id, { addEventListener() {}, focus() {} });
       return nodes.get(id);
@@ -84,7 +84,7 @@ test("revoking a session refreshes the list even after another refresh finishes"
 
 test("a refresh started before a saved timeout does not restore the old value", async () => {
   const nodes = new Map();
-  const document = {
+  const document = { addEventListener() {},
     getElementById(id) {
       if (!nodes.has(id)) nodes.set(id, {
         value: "", events: {}, addEventListener(type, handler) { this.events[type] = handler; },

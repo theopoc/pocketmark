@@ -1,6 +1,7 @@
 import { createAccountPassword } from "./account-password";
 import { createAuthenticator } from "./authenticator";
 import { createKeyRegister } from "./key-register.jsx";
+import { showBackups } from "./backups.jsx";
 import { createSettingsDesk } from "./desk.js";
 import { createLifecycle } from "../../lib/lifecycle.js";
 export function createSettings(
@@ -87,6 +88,12 @@ export function createSettings(
     $("app-view").classList.toggle("showing-settings", active);
     renderBreadcrumb();
     showSection(state.settingsSection);
+    showBackups(
+      $("scheduled-backups"),
+      state.settingsSection === "backup",
+      api,
+      toast,
+    );
     keys.visible(state.settingsSection === "api-keys");
     document.querySelectorAll("[data-settings-panel]").forEach((panel) => {
       panel.hidden = panel.dataset.settingsPanel !== state.settingsSection;
@@ -250,6 +257,7 @@ export function createSettings(
     ]);
   }
   function clearSettings() {
+    showBackups($("scheduled-backups"), false, api, toast);
     security.clear();
     state.settingsSession++;
     keys.clear();
@@ -276,6 +284,7 @@ export function createSettings(
     clearMFAManagement: authenticator.clear,
     dispose() {
       state.settingsSession++;
+      showBackups($("scheduled-backups"), false, api, toast);
       keys.dispose();
       password.reset();
       authenticator.clear();

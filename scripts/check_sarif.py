@@ -11,7 +11,7 @@ from pathlib import Path
 # to either source require review again; no rule-wide suppression is allowed.
 ROOT = Path(__file__).resolve().parents[1]
 REVIEWED_API_KEY_SOURCES = {
-    'internal/server/authorization.go': '46afefc000c33e8118dd5c54fa7010e6927349c529ae161534c7893aa22630a2',
+    'internal/server/authorization.go': '98cfc4a78a961d4e145b306f143798333babeee441814bbeb397482735f4c673',
     'internal/server/account.go': '19323ac8bcccb68e8606e20c3c61fc4ea3aa7273f5a33b7c22381ac30475cc4e',
 }
 

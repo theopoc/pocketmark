@@ -722,13 +722,19 @@ export function createApplication() {
           $("login-error").textContent = workspace.requestFailure(401);
       }
       const message =
-        response.status === 401 && loginPath
-          ? body?.error || "Check your credentials, then try again."
-          : workspace.requestFailure(
-              response.status,
-              body?.error,
-              loginPath ? body?.code : "",
-            );
+        response.status === 502 &&
+        ((path === "/api/backups/test" &&
+          body?.code === "backup_probe_failed") ||
+          (path === "/api/backups/telegram/test" &&
+            body?.code === "telegram_test_failed"))
+          ? body.error
+          : response.status === 401 && loginPath
+            ? body?.error || "Check your credentials, then try again."
+            : workspace.requestFailure(
+                response.status,
+                body?.error,
+                loginPath ? body?.code : "",
+              );
       const error = new Error(message);
       error.status = response.status;
       throw error;

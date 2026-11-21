@@ -1,6 +1,6 @@
 # Personal feature coverage
 
-This implementation uses a Go server and PostgreSQL for storage and search. Collaboration, public sharing, SSO/OIDC and automations (RSS/AI, recurring captures and scheduled backups) are excluded by request.
+This implementation uses a Go server and PostgreSQL for storage and search. Collaboration, public sharing, SSO/OIDC and product automations (RSS/AI and recurring captures) are excluded by request.
 
 | Feature | Implementation and limits |
 | --- | --- |
@@ -19,7 +19,7 @@ This implementation uses a Go server and PostgreSQL for storage and search. Coll
 | PDF | The Chrome extension generates and uploads PDF from the current rendered page, using a bounded stream. Other browsers can use Print → Save as PDF followed by upload. No server PDF renderer. |
 | Personal authentication | One account with mandatory password (PBKDF2-SHA256, 600,000 iterations) and TOTP or a single-use recovery code. Local QR enrollment; seven-day revocable cookie with configurable inactivity expiry. Anyone who can reach an eligible empty instance can create the account. Finish account and MFA setup before exposure. For existing libraries, see [local account recovery](API.md#existing-installations-and-account-recovery). API keys remain separate. |
 | API keys | Up to 32 named keys, revealed once, stored hashed, individually revocable. Reader, Editor, Sync and Full Access roles, optional expiry and rotation. Account/key/session management and full backups require the owner; sensitive browser actions require recent password confirmation. |
-| Backup | Manual, owner-only ZIP of a transactionally consistent PostgreSQL dump, streamed from disk. Includes archives, attachments, annotations and credential hashes; preserve the private `server-secret` separately. Follow the [backup and restore guide](GUIDE.md#back-up-everything). |
+| Backup | Owner-only local ZIP download, or manual and cron-scheduled encrypted backups to S3/Garage with full remote verification, age-based retention and optional Telegram failure alerts. Includes archives, attachments, annotations and credential hashes; preserve the private `server-secret` separately. Follow the [backup and restore guide](GUIDE.md#scheduled-remote-backups). |
 | Mobile web | Responsive installable manifest, minimal static-only service worker, share target. Installation/share support depends on browser/OS. Private pages and API data are never cached by the service worker. |
 | Floccus | WebDAV/XBEL; previously verified with Floccus 5.11.1. The Linkwarden API backend has been removed. DAV includes API-key authentication, lock/temp/MOVE, exact bytes, stable numeric IDs and ordering. No recurring server sync process. |
 

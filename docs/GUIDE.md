@@ -49,11 +49,11 @@ Schema 3 adds an optional sign-in IP address to browser sessions. Existing sessi
 
 ### Route backups during a Kubernetes rollout
 
-Install the [backup Service, Ingress paths and NetworkPolicy](../deploy/kubernetes/backup-routing.yaml) **before** starting pods that migrate the schema. The exact path `/api/backup` selects only ready pods bearing the target revision label. The ordinary `pocketmark` ClusterIP Service continues to select all application pods for other requests.
+Install the [backup Service, Ingress paths and NetworkPolicy](../deploy/kubernetes/backup-routing.yaml) **before** starting pods that migrate the schema. The exact path `/api/backup` and prefix `/api/backups` select only ready pods bearing the target revision label. The ordinary `pocketmark` ClusterIP Service continues to select all application pods for other requests.
 
 Adapt the example to your namespace, existing host, TLS secret, Service port and controller labels. Merge the paths into the existing Ingress for that host and preserve its authentication and TLS settings. For Traefik, enable `providers.kubernetesIngress.allowEmptyServices=true` so that the exact path returns 503 while its Service is empty. With a controller that drops empty backends, the catch-all path could otherwise send the request to an old pod. Use a CNI enforcing NetworkPolicy, allow only the trusted ingress controller to reach the app port, and remove other access paths or additive policies that allow clients to reach the pods directly.
 
-1. Set the backup Service selector to the incoming revision (`mfa-schema-2` in the example). Keep this label off the running pods. Before the image rollout, verify that the backup Service has no ready endpoints. Check every serving ingress-controller replica individually with the production Host and TLS server name: an authenticated backup request must return 503 and an authenticated library read must succeed on each. Recheck any controller that joins during this step. Once the routing change has converged, let any backup requests already accepted by old pods finish.
+1. Set the backup Service selector to the incoming revision (`backup-schema-4` in the example). Keep this label off the running pods. Before the image rollout, verify that the backup Service has no ready endpoints. Check every serving ingress-controller replica individually with the production Host and TLS server name: an authenticated backup request must return 503 and an authenticated library read must succeed on each. Recheck any controller that joins during this step. Once the routing change has converged, let any backup requests already accepted by old pods finish.
 2. Change the pinned image and the revision label **together** in the Deployment pod template. For example, with the verified image reference in `POCKETMARK_IMAGE` and a container named `pocketmark`:
 
    ```sh
@@ -62,7 +62,7 @@ Adapt the example to your namespace, existing host, TLS secret, Service port and
      template:
        metadata:
          labels:
-           pocketmark-backup-revision: mfa-schema-2
+           pocketmark-backup-revision: backup-schema-4
        spec:
          containers:
            - name: pocketmark
@@ -70,7 +70,7 @@ Adapt the example to your namespace, existing host, TLS secret, Service port and
    EOF
    ```
 
-3. As the first new pod passes its HTTP readiness probe, the backup Service begins serving exports. Check its EndpointSlices during rollout and download a backup through the configured host. For subsequent rollouts use a fresh revision value in both the Service selector and the pod template. If the rollout stalls or rolls back, keep the backup selector off images that cannot exclude pending challenges.
+3. As the first new pod passes its HTTP readiness probe, the backup Service begins serving exports. Check its EndpointSlices during rollout and download a backup through the configured host. For subsequent rollouts use a fresh revision value in both the Service selector and the pod template. If the rollout stalls or rolls back, keep the backup selector off images that cannot exclude pending challenges and backup credentials.
 
 ## What is included
 
@@ -89,7 +89,7 @@ Adapt the example to your namespace, existing host, TLS secret, Service port and
 
 Default capture fetches one HTML response, with a 20-second timeout, at most five redirects, a 2 MiB response/decompressed-body limit and up to 256 KiB of extracted text. When adding or editing a bookmark, select **Save an HTML copy** for bounded resource embedding, or use the extension for an already-rendered page and a visible-tab PNG screenshot. The same Chrome extension generates PDF and full-page screenshots on demand, using an explicit debugger permission; [installation and limits](../extension/README.md). Select a bookmark to read its article. The HTML, screenshot and PDF icons open the corresponding saved copies. **Aa** changes the text size, and the fit-to-page icon expands the reader within the tab. Existing files can also be attached using the bookmark assets API. No Chromium instance runs on the server. Private, loopback and reserved network destinations can be bookmarked, but server capture refuses them. See [archive limits](ARCHIVES.md).
 
-Collaboration/public sharing, SSO/OIDC, RSS, AI automation, scheduled recapture and automatic backups are intentionally excluded. Screenshots and PDF rendering consume memory in the user's browser; their memory is not included in server measurements. See [client compatibility and verification](REAL_CLIENTS.md) for observed workflows and qualification limits. The supported integration paths are the Pocketmark Chrome extension and Floccus WebDAV; older Linkwarden client observations do not qualify the new extension.
+Collaboration/public sharing, SSO/OIDC, RSS, AI automation and scheduled recapture are intentionally excluded. Screenshots and PDF rendering consume memory in the user's browser; their memory is not included in server measurements. See [client compatibility and verification](REAL_CLIENTS.md) for observed workflows and qualification limits. The supported integration paths are the Pocketmark Chrome extension and Floccus WebDAV; older Linkwarden client observations do not qualify the new extension.
 
 ## Configuration
 
@@ -124,13 +124,27 @@ JSON import/export does not include captured HTML, extracted text or other archi
 
 ## Back up everything
 
-Choose **Settings → Backup & restore → Download full backup**. Pocketmark uses `pg_dump` to write a consistent snapshot to its private work directory and streams it as a ZIP. Provision enough space for the logical SQL dump, which encodes binary data. Store the ZIP and original server secret securely. Restore `pocketmark.sql` into an empty dedicated database with Pocketmark stopped:
+Choose **Settings → Backup & restore → Download & restore → Download full backup**. Pocketmark uses `pg_dump` to write a consistent snapshot to its private work directory and streams it as a ZIP. Provision enough space for the logical SQL dump, which encodes binary data. Store the ZIP and original server secret securely in separate places.
 
-```sh
-psql -X --single-transaction -v ON_ERROR_STOP=1 -d "$POCKETMARK_DATABASE_URL" -f pocketmark.sql
-```
+### Restore a full ZIP after losing the server
 
-Restore the original server secret before startup. Sign in again and generate new recovery codes. The snapshot excludes browser sessions, pending MFA challenges and recovery codes. To upgrade a SQLite library, follow the [migration procedure](MIGRATION_POSTGRESQL.md).
+1. Retrieve the full backup ZIP and the server secret that was active when you made it. If you stored the ZIP in S3 or Garage, download the object to a private working directory. In that directory, extract the dump and the instructions included with that backup:
+
+   ```sh
+   unzip pocketmark-backup.zip pocketmark.sql RESTORE.txt
+   ```
+
+2. Start PostgreSQL 18 and create a **new, empty database** owned by the Pocketmark application role. Point `POCKETMARK_DATABASE_URL` at that database. Keep every Pocketmark replica stopped until the restore completes.
+3. From the directory containing `pocketmark.sql`, run the restore as the application role. The command rolls back the transaction on a SQL error. Continue only after it succeeds.
+
+   ```sh
+   psql -X --single-transaction -v ON_ERROR_STOP=1 -d "$POCKETMARK_DATABASE_URL" -f pocketmark.sql
+   ```
+
+4. Configure the original server secret through `POCKETMARK_SERVER_SECRET` or the private `server-secret` file in the data directory. Start Pocketmark with the restored database. Sign in with your password and authenticator. Sessions, pending MFA challenges and recovery codes are excluded from the backup. Generate new recovery codes and review named API keys, since restoring an older snapshot can bring back a key you revoked later.
+5. Check a known bookmark and open one of its saved attachments or archived pages. Follow `RESTORE.txt` for MFA recovery if your authenticator is unavailable.
+
+For a SQLite library, follow the [migration procedure](MIGRATION_POSTGRESQL.md).
 
 ## Development and verification
 
@@ -143,3 +157,32 @@ Use the [contributor checklist](../AGENTS.md#verification-and-delivery) for loca
 - [Release installation](RELEASE_INSTALL.md) · [Container images](RELEASE.md#ghcr-images)
 - [Archive limits](ARCHIVES.md) · [Feature coverage](FEATURES.md)
 - [Client compatibility](REAL_CLIENTS.md)
+
+## Scheduled remote backups
+
+Open **Settings → Backup & restore → Configure**. Choose a full database backup for disaster recovery or a custom library backup to move bookmarks and selected captures or files to an empty library. Full backups include account data. Both remote formats use the server secret for encryption. Keep the original secret separately, including previous values while their backups remain in storage.
+
+1. Create a bucket on S3 or Garage. Enter its API endpoint, region, bucket and prefix, then the access key and secret. Grant read, write and delete permission on the backup prefix. On AWS also allow s3:ListBucket so recovery can distinguish an interrupted upload that created no object from a denied read. For versioned S3 buckets, also grant GetObjectVersion and DeleteObjectVersion. Pocketmark reads and deletes the specific version it uploaded. Object Lock or a denied deletion can leave a verified copy with a failed retention status. For Garage use the region configured by the operator. Use **Test connection** to write, read and delete a small probe.
+2. Enter a five-field cron expression and IANA time zone. Review the next three occurrences and enable scheduling. The initial expression runs daily at 03:00 in the selected zone. The default execution window is two hours, including retries. Missed schedules during downtime are skipped. A manual request made during a run waits for completion. Further clicks return the same waiting request.
+3. Keep the default **7 days** or choose another duration. Each newly verified backup triggers removal of older copies of the same format at the same destination. If removal fails permanently, the run shows **Failed** at **Retention** and keeps the newly verified copy. Open its Backup ID for the verification time and failure details. The history shows the latest 20 runs.
+4. To receive failures in Telegram, create a bot with BotFather, start a conversation with it (or add it to the intended group), and enter the bot token and numeric chat ID. Send a test message and save the settings. Run details show alert delivery separately from the backup result.
+
+A nonempty environment value overrides its corresponding field and locks it in Settings. Other fields stay editable. The [environment table](adr/0001-verify-remote-backups.md#environment-variables) lists all fourteen names, defaults and units. Apply the same configuration and server secret to each replica. Disk space in Pocketmark's data directory must accommodate the snapshot and encrypted archive during a full run. Check [backup metrics and logs](OBSERVABILITY.md#scheduled-backup-signals) for failures and freshness.
+
+## Recover a remote backup
+
+1. On the recovery host, locate the object key in the backup run details or under the instance prefix in your bucket. Download the encrypted file through your storage console or an already authenticated S3 client. For example, substitute your own endpoint, region, bucket and key:
+
+   ```sh
+   aws --endpoint-url "$S3_ENDPOINT" --region "$S3_REGION" s3 cp "s3://$S3_BUCKET/$OBJECT_KEY" backup.zip.age
+   ```
+
+2. Use a Pocketmark binary with remote backup support. Place the **original** server secret in a private directory as `server-secret` with mode 0600, or supply it via `POCKETMARK_SERVER_SECRET`. Decrypt offline to a new path. This command needs neither PostgreSQL nor a running Pocketmark server.
+
+   ```sh
+   pocketmark -data ./recovery-secrets -decrypt-backup backup.zip.age -output recovered.zip
+   unzip -l recovered.zip
+   ```
+
+3. A full ZIP contains `pocketmark.sql` and `RESTORE.txt`. Follow [Restore a full ZIP after losing the server](#restore-a-full-zip-after-losing-the-server) with an empty database and the original server secret. A custom library ZIP contains `manifest.json`. Sign in to an empty Pocketmark library, open **Backup & restore → Download & restore**, select the decrypted ZIP, review its contents and confirm. Custom backups restore library data and the content selected when the archive was created. Custom ZIPs support up to 64 GiB. Choose a full backup for larger libraries.
+4. Open a known bookmark and an included attachment or capture. For a restored instance, set the remote destination and Telegram credentials again, check the schedule, and run a manual remote backup. Store the decrypted ZIP as private account or library data.

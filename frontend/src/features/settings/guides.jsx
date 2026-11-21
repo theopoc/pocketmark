@@ -18,31 +18,13 @@ function Guide({ id, title, children }) {
 export function SettingsGuides() {
   return (
     <>
-      <Guide id="backup" title="Full library backup">
-        <p className="small muted">
-          A full backup keeps your bookmarks, captures, attachments, highlights
-          and account settings together.
-        </p>
-        <a className="button primary" href="/api/backup">
-          Download full backup
-        </a>
-        <details className="help-details">
-          <summary>How to restore a backup</summary>
-          <ol className="small muted">
-            <li>Stop Pocketmark before restoring.</li>
-            <li>
-              Unzip the backup and follow its RESTORE instructions. Use an empty
-              PostgreSQL database and restore the original server secret from
-              your configuration or data volume.
-            </li>
-            <li>Restore file ownership if needed, then restart Pocketmark.</li>
-          </ol>
-          <p className="small muted">
-            JSON and browser HTML exports contain bookmark metadata. Use a full
-            backup for captures and attached files.
-          </p>
-        </details>
-      </Guide>
+      <section
+        className="settings-feature"
+        id="scheduled-backups"
+        data-settings-panel="backup"
+        aria-labelledby="backup-title"
+        hidden
+      />
       <Guide id="sync" title="Connect Floccus">
         <p className="small muted">
           Use a dedicated Floccus API key to sync bookmarks and collection

@@ -21,7 +21,7 @@ A personal bookmark manager with a Go server, an embedded web interface and Post
 - Save bookmarks and capture rendered pages, screenshots or PDFs with the [Pocketmark Chrome extension](#pocketmark-chrome-extension).
 - Use the mobile web interface; sync browser bookmarks with Floccus over WebDAV.
 
-Personal use only: collaboration, public sharing, SSO and automations are outside the supported scope.
+Personal use only: collaboration, public sharing, SSO and library automations are outside the supported scope.
 
 ## Quick start
 
@@ -99,7 +99,7 @@ During development, enable auto-merge for the pull request so it merges into `ma
 
 ## Documentation
 
-- [User guide](docs/GUIDE.md) — configuration, migration and full backups.
+- [User guide](docs/GUIDE.md) — configuration, migration, [scheduled S3/Garage backups](docs/GUIDE.md#scheduled-remote-backups) and recovery.
 - [Browser extension](extension/README.md) — installation and capture tools.
 - [API](docs/API.md) — endpoints and request limits.
 - [Observability](docs/OBSERVABILITY.md) — JSON logs, authenticated metrics and optional OpenTelemetry traces.

@@ -118,7 +118,7 @@ export async function securityJourney({ browser, page, base, username, password,
     await page.locator('#logout-dialog #logout-cancel').click();
     assert.equal((await request.get(url('/api/session'))).status(), 200);
     await page.setViewportSize({ width: 320, height: 700 });
-    for (const [section, selectors] of [['api-keys', ['#token-name', '.akd-card']], ['sessions', ['#sessions-refresh']], ['backup', ['#settings-page a[href="/api/backup"]']]]) {
+    for (const [section, selectors] of [['api-keys', ['#token-name', '.akd-card']], ['sessions', ['#sessions-refresh']], ['backup', ['#scheduled-backups .bk-recovery']]]) {
       await selectSettings(page, section);
       if (section === 'api-keys') await page.locator('#token-create').click();
       for (const selector of selectors) assert.ok(await page.locator(selector).first().evaluate(node => node.getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
@@ -128,7 +128,7 @@ export async function securityJourney({ browser, page, base, username, password,
     await page.setViewportSize({ width: 1280, height: 720 });
     await openNavigation(page);
     await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: 'Backup & restore' }).click();
-    assert.equal(await page.locator('#settings-detail-title').evaluate(node => document.activeElement === node), true);
+    assert.equal(await page.locator('#backup-title').evaluate(node => document.activeElement === node), true);
     await openNavigation(page);
     await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: 'API keys' }).click();
     assert.equal(await page.locator('#api-keys-title').evaluate(node => document.activeElement === node), true);
@@ -281,6 +281,7 @@ export async function securityJourney({ browser, page, base, username, password,
 
     // The backup link always requests password confirmation, even after login.
     await selectSettings(page, 'backup');
+    await page.getByRole('button', { name: /^Download & restore/ }).click();
     await page.getByRole('link', { name: 'Download full backup', exact: true }).click();
     await page.locator('#reauth-dialog').waitFor({ state: 'visible' });
     assert.equal(await page.evaluate(() => document.activeElement.id), 'reauth-password');
@@ -298,6 +299,7 @@ export async function securityJourney({ browser, page, base, username, password,
     assert.match((await download).suggestedFilename(), /backup.*zip/);
     await page.waitForFunction(() => document.getElementById('reauth-password').value === '');
     assert.equal(await page.locator('#reauth-password').inputValue(), '');
+    await page.getByRole('dialog', { name: 'Download & restore' }).getByRole('button', { name: 'Close', exact: true }).click();
 
     await selectSettings(page, 'sessions');
     await page.locator('#session-idle-open').click();
@@ -366,11 +368,13 @@ export async function securityJourney({ browser, page, base, username, password,
     assert.equal((await (await request.get(url('/api/tokens'))).json()).some(token => token.id === key.id), false);
     // Clicking outside must cancel without starting a download or retaining the password.
     await selectSettings(page, 'backup');
+    await page.getByRole('button', { name: /^Download & restore/ }).click();
     await page.getByRole('link', { name: 'Download full backup', exact: true }).click();
     await page.locator('#reauth-password').fill('not-submitted');
     await page.mouse.click(0, 0);
     await page.waitForFunction(() => document.getElementById('reauth-password').value === '');
     assert.equal(await page.locator('#reauth-password').inputValue(), '');
+    await page.getByRole('dialog', { name: 'Download & restore' }).getByRole('button', { name: 'Close', exact: true }).click();
     await page.locator('#settings-page [data-settings-back]:visible').click();
     assert.equal(await page.locator('#new-token-value').count(), 0);
   } finally { await peer.close(); }

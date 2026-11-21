@@ -15,6 +15,9 @@ var challengeSchema string
 //go:embed migrations/003_session_addresses.sql
 var sessionAddressSchema string
 
+//go:embed migrations/004_backup.sql
+var backupSchema string
+
 func (s *Store) initializeSchema(ctx context.Context) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -56,7 +59,15 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(3)"); err != nil {
 			return err
 		}
+		fallthrough
 	case 3:
+		if _, err = tx.ExecContext(ctx, backupSchema); err != nil {
+			return fmt.Errorf("migrate scheduled backups: %w", err)
+		}
+		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(4)"); err != nil {
+			return err
+		}
+	case 4:
 	default:
 		return fmt.Errorf("unsupported Pocketmark schema version %d", version)
 	}
