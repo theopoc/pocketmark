@@ -1,43 +1,73 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { chromium } from 'playwright';
 
-const root = new URL('../internal/webui/static/', import.meta.url);
-const html = (await readFile(new URL('index.html', root), 'utf8'))
-  .replace(/<script\b[^>]*>\s*<\/script>/g, '')
-  .replace(/<link\b[^>]*>/g, '');
-const browser = await chromium.launch(process.env.E2E_CHROMIUM_EXECUTABLE
-  ? { executablePath: process.env.E2E_CHROMIUM_EXECUTABLE } : { channel: 'chromium' });
-try {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
-  await page.setContent(html);
-  await page.addStyleTag({ path: new URL('style.css', root).pathname });
-  await page.evaluate(() => {
-    const app = document.querySelector('#app-view');
-    app.hidden = false;
-    const rail = document.createElement('div');
-    rail.className = 'sidebar-rail';
-    app.insertBefore(rail, document.querySelector('#main-content'));
-    rail.append(document.querySelector('#sidebar'));
-    document.querySelector('#workspace-popover').addEventListener('beforetoggle', event => {
-      if (event.newState !== 'open') return;
-      const anchor = document.querySelector('#workspace-button').getBoundingClientRect();
-      event.target.style.left = `${anchor.left}px`;
-      event.target.style.top = `${anchor.bottom + 4}px`;
-    });
+export async function navigationLayoutJourney(library) {
+  // The Playwright clock applies to its whole browser context.
+  const page = await library.context().browser().newPage({
+    storageState: await library.context().storageState(),
+    viewport: { width: 1280, height: 800 },
+    reducedMotion: 'reduce',
   });
-  await page.mouse.move(2, 200);
-  await page.locator('#workspace-button').click();
-  const before = await page.locator('#main-content').evaluate(el => el.getBoundingClientRect().left);
-  await page.locator('#import-button').hover();
-  const after = await page.locator('#main-content').evaluate(el => el.getBoundingClientRect().left);
-  assert.equal(after, before, 'workspace menu hover must not move the main content');
-  assert.equal(before, 280, 'the open sidebar reserves its width');
-  assert.equal(await page.locator('#sidebar').isVisible(), true, 'the sidebar remains visible');
-  await page.keyboard.press('Escape');
-  await page.locator('#workspace-popover').waitFor({ state: 'hidden' });
-  await page.locator('#main-content').focus();
-  await page.mouse.move(600, 400);
-  assert.equal(await page.locator('#main-content').evaluate(el => el.getBoundingClientRect().left), 0, 'the content expands again after the menu closes');
-  console.log('Workspace popover keeps the desktop layout stable.');
-} finally { await browser.close(); }
+  try {
+    const start = Date.now();
+    await page.clock.install({ time: start });
+    await page.goto(library.url());
+    await page.locator('#app-view').waitFor();
+    await page.mouse.move(600, 400);
+    await page.clock.pauseAt(start + 60_000);
+    const sidebar = page.locator('#sidebar');
+    const mainLeft = () => page.locator('#main-content').evaluate(node => node.getBoundingClientRect().left);
+
+    await page.mouse.move(2, 400);
+    await page.clock.fastForward(80);
+    assert.equal(await sidebar.isVisible(), false, 'briefly brushing the edge leaves the library alone');
+    await page.mouse.move(600, 400);
+    await page.clock.fastForward(600);
+    assert.equal(await sidebar.isVisible(), false, 'leaving the edge cancels the pending reveal');
+
+    await page.mouse.move(2, 400);
+    await page.clock.fastForward(250);
+    assert.equal((await sidebar.boundingBox())?.x, 0, 'dwelling at the edge reveals the whole panel with reduced motion');
+    assert.equal(await mainLeft(), 0, 'temporary navigation overlays the library');
+    await page.locator('.api-documentation-link').focus();
+    await page.keyboard.press('Tab');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'open-navigation');
+    assert.equal(await sidebar.isVisible(), false, 'tabbing out uncovers the focused header even with the pointer parked');
+    await page.mouse.move(600, 400);
+    await page.mouse.move(2, 400);
+    await page.clock.fastForward(250);
+    await page.mouse.move(600, 400);
+    await page.clock.fastForward(150);
+    assert.equal((await sidebar.boundingBox())?.x, 0, 'a short detour leaves the panel in place');
+    await page.mouse.move(80, 400);
+    await page.clock.fastForward(600);
+    assert.equal(await sidebar.isVisible(), true, 'returning to the panel cancels its pending close');
+    await page.mouse.move(600, 400);
+    await page.clock.fastForward(600);
+    assert.equal(await sidebar.isVisible(), false, 'staying outside closes the panel');
+
+    await page.locator('#main-content').focus();
+    await page.mouse.move(2, 400);
+    await page.clock.fastForward(250);
+    assert.equal(await sidebar.isVisible(), true);
+    await page.keyboard.press('Escape');
+    await page.clock.fastForward(600);
+    assert.equal(await sidebar.isVisible(), false, 'Escape dismisses hover navigation with the pointer still at the edge');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'main-content', 'hover never steals library focus');
+
+    await page.locator('#open-navigation').press('Enter');
+    assert.equal((await sidebar.boundingBox())?.x, 0, 'the keyboard opener bypasses hover delays');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'sidebar-mode');
+    await page.locator('#workspace-button').click();
+    await page.locator('#import-button').hover();
+    await page.clock.fastForward(600);
+    assert.equal(await mainLeft(), 0, 'hovering a workspace action leaves the library in place');
+    await page.keyboard.press('Escape');
+    await page.locator('#workspace-popover').waitFor({ state: 'hidden' });
+    assert.equal(await sidebar.isVisible(), true, 'Escape dismisses the workspace menu first');
+    await page.keyboard.press('Escape');
+    assert.equal(await sidebar.isVisible(), false, 'Escape closes temporary navigation immediately');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'open-navigation');
+  } finally {
+    await page.close();
+  }
+}

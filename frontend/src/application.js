@@ -374,6 +374,9 @@ export function createApplication() {
   );
   const sidebarRail = document.createElement("div");
   sidebarRail.className = "sidebar-rail";
+  const hoverOpenDelay = 160;
+  const hoverCloseDelay = 320;
+  let hoverTimer;
   let sidebarFixed = false;
   try {
     sidebarFixed = localStorage.getItem("pocketmark-sidebar") === "fixed";
@@ -397,6 +400,7 @@ export function createApplication() {
     );
   }
   function arrangeNavigation() {
+    resetSidebarReveal();
     navigationHost.hidden = false;
     if (navigation.open) navigation.close();
     closeWorkspacePopover();
@@ -418,11 +422,8 @@ export function createApplication() {
   }
   lifecycle.listen($("sidebar-mode"), "click", () => {
     sidebarFixed = !sidebarFixed;
-    if (!sidebarFixed) {
-      sidebarRail.classList.toggle("dismissed", sidebarRail.matches(":hover"));
-      sidebarRail.classList.remove("revealed");
-      $("open-navigation").focus({ preventScroll: true });
-    } else sidebarRail.classList.remove("dismissed");
+    resetSidebarReveal();
+    if (!sidebarFixed) $("open-navigation").focus({ preventScroll: true });
     try {
       localStorage.setItem(
         "pocketmark-sidebar",
@@ -433,12 +434,33 @@ export function createApplication() {
     }
     renderSidebarMode();
   });
-  lifecycle.listen(sidebarRail, "pointerleave", () =>
-    sidebarRail.classList.remove("dismissed"),
-  );
+  function resetSidebarReveal() {
+    lifecycle.cancelTimeout(hoverTimer);
+    sidebarRail.classList.remove("hover-open", "revealed");
+  }
+  lifecycle.listen(sidebarRail, "pointerenter", (event) => {
+    if (sidebarFixed || event.pointerType === "touch") return;
+    lifecycle.cancelTimeout(hoverTimer);
+    // Catch a retreating panel immediately when the pointer returns to it.
+    if (getComputedStyle(sidebar).visibility === "visible")
+      sidebarRail.classList.add("hover-open");
+    else
+      hoverTimer = lifecycle.timeout(
+        () => sidebarRail.classList.add("hover-open"),
+        hoverOpenDelay,
+      );
+  });
+  lifecycle.listen(sidebarRail, "pointerleave", (event) => {
+    if (event.pointerType === "touch") return;
+    lifecycle.cancelTimeout(hoverTimer);
+    if (sidebarRail.classList.contains("hover-open"))
+      hoverTimer = lifecycle.timeout(
+        () => sidebarRail.classList.remove("hover-open"),
+        hoverCloseDelay,
+      );
+  });
   lifecycle.listen(sidebar, "focusout", (event) => {
-    if (!sidebar.contains(event.relatedTarget))
-      sidebarRail.classList.remove("revealed");
+    if (!sidebar.contains(event.relatedTarget)) resetSidebarReveal();
   });
   lifecycle.listen(desktopNavigation, "change", arrangeNavigation);
   const workspaceButton = $("workspace-button");
@@ -475,7 +497,7 @@ export function createApplication() {
   function closeNavigation() {
     closeWorkspacePopover();
     if (desktopNavigation.matches) {
-      sidebarRail.classList.remove("revealed");
+      resetSidebarReveal();
       if (sidebar.contains(document.activeElement))
         $("main-content").focus({ preventScroll: true });
       return;
@@ -496,6 +518,22 @@ export function createApplication() {
     $("close-navigation").focus();
   });
   lifecycle.listen($("close-navigation"), "click", closeNavigation);
+  lifecycle.listen(document, "keydown", (event) => {
+    if (
+      event.key !== "Escape" ||
+      event.defaultPrevented ||
+      sidebarFixed ||
+      !desktopNavigation.matches ||
+      !sidebarRail.matches(".hover-open, .revealed, :focus-within") ||
+      document.querySelector("dialog[open], :popover-open")
+    )
+      return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    resetSidebarReveal();
+    if (sidebar.contains(document.activeElement))
+      $("open-navigation").focus({ preventScroll: true });
+  });
   lifecycle.listen(navigation, "cancel", (event) => {
     event.preventDefault();
     closeNavigation();
