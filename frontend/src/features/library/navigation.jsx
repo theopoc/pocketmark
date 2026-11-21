@@ -25,19 +25,40 @@ export function renderBreadcrumbs(element, crumbs, disabled) {
   );
 }
 
-export function renderFilter(element, query, onClear) {
+export function renderFilters(
+  element,
+  { query, activeTags, onClearSearch, onRemoveTag },
+) {
   renderRegion(
     element,
-    query ? (
-      <Button
-        className="filter-chip"
-        data-focus-key={`filter:Search: ${query}`}
-        aria-label={`Remove Search: ${query} filter`}
-        onClick={onClear}
-      >
-        Search: {query}
-        <Icon name="close" />
-      </Button>
+    query || activeTags.length ? (
+      <>
+        <span className="filter-label">Active filters</span>
+        {query && (
+          <Button
+            className="filter-chip"
+            data-focus-key={`filter:Search: ${query}`}
+            aria-label={`Remove Search: ${query} filter`}
+            onClick={onClearSearch}
+          >
+            <span>Search: {query}</span>
+            <Icon name="close" />
+          </Button>
+        )}
+        {activeTags.map((name) => (
+          <Button
+            key={name}
+            className="filter-chip tag-filter-chip"
+            data-tag-filter={name}
+            data-focus-key={`filter:tag:${name}`}
+            aria-label={`Remove #${name} filter`}
+            onClick={() => onRemoveTag(name)}
+          >
+            <span>#{name}</span>
+            <Icon name="close" />
+          </Button>
+        ))}
+      </>
     ) : null,
   );
 }
@@ -99,19 +120,20 @@ export function renderCollectionNavigation(
   );
 }
 
-export function renderFrequentTags(element, tags, activeTag, onSelect) {
+export function renderFrequentTags(element, tags, activeTags, onSelect) {
   renderRegion(
     element,
-    tags.slice(0, 12).map((tag) => (
+    tags.map((tag) => (
       <Button
         key={tag.name}
-        className={`tag-button${activeTag === tag.name ? " active" : ""}`}
+        className="tag-button"
         data-focus-key={`tag:${tag.name}`}
-        aria-pressed={activeTag === tag.name}
+        aria-pressed={activeTags.includes(tag.name)}
         title={`${tag.count} bookmark${tag.count === 1 ? "" : "s"}`}
         onClick={() => onSelect(tag.name)}
       >
-        #{tag.name}
+        {activeTags.includes(tag.name) && <Icon name="check" />}
+        <span>#{tag.name}</span>
       </Button>
     )),
   );

@@ -1166,9 +1166,14 @@
             "name": "tag",
             "in": "query",
             "required": false,
-            "description": "Exact tag name.",
+            "description": "Exact, case-sensitive tag names. Repeat tag to require every selected tag. Empty values are ignored.",
+            "style": "form",
+            "explode": true,
             "schema": {
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {

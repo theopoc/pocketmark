@@ -336,7 +336,7 @@ func TestImportExportRoundTrip(t *testing.T) {
 	}
 	b := newTestServer(t, "", false)
 	requireStatus(t, request(b, "POST", "/api/import", w.Body.String(), true, nil), 200)
-	page, err := b.Store.List(context.Background(), store.Filter{Tag: "docs", Favorite: true})
+	page, err := b.Store.List(context.Background(), store.Filter{Tags: []string{"docs"}, Favorite: true})
 	if err != nil || page.Total != 1 || page.Links[0].Title != "A guide" || page.Links[0].CollectionID == nil {
 		t.Fatalf("roundtrip: %+v %v", page, err)
 	}

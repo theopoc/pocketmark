@@ -4,7 +4,7 @@ import { createSettings } from "./features/settings/controller.js";
 import { createLifecycle } from "./lib/lifecycle.js";
 import {
   renderBreadcrumbs,
-  renderFilter,
+  renderFilters,
   renderCollectionNavigation,
   renderFrequentTags,
 } from "./features/library/navigation";
@@ -36,7 +36,7 @@ export function createApplication() {
 
     filter: "all",
     collection: null,
-    tag: "",
+    activeTags: [],
     query: "",
     page: 1,
     pageSize: 40,
@@ -54,6 +54,7 @@ export function createApplication() {
     toastActionPending = false;
   let expandedBookmarkActions = null;
   const expandedBookmarkTags = new Set();
+  let frequentTags = [];
   let searchTimer;
   let tagsTimer;
   let tagsPage = 1;
@@ -165,7 +166,7 @@ export function createApplication() {
     Object.assign(state, {
       filter: restored.filter,
       collection: restored.collection,
-      tag: restored.tag,
+      activeTags: restored.activeTags,
       query: restored.query,
       page: restored.page,
       sort: restored.sort,
@@ -652,6 +653,7 @@ export function createApplication() {
     renderedLibraryRoute = null;
     libraryUnavailable = true;
     expandedBookmarkTags.clear();
+    frequentTags = [];
     state.links = [];
     bulk.clear();
     state.request++;
@@ -867,7 +869,6 @@ export function createApplication() {
   }
 
   function currentTitle() {
-    if (state.tag) return `#${state.tag}`;
     if (state.filter === "collection") return collectionLabel(state.collection);
     return {
       all: "All bookmarks",
@@ -913,7 +914,7 @@ export function createApplication() {
         key: "tags",
         action: () => $("all-tags").click(),
       });
-    } else if (!state.tag && state.filter === "collection") {
+    } else if (state.filter === "collection") {
       const seen = new Set();
       let collection = state.collections.find(
         (item) => String(item.id) === String(state.collection),
@@ -942,7 +943,7 @@ export function createApplication() {
       crumbs.push({
         label: currentTitle(),
         key: "current",
-        action: () => selectFilter(state.filter, state.collection, state.tag),
+        action: () => selectFilter(state.filter, state.collection),
       });
     }
     return crumbs;
@@ -987,12 +988,9 @@ export function createApplication() {
       unread: "Your reading list, ready when you are.",
       collection: "Bookmarks organized in this collection.",
     };
-    $("page-subtitle").textContent = state.tag
-      ? `Bookmarks tagged #${state.tag}.`
-      : descriptions[state.filter];
+    $("page-subtitle").textContent = descriptions[state.filter];
     document.querySelectorAll("[data-filter]").forEach((button) => {
-      const active =
-        !showingTags && !state.tag && button.dataset.filter === state.filter;
+      const active = !showingTags && button.dataset.filter === state.filter;
       button.classList.toggle("active", active);
       if (active) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
@@ -1000,30 +998,28 @@ export function createApplication() {
     document.querySelectorAll("[data-quick-filter]").forEach((button) => {
       button.setAttribute(
         "aria-pressed",
-        String(
-          !showingTags &&
-            !state.tag &&
-            button.dataset.quickFilter === state.filter,
-        ),
+        String(!showingTags && button.dataset.quickFilter === state.filter),
       );
     });
-    renderActiveFilters();
   }
 
   function renderActiveFilters() {
-    const root = $("active-filters"),
-      key = focusedKey(root);
-    renderFilter(root, state.query, () => {
-      lifecycle.cancelTimeout(searchTimer);
-      state.query = "";
-      $("search").value = "";
-      state.page = 1;
-      commitRoute();
-      refresh();
-      $("page-title").focus();
+    const root = $("active-filters");
+    renderFilters(root, {
+      query: state.query,
+      activeTags: state.activeTags,
+      onClearSearch: () => {
+        lifecycle.cancelTimeout(searchTimer);
+        state.query = "";
+        $("search").value = "";
+        state.page = 1;
+        commitRoute();
+        refresh();
+        (root.querySelector("button") || $("page-title")).focus();
+      },
+      onRemoveTag: toggleTagFilter,
     });
-    root.hidden = !state.query;
-    restoreFocus(root, key);
+    root.hidden = !state.query && !state.activeTags.length;
   }
 
   function focusedKey(root) {
@@ -1051,7 +1047,7 @@ export function createApplication() {
   function selectFilter(
     filter,
     collection = null,
-    tag = "",
+    activeTags = [],
     focusHeading = true,
   ) {
     lifecycle.cancelTimeout(searchTimer);
@@ -1061,7 +1057,7 @@ export function createApplication() {
     showingTags = false;
     state.filter = filter;
     state.collection = collection;
-    state.tag = tag;
+    state.activeTags = activeTags;
     state.page = 1;
     bulk.clear();
     commitRoute();
@@ -1071,6 +1067,23 @@ export function createApplication() {
     renderCollections();
     refresh();
     if (focusHeading) $("page-title").focus();
+  }
+
+  function toggleTagFilter(name) {
+    const index = state.activeTags.indexOf(name);
+    const tags =
+      index < 0
+        ? [...state.activeTags, name]
+        : state.activeTags.filter((tag) => tag !== name);
+    selectFilter(state.filter, state.collection, tags, false);
+    const filters = $("active-filters");
+    const chips = filters.querySelectorAll("[data-tag-filter]");
+    (
+      chips[index] ||
+      chips[tags.length - 1] ||
+      filters.querySelector("button") ||
+      $("page-title")
+    ).focus();
   }
 
   function orderedCollections() {
@@ -1151,11 +1164,14 @@ export function createApplication() {
     restoreFocus($("collections"), key);
   }
 
-  function renderTags(tags) {
-    $("frequent-tags-heading").hidden = !tags.length;
+  function renderTags() {
+    $("frequent-tags-heading").hidden = !frequentTags.length;
     const key = focusedKey($("tags"));
-    renderFrequentTags($("tags"), tags, state.tag, (name) =>
-      selectFilter("all", null, state.tag === name ? "" : name),
+    renderFrequentTags(
+      $("tags"),
+      frequentTags,
+      state.activeTags,
+      toggleTagFilter,
     );
     restoreFocus($("tags"), key);
   }
@@ -1253,12 +1269,10 @@ export function createApplication() {
           "aria-label",
           `${tag.count} bookmark${tag.count === 1 ? "" : "s"}`,
         );
-        button.append(name, count, icon("chevron-right"));
-        lifecycle.listen(button, "click", () => {
-          lifecycle.cancelTimeout(searchTimer);
-          selectFilter("all", null, tag.name);
-          $("page-title").focus();
-        });
+        const active = state.activeTags.includes(tag.name);
+        button.setAttribute("aria-pressed", String(active));
+        button.append(name, count, icon(active ? "check" : "chevron-right"));
+        lifecycle.listen(button, "click", () => toggleTagFilter(tag.name));
         sections.get(tag.letter).append(button);
       }
       renderTagAlphabet(result.groups, jump || result.tags[0]?.letter);
@@ -1431,12 +1445,13 @@ export function createApplication() {
       revision: state.request,
       view: libraryView,
       query: state.query,
+      activeTags: state.activeTags,
       expandedActions: expandedBookmarkActions,
       expandedTags: expandedBookmarkTags,
       onOpen: (link) => reader.open(link.id),
       onEdit: openEditor,
       onUpdate: updateLink,
-      onTag: (name) => selectFilter("all", null, name),
+      onTag: toggleTagFilter,
       onMoreTags: (link) => {
         expandedBookmarkTags.add(link.id);
         renderLinks();
@@ -1461,7 +1476,8 @@ export function createApplication() {
     grid.hidden = libraryUnavailable || libraryLoading;
     $("empty-state").hidden =
       libraryUnavailable || libraryLoading || state.links.length > 0;
-    const filtered = !!state.query || state.filter !== "all" || !!state.tag;
+    const filtered =
+      !!state.query || state.filter !== "all" || state.activeTags.length > 0;
     $("empty-title").textContent = filtered
       ? "No bookmarks found"
       : "Your library starts here";
@@ -1470,10 +1486,12 @@ export function createApplication() {
       : "Save your first bookmark, or bring your existing bookmarks with you.";
     const emptyView =
       !state.query &&
-      (state.tag
+      (state.activeTags.length
         ? [
-            "No bookmarks with this tag",
-            "Choose another tag or return to all bookmarks.",
+            state.activeTags.length === 1
+              ? "No bookmarks with this tag"
+              : "No bookmarks match all selected tags",
+            "Remove a tag filter to broaden your results.",
             false,
             "tag",
           ]
@@ -1562,13 +1580,15 @@ export function createApplication() {
     });
     if (state.query) params.set("fuzzy", "1");
     if (state.query) params.set("q", state.query);
-    if (state.tag) params.set("tag", state.tag);
+    for (const tag of state.activeTags) params.append("tag", tag);
     if (state.filter === "favorite") params.set("favorite", "1");
     if (state.filter === "unread") params.set("unread", "1");
     if (state.filter === "inbox") params.set("collection", "0");
     if (state.filter === "collection")
       params.set("collection", state.collection);
     libraryLoading = renderedLibraryRoute !== params.toString();
+    renderActiveFilters();
+    renderTags();
     if (libraryLoading) {
       if (
         $("bookmark-grid").contains(document.activeElement) ||
@@ -1607,10 +1627,11 @@ export function createApplication() {
         return refresh(quiet);
       }
       state.collections = collections || [];
+      frequentTags = (tags || []).slice(0, 12);
       $("total-count").textContent = stats.links;
       updateHeading();
       renderCollections();
-      renderTags(tags || []);
+      renderTags();
       renderLinks();
       const destination = params.toString();
       if (
@@ -2058,8 +2079,8 @@ export function createApplication() {
     );
   document.querySelectorAll("[data-quick-filter]").forEach((button) =>
     lifecycle.listen(button, "click", () => {
-      if (!state.tag && state.filter === button.dataset.quickFilter) return;
-      selectFilter(button.dataset.quickFilter, null, "", false);
+      if (state.filter === button.dataset.quickFilter) return;
+      selectFilter(button.dataset.quickFilter, null, state.activeTags, false);
     }),
   );
   document

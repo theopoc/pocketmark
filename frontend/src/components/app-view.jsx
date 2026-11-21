@@ -318,6 +318,7 @@ export function AppView() {
             <div
               id="active-filters"
               className="active-filters"
+              role="group"
               aria-label="Active filters"
               hidden
             ></div>

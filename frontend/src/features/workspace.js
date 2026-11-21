@@ -24,16 +24,15 @@ function readRoute(search) {
     Number.MAX_SAFE_INTEGER,
   );
   if (filter === "collection" && !collection) filter = "all";
-  const tag = (params.get("tag") || "").trim();
   return {
     settingsSection: params.has("settings")
       ? settingsSections.has(params.get("settings"))
         ? params.get("settings")
         : "overview"
       : null,
-    filter: tag ? "all" : filter,
-    collection: !tag && filter === "collection" ? collection : null,
-    tag,
+    filter,
+    collection: filter === "collection" ? collection : null,
+    activeTags: tagValues(params.getAll("tag")),
     query: (params.get("q") || "").trim(),
     page: positive(params.get("page")),
     sort: ["newest", "oldest", "title", "title_desc", "updated"].includes(
@@ -53,7 +52,7 @@ function routeSearch(route) {
   if (route.filter !== "all") params.set("filter", route.filter);
   if (route.filter === "collection" && route.collection)
     params.set("collection", route.collection);
-  if (route.tag) params.set("tag", route.tag);
+  for (const tag of route.activeTags) params.append("tag", tag);
   if (route.query) params.set("q", route.query);
   if (route.page > 1) params.set("page", route.page);
   if (route.sort !== "newest") params.set("sort", route.sort);

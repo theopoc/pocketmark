@@ -183,7 +183,7 @@ export function createSettings(
       Object.assign(destination, {
         filter: "all",
         collection: null,
-        tag: "",
+        activeTags: [],
         showingTags: false,
         page: 1,
       });
