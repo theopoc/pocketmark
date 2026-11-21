@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
+import { navigationLayoutJourney } from './navigation-layout.mjs';
 
 export async function openNavigation(page) {
   if (await page.locator('.showing-settings').count()) return; // Settings keeps its navigation visible.
   const desktop = await page.evaluate(() => matchMedia('(min-width: 901px) and (hover: hover) and (pointer: fine)').matches);
   if (desktop) {
-    await page.mouse.move(2, 200);
-    await page.locator('#sidebar-mode').focus();
+    await page.locator('#open-navigation').press('Enter');
   } else if (!await page.locator('#navigation-dialog').evaluate(node => node.open)) {
     await page.locator('#open-navigation').click();
   }
@@ -98,6 +98,7 @@ export async function dialogDismissalJourney(page) {
 
 export async function navigationJourney(page) {
   const original = page.viewportSize();
+  await navigationLayoutJourney(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.mouse.move(500, 400);
   assert.equal(await page.locator('#sidebar').isVisible(), false);
@@ -105,6 +106,7 @@ export async function navigationJourney(page) {
   await page.locator('#sidebar').waitFor({ state: 'visible' });
   await page.locator('#sidebar-mode').click();
   assert.equal(await page.locator('#sidebar-mode').getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator('#main-content').evaluate(el => el.getBoundingClientRect().left), 280, 'pinned navigation reserves its width');
   await page.mouse.move(600, 400);
   await page.reload();
   assert.equal(await page.locator('#sidebar-mode').getAttribute('aria-pressed'), 'true');
