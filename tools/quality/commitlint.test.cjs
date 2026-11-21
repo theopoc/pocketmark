@@ -3,15 +3,13 @@ const { readFileSync, existsSync } = require("node:fs");
 const { spawnSync } = require("node:child_process");
 const { join, resolve } = require("node:path");
 const test = require("node:test");
+const yaml = require("js-yaml");
 
 const root = resolve(__dirname, "../..");
-const workflow = readFileSync(join(root, ".github/workflows/ci.yml"), "utf8");
-// Run the actual title-validation shell block with untrusted metadata.
-const script = workflow.split("      - name: Validate the squash commit title\n")[1]
-  .split("        run: |\n")[1].split("      - run:")[0]
-  .split("\n").map((line) => line.replace(/^          /, "")).join("\n");
+const workflow = yaml.load(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"));
+const titleStep = workflow.jobs.repository.steps.find(step => step.name === "Validate the squash commit title");
 function lint(title) {
-  return spawnSync("bash", ["-e", "-o", "pipefail", "-c", script], {
+  return spawnSync("bash", ["-e", "-o", "pipefail", "-c", titleStep.run], {
     cwd: root, env: { ...process.env, PR_TITLE: title }, encoding: "utf8",
   });
 }
