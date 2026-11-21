@@ -278,11 +278,11 @@ export function AppView() {
             <fieldset className="quick-filters">
               <legend className="sr-only">Filter bookmarks</legend>
               {[
-                ["all", "All"],
-                ["unread", "Unread"],
-                ["favorite", "Favorites"],
-                ["inbox", "Inbox"],
-              ].map(([value, label]) => (
+                ["all", "All", "library"],
+                ["unread", "Unread", "clock"],
+                ["favorite", "Favorites", "star"],
+                ["inbox", "Inbox", "inbox"],
+              ].map(([value, label, icon]) => (
                 <label key={value}>
                   <Input
                     type="radio"
@@ -290,7 +290,10 @@ export function AppView() {
                     value={value}
                     defaultChecked={value === "all"}
                   />
-                  <span>{label}</span>
+                  <span className="quick-filter-label">
+                    <span data-icon={icon} aria-hidden="true"></span>
+                    {label}
+                  </span>
                 </label>
               ))}
             </fieldset>
