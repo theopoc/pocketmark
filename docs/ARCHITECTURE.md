@@ -40,6 +40,6 @@ Workflow tests use an in-memory adapter to control capture/network failures. Sto
 
 ## Verification scope
 
-Run `make check`, `make test`, `make test-extension` and `make build`. CI additionally gates secrets, dependency vulnerabilities and release tooling, with separate native AMD64/ARM64 test and build jobs. The amd64 Build job runs the complete Chromium journey against its compiled binary before uploading it as a release input. Docker smoke tests additionally qualify release images. The deterministic suite tests regressions; it does not replace [RAM measurements](BENCHMARK.md) or real-client observations.
+Run `make check`, `make test`, `make test-extension` and `make build`. The [CI jobs](CI.md#ci-jobs) cover the web UI, backend on native AMD64 and ARM64, Chrome extension, security and repository tooling. The web integration job runs Chromium against a disposable server with the compiled frontend. Docker smoke tests additionally qualify release images. The deterministic suite tests regressions; it does not replace [RAM measurements](BENCHMARK.md) or real-client observations.
 
 Keep modules together when their rules change together. Splitting the capture worker or other files solely for their size does not add depth; introduce a new seam only when it hides a real responsibility or supports a concrete adapter.

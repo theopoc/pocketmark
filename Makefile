@@ -16,6 +16,7 @@ preflight:
 	python3 scripts/preflight.py
 test-extension:
 	node --test extension/*.test.cjs
+	python3 -m unittest discover -s extension -p 'test_*.py' -v
 fmt-check:
 	@test -z "$$(gofmt -l cmd internal)" || { gofmt -l cmd internal; exit 1; }
 check: frontend fmt-check

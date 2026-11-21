@@ -113,11 +113,10 @@ The selection journey uses the platform’s additive click (Command on macOS, Co
 
 For visual comparisons, [the fidelity journey](../e2e/fidelity.mjs) reads `E2E_FIXTURE_FILE` with a populated disposable loopback instance and its browser storage state. Set `E2E_EVIDENCE_DIR` to a fresh directory for each build and `E2E_REFERENCE_DIR` to the completed base run when comparing. Check that the expected view is ready and its screenshot was written before recording a comparison.
 
-Quality, Tests, native Build and Go CodeQL extraction all compile frontend assets.
-The amd64 Build job exercises its compiled binary in Chromium before it becomes
-a release input. Security audits the locked frontend inventory; Dependabot checks
-updates separately. Docker builds assets in a Node build stage and copies only
-static output into the Go build; releases keep reusing validated binaries.
+Frontend and integration builds the Go server with its embedded production UI
+and exercises it in Chromium. The native backend tests and Go CodeQL extraction also
+compile assets for their own binaries. The Repository checks job runs source lint and audits
+the locked npm dependencies. Distribution binaries are built by the release workflow.
 The nested `frontend/go.mod` keeps Go examples inside npm tooling out of the
 application's recursive Go checks; it introduces no Go runtime dependency.
 

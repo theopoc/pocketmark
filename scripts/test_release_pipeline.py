@@ -119,11 +119,17 @@ class PipelineTests(unittest.TestCase):
 
     def test_ci_gate_rejects_failed_cancelled_and_skipped_validations(self):
         ci = (ROOT / '.github/workflows/ci.yml').read_text()
-        command = job('gate', ci).split('        run: ', 1)[1].strip()
+        validations = set(re.findall(r'^  ([\w-]+):$', ci.split('\njobs:\n', 1)[1], re.M)) - {'gate'}
+        gate = job('gate', ci)
+        dependencies = re.search(r'^    needs: \[(.+)\]$', gate, re.M)[1].split(', ')
+        self.assertEqual(set(dependencies), validations)
+        self.assertIn('    if: always()\n', gate)
+        command = gate.split('        run: ', 1)[1].strip()
         for status in ('success', 'failure', 'cancelled', 'skipped'):
             with self.subTest(status=status):
                 result = self.execute(command, RESULTS=json.dumps({
-                    'quality': {'result': 'success'}, 'test': {'result': status}}))
+                    name: {'result': status if name == 'extension' else 'success'}
+                    for name in validations}))
                 self.assertEqual(result.returncode == 0, status == 'success')
 
     def test_tag_sha_must_match_the_tested_revision_before_any_build(self):

@@ -93,20 +93,22 @@ main pushes run `release.yml`: Release Please prepares a version PR without
 creating a tag. A merged version PR starts the full validation workflow before
 any tag or distribution build is created.
 
-| Validation | Checks |
-| --- | --- |
-| Quality | PR title, formatting/vet, checksums/tidy, syntax, actionlint and GoReleaser configuration. |
-| Security | Redacted Gitleaks, reachable Go vulnerabilities, npm audits, Swagger vendor equality and Retire.js. |
-| SAST | Parallel full CodeQL analysis for Go and JavaScript; findings or incomplete results block. |
-| Tests | Native Go race tests on AMD64 and ARM64; Python and expression regressions run once on AMD64. |
-| Web and extension | JavaScript tests, production frontend with a disposable server, Chromium selectors and extension ZIP validation, once on AMD64. |
+Every PR runs the three product checks in parallel. The frontend is embedded in
+the Go binary and the extension shares assets with the web UI, so changes in one
+directory can affect another component.
 
-The final **CI** job depends on every validation job and rejects failed, cancelled
-or skipped results. Configure the **Protect main** ruleset to require this stable
-`CI` check from GitHub Actions with strict branch updates. Migrating an existing
-ruleset requires replacing the previous nine check names, including the removed
-`Build (amd64)`, `Build (arm64)` and `Extension` checks. Workflow YAML does not
-update repository rulesets. Architecture matrices use `fail-fast: false`.
+| Check | What runs |
+| --- | --- |
+| Frontend and integration | Web unit tests and standalone Chromium selectors. A browser journey then exercises the compiled UI against a Go server and disposable PostgreSQL database. |
+| Backend (amd64, arm64) | Go race tests with PostgreSQL 18, coverage and package timings on both native architectures. |
+| Chrome extension | JavaScript regressions, installable ZIP contents and popup behavior in Chromium. Runs with Node and Python. |
+| Repository checks | Cross-component source checks (`make check`), PR title, workflow and release tooling, module integrity, secret history scan and dependency audits. |
+| CodeQL (Go, JavaScript) | Full static analysis for each language. Findings and incomplete reports fail the check. |
+
+**CI** is the single required GitHub Actions check. Its job depends on every row
+above and succeeds only when all jobs succeed. Keep the **Protect main** ruleset
+pointed at `CI` with strict branch updates. Both matrices use `fail-fast: false`
+so a failure on one runner leaves the other result visible.
 
 ### Go caches and timings
 
@@ -135,8 +137,7 @@ The deterministic container smoke test does not depend on public websites. The s
 CodeQL actions are SHA-pinned and run the bundled `security-extended` queries for
 Go and JavaScript. `CODEQL_ACTION_DIFF_INFORMED_QUERIES: 'false'` disables automatic
 PR diff filtering so the pre-merge gate evaluates the same complete source as
-main. Both language jobs run on every PR and are individually required by branch
-protection. The SARIF gate also rejects reports declaring an
+main. Both language jobs run on every PR and feed the required `CI` result. The SARIF gate also rejects reports declaring an
 incremental mode, even if they have no findings. The Go build forces compilation for extraction. JavaScript excludes test harnesses and compiled application bundles and upstream minified
 vendor assets; the latter are covered by dependency scanning. Reports stay in
 short-lived artifacts, without uploading databases or requiring code-scanning
@@ -214,7 +215,7 @@ Enable the repository's **Allow auto-merge** setting while retaining the active 
 
 The workflow uses `gh pr merge --auto --squash --match-head-commit` with the event's head SHA. GitHub waits for the aggregate required `CI` check, an up-to-date branch and resolved review threads; it has no ruleset bypass. Failed, skipped, cancelled or pending CI cannot authorize merge. Keep the aggregate `CI` check required from the GitHub Actions app with strict branch updates and no bypass actors: the workflow relies on this server-side enforcement. Existing open PRs are evaluated on their next supported PR event after the workflow reaches `main`. As with other operations performed using `GITHUB_TOKEN`, the resulting merge does not trigger push-based CI or Release Please; subsequent eligible pushes to `main` pick up the dependency commits. The PR's complete CI still gates its merge. CI regression tests evaluate the actual eligibility expressions; the aggregate `CI` check provides the merge gate.
 
-Commitlint runs in Quality with the conventional configuration and a locked
+Commitlint runs in Repository checks with the conventional configuration and a locked
 CI-only dependency inventory under `tools/quality/`. PR titles reach the CLI via
 a quoted environment variable and stdin, never as shell source. Default ignored
 messages are disabled, so merge/revert/version-like titles still need the
@@ -247,9 +248,12 @@ node e2e/extension-selectors.mjs
 python3 scripts/smoke_docker.py --image pocketmark:ci --browser
 ```
 
-The browser dependency is pinned and locked under `e2e/`; it is test tooling only and is not copied into the application image. The browser runs on the CI runner, outside the server's 128 MiB container limit. Selector checks cover the web UI and extension at desktop and narrow viewport sizes in both themes; the separate container browser journey exercises the running server. The Web and extension job runs the complete browser journey against a compiled temporary server before release tagging. `python3 scripts/smoke_frontend.py --binary bin/pocketmark` reproduces that journey with disposable data. These Chromium checks do not qualify Firefox, Safari, native mobile clients or full accessibility.
-
-Frontend and extension regressions run once in the Web and extension job on every validation run. Selector Chromium checks run in ordinary source CI; the container journey runs during release, and ordinary source CI does not build containers.
+Chromium is pinned through the `e2e/` lockfile. Frontend and integration exercises
+the compiled server with `python3 scripts/smoke_frontend.py --binary bin/pocketmark`
+using `POCKETMARK_TEST_DATABASE_URL` for disposable data. Chrome extension runs its
+popup checks independently. Both cover desktop and narrow viewports. Release
+qualification also runs a browser against the container, outside its 128 MiB
+limit. Firefox, Safari and native mobile clients need separate qualification.
 
 The release expression regression checks use `@actions/expressions` only as a temporary CI/test tool; it is not an application or frontend dependency. They read the expression directly from the workflow and cover missing/empty PR outputs after a version PR is merged, ordinary opened PRs, and malformed output. Reproduce them locally with:
 
@@ -257,7 +261,7 @@ The release expression regression checks use `@actions/expressions` only as a te
 npm install --prefix /tmp/pocketmark-release-expressions --no-save --no-package-lock \
   --ignore-scripts --no-audit --no-fund @actions/expressions@0.3.61
 ACTIONS_EXPRESSIONS_PATH=/tmp/pocketmark-release-expressions/node_modules/@actions/expressions/dist/index.js \
-  node --test scripts/test_release_expressions.mjs
+  node --test scripts/test_*_expressions.mjs
 ```
 
 For local release packaging, see the [release rehearsal](RELEASE.md#rehearse-packaging-locally).

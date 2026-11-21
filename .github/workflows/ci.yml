@@ -29,22 +29,124 @@ env:
   CGO_ENABLED: '1'
 
 jobs:
-  quality:
-    name: Quality
+  frontend:
+    name: Frontend and integration
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
+    services: &postgres
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 127.0.0.1:5432:5432
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 12
+    env: &test-database
+      POCKETMARK_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1/postgres
+    steps:
+      - &checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.revision || github.sha }}
+          persist-credentials: false
+      - &node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - &go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - &postgres-client
+        name: Install matching PostgreSQL clients
+        run: |
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-18
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+      - name: Build the server with the production frontend
+        run: make build
+      - name: Test the web UI
+        run: |
+          node --test internal/webui/*.test.cjs
+          npm test --prefix frontend
+      - &chromium
+        name: Install Chromium
+        run: |
+          npm ci --prefix e2e --ignore-scripts --no-audit --no-fund
+          ./e2e/node_modules/.bin/playwright install --with-deps chromium
+      - name: Test the web UI in Chromium
+        run: |
+          node e2e/selectors.mjs
+          python3 scripts/smoke_frontend.py --binary bin/pocketmark
+
+  backend:
+    name: Backend (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    services: *postgres
+    env: *test-database
+    steps:
+      - *checkout
+      - *go
+      - *node
+      - *postgres-client
+      - name: Race tests and coverage
+        run: |
+          make frontend
+          go test -json -race -p 2 -count=1 -covermode=atomic -coverprofile=coverage.out \
+            ./... | tee test-results.log
+      - name: Summarize test timings
+        if: always()
+        run: python3 scripts/test_timings.py test-results.log >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: coverage-${{ matrix.arch }}
+          path: coverage.out
+          retention-days: 7
+
+  extension:
+    name: Chrome extension
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - *checkout
+      - *node
+      - run: make test-extension
+      - *chromium
+      - run: node e2e/extension-selectors.mjs
+
+  repository:
+    name: Repository checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.revision || github.sha }}
+          fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
+      - name: Scan the complete history for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: '8.30.1'
+          # Use the action's full-history mode instead of an event range.
+          GITHUB_EVENT_NAME: workflow_dispatch
+          GITLEAKS_ENABLE_COMMENTS: 'false'
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
+          GITLEAKS_ENABLE_SUMMARY: 'false'
+      - *go
+      - *node
       - name: Install Commitlint
         run: npm ci --prefix tools/quality --ignore-scripts --no-audit --no-fund
       - name: Test Commitlint title validation
@@ -56,9 +158,10 @@ jobs:
         run: |
           [[ "$PR_TITLE" != *$'\n'* && "$PR_TITLE" != *$'\r'* ]]
           printf '%s\n' "$PR_TITLE" | tools/quality/node_modules/.bin/commitlint --strict
+      - name: Check formatting, Go vet, frontend lint, shared assets and syntax
+        run: make check
       - run: go mod verify
       - run: go mod tidy -diff
-      - run: make check
       - name: Validate workflow syntax and shell commands
         # GitHub supports queue:max; actionlint 1.7.12 and current upstream do not.
         # Ignore only that unknown-key diagnostic, retaining all other lint checks.
@@ -70,49 +173,30 @@ jobs:
           version: v2.18.3
           install-only: true
       - run: make release-check
-
-  security:
-    name: Security
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.revision || github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-      - name: Scan the complete history for secrets
-        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_VERSION: '8.30.1'
-          # Use the action's full-history mode instead of an event range.
-          GITHUB_EVENT_NAME: workflow_dispatch
-          GITLEAKS_ENABLE_COMMENTS: 'false'
-          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
-          GITLEAKS_ENABLE_SUMMARY: 'false'
+      - name: Test repository tooling
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+      - name: Test workflow expressions
+        run: |
+          npm install --prefix "$RUNNER_TEMP/release-expressions" --no-save --no-package-lock \
+            --ignore-scripts --no-audit --no-fund @actions/expressions@0.3.61
+          ACTIONS_EXPRESSIONS_PATH="$RUNNER_TEMP/release-expressions/node_modules/@actions/expressions/dist/index.js" \
+            node --test scripts/test_*_expressions.mjs
       - name: Check reachable dependency vulnerabilities
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
 
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
       - run: npm ci --prefix tools/security --ignore-scripts --no-audit --no-fund
-      - run: npm audit --prefix tools/security --audit-level=high
-      - run: npm audit --prefix frontend --audit-level=high
-      - run: npm audit --prefix e2e --audit-level=high
-      - run: npm audit --prefix tools/quality --audit-level=high
+      - name: Audit locked npm dependencies
+        run: |
+          for project in frontend e2e tools/quality tools/security; do
+            npm audit --prefix "$project" --audit-level=high
+          done
       - name: Verify vendored Swagger UI matches the scanned package
         run: python3 scripts/check_swagger_vendor.py
       - name: Scan the actual embedded JavaScript bundle
         run: tools/security/node_modules/.bin/retire --path internal/webui/static/api-docs/vendor --severity high
 
   sast:
-    name: SAST (${{ matrix.language }})
+    name: CodeQL (${{ matrix.language }})
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
@@ -127,10 +211,7 @@ jobs:
           - language: javascript-typescript
             build-mode: none
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.revision || github.sha }}
-          persist-credentials: false
+      - *checkout
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         if: matrix.language == 'go'
         with:
@@ -161,121 +242,9 @@ jobs:
           path: artifacts/codeql/*.sarif
           retention-days: 7
 
-  test:
-    name: Tests (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-    services:
-      postgres:
-        image: postgres:18-alpine
-        env:
-          POSTGRES_HOST_AUTH_METHOD: trust
-        ports:
-          - 127.0.0.1:5432:5432
-        options: --health-cmd pg_isready --health-interval 5s --health-retries 12
-    env:
-      POCKETMARK_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1/postgres
-    steps:
-      - name: Install matching PostgreSQL clients
-        run: |
-          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
-          sudo apt-get install -y postgresql-client-18
-          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.revision || github.sha }}
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
-      - name: Race tests and coverage
-        run: |
-          make frontend
-          go test -json -race -p 2 -count=1 -covermode=atomic -coverprofile=coverage.out \
-            ./... | tee test-results.log
-      - name: Summarize test timings
-        if: always()
-        run: python3 scripts/test_timings.py test-results.log >> "$GITHUB_STEP_SUMMARY"
-      - name: Test release packaging
-        if: matrix.arch == 'amd64'
-        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
-      - name: Test workflow expressions
-        if: matrix.arch == 'amd64'
-        run: |
-          npm install --prefix "$RUNNER_TEMP/release-expressions" --no-save --no-package-lock \
-            --ignore-scripts --no-audit --no-fund @actions/expressions@0.3.61
-          ACTIONS_EXPRESSIONS_PATH="$RUNNER_TEMP/release-expressions/node_modules/@actions/expressions/dist/index.js" \
-            RELEASE_WORKFLOW_PATH="$GITHUB_WORKSPACE/.github/workflows/release.yml" \
-            DEPENDABOT_WORKFLOW_PATH="$GITHUB_WORKSPACE/.github/workflows/dependabot-auto-merge.yml" \
-            node --test scripts/test_*_expressions.mjs
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: coverage-${{ matrix.arch }}
-          path: coverage.out
-          retention-days: 7
-
-  extension:
-    name: Web and extension
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    services:
-      postgres:
-        image: postgres:18-alpine
-        env:
-          POSTGRES_HOST_AUTH_METHOD: trust
-        ports:
-          - 127.0.0.1:5432:5432
-        options: --health-cmd pg_isready --health-interval 5s --health-retries 12
-    env:
-      POCKETMARK_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1/postgres
-    steps:
-      - name: Install matching PostgreSQL clients
-        run: |
-          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
-          sudo apt-get install -y postgresql-client-18
-          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.revision || github.sha }}
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-      - name: Build test server and run JavaScript regressions once
-        run: |
-          make build test-extension
-          node --test internal/webui/*.test.cjs
-          npm test --prefix frontend
-      - name: Install selector browser tooling
-        run: |
-          npm ci --prefix e2e --ignore-scripts --no-audit --no-fund
-          ./e2e/node_modules/.bin/playwright install --with-deps chromium
-      - name: Test browser and extension journeys
-        run: |
-          node e2e/selectors.mjs
-          node e2e/extension-selectors.mjs
-          python3 scripts/smoke_frontend.py --binary bin/pocketmark
-
   gate:
     name: CI
-    needs: [quality, security, sast, test, extension]
+    needs: [frontend, backend, extension, repository, sast]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 2
