@@ -87,11 +87,11 @@ async function captureMFA(page, name) {
   await page.setViewportSize({ width: 1280, height: 1000 });
   await page.evaluate(() => { if (document.documentElement.dataset.theme !== 'dark') document.querySelector('[data-theme-toggle]').click(); });
 }
-async function holdResponse(page, path) {
+async function holdResponse(page, match) {
   let received, release;
   const ready = new Promise(resolve => { received = resolve; });
   const blocked = new Promise(resolve => { release = resolve; });
-  const url = new URL(path, base).href;
+  const url = typeof match === 'function' ? match : new URL(match, base).href;
   const handler = async route => {
     const response = await route.fetch();
     received();
@@ -781,8 +781,21 @@ try {
   await card('Design only').waitFor();
   assert.equal(await tagFilter('design').evaluate(button => button === document.activeElement), true, 'keyboard removal focuses the remaining tag');
   assert.deepEqual(new URL(page.url()).searchParams.getAll('tag'), ['design']);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const restoredResults = await holdResponse(page, url => url.pathname === '/api/links' && url.searchParams.getAll('tag').length === 2);
   await page.goBack();
+  await restoredResults.ready;
   await tagFilter('reading').waitFor();
+  await openNavigation(page);
+  const frequentDesign = page.locator('#tags').getByRole('button', { name: '#design', exact: true });
+  await frequentDesign.focus();
+  restoredResults.release();
+  await cardTag('reading').waitFor();
+  await page.waitForFunction(() => document.getElementById('bookmark-grid').getAttribute('aria-busy') === 'false');
+  assert.equal(await frequentDesign.isVisible(), true, 'restored results leave the open navigation available');
+  assert.equal(await frequentDesign.evaluate(button => button === document.activeElement), true, 'restored results preserve focus on the next tag');
+  await restoredResults.remove();
+  await page.keyboard.press('Escape');
   await card('Design only').waitFor({ state: 'detached' });
   await cardTag('design').click();
   await tagFilter('design').waitFor({ state: 'detached' });

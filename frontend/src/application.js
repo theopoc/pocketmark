@@ -193,14 +193,16 @@ export function createApplication() {
       if (!wasSettings) await loadSettings();
       return;
     }
+    if (!initial) {
+      updateHeading();
+      $(showingTags ? "tags-title" : "page-title").focus({
+        preventScroll: true,
+      });
+    }
     await refresh();
     if (request !== routeRequest) return;
     if (showingTags) await loadTagDirectory();
     if (request !== routeRequest) return;
-    if (!initial)
-      $(showingTags ? "tags-title" : "page-title").focus({
-        preventScroll: true,
-      });
     requestAnimationFrame(() => {
       if (request === routeRequest)
         window.scrollTo({ top: scroll, behavior: "instant" });
