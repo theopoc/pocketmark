@@ -1,4 +1,4 @@
-.PHONY: preflight build frontend test run check fmt-check test-extension release-check release-snapshot
+.PHONY: preflight build frontend test run up check fmt-check test-extension release-check release-snapshot
 LDFLAGS ?= -s -w
 TEST_FLAGS ?= -race -p 1
 
@@ -47,3 +47,5 @@ release-snapshot:
 	goreleaser release --snapshot --clean --config .goreleaser.yaml
 run: build
 	./bin/pocketmark
+up:
+	docker compose -f compose.dev.yaml up --build --wait

@@ -11,8 +11,7 @@ Requirements include Go from `go.mod`, Node.js 24, npm and Make. Start PostgreSQ
 ```sh
 export POCKETMARK_DATABASE_URL='postgresql://pocketmark@localhost/pocketmark'
 # Configure the password in a private libpq password file.
-make build
-./bin/pocketmark
+make run
 ```
 
 Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account. Register an authenticator app with the local QR code or setup key, verify a code and save the single-use recovery codes. On later visits, sign in with your username, password and an authentication or recovery code. In **Settings → API keys**, create an **Editor** key for the Pocketmark extension or a **Sync** key for Floccus. To revoke a key permanently, turn off its access switch and choose **Revoke**.

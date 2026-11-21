@@ -77,14 +77,23 @@ WebDAV was previously verified with unmodified **Floccus 5.11.1**, including syn
 
 ## Development
 
+With Docker Compose v2 running, start the development stack from the repository root:
+
+```sh
+make up
+```
+
+Open [http://localhost:8091](http://localhost:8091). The development stack has its own volumes and a built-in local database password. To stop it and keep your data, run `docker compose -f compose.dev.yaml stop`.
+
+### Native development
+
 Requires Go (see `go.mod`), a C compiler and Make. Node.js 24 with npm is required to compile the React/shadcn frontend; Python 3 is required for checks and tests. Production runs the Go binary and PostgreSQL 18. Native backups require the PostgreSQL client tools. See the [frontend guide](docs/FRONTEND.md) for development and dependency updates.
 
 Build and run locally:
 
 ```sh
 export POCKETMARK_DATABASE_URL=postgresql://pocketmark@localhost/pocketmark
-make build
-./bin/pocketmark
+make run
 ```
 
 For integration tests, set `POCKETMARK_TEST_DATABASE_URL` to a disposable PostgreSQL cluster where the role can create databases. Install PostgreSQL 18 client tools, then run:
