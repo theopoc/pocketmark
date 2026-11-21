@@ -1,4 +1,4 @@
-.PHONY: preflight build frontend test run up check fmt-check test-extension release-check release-snapshot
+.PHONY: preflight build frontend test run up down check fmt-check test-extension release-check release-snapshot
 LDFLAGS ?= -s -w
 TEST_FLAGS ?= -race -p 1
 
@@ -49,3 +49,5 @@ run: build
 	./bin/pocketmark
 up:
 	docker compose -f compose.dev.yaml up --build --wait
+down:
+	docker compose -f compose.dev.yaml down

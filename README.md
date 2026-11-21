@@ -83,7 +83,7 @@ With Docker Compose v2 running, start the development stack from the repository 
 make up
 ```
 
-Open [http://localhost:8091](http://localhost:8091). The development stack has its own volumes and a built-in local database password. To stop it and keep your data, run `docker compose -f compose.dev.yaml stop`.
+Open [http://localhost:8091](http://localhost:8091). The development stack has its own volumes and a built-in local database password. Run `make down` to stop it and keep your data. The next `make up` reuses the same volumes.
 
 ### Native development
 
