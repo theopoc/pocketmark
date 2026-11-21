@@ -20,7 +20,8 @@ def main():
     args = parser.parse_args()
     name = "pocketmark-import-probe-" + secrets.token_hex(6)
     key = secrets.token_hex(32)
-    environment = {**os.environ, "POCKETMARK_TOKEN": key, "POCKETMARK_DB_PASSWORD": secrets.token_hex(32)}
+    environment = {**os.environ, "POCKETMARK_SERVER_SECRET": key, "POCKETMARK_TOKEN": "",
+                   "POCKETMARK_DB_PASSWORD": secrets.token_hex(32)}
 
     def docker(*arguments):
         return subprocess.check_output(
@@ -40,7 +41,7 @@ def main():
         service.pop("build", None)
         service["image"] = args.image
         service["ports"] = [{"target":8090, "published":"0", "host_ip":"127.0.0.1", "protocol":"tcp"}]
-        service["environment"].update(POCKETMARK_CAPTURE="false", POCKETMARK_TOKEN=key)
+        service["environment"]["POCKETMARK_CAPTURE"] = "false"
         service["memswap_limit"] = service["mem_limit"]
         config_path = Path(directory) / "compose.json"
         config_path.write_text(json.dumps(config))

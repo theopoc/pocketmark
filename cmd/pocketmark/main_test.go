@@ -18,8 +18,10 @@ import (
 )
 
 func TestServerSecretPersistenceAndLegacyMigration(t *testing.T) {
+	t.Setenv("POCKETMARK_SERVER_SECRET", "")
+	t.Setenv("POCKETMARK_TOKEN", "")
 	dir := t.TempDir()
-	secret, err := loadServerSecret(dir, "", true)
+	secret, err := loadServerSecret(dir, true)
 	if err != nil || len(secret) != 64 {
 		t.Fatalf("new secret: %v", err)
 	}
@@ -27,7 +29,7 @@ func TestServerSecretPersistenceAndLegacyMigration(t *testing.T) {
 	if err != nil || info.Mode().Perm() != 0600 {
 		t.Fatalf("secret permissions: %v %v", info, err)
 	}
-	again, err := loadServerSecret(dir, "", false)
+	again, err := loadServerSecret(dir, false)
 	if err != nil || again != secret {
 		t.Fatal("secret changed across restart", err)
 	}
@@ -36,16 +38,38 @@ func TestServerSecretPersistenceAndLegacyMigration(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(legacy, "access-token"), []byte(old), 0600); err != nil {
 		t.Fatal(err)
 	}
-	got, err := loadServerSecret(legacy, "", false)
+	got, err := loadServerSecret(legacy, false)
 	if err != nil || got != old {
 		t.Fatal("legacy secret changed", err)
 	}
 	missing := t.TempDir()
-	if _, err := loadServerSecret(missing, "", false); err == nil {
+	if _, err := loadServerSecret(missing, false); err == nil {
 		t.Fatal("missing secret silently replaced")
 	}
-	if _, err := loadServerSecret(missing, "", true); err != nil {
+	if _, err := loadServerSecret(missing, true); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestServerSecretEnvironment(t *testing.T) {
+	dir := t.TempDir()
+	legacy := strings.Repeat("a", 32)
+	current := strings.Repeat("b", 32)
+	t.Setenv("POCKETMARK_TOKEN", legacy)
+	t.Setenv("POCKETMARK_SERVER_SECRET", " ")
+	if got, err := loadServerSecret(dir, false); err != nil || got != legacy {
+		t.Fatal("legacy variable should supply the secret", err)
+	}
+	t.Setenv("POCKETMARK_SERVER_SECRET", current)
+	if got, err := loadServerSecret(dir, true); err != nil || got != current {
+		t.Fatal("preferred variable should take precedence", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "server-secret")); !os.IsNotExist(err) {
+		t.Fatal("environment configuration should not create a secret file", err)
+	}
+	t.Setenv("POCKETMARK_SERVER_SECRET", "too-short")
+	if _, err := loadServerSecret(dir, true); err == nil {
+		t.Fatal("invalid preferred secret should fail even with a valid legacy variable")
 	}
 }
 

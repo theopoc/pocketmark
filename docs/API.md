@@ -145,7 +145,7 @@ The included extension uses bearer authentication with narrowly recognized `chro
 
 ### Existing installations and account recovery
 
-Existing credentials, TOTP factors, MFA-verified sessions and named API keys are preserved. The old administrative bearer is no longer accepted; replace it with a named API key in every integration before upgrading to avoid interruption. The old `access-token` file or `POCKETMARK_TOKEN` remains the server secret for existing installations. New installations automatically generate `server-secret` with mode `0600`.
+Existing credentials, TOTP factors, MFA-verified sessions and named API keys are preserved. The old administrative bearer is no longer accepted; replace it with a named API key in every integration before upgrading to avoid interruption. Set `POCKETMARK_SERVER_SECRET` to the original server secret to preserve MFA and sessions when moving to environment configuration. The legacy `POCKETMARK_TOKEN` alias and `access-token` file are still supported. New installations generate `server-secret` with mode `0600` when no secret is supplied.
 
 An older library without a password cannot be claimed through public setup. Stop the server and provide a private JSON file with `{"username":"your-name","password":"your-new-password"}` via standard input:
 

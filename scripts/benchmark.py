@@ -50,7 +50,7 @@ def main():
 
     with disposable_database() as database, tempfile.TemporaryDirectory(prefix="pocketmark-bench-") as data:
         with open(Path(data) / "server.log", "w+") as log:
-            env = {**os.environ, "POCKETMARK_DATABASE_URL": database, "POCKETMARK_TOKEN": token, "GOMEMLIMIT": "32MiB"}
+            env = {**os.environ, "POCKETMARK_DATABASE_URL": database, "POCKETMARK_SERVER_SECRET": token, "GOMEMLIMIT": "32MiB"}
             proc = subprocess.Popen([str(binary), "-listen", f"127.0.0.1:{port}",
                                      "-data", data, "-no-capture"], env=env, stdout=log, stderr=log)
 
