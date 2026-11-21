@@ -1033,11 +1033,8 @@ export function createApplication() {
       if (active) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
     });
-    document.querySelectorAll("[data-quick-filter]").forEach((button) => {
-      button.setAttribute(
-        "aria-pressed",
-        String(!showingTags && button.dataset.quickFilter === state.filter),
-      );
+    quickFilters.forEach((radio) => {
+      radio.checked = !showingTags && radio.value === state.filter;
     });
   }
 
@@ -2115,11 +2112,11 @@ export function createApplication() {
         selectFilter(button.dataset.filter),
       ),
     );
-  document.querySelectorAll("[data-quick-filter]").forEach((button) =>
-    lifecycle.listen(button, "click", () => {
-      if (state.filter === button.dataset.quickFilter) return;
-      selectFilter(button.dataset.quickFilter, null, state.activeTags, false);
-    }),
+  const quickFilters = document.querySelectorAll('input[name="quick-filter"]');
+  quickFilters.forEach((radio) =>
+    lifecycle.listen(radio, "change", () =>
+      selectFilter(radio.value, null, state.activeTags, false),
+    ),
   );
   document
     .querySelectorAll("dialog")
@@ -2441,7 +2438,9 @@ export function createApplication() {
       event.altKey ||
       document.querySelector("dialog[open]") ||
       document.activeElement.isContentEditable ||
-      ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)
+      document.activeElement.matches(
+        'input:not([name="quick-filter"]), textarea, select',
+      )
     )
       return;
     if (event.key === "/") {

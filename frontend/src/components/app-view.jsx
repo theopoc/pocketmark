@@ -275,45 +275,25 @@ export function AppView() {
               {"\n      "}
             </div>
             {"\n      "}
-            <div
-              className="quick-filters"
-              role="group"
-              aria-label="Filter bookmarks"
-            >
-              {"\n        "}
-              <Button type="button" data-quick-filter="all" aria-pressed="true">
-                <span data-icon="check" aria-hidden="true"></span>
-                {"All"}
-              </Button>
-              {"\n        "}
-              <Button
-                type="button"
-                data-quick-filter="unread"
-                aria-pressed="false"
-              >
-                <span data-icon="check" aria-hidden="true"></span>
-                {"Unread"}
-              </Button>
-              {"\n        "}
-              <Button
-                type="button"
-                data-quick-filter="favorite"
-                aria-pressed="false"
-              >
-                <span data-icon="check" aria-hidden="true"></span>
-                {"Favorites"}
-              </Button>
-              {"\n        "}
-              <Button
-                type="button"
-                data-quick-filter="inbox"
-                aria-pressed="false"
-              >
-                <span data-icon="check" aria-hidden="true"></span>
-                {"Inbox"}
-              </Button>
-              {"\n      "}
-            </div>
+            <fieldset className="quick-filters">
+              <legend className="sr-only">Filter bookmarks</legend>
+              {[
+                ["all", "All"],
+                ["unread", "Unread"],
+                ["favorite", "Favorites"],
+                ["inbox", "Inbox"],
+              ].map(([value, label]) => (
+                <label key={value}>
+                  <Input
+                    type="radio"
+                    name="quick-filter"
+                    value={value}
+                    defaultChecked={value === "all"}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </fieldset>
             {"\n      "}
             <div
               id="active-filters"

@@ -246,9 +246,9 @@ Use the primary button to start or submit a panel’s main task, or to recover f
 ### Chips
 Small rectangular tags use neutral fill, short padding and compact type. Hover or active filter states use the soft accent and indigo text. Long labels truncate rather than widening the navigation drawer.
 
-Quick filters beneath library search use rounded pills. The selected filter uses the accent with white text and a check; inactive filters use the themed control surface and border. They wrap as needed and have 44px minimum height on phones.
-Center each pill's content on both axes. Hide the entire inactive check wrapper
-so it reserves no width or gap beside the centered label.
+### Segmented control
+
+Quick filters beneath library search share one rounded track with four equal segments and centered labels. The current destination has a soft indigo fill, a fine outline and a heavier label. A named collection leaves the four global destinations unselected. Tag filters narrow the current destination and stay active when switching segments. Keep the segments on one line with 44px minimum targets on phones. Tab enters the native radio group and arrow keys switch destinations while keeping focus in the group.
 
 ### Capture status
 
