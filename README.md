@@ -25,13 +25,17 @@ Personal use only: collaboration, public sharing, SSO and library automations ar
 
 ## Quick start
 
-With Docker Compose v2, Make and Python 3 installed, run this from the cloned repository. Existing SQLite installations must first follow the [PostgreSQL migration guide](docs/MIGRATION_POSTGRESQL.md).
+Use Docker Compose, or [download a Linux binary](docs/RELEASE_INSTALL.md).
+
+For a new installation, set a database password before starting Compose. Existing SQLite installations must first follow the [PostgreSQL migration guide](docs/MIGRATION_POSTGRESQL.md).
 
 ```sh
-make up
+git clone https://github.com/theopoc/pocketmark.git
+cd pocketmark
+umask 077
+printf 'POCKETMARK_DB_PASSWORD=%s\n' "$(openssl rand -hex 32)" > .env
+docker compose up -d --build
 ```
-
-On a fresh checkout, `make up` generates a database password in a private `.env` file. If you already have a database, supply its original `POCKETMARK_DB_PASSWORD` in `.env` or your shell. The command returns when both services are healthy. Stop them with `docker compose stop` and run `make up` again to restart. A [standalone Linux binary](docs/RELEASE_INSTALL.md) is also available.
 
 Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account before exposing the instance to untrusted networks. Register an authenticator app and save the single-use recovery codes. On later visits, sign in with your password and an authentication or recovery code. PostgreSQL stores the library in its own persistent volume. By default the application volume holds the server secret. To supply it from the environment, set `POCKETMARK_SERVER_SECRET` in your private Compose `.env` or shell. On an existing installation, use the original secret value to preserve MFA and sessions. The Go container has a 128 MiB memory limit, with PostgreSQL using additional memory; see [memory measurement methodology](docs/BENCHMARK.md) for workload boundaries.
 
@@ -72,6 +76,16 @@ Use the API key rather than your Pocketmark account password. Bookmark order is 
 WebDAV was previously verified with unmodified **Floccus 5.11.1**, including synchronization after a server restart. See [tested client workflows and limits](docs/REAL_CLIENTS.md) and [Floccus data semantics](docs/FEATURES.md#floccus-setup-and-data-semantics). Synchronization runs in Floccus; Pocketmark adds no background sync process.
 
 ## Development
+
+With Docker Compose v2 running, start the development stack from the repository root:
+
+```sh
+make up
+```
+
+Open [http://localhost:8091](http://localhost:8091). The development stack has its own volumes and a built-in local database password. To stop it and keep your data, run `docker compose -f compose.dev.yaml stop`.
+
+### Native development
 
 Requires Go (see `go.mod`), a C compiler and Make. Node.js 24 with npm is required to compile the React/shadcn frontend; Python 3 is required for checks and tests. Production runs the Go binary and PostgreSQL 18. Native backups require the PostgreSQL client tools. See the [frontend guide](docs/FRONTEND.md) for development and dependency updates.
 

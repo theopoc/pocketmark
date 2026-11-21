@@ -28,10 +28,10 @@ Restrict access to an empty instance until account and MFA setup are complete. S
 
 ## Docker Compose
 
-From the cloned repository, follow the [quick start](../README.md#quick-start) to launch PostgreSQL and Pocketmark together:
+Set the database password as described in the [quick start](../README.md#quick-start).
 
 ```sh
-make up
+docker compose up --build -d
 ```
 
 Open the same local URL. Compose uses separate named volumes for PostgreSQL and the application work directory and publishes port 8090 on host loopback only. The image runs as UID/GID `10001:10001`; a custom bind-mounted data directory must be writable by that user.

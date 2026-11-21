@@ -48,5 +48,4 @@ release-snapshot:
 run: build
 	./bin/pocketmark
 up:
-	python3 scripts/prepare_compose_env.py
-	docker compose up --build --wait
+	docker compose -f compose.dev.yaml up --build --wait
