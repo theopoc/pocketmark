@@ -248,7 +248,9 @@ Small rectangular tags use neutral fill, short padding and compact type. Hover o
 
 ### Segmented control
 
-Quick filters beneath library search share one rounded track with four equal segments and centered labels. The current destination has a soft indigo fill, a fine outline and a heavier label. A tag or named collection leaves the four global destinations unselected. Keep the segments on one line with 44px minimum targets on phones. Tab enters the native radio group and arrow keys switch destinations while keeping focus in the group.
+Quick filters beneath library search sit on a single recessed track. A raised white thumb in light mode and a pale lavender thumb in dark mode mark the current destination. Fine dividers separate neighboring inactive segments. Center each label with its navigation icon and drop the icons when the track is too narrow. Keep the four labels on one line with 44px minimum targets on phones.
+
+Tab enters the native radio group. Arrow keys switch destinations and slide the thumb into place over 180ms. Reduced motion makes the change immediate. A tag or named collection leaves the four global destinations unselected.
 
 ### Capture status
 
