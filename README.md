@@ -37,7 +37,7 @@ printf 'POCKETMARK_DB_PASSWORD=%s\n' "$(openssl rand -hex 32)" > .env
 docker compose up -d --build
 ```
 
-Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account before exposing the instance to untrusted networks. Register an authenticator app and save the single-use recovery codes. On later visits, sign in with your password and an authentication or recovery code. PostgreSQL stores the library in its own persistent volume. The application volume holds the server secret. The Go container has a 128 MiB memory limit, with PostgreSQL using additional memory; see [memory measurement methodology](docs/BENCHMARK.md) for workload boundaries.
+Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal account before exposing the instance to untrusted networks. Register an authenticator app and save the single-use recovery codes. On later visits, sign in with your password and an authentication or recovery code. PostgreSQL stores the library in its own persistent volume. By default the application volume holds the server secret. To supply it from the environment, set `POCKETMARK_SERVER_SECRET` in your private Compose `.env` or shell. On an existing installation, use the original secret value to preserve MFA and sessions. The Go container has a 128 MiB memory limit, with PostgreSQL using additional memory; see [memory measurement methodology](docs/BENCHMARK.md) for workload boundaries.
 
 For HTTPS access, set `POCKETMARK_ORIGIN` to your public URL. See the [guide](docs/GUIDE.md#configuration) for configuration.
 

@@ -15,7 +15,7 @@ This is a breaking storage change. The server now requires PostgreSQL. New insta
 
    The importer refuses a populated destination, checks source integrity, streams rows including binary chunks, verifies row counts, restores sequence counters and commits in one transaction. It rebuilds search indexes and requeues interrupted captures. On error, retain the original and retry against an empty destination. A native ZIP from the previous version contains a standalone pocketmark.db suitable for this procedure, with the session/MFA restore semantics of that ZIP.
    PostgreSQL text requires UTF-8 without embedded NUL characters. If the importer reports incompatible text, it identifies the source table, column and SQLite rowid. Review and correct that field on a separate copy, then retry. Binary files can contain any byte.
-4. Prepare a new private application work directory or volume, writable by UID 10001 in the container. Put the original server-secret (or legacy access-token) there or supply the original POCKETMARK_TOKEN. For Compose, copy the original key from your private backup before first startup:
+4. Prepare a new private application work directory or volume, writable by UID 10001 in the container. Supply the original secret value through `POCKETMARK_SERVER_SECRET` (legacy alias `POCKETMARK_TOKEN`) or place the original `server-secret` or `access-token` file in that directory. For file-based Compose installations, copy the original key from your private backup before first startup:
 
    ```sh
    docker compose build pocketmark

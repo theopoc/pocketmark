@@ -26,6 +26,8 @@ services:
       - pocketmark-state:/data
     environment:
       POCKETMARK_DATABASE_URL: postgresql://pocketmark@postgres/pocketmark?sslmode=disable
+      POCKETMARK_SERVER_SECRET: ${POCKETMARK_SERVER_SECRET:-}
+      POCKETMARK_TOKEN: ${POCKETMARK_TOKEN:-}
       PGPASSWORD: ${POCKETMARK_DB_PASSWORD:?Set POCKETMARK_DB_PASSWORD in .env}
       GOMEMLIMIT: 32MiB
     healthcheck:

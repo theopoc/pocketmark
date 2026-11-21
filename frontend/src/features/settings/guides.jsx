@@ -32,8 +32,8 @@ export function SettingsGuides() {
             <li>Stop Pocketmark before restoring.</li>
             <li>
               Unzip the backup and follow its RESTORE instructions. Use an empty
-              PostgreSQL database and keep your server-secret (or legacy
-              access-token / POCKETMARK_TOKEN) separately.
+              PostgreSQL database and restore the original server secret from
+              your configuration or data volume.
             </li>
             <li>Restore file ownership if needed, then restart Pocketmark.</li>
           </ol>

@@ -239,10 +239,12 @@ export function HelpDialog() {
               </ol>
               {"\n            "}
               <p>
-                {"Keep your server-secret (or legacy access-token / "}
-                <code>{"POCKETMARK_TOKEN"}</code>
                 {
-                  ") separately. JSON and HTML exports contain bookmark metadata only."
+                  "Keep a separate copy of your server secret, whether supplied by "
+                }
+                <code>POCKETMARK_SERVER_SECRET</code>
+                {
+                  " or stored in the data volume. JSON and HTML exports contain bookmark metadata only."
                 }
               </p>
               {"\n          "}

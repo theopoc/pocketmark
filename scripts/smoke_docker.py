@@ -38,6 +38,8 @@ def main():
     args = parser.parse_args()
     project = "pocketmark-smoke-" + secrets.token_hex(6)
     os.environ["POCKETMARK_DB_PASSWORD"] = secrets.token_hex(32)
+    # Exercise file generation even if the caller supplies a secret for their own stack.
+    os.environ["POCKETMARK_SERVER_SECRET"] = os.environ["POCKETMARK_TOKEN"] = ""
     config = json.loads(docker("compose", "-f", str(ROOT / "compose.yaml"), "config", "--format", "json"))
     config.pop("name", None)
     service = config["services"]["pocketmark"]

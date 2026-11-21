@@ -19,7 +19,9 @@ Open [http://127.0.0.1:8090](http://127.0.0.1:8090) and create your personal acc
 
 Existing installations keep their credentials and keys. Existing MFA and browser sessions remain valid when the original server secret is preserved. Legacy administrator bearer access is removed; create named API keys and update integrations before upgrading to avoid interruption. If no password was configured before upgrading, follow [account recovery](API.md#existing-installations-and-account-recovery); public account creation cannot claim an existing library.
 
-The default data directory is `./data`, containing temporary working files and the automatically generated private `server-secret` file (mode `0600`). Existing installations continue to use their original `access-token` file or `POCKETMARK_TOKEN` as the internal secret. It protects TOTP and session digests, is never entered in the browser and is not an API credential. Preserve it separately with backups. Restrict access to an empty instance until account and MFA setup are complete. Stop with Ctrl+C. To run without fetching bookmarked pages:
+Pocketmark uses the server secret to protect TOTP and session digests. It first reads `POCKETMARK_SERVER_SECRET`, then the legacy `POCKETMARK_TOKEN` if the preferred variable is empty. With both variables empty, it reads `server-secret` or the legacy `access-token` from the data directory (default `./data`). A new installation generates a private `server-secret` file (mode `0600`) when neither file exists. Keep the active secret separately from the database backup. Use the original value when changing how you supply it. Use named API keys for integrations.
+
+Restrict access to an empty instance until account and MFA setup are complete. Stop with Ctrl+C. To run without fetching bookmarked pages:
 
 ```sh
 ./bin/pocketmark -no-capture
@@ -33,7 +35,7 @@ Set the database password as described in the [quick start](../README.md#quick-s
 docker compose up --build -d
 ```
 
-Open the same local URL. Compose stores the database and server secret in separate named volumes and publishes port 8090 on host loopback only. The image runs as UID/GID `10001:10001`; a custom bind-mounted data directory must be writable by that user.
+Open the same local URL. Compose uses separate named volumes for PostgreSQL and the application work directory and publishes port 8090 on host loopback only. The image runs as UID/GID `10001:10001`; a custom bind-mounted data directory must be writable by that user.
 
 Tagged releases also publish a private multiarchitecture image at `ghcr.io/theopoc/pocketmark:vMAJOR.MINOR.PATCH` for Linux AMD64/ARM64. After authenticating Docker with read access to the package, use that image in place of `build: .` in your Compose configuration. Keep the same volume, port binding and resource/security settings. See [GHCR publication and verification](RELEASE.md#ghcr-images).
 
@@ -96,7 +98,8 @@ Collaboration/public sharing, SSO/OIDC, RSS, AI automation, scheduled recapture 
 | `POCKETMARK_DATABASE_URL` | Required | PostgreSQL connection URI for a dedicated database. |
 | `POCKETMARK_DATA` / `-data` | `./data` | Private work and server secret directory. |
 | `POCKETMARK_LISTEN` / `-listen` | `127.0.0.1:8090` | HTTP bind address; Docker uses `0.0.0.0:8090` internally. |
-| `POCKETMARK_TOKEN` | Generated server secret | Legacy override for the internal TOTP/session secret; at least 24 characters, never an API credential. |
+| `POCKETMARK_SERVER_SECRET` | Unset | Internal TOTP/session secret, at least 24 characters. Compose accepts it from the shell or a private `.env`. Use a cryptographically random value for a new installation. |
+| `POCKETMARK_TOKEN` | Unset | Legacy alias, used when `POCKETMARK_SERVER_SECRET` is empty. |
 | `POCKETMARK_ORIGIN` | Request origin | Public origin such as `https://bookmarks.example.com`, without a path. |
 | `POCKETMARK_TRUSTED_PROXIES` | Empty | Comma-separated trusted proxy CIDRs for HTTP and login client limits; see [HTTPS deployment](API.md#public-https-deployment). |
 | `POCKETMARK_RATE_LIMIT` | `10` | HTTP requests per second per client IP (1–1000); [rate limiting](API.md#http-rate-limiting). |

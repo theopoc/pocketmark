@@ -29,8 +29,11 @@ import (
 	"pocketmark/internal/store"
 )
 
-func loadServerSecret(dir, configured string, allowGenerate bool) (string, error) {
-	token := strings.TrimSpace(configured)
+func loadServerSecret(dir string, allowGenerate bool) (string, error) {
+	token := strings.TrimSpace(os.Getenv("POCKETMARK_SERVER_SECRET"))
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv("POCKETMARK_TOKEN"))
+	}
 	if token == "" {
 		path := filepath.Join(dir, "server-secret")
 		raw, e := os.ReadFile(path)
@@ -170,7 +173,7 @@ func run() (runErr error) {
 	if e != nil {
 		return e
 	}
-	token, e := loadServerSecret(dir, os.Getenv("POCKETMARK_TOKEN"), setup.SetupRequired || *resetMFA)
+	token, e := loadServerSecret(dir, setup.SetupRequired || *resetMFA)
 	if e != nil {
 		return e
 	}
