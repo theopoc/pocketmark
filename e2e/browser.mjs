@@ -661,6 +661,9 @@ try {
   await page.locator('#reader-dialog').waitFor({ state: 'visible' });
   await page.locator('#reader-retry-open').waitFor({ state: 'visible' });
   assert.equal(await page.locator('#reader-section-nav').isVisible(), false);
+  const sizeButton = page.getByRole('button', { name: /text size/i });
+  const sizeSlider = page.getByRole('slider', { name: /text size/i });
+  assert.equal(await sizeButton.isDisabled(), true);
   await page.unroute(readerURL, failReader);
   await page.locator('#reader-retry-open').click();
   await page.locator('#reader-title').filter({ hasText: original }).waitFor();
@@ -676,6 +679,12 @@ try {
   for (const selector of ['#reader-original', '#reader-notebook-toggle', '#reader-page-toggle', '#reader-size-trigger']) {
     assert.ok(await page.locator(selector).evaluate(node => node.getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
   }
+  await sizeButton.click();
+  const sliderBounds = await sizeSlider.boundingBox();
+  assert.ok(sliderBounds && sliderBounds.x >= 0 && sliderBounds.x + sliderBounds.width <= 320 && sliderBounds.height >= 44, 'slider fits the phone viewport with a full-height touch target');
+  const textPanel = await page.locator('#reader-text-panel').boundingBox();
+  await page.mouse.click(textPanel.x + 8, textPanel.y + textPanel.height - 8);
+  assert.equal(await sizeSlider.isVisible(), false, 'an outside click dismisses text size');
   await page.getByRole('button', { name: 'Close reader', exact: true }).click();
   await page.setViewportSize({ width: 1280, height: 720 });
   await card(original).getByRole('button', { name: original, exact: true }).click();
@@ -859,14 +868,26 @@ try {
   assert.equal(await article.getByRole('heading', { name: 'Original saved appearance' }).isVisible(), true);
   assert.equal(await article.locator('pre code').innerText(), '{"format": "HTML"}');
   await page.waitForFunction(() => document.querySelector('#reader-rich-article img')?.naturalWidth > 0);
-  for (const [size, pixels] of [['M', '20px'], ['L', '24px'], ['S', '17px']]) {
-    await chooseOption(page, 'reader-size', size);
-    assert.equal(await article.evaluate(node => getComputedStyle(node).fontSize), pixels);
+  await sizeButton.press('Enter');
+  assert.equal(await sizeSlider.inputValue(), '1');
+  assert.equal(await sizeSlider.evaluate(node => document.activeElement === node), true);
+  for (const [key, pixels] of [['Home', 15], ['ArrowRight', 17], ['ArrowRight', 20], ['ArrowRight', 22], ['ArrowRight', 24], ['ArrowRight', 28], ['End', 32]]) {
+    await page.keyboard.press(key);
+    assert.equal(await article.evaluate(node => getComputedStyle(node).fontSize), `${pixels}px`);
+    assert.equal(await sizeSlider.getAttribute('aria-valuetext'), `${pixels} pixels`);
   }
+  await page.keyboard.press('Escape');
+  assert.equal(await sizeSlider.isVisible(), false);
+  assert.equal(await sizeButton.evaluate(node => document.activeElement === node), true);
   const layout = page.locator('#reader-page-toggle');
   await layout.click();
   await page.locator('#reader-page-breadcrumb [aria-current="page"]').filter({ hasText: revised }).waitFor();
   assert.equal(await page.evaluate(() => document.fullscreenElement), null);
+  await sizeButton.click();
+  await sizeSlider.press('Home');
+  await sizeSlider.press('ArrowRight');
+  await sizeSlider.press('Escape');
+  assert.equal(await page.locator('#reader-page-breadcrumb').isVisible(), true, 'Escape closes text size before leaving full-page reading');
   await article.getByRole('button', {name: /Enlarge image/}).click();
   await page.getByRole('button', {name: 'Close image', exact: true}).press('Escape');
   assert.equal(await page.locator('#reader-page-breadcrumb').isVisible(), true);

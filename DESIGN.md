@@ -336,7 +336,9 @@ Entering Settings settles the workspace 12px from the right over 220ms with a li
 
 <a id="interface-refinement--31-october-2026"></a>
 
-The reader toolbar keeps three icon buttons for HTML, screenshot and PDF. Available copies use the accent. Unavailable formats stay visible and disabled, with accessible status. Each shortcut opens the latest saved copy of its format. The viewer provides earlier copies. The toolbar also offers Open original, Notes, text size, fit to page and Close. The text-size control displays its selected S, M or L value and applies 17, 20 or 24 px respectively.
+The reader toolbar keeps three icon buttons for HTML, screenshot and PDF. Available copies use the accent. Unavailable formats stay visible and disabled, with accessible status. Each shortcut opens the latest saved copy of its format. The viewer provides earlier copies. The toolbar also offers Open original, Notes, text size, fit to page and Close.
+
+The **Aa** button opens a compact popover with small and large A markers above a graduated track. A round, indigo-outlined thumb marks the selected size, also shown in pixels. The seven stops are 15, 17, 20, 22, 24, 28 and 32 px. The reader starts at 17 px and applies each adjustment immediately to both the saved article and its text view. The slider supports touch, pointer and keyboard input. Escape dismisses the popover and returns focus to **Aa**.
 
 The bookmark editor keeps its heading and save/cancel footer visible around a scrolling form body. URL, title and organization lead; description and notes are disclosed together and open automatically for existing content or drafts. Secondary controls use semantic surface, ink, border and hover tokens in both themes.
 
