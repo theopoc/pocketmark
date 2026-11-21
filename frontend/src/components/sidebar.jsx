@@ -64,7 +64,7 @@ export function Sidebar() {
         {"\n      "}
         <div
           id="workspace-popover"
-          className="workspace-popover"
+          className="app-popover workspace-popover"
           popover=""
           aria-label="Workspace actions"
         >

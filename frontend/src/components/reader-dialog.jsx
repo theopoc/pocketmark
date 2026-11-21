@@ -1,6 +1,7 @@
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { Icon } from "./icon";
+import { readerTextSizes } from "../features/reader-text-size";
 import "../features/reader.css";
 import "../features/reader-article.css";
 
@@ -58,11 +59,43 @@ export function ReaderDialog() {
             <Icon name="external" />
           </a>
           <div className="reader-size-control">
-            <select id="reader-size" aria-label="Text size">
-              <option value="17">S</option>
-              <option value="20">M</option>
-              <option value="24">L</option>
-            </select>
+            <Button
+              id="reader-size-trigger"
+              type="button"
+              variant="outline"
+              popoverTarget="reader-size-panel"
+              aria-controls="reader-size-panel"
+              aria-expanded="false"
+              aria-label="Text size"
+              title="Text size"
+              disabled
+            >
+              Aa
+            </Button>
+            <div id="reader-size-panel" className="app-popover" popover="auto">
+              <div className="reader-size-labels" aria-hidden="true">
+                <span>A</span>
+                <span id="reader-size-value"></span>
+                <span>A</span>
+              </div>
+              <div className="reader-size-scale">
+                <div className="reader-size-ticks" aria-hidden="true">
+                  {readerTextSizes.map((size) => (
+                    <span key={size} />
+                  ))}
+                </div>
+                <input
+                  id="reader-size"
+                  aria-label="Text size"
+                  type="range"
+                  min="0"
+                  max={readerTextSizes.length - 1}
+                  step="1"
+                  defaultValue={readerTextSizes.indexOf(17)}
+                  autoFocus
+                />
+              </div>
+            </div>
           </div>
           <Button
             id="reader-notebook-toggle"

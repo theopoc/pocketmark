@@ -64,7 +64,8 @@ kbd { font-size: 11px; line-height: 1.4; font-family: inherit; display: inline-f
 .workspace-subtitle { display: block; font-size: 11px; color: var(--muted); font-weight: 400; margin-top: 2px; }
 .workspace-chevron .icon { width: 14px; height: 14px; color: var(--muted); transform: rotate(90deg); }
 .workspace-label[aria-expanded="true"] .workspace-chevron .icon { transform: rotate(-90deg); }
-.workspace-popover { position: fixed; inset: auto; margin: 0; width: 224px; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); box-shadow: 0 8px 28px #0003; }
+.app-popover { position: fixed; inset: auto; margin: 0; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); box-shadow: 0 8px 28px #0003; }
+.workspace-popover { width: 224px; padding: 6px; }
 .workspace-popover .nav-item { min-height: 44px; margin: 0; font-size: 14px; }
 .workspace-popover hr { margin: 6px 4px; border: 0; border-top: 1px solid var(--line); }
 .workspace-popover .nav-item.workspace-sign-out, .workspace-popover .nav-item.workspace-sign-out .icon { color: var(--danger); }
