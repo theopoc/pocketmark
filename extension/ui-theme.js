@@ -16,6 +16,7 @@
     button.addEventListener("click", () => {
       const value = themeSwitch.requested === "dark" ? "light" : "dark";
       themeSwitch.set(value);
+      void chrome.runtime.sendMessage({ type: "theme", theme: value }).catch(() => {});
       try { localStorage.setItem("pocketmark-extension-theme", value); } catch { /* Keep session choice. */ }
     });
     apply();

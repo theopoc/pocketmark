@@ -271,6 +271,11 @@ and `accent` foreground (`focus` in dark mode), with `control-hover` on hover
 and a visible `focus` outline. Preserve the existing durations, focus pause,
 Undo and HTML retry behavior.
 
+The Chrome extension uses a check in its success color for a confirmed save
+and a warning icon for a failed or partial save. Its toast follows the extension
+theme, including when displayed over a website. In Chrome’s toolbar, a white
+check on the fixed success-green badge marks a saved URL beside the app mark.
+
 ### Cards / Containers
 Grid bookmark cards use the panel radius, white background and a line border; selection changes both fill and border without a checkbox. A softly tinted header groups the domain and the favorite star, with the full saved URL available on hover. The capture state and remaining actions stay in the footer. List mode removes individual card rounding, separates rows with dividers and retains the same selection, tags, capture labels and actions. Do not add permanent card shadows.
 

@@ -4,6 +4,7 @@
   "version": "2.0.1",
   "description": "Save and edit Pocketmark bookmarks, with optional HTML, screenshots and PDF captures.",
   "permissions": [
+    "tabs",
     "activeTab",
     "scripting",
     "storage",
@@ -13,7 +14,19 @@
     "http://*/*",
     "https://*/*"
   ],
+  "icons": {
+    "16": "icon-16.png",
+    "32": "icon-32.png",
+    "48": "icon-48.png",
+    "128": "icon-128.png"
+  },
   "action": {
+    "default_icon": {
+      "16": "icon-16.png",
+      "24": "icon-24.png",
+      "32": "icon-32.png",
+      "48": "icon-48.png"
+    },
     "default_popup": "popup.html",
     "default_title": "Save to Pocketmark"
   },

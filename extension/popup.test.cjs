@@ -1,14 +1,19 @@
 "use strict";
 const { test } = require("node:test"), assert = require("node:assert/strict"), vm = require("node:vm"), fs = require("node:fs"), path = require("node:path");
-async function setup({ stored, permissionCloses = false, granted = true, hostGranted = true, authenticated = true, existing = false, job = null, collectionResult, tagsFail = false, tagsResult } = {}) {
+async function setup({ stored, permissionCloses = false, granted = true, hostGranted = true, authenticated = true, existing = false, job = null, collectionResult, tagsFail = false, tagsResult, saveError, loadError, toastAllowed = true } = {}) {
   const elements = new Map(), calls = [], writes = [], permissions = [], data = stored || { server: "https://library.example", token: "key" };
   let closeCount = 0;
+  const longTimers = [], popupToasts = [], pageToasts = [];
+  const tab = { id: 3, url: "https://example.org", title: "Page title", active: true };
   function node(id = "") { return { id, value: "", hidden: true, children: [], listeners: {}, classList: { toggle() {} }, setCustomValidity() {}, reportValidity() {}, addEventListener(type, fn) { this.listeners[type] = fn; }, setAttribute() {}, replaceChildren() { this.children = []; }, append(child) { this.children.push(child); }, focus() {} }; }
   const element = (id) => { if (!elements.has(id)) elements.set(id, node(id)); return elements.get(id); };
-  const context = vm.createContext({ document: { getElementById: element, createElement: () => node(), createElementNS: () => node() }, URL, TextEncoder, setTimeout, clearTimeout, setInterval: () => 1, clearInterval() {}, window: { addEventListener() {}, close() { closeCount++; } },
+  const context = vm.createContext({ document: { body: {}, documentElement: { dataset: { theme: "light" } }, getElementById: element, createElement: () => node(), createElementNS: () => node() }, URL, TextEncoder,
+    setTimeout(fn, ms) { if (ms >= 1000) longTimers.push(fn); else return setTimeout(fn, ms); },
+    clearTimeout, setInterval: () => 1, clearInterval() {}, window: { addEventListener() {}, close() { closeCount++; } },
     chrome: {
       storage: { local: { setAccessLevel: async () => {}, get: async () => data, set: async (value) => { writes.push(value); Object.assign(data, value); } } },
-      tabs: { query: async () => [{ id: 3, url: "https://example.org", title: "Page title" }] },
+      tabs: { query: async () => [tab], get: async () => tab },
+      scripting: { executeScript: async ({ args }) => { if (!toastAllowed) throw Error("Restricted page"); pageToasts.push(args); return [{ result: true }]; } },
       permissions: { contains: async () => hostGranted, request: async (value) => { permissions.push(value); return permissionCloses ? new Promise(() => {}) : granted; } },
       runtime: { sendMessage: async (message) => {
         calls.push(message);
@@ -18,18 +23,23 @@ async function setup({ stored, permissionCloses = false, granted = true, hostGra
           Object.assign(data, message.connection, { pendingConnection: null }); value = { connected: true };
         }
         if (message.type === "load") value = { server: data.server, collections: [{ id: 7, name: "Reading", parentId: null }], tags: [{ name: "docs" }], link: existing ? { id: 17, title: "Existing title", tags: ["existing"], collectionId: 7 } : null };
+        if (message.type === "load" && loadError) return { ok: false, error: loadError };
         if (message.type === "collection") value = await collectionResult;
         if (message.type === "tags") { if (tagsFail) return { ok: false, error: "Unavailable" }; value = tagsResult ? await tagsResult : { tags: [] }; }
-        if (message.type === "save") value = job = { id: "task", fields: message.fields, status: "running", message: "Starting", items: message.modes.map((mode) => ({ mode, status: "pending" })) };
+        if (message.type === "save") {
+          if (saveError) return { ok: false, error: saveError };
+          value = job = { id: "task", fields: message.fields, tabId: message.tabId, status: "running", message: "Starting", items: message.modes.map((mode) => ({ mode, status: "pending" })) };
+        }
         if (message.type === "retry") value = job = { ...job, status: "running", message: "Retrying" };
         return { ok: true, value };
       } },
     },
   });
-  for (const file of ["name-limit.js", "common.js", "popup.js"]) vm.runInContext(fs.readFileSync(path.join(__dirname, file), "utf8"), context);
+  for (const file of ["name-limit.js", "common.js", "save-toast.js", "popup.js"]) vm.runInContext(fs.readFileSync(path.join(__dirname, file), "utf8"), context);
+  context.PocketmarkSaveToast.render = (...args) => { popupToasts.push(args); return true; };
   await new Promise(setImmediate);
   const submit = async (id) => element(id).listeners.submit({ preventDefault() {} });
-  return { element, calls, writes, permissions, data, submit, context, get closeCount() { return closeCount; }, setJob(value) { job = value; } };
+  return { element, calls, writes, permissions, data, submit, context, popupToasts, pageToasts, finishTimers() { longTimers.splice(0).forEach(fn => fn()); }, get closeCount() { return closeCount; }, setJob(value) { job = value; } };
 }
 test("adding a tag invalidates an outstanding suggestions request", async () => {
   let resolve; const pending = new Promise(done => { resolve = done; });
@@ -83,10 +93,10 @@ for (const modes of [[], ["pdf", "screenshot"]]) test(`popup closes only after s
   for (const mode of modes) env.element("capture-" + mode).checked = true;
   await env.submit("save-form");
   assert.equal(env.closeCount, 0);
-  const job = { id: "task", fields: { url: "https://example.org", title: "Page title" }, status: "running", message: "Uploading", linkId: 17, items: modes.map((mode) => ({ mode, status: "uploading" })) };
+  const job = { id: "task", tabId: 3, fields: { url: "https://example.org", title: "Page title" }, status: "running", message: "Uploading", linkId: 17, items: modes.map((mode) => ({ mode, status: "uploading" })) };
   env.setJob(job); await env.context.refresh();
   assert.equal(env.closeCount, 0);
-  env.setJob({ ...job, status: "done", items: modes.map((mode) => ({ mode, status: "saved" })) });
+  env.setJob({ ...job, status: "done", toastShown: true, items: modes.map((mode) => ({ mode, status: "saved" })) });
   await env.context.refresh();
   assert.equal(env.closeCount, 1);
   await env.context.refresh();
@@ -97,17 +107,88 @@ test("reopening a completed save keeps the popup open for editing", async () => 
   await env.context.refresh();
   assert.equal(env.closeCount, 0); assert.equal(env.element("save-form").hidden, false);
 });
-test("partial capture failure keeps recovery visible and successful retry closes the popup", async () => {
+test("partial failure closes after its page toast; recovery and retry are available on reopen", async () => {
   const env = await setup(); env.element("capture-pdf").checked = true;
   await env.submit("save-form");
-  const job = { id: "task", fields: { url: "https://example.org", title: "Page title" }, status: "paused", message: "Capture failed", linkId: 17, items: [{ mode: "pdf", status: "failed" }] };
+  const job = { id: "task", tabId: 3, toastShown: true, fields: { url: "https://example.org", title: "Page title" }, status: "paused", message: "Capture failed", linkId: 17, items: [{ mode: "pdf", status: "failed" }] };
   env.setJob(job); await env.context.refresh();
-  assert.equal(env.closeCount, 0); assert.equal(env.element("task-actions").hidden, false);
-  await env.element("retry").listeners.click();
-  assert.equal(env.closeCount, 0);
-  env.setJob({ ...job, status: "done", items: [{ mode: "pdf", status: "saved" }] });
-  await env.context.refresh();
   assert.equal(env.closeCount, 1);
+  const reopened = await setup({ job });
+  assert.equal(reopened.element("task-actions").hidden, false); assert.equal(reopened.closeCount, 0);
+  await reopened.element("retry").listeners.click();
+  assert.equal(reopened.closeCount, 0);
+  reopened.setJob({ ...job, status: "done", items: [{ mode: "pdf", status: "saved" }] });
+  await reopened.context.refresh();
+  assert.equal(reopened.closeCount, 1);
+});
+test("when Chrome denies the page toast the popup shows the result before closing", async () => {
+  const env = await setup(); await env.submit("save-form");
+  env.setJob({ id: "task", tabId: 3, fields: { url: "https://example.org" }, status: "paused", items: [], toastShown: false });
+  await env.context.refresh(); await env.context.refresh();
+  assert.equal(env.closeCount, 0); assert.equal(env.popupToasts.length, 1);
+  assert.match(env.popupToasts[0][1].message, /couldn’t confirm/i);
+  assert.equal(env.popupToasts[0][2], "light");
+  env.finishTimers(); assert.equal(env.closeCount, 1);
+});
+test("delayed paused snapshots from before a retry acknowledgement cannot close the new attempt", async () => {
+  const job = { id: "task", tabId: 3, toastShown: true, status: "paused", fields: { url: "https://example.org" }, items: [] };
+  const env = await setup({ job });
+  const runtime = env.context.chrome.runtime, send = runtime.sendMessage;
+  let acknowledge;
+  const retryGate = new Promise(resolve => { acknowledge = resolve; });
+  const releaseReads = [];
+  runtime.sendMessage = async message => {
+    if (message.type === "retry") await retryGate;
+    const response = await send(message);
+    if (message.type === "state") await new Promise(resolve => releaseReads.push(resolve));
+    return response;
+  };
+  const before = env.context.refresh();
+  const retry = env.element("retry").listeners.click();
+  const during = env.context.refresh();
+  await new Promise(setImmediate);
+  acknowledge(); await retry;
+  for (const resolve of releaseReads) resolve();
+  await Promise.all([before, during]);
+  assert.equal(env.closeCount, 0);
+  assert.equal(env.element("background-note").hidden, false);
+  runtime.sendMessage = send;
+  env.setJob({ ...job, status: "done" }); await env.context.refresh();
+  assert.equal(env.closeCount, 1);
+});
+test("concurrent polls keep the newest applied response", async () => {
+  const env = await setup();
+  const runtime = env.context.chrome.runtime, send = runtime.sendMessage;
+  let release;
+  runtime.sendMessage = async message => {
+    const response = await send(message);
+    await new Promise(resolve => { release = resolve; });
+    return response;
+  };
+  const earlier = env.context.refresh();
+  await new Promise(setImmediate);
+  runtime.sendMessage = send;
+  env.setJob({ id: "new", status: "paused", fields: { url: "https://example.org" }, items: [] });
+  await env.context.refresh();
+  release(); await earlier;
+  assert.equal(env.element("task-actions").hidden, false);
+});
+for (const status of ["paused", "running"]) test(`reopening an offline library preserves the ${status} task view`, async () => {
+  const job = { id: "task", tabId: 3, status, fields: { url: "https://example.org" }, items: [] };
+  const env = await setup({ job, loadError: "Library unavailable" });
+  assert.equal(env.element("task").hidden, false);
+  assert.equal(env.element("settings").hidden, true);
+  assert.equal(env.element("task-actions").hidden, status !== "paused");
+  assert.equal(env.element("background-note").hidden, status !== "running");
+  assert.equal(env.element("status").textContent, "Library unavailable");
+});
+test("save rejected before creating a job shows failure then closes without exposing the server error", async () => {
+  const env = await setup({ saveError: "Private server detail" });
+  await env.submit("save-form");
+  assert.equal(env.closeCount, 1); assert.equal(env.pageToasts.length, 1);
+  const [url, feedback, theme] = env.pageToasts[0];
+  assert.equal(url, "https://example.org"); assert.equal(theme, "light");
+  assert.equal(feedback.error, true); assert.doesNotMatch(feedback.message, /Private/);
 });
 test("invalid bookmark stays open and shows its error", async () => {
   const env = await setup(); env.element("title").value = "x".repeat(1025);

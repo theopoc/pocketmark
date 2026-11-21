@@ -29,7 +29,7 @@ def fixture(root, wrong_machine=False, extra_member=False, missing_debugger=Fals
         (root / f"pocketmark-linux-{arch}.buildinfo.txt").write_text(f"vcs.revision={COMMIT}\nvcs.modified=false\n")
     with zipfile.ZipFile(root / "pocketmark-extension.zip", "w") as archive:
         for name in VERIFY.EXTENSION_FILES:
-            content = json.dumps({"permissions": ["activeTab", "scripting", "storage"] + ([] if missing_debugger else ["debugger"]), "background": {"service_worker": "background.js"}}) if name == "manifest.json" else "synthetic"
+            content = json.dumps({"permissions": ["tabs", "activeTab", "scripting", "storage"] + ([] if missing_debugger else ["debugger"]), "background": {"service_worker": "background.js"}}) if name == "manifest.json" else "synthetic"
             archive.writestr(name, content)
     (root / "SHA256SUMS").write_text("".join(f"{VERIFY.digest(root / name)}  {name}\n" for name in sorted(VERIFY.ASSETS)))
 

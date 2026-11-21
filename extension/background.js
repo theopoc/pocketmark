@@ -1,9 +1,28 @@
 "use strict";
-importScripts("common.js", "job-store.js", "capture.js");
-const { formats, origin, request, json, validate } = Pocketmark;
+importScripts("common.js", "job-store.js", "capture.js", "save-toast.js");
+const { formats, origin, request, json, validate, validateURL } = Pocketmark;
 const blobKeys = Object.keys(formats);
 let busy = false;
 const initialized = chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
+const badgeChecks = new Map();
+const toastPorts = new Set();
+let toastTheme;
+
+// Each visible toast subscribes only for its short lifetime. The injected
+// script receives the palette name and has no access to connection storage.
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== "save-toast-theme" || port.sender?.id !== chrome.runtime.id) return;
+  toastPorts.add(port);
+  port.onDisconnect.addListener(() => toastPorts.delete(port));
+  if (toastTheme) port.postMessage(toastTheme);
+});
+
+function updateToastTheme(value) {
+  toastTheme = value === "light" ? "light" : "dark";
+  for (const port of toastPorts) {
+    try { port.postMessage(toastTheme); } catch { toastPorts.delete(port); }
+  }
+}
 
 async function connection(server) {
   const value = await chrome.storage.local.get(["server", "token"]);
@@ -13,6 +32,65 @@ async function connection(server) {
   if (!await chrome.permissions.contains({ origins: [value.server + "/*"] })) throw new Error("Server access was revoked. Reconnect in Connection settings.");
   return value;
 }
+
+async function findBookmark(conn, url) {
+  const { links } = await request(conn, `/api/links?url=${encodeURIComponent(url)}`);
+  return links.find((link) => link.url === url) || null;
+}
+
+function setTabBadge(tabId, saved) {
+  const changes = [
+    chrome.action.setBadgeText({ tabId, text: saved ? "✓" : "" }),
+    chrome.action.setTitle({ tabId, title: saved ? "Saved to Pocketmark" : "Save to Pocketmark" }),
+  ];
+  if (saved) changes.push(chrome.action.setBadgeBackgroundColor({ tabId, color: "#23714a" }));
+  return Promise.all(changes);
+}
+
+async function refreshBadge(tabId, savedJob) {
+  // Only the latest check may paint this tab. Keep no browsing history.
+  const check = Symbol();
+  badgeChecks.set(tabId, check);
+  try {
+    await setTabBadge(tabId, false);
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab.active || tab.incognito) return;
+    validateURL(tab.url);
+    await initialized;
+    const conn = await connection();
+    if (badgeChecks.get(tabId) !== check) return;
+    const saved = (savedJob?.server === conn.server && savedJob.fields.url === tab.url) ||
+      await findBookmark(conn, tab.url);
+    if (saved && badgeChecks.get(tabId) === check) await setTabBadge(tabId, true);
+  } catch {
+    // A closed/private/unsupported tab or an unavailable server has no check.
+  } finally {
+    if (badgeChecks.get(tabId) === check) badgeChecks.delete(tabId);
+  }
+}
+
+async function refreshActiveBadges(windowId) {
+  const query = { active: true };
+  if (Number.isInteger(windowId)) query.windowId = windowId;
+  else badgeChecks.clear();
+  // A window can close between the focus event and the query.
+  const tabs = await chrome.tabs.query(query).catch(() => []);
+  await Promise.all(tabs.map((tab) => refreshBadge(tab.id)));
+}
+
+chrome.tabs.onActivated.addListener(({ tabId }) => refreshBadge(tabId));
+chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
+  if (tab.active && (change.url || change.status === "loading")) return refreshBadge(tabId);
+});
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  if (windowId !== chrome.windows.WINDOW_ID_NONE) return refreshActiveBadges(windowId);
+});
+chrome.runtime.onStartup.addListener(refreshActiveBadges);
+chrome.runtime.onInstalled.addListener(refreshActiveBadges);
+chrome.permissions.onRemoved.addListener(refreshActiveBadges);
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && (changes.server || changes.token)) return refreshActiveBadges();
+});
 
 async function state() {
   const job = await jobStore.read("job");
@@ -28,18 +106,17 @@ async function state() {
 }
 
 async function saveBookmark(job, conn) {
-  const lookup = async () => (await request(conn, `/api/links?url=${encodeURIComponent(job.fields.url)}`)).links.find((link) => link.url === job.fields.url);
   const update = (link) => request(conn, `/api/links/${link.id}`, json("PUT", {
     url: link.url, title: job.fields.title, collectionId: job.fields.collectionId, tags: job.fields.tags,
     description: link.description, notes: link.notes, favorite: link.favorite, read: link.read,
   }));
-  let link = await lookup();
+  let link = await findBookmark(conn, job.fields.url);
   if (link) return update(link);
   try { return await request(conn, "/api/links", json("POST", job.fields)); }
   catch (error) {
     // The website or another browser may have created this URL in the meantime,
     // or the create response may have been lost. Reconcile before retrying.
-    link = await lookup();
+    link = await findBookmark(conn, job.fields.url);
     if (link) return update(link);
     throw error;
   }
@@ -90,6 +167,7 @@ async function run(job) {
       const link = await saveBookmark(job, conn);
       job.linkId = link.id;
       await jobStore.write({ job });
+      void refreshBadge(job.tabId, job);
     }
     for (const item of job.items) {
       if (item.status === "saved") continue;
@@ -119,23 +197,25 @@ async function run(job) {
   } finally {
     if (target) { try { await chrome.debugger.detach(target); } catch {} }
     try {
+      job.toastShown = await PocketmarkSaveToast.showInTab(job.tabId, job.fields.url, PocketmarkSaveToast.outcome(job), toastTheme);
       await jobStore.write({ job }, job.status === "done" ? blobKeys : []);
-      await chrome.action.setBadgeText({ text: job.status === "done" ? "" : "!" });
     } finally { busy = false; }
   }
 }
 
 async function dispatch(message) {
   await initialized;
+  if (message.type === "theme") return updateToastTheme(message.theme);
   if (message.type === "state") return state();
   if (message.type === "tags") return request(await connection(), `/api/tags/browse?q=${encodeURIComponent(String(message.query || "").slice(0, 512))}`);
   if (message.type === "load") {
     const conn = await connection(), tab = await chrome.tabs.get(message.tabId);
-    const [collections, tags, result] = await Promise.all([
+    validateURL(tab.url);
+    const [collections, tags, link] = await Promise.all([
       request(conn, "/api/collections"), request(conn, "/api/tags"),
-      request(conn, `/api/links?url=${encodeURIComponent(tab.url)}`),
+      findBookmark(conn, tab.url),
     ]);
-    return { collections, tags, link: result.links.find((link) => link.url === tab.url) || null, server: conn.server };
+    return { collections, tags, link, server: conn.server };
   }
   // All mutations acquire this lock before the first asynchronous read. Multiple
   // popups cannot race to overwrite the one durable job or its captured files.
@@ -161,7 +241,6 @@ async function dispatch(message) {
     }
     if (message.type === "discard") {
       await jobStore.write({}, ["job", ...blobKeys]);
-      await chrome.action.setBadgeText({ text: "" });
       return null;
     }
     if (message.type === "retry") {
@@ -174,6 +253,8 @@ async function dispatch(message) {
         if (tab.url === job.fields.url) job.tabId = tab.id;
       }
       job.status = "running"; job.message = "Retrying…";
+      delete job.toastShown;
+      updateToastTheme(message.theme);
       await jobStore.write({ job });
       launched = true;
       void run(job).catch(console.error);
@@ -186,6 +267,7 @@ async function dispatch(message) {
     if (tab.url !== message.fields.url) throw new Error("The source page changed. Reopen the extension.");
     if (!Array.isArray(message.modes) || message.modes.length > 4 || message.modes.some((mode) => !Object.hasOwn(formats, mode))) throw new Error("Select valid capture formats.");
     const id = crypto.randomUUID();
+    updateToastTheme(message.theme);
     const next = { id, server: conn.server, tabId: tab.id, fields: message.fields, status: "running", message: "Starting…", items: [...new Set(message.modes)].map((mode) => ({ mode, status: "pending", name: `${mode}-${id}.${formats[mode][1]}` })) };
     await jobStore.write({ job: next }, blobKeys);
     launched = true;

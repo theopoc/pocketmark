@@ -46,7 +46,13 @@ archives:
       - {src: extension/common.js, dst: common.js}
       - {src: extension/capture.js, dst: capture.js}
       - {src: extension/job-store.js, dst: job-store.js}
+      - {src: extension/save-toast.js, dst: save-toast.js}
       - {src: extension/icon.svg, dst: icon.svg}
+      - {src: extension/icon-16.png, dst: icon-16.png}
+      - {src: extension/icon-24.png, dst: icon-24.png}
+      - {src: extension/icon-32.png, dst: icon-32.png}
+      - {src: extension/icon-48.png, dst: icon-48.png}
+      - {src: extension/icon-128.png, dst: icon-128.png}
 
 checksum:
   name_template: SHA256SUMS
