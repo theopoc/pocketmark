@@ -49,7 +49,6 @@ async function assertKeyRouteProtected(page) {
 }
 
 async function checkConcurrentKeyChanges(page, peer, url, key, password) {
-  await page.getByRole('searchbox', {name:'Find a key by name or role'}).fill('');
   const request = peer.request, endpoint = url('/api/tokens/' + key.id);
   assert.equal((await request.post(url('/api/reauth'), {data:{password}})).status(), 200);
   assert.equal((await request.patch(endpoint, {data:{name:'Peer renamed key'}})).status(), 200);
@@ -224,10 +223,12 @@ export async function securityJourney({ browser, page, base, username, password,
     assert.equal(await access.getAttribute('aria-checked'), 'true');
     assert.equal(await keyRow.getByRole('cell', { name: 'Editor', exact: true }).count(), 1);
     const query = page.getByRole('searchbox', {name:'Find a key by name or role'});
+    await query.fill('editor');
+    await keySummary.waitFor();
     await query.fill('not a key');
     await page.getByRole('heading', {name:'No matching keys'}).waitFor();
     await page.getByRole('button', {name:'Clear filters'}).click();
-    await query.fill('editor');
+    assert.equal(await query.inputValue(), '');
     await keySummary.press('Enter');
     await inspector.getByRole('heading', { name: 'Synthetic extension' }).waitFor();
     assert.equal(await revoke.isDisabled(), true);
