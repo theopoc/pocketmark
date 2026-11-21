@@ -3,6 +3,7 @@ import { Textarea } from "./ui/textarea";
 import { Icon } from "./icon";
 import "../features/reader.css";
 import "../features/reader-article.css";
+import "../features/reader-state.css";
 
 function SavedFormat({ format, name, icon }) {
   const id = `reader-format-${format}`;
@@ -47,7 +48,7 @@ export function ReaderDialog() {
           </div>
           <a
             id="reader-original"
-            className="button primary"
+            className="button subtle"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Open original"
@@ -72,6 +73,7 @@ export function ReaderDialog() {
             aria-controls="reader-notebook"
             disabled
           >
+            <Icon name="book" />
             Notes
           </Button>
           <Button
@@ -114,28 +116,50 @@ export function ReaderDialog() {
           tabIndex="0"
         >
           <header className="reader-article-header">
-            <div className="reader-publication">
-              <span id="reader-source-mark" aria-hidden="true"></span>
-              <span id="reader-source"></span>
-              <span id="reader-read-time"></span>
-            </div>
             <h2 id="reader-title"></h2>
-            <p id="reader-status" className="muted small" role="status"></p>
+            <div className="reader-publication">
+              <span id="reader-source"></span>
+              <span className="reader-duration">
+                <Icon name="clock" />
+                <span id="reader-read-time"></span>
+              </span>
+            </div>
           </header>
-          <Button id="reader-retry-open" type="button" variant="default" hidden>
-            Try opening again
-          </Button>
-          <Button
-            id="reader-retry-capture"
-            type="button"
-            variant="outline"
-            hidden
-          >
-            Retry capture
-          </Button>
-          <Button id="reader-recheck" type="button" variant="ghost" hidden>
-            Check capture status
-          </Button>
+          <div id="reader-state" hidden>
+            <span className="reader-state-symbol" aria-hidden="true">
+              <Icon name="warning" className="icon state-failed" />
+              <Icon name="clock" className="icon state-pending" />
+              <Icon name="book" className="icon state-empty" />
+            </span>
+            <div
+              className="reader-state-message"
+              role="status"
+              aria-atomic="true"
+            >
+              <strong id="reader-status"></strong>
+              <p id="reader-status-detail"></p>
+            </div>
+            <Button
+              id="reader-retry-open"
+              type="button"
+              variant="outline"
+              hidden
+            >
+              Try opening again
+            </Button>
+            <Button
+              id="reader-retry-capture"
+              type="button"
+              variant="outline"
+              hidden
+            >
+              <Icon name="refresh" />
+              Retry capture
+            </Button>
+            <Button id="reader-recheck" type="button" variant="outline" hidden>
+              Check status
+            </Button>
+          </div>
           <Button id="reader-article-mode" type="button" variant="ghost" hidden>
             Return to article
           </Button>

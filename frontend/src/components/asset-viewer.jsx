@@ -28,7 +28,6 @@ export function AssetViewer() {
         </a>
       </div>
       {"\n    "}
-      <p id="asset-viewer-hint" className="small muted"></p>
       <p id="asset-viewer-status" className="small" role="status"></p>
       <Button
         id="asset-viewer-retry"
