@@ -340,6 +340,8 @@
   margin-top: 0;
   color: var(--ink);
   line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 #reader-dialog .reader-text-panel > button {
   display: block;

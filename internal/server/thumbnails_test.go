@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"pocketmark/internal/capture"
 	"testing"
 
 	"pocketmark/internal/store"
@@ -21,7 +22,7 @@ func TestThumbnailAuthenticationAndPrivateCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	png, _ := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6XcAAAAASUVORK5CYII=")
-	if err = a.Store.Finish(ctx, l, "title", "", "", nil, nil, png); err != nil {
+	if err = a.Store.Finish(ctx, l, capture.Result{Title: "title", Thumbnail: png}, nil); err != nil {
 		t.Fatal(err)
 	}
 	path := fmt.Sprintf("/api/links/%d/thumbnail", l.ID)

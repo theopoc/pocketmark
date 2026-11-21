@@ -46,6 +46,15 @@ On the first upgrade from schema 1, challenges already issued by the older binar
 
 Schema 3 adds an optional sign-in IP address to browser sessions. Existing sessions remain valid with an unknown address. A schema 2 binary cannot restart against schema 3. Finish upgrading all serving replicas to enforce the disable-before-revoke rule on every API key request.
 
+Schema 5 adds an optional illustrated reading copy to automatic captures.
+Original HTML, notes and existing attachments stay available. Recapturing a
+bookmark populates its reading copy. An older binary cannot reopen schema 5.
+Schema 5 workers write format 2 library backups when archives are included.
+During a rolling upgrade an already-running schema 4 worker can still claim a
+scheduled backup and write format 1 with the original HTML. Once all schema 4
+workers have stopped, take a new backup to include both copies. The current
+restore command also accepts format 1.
+
 ### Route backups during a Kubernetes rollout
 
 Install the [backup Service, Ingress paths and NetworkPolicy](../deploy/kubernetes/backup-routing.yaml) **before** starting pods that migrate the schema. The exact path `/api/backup` and prefix `/api/backups` select only ready pods bearing the target revision label. The ordinary `pocketmark` ClusterIP Service continues to select all application pods for other requests.

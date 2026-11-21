@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"pocketmark/internal/capture"
 	"pocketmark/internal/pgtest"
 	"strings"
 	"sync"
@@ -40,7 +41,7 @@ func TestOpenInitializesPersistenceAndPreservesAcrossRestart(t *testing.T) {
 	if err != nil || claimed.ID != id {
 		t.Fatalf("capture: %+v (%v)", claimed, err)
 	}
-	if err := s.Finish(ctx, claimed, "Captured title", "Description", "Captured text", []byte("<p>Automatic capture</p>"), nil); err != nil {
+	if err := s.Finish(ctx, claimed, capture.Result{Title: "Captured title", Description: "Description", Content: "Captured text", HTML: []byte("<p>Automatic capture</p>")}, nil); err != nil {
 		t.Fatal(err)
 	}
 	asset, err := s.SaveAsset(ctx, Asset{LinkID: id, Name: "page.html", MediaType: "text/html", Kind: "html"}, strings.NewReader("<p>Uploaded page</p>"))
@@ -147,6 +148,93 @@ func TestOpenRollsBackFailedSchemaInitialization(t *testing.T) {
 	state, err := s.SetupStatus(context.Background())
 	if err != nil || !state.SetupRequired {
 		t.Fatalf("fresh setup after retry: %+v (%v)", state, err)
+	}
+}
+
+func TestReaderArchiveUpgradeAndRecaptureAcrossRestart(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	uri := pgtest.URL(t, dir)
+	db, err := sql.Open("pgx", uri)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(initialSchema + challengeSchema + sessionAddressSchema + backupSchema + `
+CREATE TABLE pocketmark_migrations(version integer PRIMARY KEY);
+INSERT INTO pocketmark_migrations VALUES (1),(2),(3),(4);
+INSERT INTO links(url,title,created_at,updated_at,status,archive)
+VALUES('https://example.test/old','Original',utc_timestamp_text(),utc_timestamp_text(),'ready',convert_to('original','UTF8'));`)
+	db.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(uri, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, err := s.ArticleArchive(ctx, 1); err != nil || string(b) != "original" {
+		t.Fatalf("legacy reading copy: %q %v", b, err)
+	}
+	if err = s.Queue(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+	job, err := s.Next(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Finish(ctx, job, capture.Result{HTML: []byte("original"), ReaderHTML: []byte("illustrated")}, nil); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	s, err = Open(uri, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if b, err := s.Archive(ctx, 1); err != nil || string(b) != "original" {
+		t.Fatalf("original after restart: %q %v", b, err)
+	}
+	if b, err := s.ArticleArchive(ctx, 1); err != nil || string(b) != "illustrated" {
+		t.Fatalf("reading copy after restart: %q %v", b, err)
+	}
+	if err = s.Queue(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+	job, err = s.Next(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Finish(ctx, job, capture.Result{HTML: []byte("new image URL"), ReaderHTML: []byte("illustrated")}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := s.ArticleArchive(ctx, 1); err != nil || string(b) != "illustrated" {
+		t.Fatalf("lost identical image on recapture: %q %v", b, err)
+	}
+	// SQL issued by already-running schema 4 replicas during a rolling upgrade.
+	if _, err = s.db.Exec("UPDATE links SET archive=$1 WHERE id=1", []byte("recaptured")); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := s.ArticleArchive(ctx, 1); err != nil || string(b) != "recaptured" {
+		t.Fatalf("stale reading copy after legacy capture: %q %v", b, err)
+	}
+	if _, err = s.db.Exec("UPDATE links SET reader_archive=$1 WHERE id=1", []byte("updated reading copy")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.db.Exec("UPDATE links SET archive=NULL, url='https://example.test/legacy-edit' WHERE id=1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.ArticleArchive(ctx, 1); err != sql.ErrNoRows {
+		t.Fatalf("stale reading copy after legacy URL edit: %v", err)
+	}
+	if _, err = s.db.Exec("UPDATE links SET archive=$1, reader_archive=$2 WHERE id=1", []byte("updated"), []byte("new reading copy")); err != nil {
+		t.Fatal(err)
+	}
+	job.URL = "https://example.test/new"
+	if err = s.Update(ctx, 1, job); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.ArticleArchive(ctx, 1); err != sql.ErrNoRows {
+		t.Fatalf("stale reading copy after URL edit: %v", err)
 	}
 }
 

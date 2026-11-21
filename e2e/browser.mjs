@@ -7,6 +7,9 @@ import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { selectionJourney } from './selection.mjs';
 import { reactJourney } from './react.mjs';
+import { readerBodyJourney } from './reader-body.mjs';
+import { readerImageCapture } from './reader-images.mjs';
+import { checkReaderCode, readerCodeFixture } from './reader-code.mjs';
 import { securityJourney } from './security.mjs';
 import { openSettings, refreshSessionsBeforeMFA, selectSettings } from './settings.mjs';
 
@@ -193,6 +196,8 @@ try {
   await dialogDismissalJourney(page);
   await selectionJourney(page);
   await reactJourney(page, base);
+  await readerImageCapture(browser);
+  await readerBodyJourney(page, base);
   const oldSession = (await page.context().cookies()).find(cookie => cookie.name === 'pocketmark');
   await clickNavigation(page, '#logout-button');
   await page.locator('#logout-confirm').click();
@@ -926,7 +931,7 @@ try {
   await fixture.close();
   const html = `<!doctype html><style>h1 { color: rgb(12, 34, 56); } body { background: rgb(245, 240, 230); }</style>
     <article><h1>Browser revised bookmark</h1><h2>Original saved appearance</h2><figure><img id="embedded" alt="Rendered sample" src="data:image/png;base64,${png.toString('base64')}"><figcaption>Sample diagram</figcaption></figure>
-    <pre><code class="language-json">{"format": "HTML"}</code></pre></article>
+    <pre><code class="language-json">{"format": "HTML"}</code></pre>${readerCodeFixture}</article>
     <script>parent.previewCompromised = true</script><img src="/preview-leak">
     <iframe src="/preview-frame-leak"></iframe><style>@import url('/preview-style-leak');</style>
     <meta http-equiv="refresh" content="0;url=${new URL('/preview-navigation-leak', base).href}"><base href="${base.href}">
@@ -950,7 +955,8 @@ try {
   await article.getByText('Sample diagram', { exact: true }).waitFor();
   assert.equal(await article.getByRole('heading', { name: 'Browser revised bookmark', exact: true }).count(), 0);
   assert.equal(await article.getByRole('heading', { name: 'Original saved appearance' }).isVisible(), true);
-  assert.equal(await article.locator('pre code').innerText(), '{"format": "HTML"}');
+  assert.equal(await article.locator('pre code').first().innerText(), '{"format": "HTML"}');
+  await checkReaderCode(article);
   await page.waitForFunction(() => document.querySelector('#reader-rich-article img')?.naturalWidth > 0);
   await sizeButton.press('Enter');
   assert.equal(await sizeSlider.inputValue(), '1');

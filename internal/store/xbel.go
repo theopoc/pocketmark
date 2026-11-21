@@ -353,7 +353,8 @@ func replaceXBELTree(ctx context.Context, tx *sql.Tx, root *xbelNode) error {
 				} else if e == nil {
 					_, e = tx.ExecContext(ctx, `UPDATE links SET title=$1,description=CASE WHEN $2 THEN $3 ELSE description END,collection_id=$4,updated_at=$5,
 status=CASE WHEN url<>$6 THEN 'pending' ELSE status END,error=CASE WHEN url<>$7 THEN '' ELSE error END,
-content=CASE WHEN url<>$8 THEN '' ELSE content END,archive=CASE WHEN url<>$9 THEN NULL ELSE archive END,url=$10 WHERE id=$11`, l.Title, child.HasDescription, l.Description, parent, now, l.URL, l.URL, l.URL, l.URL, l.URL, lid)
+content=CASE WHEN url<>$8 THEN '' ELSE content END,archive=CASE WHEN url<>$9 THEN NULL ELSE archive END,
+reader_archive=CASE WHEN url<>$9 THEN NULL ELSE reader_archive END,url=$10 WHERE id=$11`, l.Title, child.HasDescription, l.Description, parent, now, l.URL, l.URL, l.URL, l.URL, l.URL, lid)
 				}
 				if e != nil {
 					return e

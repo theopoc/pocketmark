@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"pocketmark/internal/capture"
 
 	"errors"
 	"io"
@@ -25,7 +26,7 @@ func TestReaderDocumentSelectionOwnershipAndLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = s.Finish(ctx, claimed, "", "", "Automatic", []byte("<p>Automatic</p>"), nil); err != nil {
+	if err = s.Finish(ctx, claimed, capture.Result{Content: "Automatic", HTML: []byte("<p>Automatic</p>")}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if body, err := s.ReaderDocument(ctx, id, nil); err != nil || string(body) != "<p>Automatic</p>" {

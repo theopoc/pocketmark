@@ -56,6 +56,41 @@ func TestLibraryBackupSelectionAndRestore(t *testing.T) {
 		t.Fatal(e)
 	}
 }
+func TestLibraryBackupRestoresBothArticleCopies(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	id := createLink(t, s, Link{URL: "https://example.test/illustrated"})
+	if _, err := s.db.Exec("UPDATE links SET archive=$1, reader_archive=$2 WHERE id=$3", []byte("original"), []byte("illustrated"), id); err != nil {
+		t.Fatal(err)
+	}
+	var data bytes.Buffer
+	writer := zip.NewWriter(&data)
+	if err := s.LibraryBackup(ctx, writer, backup.Config{Archives: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	z, err := OpenLibraryZip(bytes.NewReader(data.Bytes()), int64(data.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := ReadManifest(z)
+	if err != nil || m.Version != 2 {
+		t.Fatalf("illustrated backup: %+v %v", m, err)
+	}
+	target := testStore(t)
+	if err = target.RestoreLibrary(ctx, z, m); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := target.Archive(ctx, id); err != nil || string(b) != "original" {
+		t.Fatalf("restored original: %q %v", b, err)
+	}
+	if b, err := target.ArticleArchive(ctx, id); err != nil || string(b) != "illustrated" {
+		t.Fatalf("restored illustrated copy: %q %v", b, err)
+	}
+}
+
 func TestScheduleCoalescesAndFencesWorkers(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()

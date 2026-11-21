@@ -9,10 +9,19 @@ time, with no browser process and no in-memory resource cache.
 The automatic capture accepts HTML responses up to 2 MiB, with individual tokens
 bounded to that same limit. Large inline scripts, styles and data attributes do
 not prevent text extraction within this budget; scripts and styles are excluded
-from indexed text. This server capture is separate from the browser extension's
+from indexed text. The original HTML stays available byte for byte. For the
+article panel the worker also tries to save editorial raster images in a
+separate reading copy. It considers up to 12 image positions and spends at most
+eight seconds and 2 MiB on image downloads. The illustrated HTML must fit in
+2 MiB, with up to 64 additional bytes for a charset declaration when the source
+specifies its encoding in the HTTP headers. A missing image leaves the original
+accessible. Existing bookmarks acquire these images on recapture.
+This server capture is separate from the browser extension's
 attachments: a failed automatic capture does not remove successful HTML, image
 or PDF uploads.
 
+Manual offline preservation gives editorial images priority over page
+decoration and stylesheets. It considers responsive and lazy image sources.
 Limits are deliberate: 45 seconds per snapshot, 25 HTTP resource requests
 including the main document, 2 MiB per response, 12 MiB total downloaded bytes,
 and 20 MiB final HTML. Scripts, frames, embedded media, SVG and CSS `@import`
@@ -46,6 +55,7 @@ network capture.
 
 | Endpoint | Behavior |
 | --- | --- |
+| `GET /api/links/{id}/archive?view=article` | Download the automatic illustrated reading copy, falling back to the original capture. Omit the query for the original. |
 | `GET /api/links/{id}/assets` | List attachment metadata |
 | `POST /api/files?name=document.pdf&collection=123` | Create standalone file and payload atomically; optional collection |
 | `POST /api/links/{id}/assets?name=page.html` | Raw binary body with its MIME Content-Type; returns attachment metadata |
@@ -71,6 +81,13 @@ format, including standalone files. Earlier copies and original downloads are
 available in the viewer. A basic HTML capture can also be opened when there is
 no HTML attachment. PDF display uses the browser's native
 viewer and may depend on browser settings.
+
+Editorial sidebars and footnotes can contain essential examples. The article
+panel preserves those alongside the main text and omits identified comment
+threads, navigation and related-story widgets. Preformatted code retains
+visible line breaks and omits hidden line numbers when copied. Saved content
+depends on what the source returned at capture time. Pages populated by
+JavaScript can be captured after rendering with the browser extension.
 
 HTML previews retain saved styles and embedded images/fonts up to the full
 20 MiB attachment limit, independently of the structured reader API's 2 MiB limit.

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"path/filepath"
+	"pocketmark/internal/capture"
 	"runtime"
 	"testing"
 )
@@ -33,7 +34,7 @@ func TestThumbnailLegacyRestartAndURLInvalidation(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err = s.Finish(ctx, l, "title", "", "", nil, nil, []byte("cached image")); err != nil {
+			if err = s.Finish(ctx, l, capture.Result{Title: "title", Thumbnail: []byte("cached image")}, nil); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -62,7 +63,7 @@ func TestThumbnailLegacyRestartAndURLInvalidation(t *testing.T) {
 	if _, err = s.db.Exec("UPDATE links SET url='https://other.example' WHERE id=$1", id); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.Finish(ctx, l, "", "", "", nil, nil, []byte("stale")); err != nil {
+	if err = s.Finish(ctx, l, capture.Result{Thumbnail: []byte("stale")}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.Thumbnail(ctx, id); err != sql.ErrNoRows {
@@ -97,7 +98,7 @@ func BenchmarkThumbnailCache(b *testing.B) {
 				if cached {
 					thumbnail = payload
 				}
-				if err = s.Finish(ctx, l, "", "", "", nil, nil, thumbnail); err != nil {
+				if err = s.Finish(ctx, l, capture.Result{Thumbnail: thumbnail}, nil); err != nil {
 					b.Fatal(err)
 				}
 			}

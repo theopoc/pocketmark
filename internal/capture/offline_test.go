@@ -23,7 +23,7 @@ func TestOfflineEmbedsResourcesAndRestrictsNetwork(t *testing.T) {
 			body = `@import "https://evil.test/remote.css"; body {background:url('/photo.png')}`
 		case "/photo.png":
 			typ = "image/png"
-			body = "fake png for transport test"
+			body = "\x89PNG\r\n\x1a\n" + "fixture PNG transport bytes"
 		default:
 			t.Fatalf("unexpected network request %s", r.URL)
 		}

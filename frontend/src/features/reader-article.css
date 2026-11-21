@@ -37,6 +37,10 @@
 #reader-rich-article a[href]:hover {
   text-decoration-thickness: 2px;
 }
+#reader-rich-article [tabindex="-1"]:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
 #reader-rich-article figure {
   margin: 1.5em 0;
 }
@@ -46,6 +50,15 @@
   line-height: 1.5;
   text-align: center;
   color: var(--muted);
+}
+#reader-rich-article aside:not(aside aside) {
+  margin: 1.25em 0;
+  padding: 0.8em 1em;
+  border-inline-start: 3px solid var(--control-border);
+  background: var(--surface);
+}
+#reader-rich-article aside > :last-child {
+  margin-block-end: 0;
 }
 #reader-rich-article blockquote {
   margin: 1.5em 0;

@@ -90,7 +90,10 @@ later metadata edits in Pocketmark.
 - Full-page PNG is scaled to at most 16 megapixels and 16,384 pixels per axis,
   accounting for device pixel density. Visible screenshots remain viewport-only.
 - HTML excludes scripts, frames, form controls and interactive content. External
-  styles/images that cannot be read or embedded remain omitted. Lazy content not
+  styles/images that cannot be read or embedded remain omitted. For an already
+  displayed CDN image, capture can retry its HTTPS URL anonymously when the
+  publisher permits CORS. These reads omit credentials and referrers and use
+  a shared six-second and 4 MiB budget. Lazy content not
   loaded in the tab is not synthesized. This is not a perfect site clone.
 - Browser-internal pages, the Chrome Web Store, other extension pages and pages
   that disallow capture are unsupported. Existing DevTools/debugger sessions may

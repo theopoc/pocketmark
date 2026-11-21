@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { archiveFragment } from "../src/features/reader-body.js";
 import {
   loadReaderArticle,
   readArticleSource,
@@ -7,6 +8,28 @@ import {
 
 const link = { id: 8, archiveAvailable: true };
 const maxBytes = 20 * 1024 * 1024;
+
+test("style capture only rewrites attribute names and stops at the structural limit", () => {
+  const template = { content: { querySelectorAll: () => [] } };
+  const document = {
+    implementation: {
+      createHTMLDocument: () => ({ createElement: () => template }),
+    },
+  };
+  const literal = '<span style="literal">example</span>';
+  const source =
+    `<!-- ${literal} --><title/>${literal}</title><script>${literal}</script>` +
+    `<svg><foreignObject><title/>${literal}</title></foreignObject><title/></svg>` +
+    `<pre title='${literal}'><span StYlE=display:block>` +
+    `&lt;tag style="literal"&gt;</span><span/style='display:block'>tail`;
+  archiveFragment(document, source, 2);
+  const alias = template.innerHTML.match(/data-pocketmark-style-[\d-]+/)[0];
+  assert.equal(
+    template.innerHTML,
+    source.replace("StYlE=", alias + "=").replace("/style=", "/" + alias + "="),
+  );
+  assert.throws(() => archiveFragment(document, source, 1), RangeError);
+});
 
 test("article decoding respects BOMs and legacy charset declarations across stream chunks", async () => {
   const text = "<p>Café €</p>";
@@ -71,7 +94,10 @@ test("article prefers the newest HTML attachment and otherwise reads the basic c
     ),
     null,
   );
-  assert.deepEqual(paths, ["/api/assets/4", "/api/links/8/archive"]);
+  assert.deepEqual(paths, [
+    "/api/assets/4",
+    "/api/links/8/archive?view=article",
+  ]);
 });
 
 test("oversized HTML streams cancel before parsing, including when their announced length is small", async () => {
@@ -126,19 +152,24 @@ test("cancellation skips stale content but preserves authentication failure", as
   }
 });
 
-test("structurally over-budget markup falls back before allocating a document", async () => {
-  let parses = 0;
-  const browser = {
-    fetch: async () => new Response("<p>small</p>".repeat(10000)),
-    get document() {
-      parses++;
-      return null;
-    },
-  };
-  const result = await loadReaderArticle(link, [], {
-    browser,
-    signal: new AbortController().signal,
-  });
-  assert.equal(result, null);
-  assert.equal(parses, 0);
+test("preflight counts empty formatting elements once and bounds structural input before parsing", async () => {
+  for (const [markup, canParse] of [
+    ["<p>small</p>".repeat(10000), false],
+    ["<span></span>".repeat(16001), false],
+    ["<b></b><i></i>".repeat(4500), true],
+  ]) {
+    let parsed = false;
+    const browser = {
+      fetch: async () => new Response(markup),
+      get document() {
+        parsed = true;
+        return null;
+      },
+    };
+    await loadReaderArticle(link, [], {
+      browser,
+      signal: new AbortController().signal,
+    });
+    assert.equal(parsed, canParse);
+  }
 });

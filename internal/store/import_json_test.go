@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"pocketmark/internal/capture"
 	"reflect"
 	"strings"
 	"testing"
@@ -112,7 +113,7 @@ func TestExportRoundTripMetadataWithoutCapture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := source.Finish(ctx, job, "Fetched title", "Fetched description", "captured secret content", []byte("captured archive bytes"), nil); err != nil {
+	if err := source.Finish(ctx, job, capture.Result{Title: "Fetched title", Description: "Fetched description", Content: "captured secret content", HTML: []byte("captured archive bytes")}, nil); err != nil {
 		t.Fatal(err)
 	}
 	want := getLink(t, source, id)

@@ -18,6 +18,9 @@ var sessionAddressSchema string
 //go:embed migrations/004_backup.sql
 var backupSchema string
 
+//go:embed migrations/005_reader_archive.sql
+var readerArchiveSchema string
+
 func (s *Store) initializeSchema(ctx context.Context) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -67,7 +70,15 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(4)"); err != nil {
 			return err
 		}
+		fallthrough
 	case 4:
+		if _, err = tx.ExecContext(ctx, readerArchiveSchema); err != nil {
+			return fmt.Errorf("migrate article reading copies: %w", err)
+		}
+		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(5)"); err != nil {
+			return err
+		}
+	case 5:
 	default:
 		return fmt.Errorf("unsupported Pocketmark schema version %d", version)
 	}
