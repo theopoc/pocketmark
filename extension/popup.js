@@ -13,6 +13,7 @@ if (chrome.extension?.getViews({ type: "popup" }).includes(window)) {
 }
 const collectionNameLimit = PocketmarkNameLimit.create($("collection-name"), $("collection-name-hint"));
 let activeTab, connected = false, connecting = false, loaded = false, ready = false, settingsOpen = false, task = null, tags = [], collections = [], poll, tagTimer, tagQuery = 0, taskSignature, collectionSession = 0;
+let watchedJobId, closing = false, stateRequest = 0, appliedState = 0;
 function status(message, error = false, success = false) {
   const changed = $("status").textContent !== message;
   $("status").setAttribute("role", error ? "alert" : "status");
@@ -109,6 +110,10 @@ async function load() {
   loaded = true; controls();
 }
 function renderTask(job) {
+  if (job && watchedJobId === job.id && (job.status === "done" || job.status === "paused")) {
+    watchedJobId = null;
+    closeAfterToast(PocketmarkSaveToast.outcome(job), job.toastShown && activeTab?.id === job.tabId);
+  }
   const signature = JSON.stringify(job);
   // Background polling must not recreate focused controls, re-announce the
   // same status or reopen a disclosure the user deliberately collapsed.
@@ -144,12 +149,52 @@ function renderTask(job) {
       if (job.status === "done" && job.fields.url === activeTab?.url) status("Saved to Pocketmark.", false, true);
       else if (job.status === "paused") status(job.message, true);
       else status("");
-      if (job.status === "done") window.close();
     }
   }
   controls();
 }
-async function refresh() { renderTask(await send("state")); }
+function closeAfterToast(feedback, shownInCurrentTab) {
+  if (closing) return;
+  closing = true;
+  if (shownInCurrentTab) { window.close(); return; }
+  // Protected pages and navigated tabs cannot host the toast. Give the same
+  // feedback a readable lifetime inside the popup before closing it.
+  document.body.inert = true;
+  PocketmarkSaveToast.render(null, feedback, document.documentElement.dataset.theme);
+  setTimeout(() => window.close(), feedback.duration);
+}
+async function submitTask(type, values, sourceURL) {
+  const theme = document.documentElement.dataset.theme;
+  let job;
+  appliedState = ++stateRequest;
+  try {
+    job = await send(type, { ...values, tabId: activeTab?.id, theme });
+  } catch (error) {
+    status(error.message, true);
+    const feedback = PocketmarkSaveToast.outcome(type === "retry" ? task : null);
+    const shown = sourceURL === activeTab?.url && await PocketmarkSaveToast.showInTab(activeTab.id, sourceURL, feedback, theme);
+    closeAfterToast(feedback, shown);
+    return;
+  }
+  // Ignore snapshots taken before this attempt, including reads started
+  // while the command was acquiring the worker's single-job lock.
+  appliedState = ++stateRequest;
+  watchedJobId = job.id;
+  renderTask(job);
+}
+async function refresh() {
+  const sequence = ++stateRequest;
+  let job;
+  try { job = await send("state"); }
+  catch (error) {
+    if (sequence <= appliedState) return;
+    appliedState = sequence;
+    throw error;
+  }
+  if (sequence <= appliedState) return;
+  appliedState = sequence;
+  renderTask(job);
+}
 async function finishConnection(candidate) {
   await send("connect", { connection: candidate });
   connected = true; showSettings(false);
@@ -234,16 +279,15 @@ $("save-form").addEventListener("submit", async (event) => {
     const fields = { url: activeTab.url, title: $("title").value.trim(), collectionId: Number($("collection").value) || null, tags };
     validate(fields);
     const modes = Object.keys(formats).filter((mode) => $("capture-" + mode).checked);
-    renderTask(await send("save", { tabId: activeTab.id, fields, modes }));
-    for (const mode of Object.keys(formats)) $("capture-" + mode).checked = false;
     status("");
+    await submitTask("save", { fields, modes }, fields.url);
+    for (const mode of Object.keys(formats)) $("capture-" + mode).checked = false;
   } catch (error) { status(error.message, true); }
   finally { $("save").disabled = false; controls(); }
 });
 $("retry").addEventListener("click", async () => {
   $("retry").disabled = true;
-  try { renderTask(await send("retry", { tabId: activeTab?.id })); }
-  catch (error) { status(error.message, true); }
+  try { await submitTask("retry", {}, task.fields.url); }
   finally { $("retry").disabled = false; }
 });
 $("discard").addEventListener("click", async () => {
@@ -257,6 +301,7 @@ async function initialize() {
     $("page-title").textContent = activeTab?.url && /^https?:\/\//i.test(activeTab.url) ? new URL(activeTab.url).hostname : "Your current page";
     $("page-title").title = activeTab?.url || "";
     await refresh();
+    if (task?.status === "running" && task.tabId === activeTab?.id) watchedJobId = task.id;
     const stored = await chrome.storage.local.get(["server", "token", "pendingConnection"]), candidate = stored.pendingConnection || stored;
     $("server").value = candidate.server || ""; $("token").value = candidate.token || "";
     if (stored.pendingConnection) {
@@ -264,8 +309,11 @@ async function initialize() {
       else { await chrome.storage.local.set({ pendingConnection: null }); throw new Error("Server access was not granted. Click Connect to retry."); }
     } else if (stored.server && stored.token) { connected = true; await load(); }
     else { showSettings(true); status(""); }
-  } catch (error) { showSettings(true); status(error.message, true); }
-  finally {
+  } catch (error) {
+    const recoveringTask = connected && (task?.status === "running" || task?.status === "paused");
+    showSettings(!recoveringTask);
+    status(error.message, true);
+  } finally {
     ready = true;
     controls();
     poll = setInterval(() => { refresh().catch((error) => status(error.message, true)); }, 1000);

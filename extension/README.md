@@ -22,6 +22,13 @@ that task before connecting to another server.
 
 ## Save and edit
 
+Pin Pocketmark in Chrome’s toolbar to see its indigo **p.** icon while browsing.
+A green **✓** means the exact page URL is in your library. Once connected, the
+extension uses Chrome’s `tabs` permission to check active HTTP(S) page URLs
+against your Pocketmark server as you browse, including their query and fragment.
+It skips automatic checks in Incognito. If your server cannot confirm a match,
+the icon shows no checkmark.
+
 The popup loads an existing bookmark for the exact URL, or starts a new one.
 Edit its **title**, **collection** and **tags**. The save action stays visible
 while the editor scrolls. **Connection** opens settings without losing the
@@ -48,13 +55,13 @@ No persistent content script or automatic capture scans your browsing activity.
 
 ## Progress, failures and manual retry
 
-One background task runs at a time. Closing the popup does not cancel it; reopen
-the popup to see progress and results. Active/failed tasks take priority over
-the editor, with retry/discard actions kept visible. The popup closes automatically
-after the bookmark and all selected captures are saved, including after a successful
-retry. Reopening it on the saved page shows a green “Saved to Pocketmark” message
-and a collapsed summary; expand it to inspect individual formats or edit the bookmark.
-Partial failures keep the popup open with the attention message and retry actions.
+One background task runs at a time. You can close the popup while it works.
+When saving finishes, a toast on the source page reports the result and the
+popup closes. If Chrome prevents the page from displaying the toast, the open
+popup shows it briefly before closing. A partial result tells you the bookmark
+was saved and a capture needs attention. Reopen Pocketmark to inspect the result,
+retry failed items or discard pending files. Reopening a completed save on the
+same page lets you edit the bookmark.
 Keep the source tab open and on the same URL until acquisition finishes. After acquisition, uploads do not need that tab.
 Closing Chrome interrupts work; reopening the popup marks it interrupted and
 requires a manual retry, rather than silently resuming or recapturing.
@@ -103,8 +110,9 @@ After rotating an API key, reconnect the extension with its new value.
 
 The popup offers Dark and Light appearance in its header; the choice stays in
 this browser. Dark retains its original palette. Collection creation shows an error when the server name limit is exceeded,
-including with accented letters and emoji. Shared local theme/name modules are checked by
-`python3 scripts/sync_ui_assets.py` and refreshed with `--write`.
+including with accented letters and emoji. Run `python3 scripts/sync_ui_assets.py`
+to check shared assets. Use `--write` to refresh them. Regenerating the toolbar
+PNGs from the app icon requires `rsvg-convert` from librsvg.
 
 Connections require HTTPS, except HTTP on `localhost`, `127.0.0.0/8` or `[::1]`.
 Existing remote HTTP connections must be replaced with the HTTPS server address

@@ -312,7 +312,7 @@ for (const name of selected) {
 }
 
 // Render the shipped popup with a bounded Chrome API adapter, never real account data.
-const extensionFiles = new Set(['popup.html', 'popup.css', 'icon.svg', 'name-limit.js', 'ui-theme.js', 'theme-switch.js', 'popup.js', 'common.js']);
+const extensionFiles = new Set(['popup.html', 'popup.css', 'icon.svg', 'name-limit.js', 'ui-theme.js', 'theme-switch.js', 'popup.js', 'common.js', 'selectors.js', 'save-toast.js']);
 const preview = createServer(async (req, res) => {
   const file = new URL(req.url, 'http://localhost').pathname.slice(1) || 'popup.html';
   if (!extensionFiles.has(file)) { res.writeHead(404); res.end(); return; }

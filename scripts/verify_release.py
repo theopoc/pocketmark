@@ -9,7 +9,9 @@ import tarfile
 import zipfile
 
 ARCHES = {"amd64": 62, "arm64": 183}
-EXTENSION_FILES = {"theme-switch.js", "ui-theme.js", "name-limit.js", "manifest.json", "popup.html", "popup.js", "popup.css", "selectors.js", "README.md", "background.js", "common.js", "capture.js", "job-store.js", "icon.svg"}
+EXTENSION_FILES = {"theme-switch.js", "ui-theme.js", "name-limit.js", "manifest.json", "popup.html", "popup.js",
+                   "popup.css", "selectors.js", "README.md", "background.js", "common.js", "capture.js", "job-store.js",
+                   "save-toast.js", "icon.svg", "icon-16.png", "icon-24.png", "icon-32.png", "icon-48.png", "icon-128.png"}
 ASSETS = {f"pocketmark-linux-{arch}{suffix}" for arch in ARCHES for suffix in (".tar.gz", ".buildinfo.txt")}
 ASSETS |= {"pocketmark-extension.zip"}
 
@@ -84,7 +86,7 @@ def verify(directory, commit, metadata=None, output=None):
         require(len(names) == len(EXTENSION_FILES) and set(names) == EXTENSION_FILES and archive.testzip() is None,
                 "unexpected extension archive contents")
         configuration = json.loads(archive.read("manifest.json"))
-        require(set(configuration["permissions"]) == {"activeTab", "scripting", "storage", "debugger"}, "extension permission mismatch")
+        require(set(configuration["permissions"]) == {"tabs", "activeTab", "scripting", "storage", "debugger"}, "extension permission mismatch")
         require(configuration.get("background") == {"service_worker": "background.js"}, "missing capture worker")
     if output:
         output.mkdir(parents=True, exist_ok=False)
