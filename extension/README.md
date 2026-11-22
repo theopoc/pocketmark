@@ -22,7 +22,7 @@ that task before connecting to another server.
 
 ## Save and edit
 
-Pin Pocketmark in Chrome’s toolbar to see its indigo **p.** icon while browsing.
+Pin Pocketmark in Chrome’s toolbar to see its teal **p.** icon while browsing.
 A green **✓** means the exact page URL is in your library. Once connected, the
 extension uses Chrome’s `tabs` permission to check active HTTP(S) page URLs
 against your Pocketmark server as you browse, including their query and fragment.

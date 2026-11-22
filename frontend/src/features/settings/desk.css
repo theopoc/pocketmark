@@ -549,11 +549,11 @@
 .desk-backup-art {
   min-height: 0;
   position: relative;
-  background: #cfeee8 url("./library-archive.webp") 50% 55% / cover no-repeat;
+  background: #cfeee8 url("./library-archive.svg") 50% 55% / cover no-repeat;
 }
 [data-theme="dark"] .desk-backup-art {
   background-color: #1b212c;
-  background-image: url("./library-archive-dark.webp");
+  background-image: url("./library-archive-dark.svg");
 }
 .desk-backup-info {
   padding: 14px 18px;
