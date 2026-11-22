@@ -1,8 +1,13 @@
 name: Dependabot update branch
 
 # Protect main requires up-to-date branches, and Dependabot only rebases on
-# conflicts. Merges made with GITHUB_TOKEN do not trigger push workflows, so the
-# schedule is the reliable trigger; push covers merges made by a person.
+# conflicts. Ask it to rebase PRs that are merely behind. Assumptions to verify
+# on the first real run: Dependabot honors a comment from github-actions[bot],
+# and its own push starts the normal pull_request CI (a GITHUB_TOKEN push or a
+# dispatch does not satisfy the required check). If it ignores the comment, the
+# job stops asking after three unanswered requests per PR and warns.
+# Merges made with GITHUB_TOKEN do not trigger push workflows, so the schedule
+# is the dependable trigger; push covers merges made by a person.
 on:
   push:
     branches: [main]
@@ -17,79 +22,75 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  update-branch:
+  rebase:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
-      actions: write
     steps:
       # Never check out or execute PR code in this write-enabled workflow.
-      - name: Update one Dependabot PR with auto-merge enabled
+      - name: Ask Dependabot to rebase one PR that is behind main
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          prs=$(gh pr list --state open --base main --limit 50 \
-            --json number,headRefName,headRefOid,isDraft,isCrossRepository,author,autoMergeRequest,createdAt,statusCheckRollup \
+          prs=$(gh pr list --state open --base main --limit 200 \
+            --json number,headRefOid,isDraft,isCrossRepository,author,autoMergeRequest,createdAt,statusCheckRollup \
             --jq '[.[] | select(.author.login == "app/dependabot" or .author.login == "dependabot[bot]")
               | select(.isDraft | not) | select(.isCrossRepository | not)
               | select(.autoMergeRequest != null)] | sort_by(.createdAt)')
 
+          stale=$(date -u -d '6 hours ago' +%Y-%m-%dT%H:%M:%SZ)
           candidates=()
           for row in $(jq -r '.[] | @base64' <<< "$prs"); do
             pr=$(base64 -d <<< "$row")
             number=$(jq -r .number <<< "$pr")
             sha=$(jq -r .headRefOid <<< "$pr")
-            branch=$(jq -r .headRefName <<< "$pr")
             # PRs whose CI failed need a human or a Dependabot rebase, not another run.
             failed=$(jq '[.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "CANCELLED" or .conclusion == "TIMED_OUT" or .conclusion == "STARTUP_FAILURE" or .conclusion == "ACTION_REQUIRED" or .state == "FAILURE" or .state == "ERROR")] | length' <<< "$pr")
             [[ "$failed" == 0 ]] || { echo "PR #$number has failed checks; skipped."; continue; }
+            # Any running check means a PR is in flight: handle one PR at a time.
+            # Checks stuck for over six hours (never started, awaiting approval) do not count.
+            pending=$(jq --arg cutoff "$stale" '[.statusCheckRollup[]? | select((((.status // "COMPLETED") != "COMPLETED") or .state == "PENDING") and ((.startedAt // .createdAt // "") > $cutoff))] | length' <<< "$pr")
+            if [[ "$pending" != 0 ]]; then
+              echo "PR #$number has checks running; nothing to do."
+              exit 0
+            fi
             behind=$(gh api "repos/$GH_REPO/compare/main...$sha" --jq .behind_by)
             if [[ "$behind" != 0 ]]; then
-              candidates+=("$number $sha $branch")
-              continue
+              candidates+=("$number $sha")
+            else
+              # Not blocking the others: it is blocked for another reason.
+              if [[ "$(jq '[.statusCheckRollup[]? | select(.name == "CI")] | length' <<< "$pr")" == 0 ]]; then
+                echo "::warning::PR #$number is up to date but has no CI check; its pull_request run may not have started."
+              else
+                echo "PR #$number is up to date but has not merged."
+              fi
             fi
-            # Up to date: it is in flight while any check is still running, so
-            # update at most one PR at a time. With nothing pending and no `CI`
-            # check, an earlier dispatch was lost: dispatch it again. A completed
-            # `CI` that has not merged is blocked for another reason; do not let
-            # it hold back the other PRs.
-            pending=$(jq '[.statusCheckRollup[]? | select(((.status // "COMPLETED") != "COMPLETED") or .state == "PENDING")] | length' <<< "$pr")
-            has_ci=$(jq '[.statusCheckRollup[]? | select(.name == "CI")] | length' <<< "$pr")
-            if [[ "$pending" != 0 ]]; then
-              echo "PR #$number is up to date with checks running; nothing to update."
-              exit 0
-            elif [[ "$has_ci" == 0 ]]; then
-              gh workflow run ci.yml --ref "$branch"
-              echo "Dispatched missing CI for up-to-date PR #$number."
-              exit 0
-            fi
-            echo "PR #$number is up to date and CI completed but it has not merged; not blocking others."
           done
 
+          window=$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
           for candidate in "${candidates[@]}"; do
-            read -r number sha branch <<< "$candidate"
-            if ! out=$(gh api -X PUT "repos/$GH_REPO/pulls/$number/update-branch" -f expected_head_sha="$sha" 2>&1); then
-              if [[ "$out" == *"HTTP 422"* ]]; then
-                echo "::warning::PR #$number cannot be updated (conflict or head changed); trying the next one."
-                continue
-              fi
-              echo "::error::Updating PR #$number failed: $out"
-              exit 1
+            read -r number sha <<< "$candidate"
+            pushed=$(gh api "repos/$GH_REPO/commits/$sha" --jq .commit.committer.date)
+            # Requests newer than the head went unanswered (a rebase changes the head).
+            requests=$(gh api --paginate "repos/$GH_REPO/issues/$number/comments?per_page=100" \
+              --jq '.[] | select(.body == "@dependabot rebase" and .user.login == "github-actions[bot]") | .created_at' | sort)
+            unanswered=$(awk -v pushed="$pushed" '$0 > pushed' <<< "$requests")
+            count=$(grep -c . <<< "$unanswered" || true)
+            latest=$(tail -n 1 <<< "$unanswered")
+            if [[ "$count" -gt 0 && "$latest" > "$window" ]]; then
+              echo "PR #$number: rebase requested at $latest; waiting for Dependabot."
+              exit 0
             fi
-            moved=''
-            for _ in {1..12}; do
-              new=$(gh api "repos/$GH_REPO/pulls/$number" --jq .head.sha)
-              if [[ "$new" != "$sha" ]]; then moved=1; break; fi
-              sleep 5
-            done
-            [[ -n "$moved" ]] || { echo "::error::PR #$number head did not change after update-branch."; exit 1; }
-            # Pushes made with GITHUB_TOKEN do not start pull_request workflows.
-            gh workflow run ci.yml --ref "$branch"
-            echo "Updated PR #$number and dispatched CI on $branch."
+            if [[ "$count" -ge 3 ]]; then
+              echo "::warning::Dependabot ignored $count rebase requests on PR #$number; skipped."
+              continue
+            fi
+            gh pr comment "$number" --body '@dependabot rebase'
+            echo "Asked Dependabot to rebase PR #$number."
             exit 0
           done
-          echo 'No Dependabot PR was updated.'
+          echo 'No Dependabot PR needs a rebase.'
