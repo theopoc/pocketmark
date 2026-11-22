@@ -209,7 +209,7 @@ function create({ id, api, icon, move = () => {} }, browser = globalThis) {
   function schedule(delay = 180) {
     lifecycle.cancelTimeout(timer);
     const request = ++generation;
-    const query = input.value.trim(),
+    const query = workspace.tagName(input.value),
       alreadySelected = new Set(selected);
     options = [];
     active = -1;

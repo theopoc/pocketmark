@@ -2,6 +2,7 @@ import { createAccountPassword } from "./account-password";
 import { createAuthenticator } from "./authenticator";
 import { createKeyRegister } from "./key-register.jsx";
 import { showBackups } from "./backups.jsx";
+import { showAITagging } from "./ai-tagging.jsx";
 import { createSettingsDesk } from "./desk.js";
 import { createLifecycle } from "../../lib/lifecycle.js";
 export function createSettings(
@@ -88,6 +89,11 @@ export function createSettings(
     $("app-view").classList.toggle("showing-settings", active);
     renderBreadcrumb();
     showSection(state.settingsSection);
+    showAITagging(
+      $("ai-tagging-settings"),
+      state.settingsSection === "ai-tagging",
+      api,
+    );
     showBackups(
       $("scheduled-backups"),
       state.settingsSection === "backup",
@@ -257,6 +263,7 @@ export function createSettings(
     ]);
   }
   function clearSettings() {
+    showAITagging($("ai-tagging-settings"), false, api);
     showBackups($("scheduled-backups"), false, api, toast);
     security.clear();
     state.settingsSession++;
@@ -284,6 +291,7 @@ export function createSettings(
     clearMFAManagement: authenticator.clear,
     dispose() {
       state.settingsSession++;
+      showAITagging($("ai-tagging-settings"), false, api);
       showBackups($("scheduled-backups"), false, api, toast);
       keys.dispose();
       password.reset();

@@ -25,7 +25,7 @@ globalThis.Pocketmark = (() => {
   function validate(fields) {
     validateURL(fields.url);
     if (typeof fields.title !== "string" || bytes(fields.title) > 1024) throw new Error("Title must be at most 1024 bytes.");
-    if (!Array.isArray(fields.tags) || fields.tags.length > 32 || fields.tags.some((tag) => typeof tag !== "string" || !tag.trim() || bytes(tag) > 80)) throw new Error("Use at most 32 tags, each at most 80 bytes.");
+    if (!Array.isArray(fields.tags) || fields.tags.length > 32 || fields.tags.some((tag) => typeof tag !== "string" || !tag.trim() || PocketmarkNameLimit.tagBytes(tag.trim()) > 80)) throw new Error("Use at most 32 tags, each at most 80 bytes.");
     if (fields.collectionId !== null && (!Number.isSafeInteger(fields.collectionId) || fields.collectionId <= 0)) throw new Error("Select a collection or Inbox.");
   }
   return { formats, origin, request, json, validate, validateURL };

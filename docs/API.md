@@ -89,7 +89,7 @@ Query parameters combine with AND:
 | --- | --- |
 | `q` | Space-separated literal prefix terms; case/diacritic insensitive. Searches title, URL, description, notes, tags and captured text. |
 | `collection` | Exact collection ID; `0` selects the inbox. Does not include descendant collections automatically. |
-| `tag` | Exact, case-sensitive tag name. Repeat `tag` to require every selected tag. Empty values are ignored. |
+| `tag` | Exact tag name after lowercasing and trimming its edges. Repeat `tag` to require every selected tag. Interior spaces are preserved. Empty values are ignored. |
 | `favorite=1` | Favorites only. |
 | `unread=1` | Unread only. |
 | `page` | One-based page; omitted or nonpositive values become 1. |
@@ -192,7 +192,7 @@ WebDAV supports `OPTIONS`, `PROPFIND`, `GET`, `HEAD`, `PUT`, `DELETE` and `MOVE`
 | Bookmark create/update JSON | 100 KiB |
 | URL | HTTP(S), no embedded credentials, at most 4096 bytes |
 | Title / description / notes | 1 KiB / 8 KiB / 64 KiB |
-| Tags | At most 32 input entries, each at most 80 bytes after trimming |
+| Tags | At most 32 input entries, each at most 80 UTF-8 bytes after trimming. Writes, imports and the database upgrade merge case variants. Names whose lowercase form expands past 80 bytes remain usable. |
 | Collection name | 1–120 bytes after trimming |
 | Search query | 512 bytes; page must not exceed 1,000,000 |
 | Import | 8 MiB, 10,000 links, 2,000 collections; one import at a time. JSON also allows 10,000 pinned links, 32 tags per record and 64 nesting levels; counts include repeated fields and are checked before typed allocation. JSON/HTML receive to disk before any write transaction |
@@ -338,6 +338,10 @@ for capture, invalidation and image limits.
 ### Bookmark site icon
 
 `GET /api/links/{id}/favicon` retrieves a site icon for a saved URL. It requires library read access and returns a supported raster icon up to 128 KiB, or 404 when unavailable. Responses are privately cached in the browser for one hour. At most two icon fetches run concurrently; excess requests receive 503. See [archive boundaries](ARCHIVES.md) for network and privacy details.
+
+### AI tagging
+
+The owner session reads `GET /api/ai-tagging` for connection state, selected model, eligible count and scan progress. Under the same path, POST to `connect` to obtain an OpenAI authorization URL, then to `finish` with `{"callback":"<return address>"}`. Keep both URLs private. POST to `models` to get the account catalog, then to `model` with `{"model":"<catalog ID>"}`. The `test` action uses a fictional example. The `enable`, `pause`, `disconnect`, `scan` and `resume` actions control background classification. Connection changes, model selection, activation, starting a scan and resuming work require recent owner password confirmation. [Owner guide](GUIDE.md#ai-tagging).
 
 ### Remote backups
 

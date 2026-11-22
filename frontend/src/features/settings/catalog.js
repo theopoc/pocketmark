@@ -49,6 +49,13 @@ export const settingsGroups = [
     name: "Connected apps",
     entries: [
       {
+        id: "ai-tagging",
+        icon: "tag",
+        name: "AI tagging",
+        description: "Classify untagged bookmarks with your ChatGPT plan",
+        keywords: "model classify scan automatic tags OpenAI provider",
+      },
+      {
         id: "api-keys",
         icon: "key",
         name: "API keys",

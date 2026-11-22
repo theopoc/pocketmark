@@ -18,6 +18,9 @@ var sessionAddressSchema string
 //go:embed migrations/004_backup.sql
 var backupSchema string
 
+//go:embed migrations/005_ai_tagging.sql
+var aiTagSchema string
+
 func (s *Store) initializeSchema(ctx context.Context) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -67,11 +70,20 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(4)"); err != nil {
 			return err
 		}
+		fallthrough
 	case 4:
+		if _, err = tx.ExecContext(ctx, aiTagSchema); err != nil {
+			return fmt.Errorf("migrate AI tagging: %w", err)
+		}
+		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(5)"); err != nil {
+			return err
+		}
+	case 5:
 	default:
 		return fmt.Errorf("unsupported Pocketmark schema version %d", version)
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM mfa_challenges WHERE EXISTS(SELECT 1 FROM mfa WHERE restored=1);
+	if _, err = tx.ExecContext(ctx, `INSERT INTO ai_tag_settings(id) VALUES(1) ON CONFLICT DO NOTHING;
+DELETE FROM mfa_challenges WHERE EXISTS(SELECT 1 FROM mfa WHERE restored=1);
 DELETE FROM mfa_recovery WHERE EXISTS(SELECT 1 FROM mfa WHERE restored=1);
 UPDATE mfa SET last_counter=greatest(last_counter,epoch_seconds()/30+1),restored=0 WHERE restored=1`); err != nil {
 		return err
