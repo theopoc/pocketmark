@@ -1,6 +1,6 @@
 # Personal feature coverage
 
-This implementation uses a Go server and PostgreSQL for storage and search. The owner can enable [AI tagging](GUIDE.md#ai-tagging) with a personal ChatGPT plan. Collaboration, public sharing, SSO/OIDC, RSS and recurring captures remain outside the project scope.
+This implementation uses a Go server and PostgreSQL for storage and search. The owner can enable [AI tagging](GUIDE.md#ai-tagging) with a personal ChatGPT plan or an Anthropic API key. Collaboration, public sharing, SSO/OIDC, RSS and recurring captures remain outside the project scope.
 
 | Feature | Implementation and limits |
 | --- | --- |

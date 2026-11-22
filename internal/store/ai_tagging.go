@@ -23,6 +23,7 @@ var (
 type AITagStatus struct {
 	Enabled       bool       `json:"enabled"`
 	Model         string     `json:"model"`
+	Provider      string     `json:"provider"`
 	HasTags       bool       `json:"hasTags"`
 	Eligible      int        `json:"eligible"`
 	Remaining     int        `json:"remaining"`
@@ -36,11 +37,11 @@ type AITagStatus struct {
 func (s *Store) AITagStatus(ctx context.Context) (AITagStatus, error) {
 	var status AITagStatus
 	var total int
-	err := s.db.QueryRowContext(ctx, `SELECT enabled,model,blocked,resume_at,scan_total,
+	err := s.db.QueryRowContext(ctx, `SELECT enabled,model,provider,blocked,resume_at,scan_total,
 	(SELECT count(*) FROM links WHERE tags='[]' AND url NOT LIKE 'pocketmark-file:%'),
 	EXISTS(SELECT FROM links WHERE tags<>'[]'), q.remaining,q.manual
 	FROM ai_tag_settings CROSS JOIN (SELECT count(*) AS remaining,count(*) FILTER(WHERE manual) AS manual FROM ai_tag_jobs) q
-	WHERE id=1`).Scan(&status.Enabled, &status.Model, &status.Blocked, &status.ResumeAt, &total,
+	WHERE id=1`).Scan(&status.Enabled, &status.Model, &status.Provider, &status.Blocked, &status.ResumeAt, &total,
 		&status.Eligible, &status.HasTags, &status.Remaining, &status.ScanRemaining)
 	if err != nil {
 		return status, err
@@ -60,18 +61,24 @@ func (s *Store) AITagStatus(ctx context.Context) (AITagStatus, error) {
 }
 
 // A settings change invalidates in-flight requests without losing their queue entries.
-func (s *Store) changeAITagSettings(ctx context.Context, model *string, enabled *bool) error {
+func (s *Store) changeAITagSettings(ctx context.Context, model, provider *string, enabled *bool) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	var currentModel string
+	var currentModel, currentProvider string
 	var currentEnabled bool
-	if err = tx.QueryRowContext(ctx, `SELECT model,enabled FROM ai_tag_settings WHERE id=1 FOR UPDATE`).Scan(&currentModel, &currentEnabled); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT model,provider,enabled FROM ai_tag_settings WHERE id=1 FOR UPDATE`).Scan(&currentModel, &currentProvider, &currentEnabled); err != nil {
 		return err
 	}
 	switch {
+	case provider != nil:
+		if *provider == currentProvider {
+			return nil
+		}
+		// Model identifiers belong to one provider. Pause until the owner picks again.
+		_, err = tx.ExecContext(ctx, `UPDATE ai_tag_settings SET provider=$1,model='',enabled=false,blocked='',resume_at=NULL WHERE id=1`, *provider)
 	case model != nil:
 		if *model == currentModel {
 			return nil
@@ -99,11 +106,20 @@ func (s *Store) SetAITagModel(ctx context.Context, model string) error {
 	if len(model) > 256 || strings.TrimSpace(model) != model {
 		return fault.Invalid("invalid model")
 	}
-	return s.changeAITagSettings(ctx, &model, nil)
+	return s.changeAITagSettings(ctx, &model, nil, nil)
+}
+
+// SetAITagProvider switches between "chatgpt" and "claude". A change clears the
+// model and pauses tagging because model identifiers differ between providers.
+func (s *Store) SetAITagProvider(ctx context.Context, provider string) error {
+	if provider != "chatgpt" && provider != "claude" {
+		return fault.Invalid("invalid provider")
+	}
+	return s.changeAITagSettings(ctx, nil, &provider, nil)
 }
 
 func (s *Store) SetAITagEnabled(ctx context.Context, enabled bool) error {
-	return s.changeAITagSettings(ctx, nil, &enabled)
+	return s.changeAITagSettings(ctx, nil, nil, &enabled)
 }
 
 func (s *Store) ResumeAITagging(ctx context.Context) error {
@@ -154,14 +170,14 @@ func (s *Store) StartAITagScan(ctx context.Context) error {
 // AITagJob contains only article fields permitted for classification. The lease
 // and revision fence expired workers and concurrent edits. Neither is a credential.
 type AITagJob struct {
-	ID                                         int64
-	Model, Domain, Title, Description, Excerpt string
-	Tags                                       []string
-	MoreTags                                   bool
-	firstPageTags                              []string
-	afterTag                                   string
-	lease                                      string
-	revision, inputRevision                    int64
+	ID                                                   int64
+	Model, Provider, Domain, Title, Description, Excerpt string
+	Tags                                                 []string
+	MoreTags                                             bool
+	firstPageTags                                        []string
+	afterTag                                             string
+	lease                                                string
+	revision, inputRevision                              int64
 }
 
 const aiTagPageSize = 256
@@ -192,9 +208,9 @@ func (s *Store) NextAITagJob(ctx context.Context, captureEnabled bool) (AITagJob
 	}
 	defer tx.Rollback()
 	var blocked string
-	err = tx.QueryRowContext(ctx, `SELECT model,blocked FROM ai_tag_settings
+	err = tx.QueryRowContext(ctx, `SELECT model,provider,blocked FROM ai_tag_settings
 	WHERE id=1 AND enabled AND (blocked='' OR resume_at<=now()) AND EXISTS(SELECT FROM ai_tag_jobs)
-	FOR UPDATE`).Scan(&j.Model, &blocked)
+	FOR UPDATE`).Scan(&j.Model, &j.Provider, &blocked)
 	if err != nil {
 		return j, err
 	}

@@ -112,3 +112,53 @@ func TestAITagCredentialUpdatesAcrossReplicas(t *testing.T) {
 		t.Fatal("replicas did not share latest credentials")
 	}
 }
+
+func TestAIClaudeKeyAndProviderSwitch(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	if key, err := s.ReadAIClaudeKey(ctx); err != nil || key != nil {
+		t.Fatalf("fresh key: %v %v", key, err)
+	}
+	if err := s.UpdateAITagCredentials(ctx, func(_ []byte, write func([]byte) error) error { return write([]byte("chatgpt session")) }); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.WriteAIClaudeKey(ctx, []byte("sealed key")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.WriteAIClaudeKey(ctx, []byte("replacement")); err != nil {
+		t.Fatal(err)
+	}
+	if key, err := s.ReadAIClaudeKey(ctx); err != nil || string(key) != "replacement" {
+		t.Fatalf("saved key: %q %v", key, err)
+	}
+	if session, err := s.ReadAITagCredentials(ctx); err != nil || string(session) != "chatgpt session" {
+		t.Fatalf("the API key touched the ChatGPT session: %q %v", session, err)
+	}
+	if err := s.SetAITagModel(ctx, "gpt-fixture"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetAITagEnabled(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetAITagProvider(ctx, "unknown"); err == nil {
+		t.Fatal("accepted an unknown provider")
+	}
+	if err := s.SetAITagProvider(ctx, "claude"); err != nil {
+		t.Fatal(err)
+	}
+	if status, err := s.AITagStatus(ctx); err != nil || status.Provider != "claude" || status.Model != "" || status.Enabled {
+		t.Fatalf("switching must clear the model and pause: %+v %v", status, err)
+	}
+	if err := s.SetAITagEnabled(ctx, true); err == nil {
+		t.Fatal("enabled tagging without a model")
+	}
+	if err := s.WriteAIClaudeKey(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	if key, err := s.ReadAIClaudeKey(ctx); err != nil || key != nil {
+		t.Fatalf("removed key: %v %v", key, err)
+	}
+	if session, _ := s.ReadAITagCredentials(ctx); string(session) != "chatgpt session" {
+		t.Fatal("removing the API key removed the ChatGPT session")
+	}
+}

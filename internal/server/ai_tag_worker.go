@@ -82,10 +82,17 @@ func (a *Server) workAITag(ctx context.Context, captureEnabled bool) error {
 	article := aitagprovider.Article{
 		Title: job.Title, Domain: job.Domain, Description: job.Description, Excerpt: job.Excerpt,
 	}
+	var model classifier = t.provider
+	if job.Provider == "claude" {
+		model = t.claude
+	}
+	if model == nil {
+		return a.finishAITagError(work, job, errors.New("AI tagging provider unavailable"))
+	}
 	var fallback []string
 	for {
 		call, end := context.WithTimeout(work, 60*time.Second)
-		tags, err := t.provider.Classify(call, job.Model, article, job.Tags, beforeSend)
+		tags, err := model.Classify(call, job.Model, article, job.Tags, beforeSend)
 		end()
 		switch {
 		case work.Err() != nil:
