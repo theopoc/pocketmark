@@ -35,6 +35,7 @@ export default defineConfig({
         "/theme.js",
         "/theme-switch.js",
         "/icon.svg",
+        "/fonts",
         "/manifest.webmanifest",
         "/asset-preview.html",
         "/asset-preview.js",

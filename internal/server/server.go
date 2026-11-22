@@ -160,6 +160,10 @@ func (a *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/dav/") || r.URL.Path == "/metrics" {
 		w.Header().Set("Cache-Control", "no-store")
 	}
+	// The embedded fonts change only with a release; a day of caching avoids refetching them on every page load.
+	if strings.HasPrefix(r.URL.Path, "/fonts/") {
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+	}
 	// Public authentication bodies cannot occupy the library's work slots.
 	slots := a.requests
 	if publicAuthPath(r.URL.Path) || r.URL.Path == "/api/reauth" || strings.HasPrefix(r.URL.Path, "/api/mfa/") {
