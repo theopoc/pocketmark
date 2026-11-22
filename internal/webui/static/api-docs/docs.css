@@ -64,9 +64,10 @@
 .api-docs .swagger-ui .highlight-code .microlight:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .api-docs .swagger-ui .opblock .opblock-summary-method { text-shadow: none; }
 .api-docs .swagger-ui .opblock.opblock-get .opblock-summary-method { background: #245e9b; }
-.api-docs .swagger-ui .opblock.opblock-post .opblock-summary-method { background: #23714a; }
+.api-docs .swagger-ui .opblock.opblock-post .opblock-summary-method { background: #0a6d60; }
+.api-docs .swagger-ui .opblock.opblock-post { border-color: #0a6d60; background: color-mix(in srgb, #0a6d60 8%, transparent); }
 .api-docs .swagger-ui .opblock.opblock-put .opblock-summary-method { background: #875412; }
-.api-docs .swagger-ui .opblock.opblock-delete .opblock-summary-method { background: #b12e35; }
+.api-docs .swagger-ui .opblock.opblock-delete .opblock-summary-method { background: #b42318; }
 /* Generated controls keep the shared field/button identity without restyling code. */
 .api-docs .swagger-ui .app-select-trigger,
 .api-docs .swagger-ui input:not([type="checkbox"]):not([type="radio"]),
@@ -103,7 +104,7 @@
 .api-docs .swagger-ui .btn.authorize span { float: none; padding: 0; }
 .api-docs .swagger-ui .btn.authorize svg { color: inherit; }
 .api-docs .swagger-ui .btn.authorize svg path { fill: currentColor; }
-.api-docs .swagger-ui :is(.btn.execute, .auth-btn-wrapper .btn.authorize[type="submit"]) { background: var(--accent); color: #fff; border-color: var(--accent); }
+.api-docs .swagger-ui :is(.btn.execute, .auth-btn-wrapper .btn.authorize[type="submit"]) { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 .api-docs .swagger-ui :is(.btn.execute, .auth-btn-wrapper .btn.authorize[type="submit"]):is(:hover, :active):enabled { background: var(--accent-hover); }
 .api-docs .swagger-ui .auth-container { border-color: var(--line); }
 .api-docs .swagger-ui .model, .api-docs .swagger-ui .model-title { color: var(--ink); }

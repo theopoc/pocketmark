@@ -4,7 +4,7 @@
   function setTheme(theme) {
     const dark = theme === "dark";
     document.documentElement.dataset.theme = theme;
-    document.querySelector('meta[name="theme-color"]').content = dark ? "#15161b" : "#ffffff";
+    document.querySelector('meta[name="theme-color"]').content = dark ? "#151922" : "#ffffff";
     themeButton.textContent = dark ? "Dark" : "Light";
     themeButton.setAttribute("aria-label", dark ? "Dark mode" : "Light mode");
     themeButton.setAttribute("aria-pressed", String(dark));

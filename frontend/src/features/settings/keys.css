@@ -1,11 +1,11 @@
 /* Key register in the Pocketmark settings workspace. */
 .ak-page {
-  --ak-violet: #5b4bc0;
-  --ak-violet-soft: #edeafb;
-  --ak-violet-line: #d8d2f1;
-  --ak-green: #246953;
-  --ak-green-soft: #e8f3ed;
-  --ak-green-line: #cce4d4;
+  --ak-violet: #0a6d60;
+  --ak-violet-soft: #e2f4f1;
+  --ak-violet-line: #cfeee8;
+  --ak-green: #3d6b1a;
+  --ak-green-soft: #e6f1d9;
+  --ak-green-line: #cfe3b8;
   --ak-blue: #375f9f;
   --ak-blue-soft: #e9effa;
   --ak-blue-line: #cfddf1;
@@ -13,33 +13,33 @@
   --ak-amber-soft: #fbf0df;
   --ak-amber-line: #edddbd;
   --ak-surface: #fff;
-  --ak-rule: #e1e3e9;
-  --ak-hair: #e9eaf0;
-  --ak-base: #f8f9fc;
-  --ak-meter-on: #7568df;
-  --ak-meter-off: #dcdde8;
+  --ak-rule: #e4e8ef;
+  --ak-hair: #eef1f6;
+  --ak-base: #f7f8fb;
+  --ak-meter-on: #0b7a6b;
+  --ak-meter-off: #dde3ec;
   --ak-sub: #575e6d;
 }
 [data-theme="dark"] .ak-page {
-  --ak-violet: #c3baff;
-  --ak-violet-soft: #302b47;
-  --ak-violet-line: #49405f;
-  --ak-green: #a3d3bc;
-  --ak-green-soft: #20332d;
-  --ak-green-line: #354c43;
+  --ak-violet: #7fe8d9;
+  --ak-violet-soft: #12332f;
+  --ak-violet-line: #2f7a6f;
+  --ak-green: #b4e08a;
+  --ak-green-soft: #1f3016;
+  --ak-green-line: #2f4a22;
   --ak-blue: #b0c7f3;
   --ak-blue-soft: #263246;
   --ak-blue-line: #3b4a62;
   --ak-amber: #e6c48b;
   --ak-amber-soft: #382f25;
   --ak-amber-line: #514536;
-  --ak-surface: #1b1d25;
-  --ak-base: #1e2029;
-  --ak-rule: #373a48;
-  --ak-hair: #30323e;
-  --ak-meter-on: #a297ff;
-  --ak-meter-off: #3d3e50;
-  --ak-sub: #b0b3c3;
+  --ak-surface: #1b212c;
+  --ak-base: #151922;
+  --ak-rule: #323a49;
+  --ak-hair: #262d3a;
+  --ak-meter-on: #7fe8d9;
+  --ak-meter-off: #323a49;
+  --ak-sub: #b4bfce;
 }
 #settings-page #token-list {
   list-style: none;
@@ -482,7 +482,7 @@ button.ak-expiry:focus-visible {
 }
 .ak-toggle[aria-checked="true"] .ak-track i {
   transform: translateX(12px);
-  background: #fff;
+  background: var(--on-accent);
 }
 .ak-toggle.expired .ak-track {
   background: var(--ak-amber-soft);

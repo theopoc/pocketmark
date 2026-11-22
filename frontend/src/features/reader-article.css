@@ -1,5 +1,5 @@
 #reader-rich-article {
-  --reader-code-key: #5447a7;
+  --reader-code-key: #2c4fa3;
   --reader-code-string: #216c5e;
   --reader-image-badge: #171a21c9;
   min-width: 0;
@@ -180,7 +180,7 @@
   color: var(--reader-code-string);
 }
 [data-theme="dark"] #reader-rich-article {
-  --reader-code-key: #c3baff;
+  --reader-code-key: #9db8ff;
   --reader-code-string: #a4d9c8;
 }
 #reader-rich-article .reader-article-table {
