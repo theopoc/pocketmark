@@ -7,6 +7,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"pocketmark/internal/capture"
 )
 
 func TestAITagMetadataRoundTrips(t *testing.T) {
@@ -161,7 +163,7 @@ func TestAITagAdoptsChangedURLAndRetriesNewCapture(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err = s.Finish(ctx, link, "unused", "", "New public excerpt", nil, nil); err != nil {
+		if err = s.Finish(ctx, link, capture.Result{Title: "unused", Content: "New public excerpt"}, nil); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"pocketmark/internal/capture"
 	"pocketmark/internal/pgtest"
 )
 
@@ -158,7 +159,7 @@ func TestAITagUsesOnlyPublicCaptureAndFencesChangedSettings(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err = s.Finish(ctx, link, "Public title", "Public description", "verified public AWS excerpt", []byte("<p>public</p>"), nil); err != nil {
+		if err = s.Finish(ctx, link, capture.Result{Title: "Public title", Description: "Public description", Content: "verified public AWS excerpt", HTML: []byte("<p>public</p>")}, nil); err != nil {
 			t.Fatal(err)
 		}
 	}

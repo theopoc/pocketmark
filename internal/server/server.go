@@ -470,7 +470,11 @@ func (a *Server) tags(w http.ResponseWriter, r *http.Request) {
 	respond(w, 200, tags)
 }
 func (a *Server) archive(w http.ResponseWriter, r *http.Request) {
-	raw, e := a.Store.Archive(r.Context(), id(r))
+	archive := a.Store.Archive
+	if r.URL.Query().Get("view") == "article" {
+		archive = a.Store.ArticleArchive
+	}
+	raw, e := archive(r.Context(), id(r))
 	if e != nil {
 		handleError(w, e)
 		return

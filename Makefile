@@ -37,6 +37,9 @@ check: frontend fmt-check
 	node --check e2e/polish.mjs
 	node --check e2e/browser.mjs
 	node --check e2e/react.mjs
+	node --check e2e/reader-body.mjs
+	node --check e2e/reader-code.mjs
+	node --check e2e/reader-images.mjs
 	node --check e2e/security.mjs
 	node --check e2e/settings.mjs
 	@for source in extension/*.js; do node --check "$$source" || exit; done

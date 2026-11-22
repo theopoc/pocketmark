@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"pocketmark/internal/backup"
@@ -12,13 +13,15 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func TestLibraryBackupSelectionAndRestore(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t)
 	web := createLink(t, s, Link{URL: "https://example.test", Title: "Web", Content: "omit"})
-	if _, e := s.db.Exec("UPDATE links SET status='processing', archive=$1 WHERE id=$2", []byte("archive"), web); e != nil {
+	if _, e := s.db.Exec("UPDATE links SET status='processing', archive=$1, reader_archive=$2, ai_public_excerpt='public excerpt' WHERE id=$3", []byte("archive"), []byte("illustrated"), web); e != nil {
 		t.Fatal(e)
 	}
 	_, asset, e := s.CreateFile(ctx, Link{URL: "pocketmark-file:" + strings.Repeat("a", 64), Title: "HTML file"}, Asset{Name: "note.html", MediaType: "text/html", Kind: "html"}, strings.NewReader("local file"))
@@ -38,15 +41,19 @@ func TestLibraryBackupSelectionAndRestore(t *testing.T) {
 		t.Fatal(e)
 	}
 	m, e := ReadManifest(archive)
-	if e != nil {
-		t.Fatal(e)
+	if e != nil || m.Version != 2 {
+		t.Fatalf("files-only manifest: %+v %v", m, e)
 	}
 	target := testStore(t)
 	if e = target.RestoreLibrary(ctx, archive, m); e != nil {
 		t.Fatal(e)
 	}
-	if r := getLink(t, target, web); r.Status != "pending" || r.Content != "" {
+	if r := getLink(t, target, web); r.Status != "pending" || r.Content != "" || r.ArchiveAvailable {
 		t.Fatalf("incorrect restored metadata %v", r)
+	}
+	var excluded bool
+	if e = target.db.QueryRow("SELECT reader_archive IS NULL AND ai_public_excerpt IS NULL FROM links WHERE id=$1", web).Scan(&excluded); e != nil || !excluded {
+		t.Fatalf("archive or public excerpt restored without selection: %v", e)
 	}
 	var out bytes.Buffer
 	if e = target.WriteAsset(ctx, asset.ID, &out); e != nil || out.String() != "local file" {
@@ -56,6 +63,122 @@ func TestLibraryBackupSelectionAndRestore(t *testing.T) {
 		t.Fatal(e)
 	}
 }
+func TestLibraryBackupRestoresBothArticleCopies(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	id := createLink(t, s, Link{URL: "https://example.test/illustrated", Title: "Owner title", Description: "Private description"})
+	if _, err := s.db.Exec("UPDATE links SET archive=$1, reader_archive=$2, ai_private_title=false, ai_private_description=true, ai_public_excerpt='public excerpt' WHERE id=$3", []byte("original"), []byte("illustrated"), id); err != nil {
+		t.Fatal(err)
+	}
+	var data bytes.Buffer
+	writer := zip.NewWriter(&data)
+	if err := s.LibraryBackup(ctx, writer, backup.Config{Archives: true, Text: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	z, err := OpenLibraryZip(bytes.NewReader(data.Bytes()), int64(data.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := ReadManifest(z)
+	if err != nil || m.Version != 3 {
+		t.Fatalf("illustrated backup: %+v %v", m, err)
+	}
+	target := testStore(t)
+	if err = target.RestoreLibrary(ctx, z, m); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := target.Archive(ctx, id); err != nil || string(b) != "original" {
+		t.Fatalf("restored original: %q %v", b, err)
+	}
+	if b, err := target.ArticleArchive(ctx, id); err != nil || string(b) != "illustrated" {
+		t.Fatalf("restored illustrated copy: %q %v", b, err)
+	}
+	var provenanceOK bool
+	if err = target.db.QueryRow("SELECT NOT ai_private_title AND ai_private_description AND ai_public_excerpt='public excerpt' FROM links WHERE id=$1", id).Scan(&provenanceOK); err != nil || !provenanceOK {
+		t.Fatalf("AI field provenance changed: %v", err)
+	}
+}
+
+func TestRestoreLegacyLibraryArchivesWithAITagProvenance(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		version int
+	}{
+		{"v1 private legacy metadata", 1},
+		{"v2 recorded provenance", 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			target := testStore(t)
+			ctx := t.Context()
+			// Use the field order of the released formats independently from
+			// sections(), so changing both writer and reader cannot mask a break.
+			columns := `1::bigint,'https://example.test/old','Old title','Old description','',NULL::bigint,
+				'["Ops","OPS"]',false,false,'ready',utc_timestamp_text(),utc_timestamp_text(),'indexed','original'::bytea`
+			if tc.version == 2 {
+				columns += ",false,true,'public excerpt'"
+			}
+			var payload bytes.Buffer
+			w := zip.NewWriter(&payload)
+			m := Manifest{"pocketmark-library", tc.version, "library", true, true, false}
+			manifest, err := w.Create("manifest.json")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = json.NewEncoder(manifest).Encode(m); err != nil {
+				t.Fatal(err)
+			}
+			err = target.libraryTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+				for _, part := range []string{"collections", "links", "annotations", "assets", "asset_chunks"} {
+					entry, err := w.CreateHeader(&zip.FileHeader{Name: part + ".bin", Method: zip.Store})
+					if err != nil {
+						return err
+					}
+					query := "SELECT 1 WHERE false"
+					if part == "links" {
+						query = "SELECT " + columns
+					}
+					if _, err = tx.Conn().PgConn().CopyTo(ctx, entry, "COPY ("+query+") TO STDOUT (FORMAT binary)"); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = w.Close(); err != nil {
+				t.Fatal(err)
+			}
+			z, err := OpenLibraryZip(bytes.NewReader(payload.Bytes()), int64(payload.Len()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			m, err = ReadManifest(z)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = target.RestoreLibrary(ctx, z, m); err != nil {
+				t.Fatal(err)
+			}
+			if b, err := target.ArticleArchive(ctx, 1); err != nil || string(b) != "original" {
+				t.Fatalf("missing original fallback: %q %v", b, err)
+			}
+			if tags := getLink(t, target, 1).Tags; len(tags) != 1 || tags[0] != "ops" {
+				t.Fatalf("legacy tags were not normalized: %v", tags)
+			}
+			var privateTitle, privateDescription bool
+			var excerpt sql.NullString
+			err = target.db.QueryRow("SELECT ai_private_title,ai_private_description,ai_public_excerpt FROM links WHERE id=1").Scan(&privateTitle, &privateDescription, &excerpt)
+			if err != nil || !privateDescription || privateTitle != (tc.version == 1) || excerpt.Valid != (tc.version == 2) || (excerpt.Valid && excerpt.String != "public excerpt") {
+				t.Fatalf("wrong provenance: %v %v %v %v", privateTitle, privateDescription, excerpt, err)
+			}
+		})
+	}
+}
+
 func TestScheduleCoalescesAndFencesWorkers(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()

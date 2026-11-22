@@ -57,6 +57,10 @@ func sections(m Manifest) []section {
 		}
 		linkValues += ",ai_private_title,ai_private_description," + excerpt
 	}
+	if m.Version == 3 && m.Archives {
+		linkColumns += ",reader_archive"
+		linkValues += ",reader_archive"
+	}
 	list := []section{{"collections", "id,name,parent_id,description,created_at", ""}, {"links", linkColumns, "SELECT " + linkValues + " FROM links"}, {"annotations", "id,link_id,quote,start_offset,end_offset,note,color,created_at", ""}}
 	if m.Archives || m.Files {
 		list = append(list, section{"assets", ac, "SELECT " + ac + " FROM assets WHERE " + filter}, section{"asset_chunks", "asset_id,ordinal,data", "SELECT asset_id,ordinal,data FROM asset_chunks JOIN assets ON id=asset_id WHERE " + filter})
@@ -76,6 +80,9 @@ func (s *Store) libraryTx(ctx context.Context, opts pgx.TxOptions, fn func(pgx.T
 }
 func (s *Store) LibraryBackup(ctx context.Context, z *zip.Writer, c backup.Config) error {
 	m := Manifest{"pocketmark-library", 2, "library", c.Text, c.Archives, c.Files}
+	if c.Archives {
+		m.Version = 3
+	}
 	w, e := z.Create("manifest.json")
 	if e != nil {
 		return e
@@ -156,7 +163,7 @@ func ReadManifest(z *zip.Reader) (Manifest, error) {
 		return m, errors.New("invalid manifest size")
 	}
 	e = json.Unmarshal(raw, &m)
-	if e != nil || m.Format != "pocketmark-library" || (m.Version != 1 && m.Version != 2) || m.Mode != "library" {
+	if e != nil || m.Format != "pocketmark-library" || m.Version < 1 || m.Version > 3 || m.Mode != "library" {
 		return m, errors.New("unsupported library archive")
 	}
 	files := map[string]bool{"manifest.json": true}
@@ -216,6 +223,8 @@ func validateSection(z *zip.Reader, part section) error {
 			switch col {
 			case "archive":
 				limit = 20 << 20
+			case "reader_archive":
+				limit = (2 << 20) + 64 // Article HTML plus its optional charset declaration.
 			case "ai_public_excerpt":
 				limit = 4096
 			case "content":

@@ -1,15 +1,23 @@
 // Build the reading view from fresh application nodes. The original bytes remain
 // available through the isolated attachment viewer.
+import {
+  archiveFragment,
+  capturedStyle,
+  readerBodyRoot,
+  readerTitleMatches,
+  skipReaderElement,
+} from "./reader-body.js";
+
 const maxBytes = 20 * 1024 * 1024;
 const maxNodes = 16000;
 const maxText = 1024 * 1024;
 const allowedTags = new Set(
-  "p div section h1 h2 h3 h4 h5 h6 ul ol li dl dt dd blockquote figure figcaption strong em b i sub sup s del mark kbd code br hr table thead tbody tfoot tr th td caption a".split(
+  "p div section aside h1 h2 h3 h4 h5 h6 ul ol li dl dt dd blockquote figure figcaption strong em b i sub sup s del mark kbd code br hr table thead tbody tfoot tr th td caption a".split(
     " ",
   ),
 );
 const excluded = new Set(
-  "head title base link meta script style template noscript frame iframe object embed form button select input textarea nav aside footer canvas video audio".split(
+  "head title base link meta script style template noscript frame iframe object embed form button select input textarea nav footer canvas video audio".split(
     " ",
   ),
 );
@@ -99,10 +107,13 @@ function canParse(source) {
   let tags = 0,
     tokens = 0;
   const structural =
-    /data:[\w.+/;-]{1,128};base64,[a-z\d+/=]+|[</=]|[\t\n\f\r ]+/gi;
+    /data:[\w.+/;-]{1,128};base64,[a-z\d+/=]+|<(span|b|i|em|strong)><\/\1>|[</=]|[\t\n\f\r ]+/gi;
   for (const match of source.matchAll(structural)) {
-    if (match[0] === "<" && ++tags > maxNodes) return false;
-    if (++tokens > 180000) return false;
+    if (match[0][0] === "<" && ++tags > maxNodes) return false;
+    // An empty formatting pair allocates one element. Its two '<' and one '/'
+    // still count towards the lexical budget. Never rewrite the source bytes.
+    tokens += match[1] ? 3 : 1;
+    if (tokens > 180000) return false;
   }
   return true;
 }
@@ -159,6 +170,10 @@ function enlargeImage(image, caption, signal) {
 
 function articleImage(source, { browser, signal }) {
   const document = browser.document;
+  // Embedded backgrounds can exceed the general layout-hint limit. Read the
+  // whole declaration once so a hidden figure cannot expose its pixels or alt.
+  const style = capturedStyle(source, maxBytes);
+  if (style?.display === "none" || style?.visibility === "hidden") return "";
   const alt =
     source.getAttribute("alt") ||
     source.getAttribute("aria-label") ||
@@ -175,6 +190,11 @@ function articleImage(source, { browser, signal }) {
     src = ["src", "data-src", "data-original"]
       .map((name) => source.getAttribute(name))
       .find((value) => value && imageData.test(value));
+    if (!src && source.getAttribute("role") === "img") {
+      const background =
+        style?.backgroundImage.match(/^url\("([^"]+)"\)$/)?.[1];
+      if (background && imageData.test(background)) src = background;
+    }
     // A saved picture can embed its only usable image in a source candidate.
     for (
       let candidate = source;
@@ -244,15 +264,35 @@ function formatCode(code, text, language, context) {
   code.replaceChildren(tokens);
 }
 
+function codeLanguage(source) {
+  // Markdown renderers can label the code, the pre, or its highlight wrapper.
+  const wrapper = source.parentElement;
+  for (const node of [
+    source.querySelector("code"),
+    source,
+    wrapper?.matches("div,figure") && wrapper,
+    wrapper?.parentElement?.matches("div,figure") && wrapper.parentElement,
+  ]) {
+    if (!node) continue;
+    const explicit =
+      node.getAttribute("data-language") ||
+      node.getAttribute("data-lang") ||
+      "";
+    if (/^[a-z0-9+#-]{1,24}$/i.test(explicit)) return explicit.toUpperCase();
+    const hint = node
+      .getAttribute("class")
+      ?.match(
+        /(?:^|\s)(?:lang(?:uage)?|highlight-(?:source|text))-([a-z0-9+#-]{1,24})(?=\s|$)/i,
+      );
+    if (hint) return hint[1].toUpperCase();
+  }
+  return "CODE";
+}
+
 function codeBlock(source, text, context) {
   const { browser, signal } = context;
   const document = browser.document;
-  const sourceCode = source.querySelector("code");
-  const hint =
-    sourceCode?.getAttribute("class") || source.getAttribute("class") || "";
-  const language = (
-    hint.match(/(?:lang(?:uage)?)-([a-z0-9+#-]{1,24})/i)?.[1] || "Code"
-  ).toUpperCase();
+  const language = codeLanguage(source);
   const section = document.createElement("div");
   section.className = "reader-article-code";
   const header = document.createElement("div");
@@ -298,10 +338,17 @@ function codeBlock(source, text, context) {
 }
 
 function safeLink(raw, base) {
-  if (!raw || raw.startsWith("#")) return null;
+  if (!raw) return null;
+  if (raw.startsWith("#")) return raw;
   try {
     const url = new URL(raw, base || undefined);
-    return ["http:", "https:"].includes(url.protocol) ? url.href : null;
+    if (!["http:", "https:"].includes(url.protocol)) return null;
+    if (url.hash && base) {
+      const original = new URL(base);
+      original.hash = url.hash;
+      if (url.href === original.href) return url.hash;
+    }
+    return url.href;
   } catch {
     return null;
   }
@@ -311,20 +358,14 @@ function projectArticle(source, link, context) {
   const { document } = context.browser;
   // In a detached template even images/frames are inert. No captured node or
   // arbitrary attribute is ever adopted into the live, same-origin document.
-  const template = document.implementation
-    .createHTMLDocument("")
-    .createElement("template");
-  template.innerHTML = source;
-  const content = template.content;
-  const root =
-    content.querySelector('[itemprop="articleBody"]') ||
-    content.querySelector("main article, [role=main] article") ||
-    content.querySelector("article") ||
-    content.querySelector("main, [role=main]") ||
-    content;
-  const normalizeTitle = (text) =>
-    (text || "").trim().replace(/\s+/g, " ").toLowerCase();
-  const bookmarkTitle = normalizeTitle(link.title);
+  const root = readerBodyRoot(
+    archiveFragment(document, source, maxNodes),
+    link.title,
+    excluded,
+  );
+  const destinations = new Map();
+  const references = [];
+  const notes = [];
   const firstHeading = root.querySelector("h1");
   let visited = 0,
     textSize = 0;
@@ -340,45 +381,46 @@ function projectArticle(source, link, context) {
       countText(node.length);
       return document.createTextNode(node.data);
     }
-    if (
-      node.nodeType !== 1 ||
-      node.hidden ||
-      node.getAttribute("aria-hidden") === "true"
-    )
-      return "";
+    if (node.nodeType !== 1 || skipReaderElement(node)) return "";
     const tag = node.localName;
     if (excluded.has(tag)) return "";
-    if (tag === "img" || tag === "svg") {
+    if (
+      tag === "img" ||
+      tag === "svg" ||
+      (node.getAttribute("role") === "img" &&
+        !node.childElementCount &&
+        !node.textContent.trim())
+    ) {
       visited += 3;
       return articleImage(node, context);
     }
-    if (tag === "pre") {
+    const codeLines = tag === "table" ? listingCells(node) : null;
+    if (tag === "pre" || codeLines) {
       visited += 9;
-      const text = codeText(node);
-      countText(text.length);
+      const text = codeText(codeLines || [node], countText);
       return codeBlock(node, text, context);
     }
-    if (node === firstHeading) {
-      const heading = normalizeTitle(node.textContent);
-      if (
-        heading &&
-        (bookmarkTitle === heading ||
-          [" - ", " – ", " — ", " | "].some((separator) =>
-            bookmarkTitle.startsWith(heading + separator),
-          ))
-      )
-        return "";
-    }
+    if (
+      node === firstHeading &&
+      readerTitleMatches(node.textContent, link.title)
+    )
+      return "";
+    const role = node.getAttribute("role");
+    const note =
+      ["doc-footnote", "doc-endnote", "doc-endnotes"].includes(role) &&
+      node.matches("aside, section, div, p, li, ol, ul, span");
     const block = allowedTags.has(tag)
       ? document.createElement(tag === "h1" ? "h2" : tag)
-      : document.createDocumentFragment();
-    if (tag === "a") {
-      const href = safeLink(node.getAttribute("href"), link.url);
-      if (href && !node.querySelector("img,svg,pre")) {
-        block.href = href;
-        block.target = "_blank";
-        block.rel = "noopener noreferrer";
-      }
+      : note || (node.id && node.id.length <= 256)
+        ? document.createElement("span")
+        : document.createDocumentFragment();
+    if (node.id && node.id.length <= 256 && !destinations.has(node.id))
+      destinations.set(node.id, block);
+    if (tag === "ol" && node.hasAttribute("reversed")) block.reversed = true;
+    if (tag === "ol" || tag === "li") {
+      const key = tag === "ol" ? "start" : "value";
+      const value = node.getAttribute(key);
+      if (value && /^-?\d{1,9}$/.test(value)) block.setAttribute(key, value);
     }
     if (tag === "td" || tag === "th") {
       for (const key of ["colspan", "rowspan"]) {
@@ -389,6 +431,29 @@ function projectArticle(source, link, context) {
     }
     for (const child of node.childNodes)
       block.append(project(child, depth + 1));
+    if (tag === "a") {
+      // Projected images and listings have their own actions. Never put those
+      // controls inside a link, including media created from a role=img node.
+      if (block.querySelector("button")) {
+        const group = document.createElement("span");
+        group.append(...block.childNodes);
+        if (destinations.get(node.id) === block)
+          destinations.set(node.id, group);
+        return group;
+      }
+      const href = safeLink(node.getAttribute("href"), link.url);
+      if (href && !node.querySelector("img,svg,pre")) {
+        if (href.startsWith("#")) {
+          if (href.length <= 768) references.push([block, href.slice(1)]);
+        } else {
+          block.href = href;
+          block.target = "_blank";
+          block.rel = "noopener noreferrer";
+        }
+      }
+    }
+    if (note || (tag === "a" && ["doc-noteref", "doc-backlink"].includes(role)))
+      notes.push([node, block, role]);
     if (tag === "table") {
       const container = document.createElement("div");
       container.className = "reader-article-table";
@@ -400,18 +465,136 @@ function projectArticle(source, link, context) {
   }
   const result = document.createDocumentFragment();
   for (const node of root.childNodes) result.append(project(node, 0));
+  // Resolve against projected nodes only, including forward references. Source
+  // IDs must never identify a control or navigation target in the application.
+  let referenceID = 0;
+  function localID(target) {
+    if (!target.id) target.id = "reader-reference-" + ++referenceID;
+    return target.id;
+  }
+  for (const [anchor, fragment] of references) {
+    let id;
+    try {
+      id = decodeURIComponent(fragment);
+    } catch {
+      continue;
+    }
+    const target = destinations.get(id);
+    if (!target) continue;
+    anchor.href = "#" + localID(target);
+    anchor.addEventListener("click", (event) => {
+      event.preventDefault();
+      target.tabIndex = -1;
+      target.focus({ preventScroll: true });
+      target.scrollIntoView({ block: "nearest" });
+    });
+  }
+  for (const [source, block, role] of notes) {
+    if (block.localName === "a" && !block.hasAttribute("href")) continue;
+    block.setAttribute("role", role);
+    const label = source.getAttribute("aria-label")?.trim().slice(0, 1000);
+    if (label) block.setAttribute("aria-label", label);
+    const labelledBy = source.getAttribute("aria-labelledby");
+    if (labelledBy && labelledBy.length <= 1000) {
+      const ids = labelledBy
+        .trim()
+        .split(/\s+/)
+        .map((id) => destinations.get(id))
+        .filter(Boolean)
+        .map(localID);
+      if (ids.length) block.setAttribute("aria-labelledby", ids.join(" "));
+    }
+  }
   return result.textContent.trim() || result.querySelector("img")
     ? result
     : null;
 }
 
-function codeText(pre) {
-  if (!pre.querySelector("br")) return pre.textContent;
-  const walker = pre.ownerDocument.createTreeWalker(pre);
+// Some highlighters use one table row per code line with a presentation-only
+// gutter. Require that shape in every row so ordinary data tables stay intact.
+function listingCells(table) {
+  if (table.caption || table.tHead || table.tFoot || table.rows.length < 2)
+    return null;
+  const lines = [];
+  for (const row of table.rows) {
+    const [gutter, cell] = row.cells;
+    if (
+      row.cells.length !== 2 ||
+      !gutter.matches(
+        '[aria-hidden="true"], [hidden], [data-line-number], .gutter, .linenos, .blob-num',
+      ) ||
+      !/^\d*$/.test(gutter.textContent.trim()) ||
+      cell.localName !== "td"
+    )
+      return null;
+    if (cell.classList.contains("blob-code")) {
+      lines.push(cell);
+    } else {
+      const code = cell.firstElementChild;
+      if (
+        !code?.matches("code, pre") ||
+        [...cell.childNodes].some(
+          (child) =>
+            child !== code && (child.nodeType !== 3 || child.data.trim()),
+        )
+      )
+        return null;
+      lines.push(code);
+    }
+  }
+  return lines;
+}
+
+function codeText(lines, countText) {
   const parts = [];
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    if (node.nodeType === 3) parts.push(node.data);
-    else if (node.localName === "br") parts.push("\n");
+  let boundary = false;
+  function add(text) {
+    if (!text) return;
+    if (
+      boundary &&
+      parts.length &&
+      !parts.at(-1).endsWith("\n") &&
+      !text.startsWith("\n")
+    ) {
+      countText(1);
+      parts.push("\n");
+    }
+    boundary = false;
+    countText(text.length);
+    parts.push(text);
+  }
+  function read(node, depth) {
+    if (depth > 96) throw new RangeError("Article exceeds reading budget");
+    if (node.nodeType === 3) return add(node.data);
+    if (node.nodeType !== 1) return;
+    const style = capturedStyle(node);
+    const display = style?.display;
+    const capturedLayout = node.getAttribute("data-pocketmark-code-layout");
+    if (
+      node.hidden ||
+      node.getAttribute("aria-hidden") === "true" ||
+      capturedLayout === "hidden" ||
+      display === "none" ||
+      style?.visibility === "hidden" ||
+      node.matches(
+        "script,style,template,noscript,button,input,.linenos,.line-numbers-rows",
+      )
+    )
+      return;
+    if (node.localName === "br") return add("\n");
+    const line =
+      capturedLayout === "block" ||
+      display === "block" ||
+      (!display &&
+        (node.localName === "div" ||
+          node.matches("span.line,span.code-line,span.token-line")));
+    if (line) boundary = true;
+    for (const child of node.childNodes) read(child, depth + 1);
+    if (line) boundary = true;
+  }
+  for (const [i, line] of lines.entries()) {
+    if (i) add("\n");
+    read(line, 0);
   }
   return parts.join("");
 }
@@ -428,7 +611,7 @@ export async function loadReaderArticle(link, assets, { browser, signal }) {
     return null;
   const path = newest
     ? `/api/assets/${newest.id}`
-    : `/api/links/${link.id}/archive`;
+    : `/api/links/${link.id}/archive?view=article`;
   let response;
   try {
     response = await browser.fetch(path, {

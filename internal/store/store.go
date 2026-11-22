@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"pocketmark/internal/capture"
 	"pocketmark/internal/fault"
 	"strconv"
 	"strings"
@@ -219,7 +220,8 @@ func (s *Store) Update(ctx context.Context, id int64, l Link) error {
 	tags, _ := json.Marshal(l.Tags)
 	r, err := s.db.ExecContext(ctx, `UPDATE links SET ai_private_title=ai_private_title AND title=$1,ai_private_description=ai_private_description AND description=$2,title=$1,description=$2,notes=$3,collection_id=$4,tags=$5,favorite=$6,read=$7,updated_at=$8,
  status=CASE WHEN url<>$9 THEN 'pending' ELSE status END,error=CASE WHEN url<>$10 THEN '' ELSE error END,
- content=CASE WHEN url<>$11 THEN '' ELSE content END,archive=CASE WHEN url<>$12 THEN NULL ELSE archive END,url=$13 WHERE id=$14`, l.Title, l.Description, l.Notes, l.CollectionID, string(tags), l.Favorite, l.Read, time.Now().UTC().Format(time.RFC3339Nano), l.URL, l.URL, l.URL, l.URL, l.URL, id)
+ content=CASE WHEN url<>$11 THEN '' ELSE content END,archive=CASE WHEN url<>$12 THEN NULL ELSE archive END,
+ reader_archive=CASE WHEN url<>$12 THEN NULL ELSE reader_archive END,url=$13 WHERE id=$14`, l.Title, l.Description, l.Notes, l.CollectionID, string(tags), l.Favorite, l.Read, time.Now().UTC().Format(time.RFC3339Nano), l.URL, l.URL, l.URL, l.URL, l.URL, id)
 	return affected(r, err)
 }
 func affected(r sql.Result, err error) error {
@@ -392,7 +394,7 @@ RETURNING id,url,title,description,notes,collection_id,tags,favorite,read,status
 	}
 	return l, err
 }
-func (s *Store) Finish(ctx context.Context, l Link, title, description, content string, archive []byte, fetchErr error, thumbnail ...[]byte) error {
+func (s *Store) Finish(ctx context.Context, l Link, captured capture.Result, fetchErr error) error {
 	if fetchErr != nil {
 		_, e := s.db.ExecContext(ctx, "UPDATE links SET status='failed',error=$1 WHERE id=$2 AND url=$3 AND status='processing' AND capture_attempt=$4", fetchErr.Error(), l.ID, l.URL, l.captureAttempt)
 		return e
@@ -402,7 +404,13 @@ func (s *Store) Finish(ctx context.Context, l Link, title, description, content 
 		return e
 	}
 	defer tx.Rollback()
-	result, e := tx.ExecContext(ctx, `UPDATE links SET status='ready',error='',ai_public_excerpt=left($4,1024),ai_private_title=ai_private_title AND NOT(title=url AND $1<>''),ai_private_description=ai_private_description AND description<>'',title=CASE WHEN title=url AND $1<>'' THEN $2 ELSE title END,description=CASE WHEN description='' THEN $3 ELSE description END,content=$4,archive=$5 WHERE id=$6 AND url=$7 AND status='processing' AND capture_attempt=$8`, title, title, description, content, archive, l.ID, l.URL, l.captureAttempt)
+	result, e := tx.ExecContext(ctx, `UPDATE links SET status='ready',error='',
+ai_public_excerpt=left($3,1024),ai_private_title=ai_private_title AND NOT(title=url AND $1<>''),
+ai_private_description=ai_private_description AND description<>'',
+title=CASE WHEN title=url AND $1<>'' THEN $1 ELSE title END,
+description=CASE WHEN description='' THEN $2 ELSE description END,
+content=$3,archive=$4,reader_archive=NULL WHERE id=$5 AND url=$6 AND status='processing' AND capture_attempt=$7`,
+		captured.Title, captured.Description, captured.Content, captured.HTML, l.ID, l.URL, l.captureAttempt)
 	if e != nil {
 		return e
 	}
@@ -410,15 +418,22 @@ func (s *Store) Finish(ctx context.Context, l Link, title, description, content 
 	if e != nil {
 		return e
 	}
-	if changed > 0 && len(thumbnail) > 0 {
-		if len(thumbnail[0]) > 512<<10 {
+	if changed > 0 {
+		// The original and its derivative commit together. Install the derivative
+		// after invalidation, even if it is byte-identical to the previous one.
+		if len(captured.ReaderHTML) > 0 {
+			if _, e = tx.ExecContext(ctx, "UPDATE links SET reader_archive=$1 WHERE id=$2", captured.ReaderHTML, l.ID); e != nil {
+				return e
+			}
+		}
+		if len(captured.Thumbnail) > 512<<10 {
 			return errors.New("thumbnail exceeds 512 KiB")
 		}
 		if _, e = tx.ExecContext(ctx, "DELETE FROM thumbnails WHERE link_id=$1", l.ID); e != nil {
 			return e
 		}
-		if len(thumbnail[0]) > 0 {
-			if _, e = tx.ExecContext(ctx, "INSERT INTO thumbnails(link_id,data) VALUES($1,$2)", l.ID, thumbnail[0]); e != nil {
+		if len(captured.Thumbnail) > 0 {
+			if _, e = tx.ExecContext(ctx, "INSERT INTO thumbnails(link_id,data) VALUES($1,$2)", l.ID, captured.Thumbnail); e != nil {
 				return e
 			}
 		}

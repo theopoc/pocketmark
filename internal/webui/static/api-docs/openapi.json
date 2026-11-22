@@ -1614,6 +1614,14 @@
     "/api/links/{id}/archive": {
       "get": {
         "operationId": "downloadArchive",
+        "parameters": [
+          {
+            "name": "view",
+            "in": "query",
+            "description": "Select the automatic article reading copy with saved illustrations when available. Omit to download the original HTML.",
+            "schema": { "type": "string", "enum": ["article"] }
+          }
+        ],
         "tags": [
           "Captures & files"
         ],
@@ -1623,7 +1631,7 @@
             "$ref": "#/components/responses/ServerError"
           },
           "200": {
-            "description": "Original HTML as an attachment named page.html",
+            "description": "Captured HTML as an attachment named page.html",
             "content": {
               "application/octet-stream": {
                 "schema": {

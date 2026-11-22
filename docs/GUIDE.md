@@ -46,15 +46,24 @@ On the first upgrade from schema 1, challenges already issued by the older binar
 
 Schema 3 adds an optional sign-in IP address to browser sessions. Existing sessions remain valid with an unknown address. A schema 2 binary cannot restart against schema 3. Finish upgrading all serving replicas to enforce the disable-before-revoke rule on every API key request.
 
+Schema 6 adds an optional illustrated reading copy to automatic captures.
+Original HTML, notes and existing attachments stay available. Recapturing a
+bookmark can populate its reading copy. An older binary cannot reopen schema 6.
+Schema 6 workers write format 3 library backups when archives are included and
+format 2 otherwise. An already-running schema 5 worker can still claim a
+scheduled backup and write format 2 with the original HTML. Once all older
+workers have stopped, take a new backup to include both copies. Restore also
+accepts formats 1 and 2.
+
 ### Route backups during a Kubernetes rollout
 
-The first schema 5 startup lowercases existing tags and merges case variants. Take a backup before upgrading if you need the original spellings. Wait for all schema 4 pods and their scheduled backup workers to stop before connecting a ChatGPT account. Only schema 5 backup workers exclude AI credentials, settings and queued work from full backups.
+The first schema 5 startup lowercases existing tags and merges case variants. Take a backup before upgrading if you need the original spellings. Wait for all schema 4 pods and their scheduled backup workers to stop before connecting a ChatGPT account. Backup workers running schema 5 or later exclude AI credentials, settings and queued work from full backups.
 
 Install the [backup Service, Ingress paths and NetworkPolicy](../deploy/kubernetes/backup-routing.yaml) **before** starting pods that migrate the schema. The exact path `/api/backup` and prefix `/api/backups` select only ready pods bearing the target revision label. The ordinary `pocketmark` ClusterIP Service continues to select all application pods for other requests.
 
 Adapt the example to your namespace, existing host, TLS secret, Service port and controller labels. Merge the paths into the existing Ingress for that host and preserve its authentication and TLS settings. For Traefik, enable `providers.kubernetesIngress.allowEmptyServices=true` so that the exact path returns 503 while its Service is empty. With a controller that drops empty backends, the catch-all path could otherwise send the request to an old pod. Use a CNI enforcing NetworkPolicy, allow only the trusted ingress controller to reach the app port, and remove other access paths or additive policies that allow clients to reach the pods directly.
 
-1. Set the backup Service selector to the incoming revision (`backup-schema-5` in the example). Keep this label off the running pods. Before the image rollout, verify that the backup Service has no ready endpoints. Check every serving ingress-controller replica individually with the production Host and TLS server name: an authenticated backup request must return 503 and an authenticated library read must succeed on each. Recheck any controller that joins during this step. Once the routing change has converged, let any backup requests already accepted by old pods finish.
+1. Set the backup Service selector to the incoming revision (`backup-schema-6` in the example). Keep this label off the running pods. Before the image rollout, verify that the backup Service has no ready endpoints. Check every serving ingress-controller replica individually with the production Host and TLS server name: an authenticated backup request must return 503 and an authenticated library read must succeed on each. Recheck any controller that joins during this step. Once the routing change has converged, let any backup requests already accepted by old pods finish.
 2. Change the pinned image and the revision label **together** in the Deployment pod template. For example, with the verified image reference in `POCKETMARK_IMAGE` and a container named `pocketmark`:
 
    ```sh
@@ -63,7 +72,7 @@ Adapt the example to your namespace, existing host, TLS secret, Service port and
      template:
        metadata:
          labels:
-           pocketmark-backup-revision: backup-schema-5
+           pocketmark-backup-revision: backup-schema-6
        spec:
          containers:
            - name: pocketmark

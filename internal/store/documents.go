@@ -112,6 +112,13 @@ func (s *Store) Archive(ctx context.Context, id int64) ([]byte, error) {
 	return body, err
 }
 
+// ArticleArchive falls back to the original for legacy or text-only captures.
+func (s *Store) ArticleArchive(ctx context.Context, id int64) ([]byte, error) {
+	var body []byte
+	err := s.db.QueryRowContext(ctx, "SELECT coalesce(reader_archive, archive) FROM links WHERE id=$1 AND archive IS NOT NULL", id).Scan(&body)
+	return body, err
+}
+
 // ReaderDocument owns HTML selection, ownership checks and the reader's bound.
 // nil selects the newest HTML attachment, then falls back to automatic capture.
 func (s *Store) ReaderDocument(ctx context.Context, id int64, assetID *int64) ([]byte, error) {

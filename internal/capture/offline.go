@@ -42,6 +42,12 @@ type offlineBuilder struct {
 }
 
 func (b *offlineBuilder) fetch(raw string) ([]byte, string, *url.URL, error) {
+	body, contentType, base, err := b.fetchLimit(raw, maxBody)
+	media, _, _ := mime.ParseMediaType(contentType)
+	return body, media, base, err
+}
+
+func (b *offlineBuilder) fetchLimit(raw string, limit int) ([]byte, string, *url.URL, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return nil, "", nil, err
@@ -66,23 +72,23 @@ func (b *offlineBuilder) fetch(raw string) ([]byte, string, *url.URL, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, "", nil, &HTTPStatusError{StatusCode: resp.StatusCode}
 	}
-	limit := maxBody
-	if b.remaining < limit {
-		limit = b.remaining
+	limit = min(limit, b.remaining, maxBody)
+	if resp.ContentLength > int64(limit) {
+		return nil, "", nil, fault.New("capture", "resource_too_large", "resource exceeds capture budget")
 	}
 	rawBody, err := io.ReadAll(io.LimitReader(resp.Body, int64(limit+1)))
+	b.remaining -= min(len(rawBody), b.remaining)
 	if err != nil {
 		return nil, "", nil, err
 	}
 	if len(rawBody) > limit {
 		return nil, "", nil, fault.New("capture", "resource_too_large", "resource exceeds capture budget")
 	}
-	b.remaining -= len(rawBody)
-	media, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))
-	if media == "" {
-		media = http.DetectContentType(rawBody)
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType, _, _ = mime.ParseMediaType(http.DetectContentType(rawBody))
 	}
-	return rawBody, media, resp.Request.URL, nil
+	return rawBody, contentType, resp.Request.URL, nil
 }
 
 func (b *offlineBuilder) resource(raw string, base *url.URL) string {
@@ -135,12 +141,24 @@ func (b *offlineBuilder) css(text string, base *url.URL) string {
 
 func offline(ctx context.Context, rawURL string, dst io.Writer, client *http.Client) (OfflineReport, error) {
 	b := &offlineBuilder{ctx: ctx, client: client, remaining: 12 << 20}
-	body, media, base, err := b.fetch(rawURL)
+	body, contentType, base, err := b.fetchLimit(rawURL, maxBody)
 	if err != nil {
 		return b.report, err
 	}
+	media, _, _ := mime.ParseMediaType(contentType)
 	if media != "text/html" && media != "application/xhtml+xml" {
 		return b.report, fault.New("capture", "unsupported_content", "offline capture requires HTML")
+	}
+	body, err = detectHTMLEncoding(body, contentType).utf8Body(body)
+	if err != nil {
+		return b.report, err
+	}
+	images, saved, base, err := b.stageImages(body, base, dst)
+	if err != nil {
+		return b.report, err
+	}
+	if images != nil {
+		defer images.Close()
 	}
 	w := &limitedWriter{dst: dst, remaining: 20 << 20}
 	_, err = io.WriteString(w, `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"><!-- Pocketmark passive offline snapshot: scripts, forms, frames and CSS imports omitted. -->`)
@@ -148,11 +166,14 @@ func offline(ctx context.Context, rawURL string, dst io.Writer, client *http.Cli
 		return b.report, err
 	}
 	z := html.NewTokenizer(bytes.NewReader(body))
-	z.SetMaxBuf(maxBody)
+	z.SetMaxBuf(max(maxBody, len(body)))
 	var excluded []string
 	style := false
+	offset := 0
 	for {
 		kind := z.Next()
+		start := offset
+		offset += len(z.Raw())
 		if kind == html.ErrorToken {
 			if z.Err() != io.EOF {
 				return b.report, z.Err()
@@ -206,6 +227,7 @@ func offline(ctx context.Context, rawURL string, dst io.Writer, client *http.Cli
 				continue
 			}
 			attrs := []html.Attribute{}
+			raster, staged := saved[start]
 			for _, a := range t.Attr {
 				if a.Namespace != "" || strings.HasPrefix(a.Key, "on") || a.Key == "srcdoc" || a.Key == "srcset" || a.Key == "action" || a.Key == "formaction" || a.Key == "ping" || a.Key == "background" || a.Key == "nonce" || a.Key == "integrity" || a.Key == "crossorigin" {
 					continue
@@ -215,7 +237,14 @@ func offline(ctx context.Context, rawURL string, dst io.Writer, client *http.Cli
 					if t.Data != "img" {
 						continue
 					}
-					a.Val = b.resource(a.Val, base)
+					if staged {
+						// A failed preferred source can still have a working embedded fallback.
+						if raster.size > 0 || raster.inline != "" || !hasDataImagePrefix(a.Val) {
+							continue
+						}
+					} else {
+						a.Val = b.resource(a.Val, base)
+					}
 				case "style":
 					a.Val = b.css(a.Val, base)
 				case "href":
@@ -231,7 +260,27 @@ func offline(ctx context.Context, rawURL string, dst io.Writer, client *http.Cli
 				}
 				attrs = append(attrs, a)
 			}
+			if raster.inline != "" {
+				attrs = append(attrs, html.Attribute{Key: "src", Val: raster.inline})
+			}
 			t.Attr = attrs
+			if staged && raster.size > 0 {
+				prefix := illustrationPrefix(t, raster.media)
+				if _, err = io.WriteString(w, prefix); err == nil {
+					enc := base64.NewEncoder(base64.StdEncoding, w)
+					_, err = io.Copy(enc, io.NewSectionReader(images, raster.offset, int64(raster.size)))
+					if closeErr := enc.Close(); err == nil {
+						err = closeErr
+					}
+				}
+				if err == nil {
+					_, err = io.WriteString(w, `">`)
+				}
+				if err != nil {
+					return b.report, err
+				}
+				continue
+			}
 			if t.Data == "style" {
 				style = true
 			}

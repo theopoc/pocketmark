@@ -334,7 +334,7 @@ func worker(ctx context.Context, s *store.Store, observer *observability.Observe
 			finish(fetchErr, nil)
 			return
 		} // processing jobs are recovered at the next start.
-		e = s.Finish(captureCtx, l, result.Title, result.Description, result.Content, result.HTML, fetchErr, result.Thumbnail)
+		e = s.Finish(captureCtx, l, result, fetchErr)
 		finish(fetchErr, e)
 	}
 }

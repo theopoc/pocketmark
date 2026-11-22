@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"pocketmark/internal/capture"
 	"strings"
 	"testing"
 )
@@ -45,7 +46,7 @@ func TestLongURLPlaceholderEditAndExportRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := restored.Finish(ctx, job, "Captured readable title", "Captured description", "Captured text", []byte("<p>Captured text</p>"), nil); err != nil {
+	if err := restored.Finish(ctx, job, capture.Result{Title: "Captured readable title", Description: "Captured description", Content: "Captured text", HTML: []byte("<p>Captured text</p>")}, nil); err != nil {
 		t.Fatal(err)
 	}
 	ready := getLink(t, restored, job.ID)
