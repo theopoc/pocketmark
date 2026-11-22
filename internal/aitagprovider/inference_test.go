@@ -16,6 +16,33 @@ func stream(answer string) string {
 		"data: " + jsonText(map[string]string{"type": "response.completed"}) + "\n\n"
 }
 
+func TestConnectionSampleRequestsJSONInInput(t *testing.T) {
+	c := oauthClient(t)
+	setupSession(t, c, registration{HostID: "host", Refresh: "session", Access: "valid", Expires: time.Now().Add(time.Hour)})
+	c.http.Transport = mockTransport(func(r *http.Request) (*http.Response, error) {
+		var body struct {
+			Input []struct{ Role, Content string }
+			Text  struct{ Format struct{ Type string } }
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body.Text.Format.Type != "json_object" {
+			t.Fatal("expected JSON object mode")
+		}
+		// Responses validates input messages before generation, even with top-level instructions.
+		for _, message := range body.Input {
+			if message.Role == "user" && strings.Contains(message.Content, "JSON") {
+				return reply(200, stream(`{"indices":[0]}`)), nil
+			}
+		}
+		return reply(200, "data: {\"type\":\"error\",\"code\":\"invalid_request_error\",\"param\":\"input\"}\n\n"), nil
+	})
+	if err := c.Test(t.Context(), "sample-model"); err != nil {
+		t.Fatalf("fictional bookmark failed the connection test: %v", err)
+	}
+}
+
 func TestClassify(t *testing.T) {
 	c := oauthClient(t)
 	setupSession(t, c, registration{HostID: "host", Refresh: "session", Access: "valid", Expires: time.Now().Add(time.Hour)})
