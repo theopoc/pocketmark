@@ -20,6 +20,9 @@
   --accent-hover: #096b5d;
   --accent-soft: #e2f4f1;
   --on-accent: #fff;
+  --toast-bad-bg: #fee4e2;
+  --toast-bad-line: #b42318;
+  --toast-bad-on: #fff;
   --bar: #12161f;
   --bar-ink: #f2f4f8;
   --bar-danger: #ffb4ae;
@@ -352,8 +355,8 @@ input[type=checkbox] { width: 15px; height: 15px; padding: 0; flex-shrink: 0; ac
   min-height: 60px;
   gap: 12px;
   padding: 8px 10px 8px 16px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
   background: var(--surface);
   color: var(--ink);
   font-size: 13px;
@@ -361,7 +364,10 @@ input[type=checkbox] { width: 15px; height: 15px; padding: 0; flex-shrink: 0; ac
   box-shadow: 0 6px 24px #10182825;
 }
 #toast > .icon { width: 20px; height: 20px; color: var(--muted); }
-#toast.error > .icon { color: var(--danger); }
+#toast.error { background: var(--toast-bad-bg); border-color: var(--toast-bad-line); }
+#toast.error > .icon { box-sizing: content-box; padding: 4px; border-radius: 50%; background: var(--toast-bad-line); color: var(--toast-bad-on); }
+#toast.error .toast-action, [data-theme="dark"] #toast.error .toast-action { background: var(--toast-bad-line); color: var(--toast-bad-on); }
+#toast.error .toast-action:is(:hover, :active) { background: var(--toast-bad-line); filter: brightness(.92); }
 #toast.favorite-notice.is-added > .icon { color: var(--accent); fill: currentColor; }
 [data-theme="dark"] #toast.favorite-notice.is-added > .icon { color: var(--focus); }
 #toast .toast-message { min-width: 0; flex: 1; overflow-wrap: anywhere; }
@@ -388,11 +394,11 @@ input, select, textarea { display: block; width: 100%; border: 1px solid #d5dbe5
 input::placeholder, textarea::placeholder { color: #5f6b7d; opacity: 1; }
 textarea { resize: vertical; line-height: 1.6; }
 input[readonly], textarea[readonly] { background: var(--surface); }
-.modal { width: min(590px,calc(100vw - 32px)); max-height: calc(100dvh - 48px); margin: auto; overflow-y: auto; padding: 28px; border: 0; border-radius: 12px; color: var(--ink); background: #fff; box-shadow: 0 20px 80px #10182838; overscroll-behavior: contain; }
+.modal { width: min(590px,calc(100vw - 32px)); max-height: calc(100dvh - 48px); margin: auto; overflow-y: auto; padding: 28px; border: 0; border-radius: 24px; color: var(--ink); background: #fff; box-shadow: 0 24px 60px #10182838; overscroll-behavior: contain; }
 .modal::backdrop, .navigation-dialog::backdrop { background: #12161f60; }
 body:has(dialog[open]) { overflow: hidden; }
 .dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
-.dialog-heading h2 { font-size: 20px; line-height: 1.4; font-weight: 650; letter-spacing: -.4px; margin: 0; }
+.dialog-heading h2 { font-size: 22px; line-height: 1.3; font-weight: 700; letter-spacing: -.4px; margin: 0; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
 .dialog-actions .button { min-height: 38px; }
 .form-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -631,6 +637,9 @@ body:has(dialog[open]) { overflow: hidden; }
   --accent-hover: #2bbfab;
   --accent-soft: #12332f;
   --on-accent: #05231f;
+  --toast-bad-bg: #3a1513;
+  --toast-bad-line: #f97066;
+  --toast-bad-on: #2a0a08;
   --bar: #e8ecf2;
   --bar-ink: #12161f;
   --bar-danger: #a01f14;

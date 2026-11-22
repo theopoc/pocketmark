@@ -10,7 +10,7 @@
     max-width: 100%;
     max-height: 100dvh;
     border-left: 1px solid var(--line);
-    border-radius: 12px 0 0 12px;
+    border-radius: 24px 0 0 24px;
     box-shadow: -12px 0 42px #0003;
   }
   #reader-dialog[data-notebook-open="true"] {
