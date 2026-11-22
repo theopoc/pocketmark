@@ -564,7 +564,9 @@ export function AppView() {
                   aria-pressed="false"
                 >
                   <span data-icon="list" aria-hidden="true"></span>
-                  <span id="select-page-label">{"Select all"}</span>
+                  <span id="select-page-label" className="bulk-label">
+                    {"Select all"}
+                  </span>
                 </Button>
                 {"\n          "}
                 <Button
@@ -574,7 +576,7 @@ export function AppView() {
                   aria-haspopup="dialog"
                 >
                   <span data-icon="folder-input" aria-hidden="true"></span>
-                  {"Move"}
+                  <span className="bulk-label">{"Move"}</span>
                 </Button>
                 {"\n          "}
                 <Button
@@ -584,7 +586,7 @@ export function AppView() {
                   aria-haspopup="dialog"
                 >
                   <span data-icon="tag" aria-hidden="true"></span>
-                  {"Tags"}
+                  <span className="bulk-label">{"Tags"}</span>
                 </Button>
                 {"\n          "}
                 <Button
@@ -594,7 +596,7 @@ export function AppView() {
                   aria-haspopup="dialog"
                 >
                   <span data-icon="star" aria-hidden="true"></span>
-                  {"Favorites"}
+                  <span className="bulk-label">{"Favorites"}</span>
                 </Button>
                 {"\n          "}
                 <Button
@@ -604,7 +606,9 @@ export function AppView() {
                   aria-haspopup="dialog"
                 >
                   <span id="bulk-read-icon" aria-hidden="true"></span>
-                  <span id="bulk-read-label">{"Read"}</span>
+                  <span id="bulk-read-label" className="bulk-label">
+                    {"Read"}
+                  </span>
                 </Button>
                 {"\n          "}
                 <Button
@@ -614,7 +618,7 @@ export function AppView() {
                   aria-haspopup="dialog"
                 >
                   <span data-icon="refresh" aria-hidden="true"></span>
-                  {"Refresh captures"}
+                  <span className="bulk-label">{"Refresh captures"}</span>
                 </Button>
                 {"\n          "}
                 <Button
@@ -624,7 +628,7 @@ export function AppView() {
                   aria-haspopup="dialog"
                 >
                   <span data-icon="trash" aria-hidden="true"></span>
-                  {"Delete"}
+                  <span className="bulk-label">{"Delete"}</span>
                 </Button>
                 {"\n        "}
               </div>

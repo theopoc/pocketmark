@@ -304,8 +304,8 @@ export function createApplication() {
     });
     document.documentElement.dataset.theme = theme;
     document.querySelector('meta[name="theme-color"]').content = dark
-      ? "#151922"
-      : "#ffffff";
+      ? "#0d1015"
+      : "#f2f4f8";
     document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
       button.setAttribute("aria-pressed", String(dark));
       button.setAttribute("aria-label", dark ? "Dark mode" : "Light mode");
