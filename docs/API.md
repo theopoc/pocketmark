@@ -341,7 +341,7 @@ for capture, invalidation and image limits.
 
 ### AI tagging
 
-Automatic classification and manual scans reuse relevant tags from the library. If none fit, the classifier can create lowercase tags, including in a library with no tags yet. Each bookmark can receive up to three tags.
+Automatic classification and manual scans assign up to three lowercase English tags per bookmark, regardless of the article’s language. Both reuse relevant English tags from the library and can create new ones when none fit, including in a library with no tags yet.
 
 The owner session reads `GET /api/ai-tagging` for connection state, selected model, eligible count and scan progress. Under the same path, POST to `connect` to obtain an OpenAI authorization URL, then to `finish` with `{"callback":"<return address>"}`. Keep both URLs private. POST to `models` to get the account catalog, then to `model` with `{"model":"<catalog ID>"}`. The `test` action uses a fictional example. The `enable`, `pause`, `disconnect`, `scan` and `resume` actions control background classification. Connection changes, model selection, activation, starting a scan and resuming work require recent owner password confirmation. [Owner guide](GUIDE.md#ai-tagging).
 

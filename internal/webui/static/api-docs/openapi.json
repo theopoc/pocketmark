@@ -54,7 +54,7 @@
     },
     {
       "name": "AI tagging",
-      "description": "Connect a personal ChatGPT plan to classify untagged bookmarks. Classification reuses existing tags and can create lowercase tags when none fit."
+      "description": "Classify untagged bookmarks with a personal ChatGPT plan. Reuse matching lowercase English tags or create new ones when none fit."
     }
   ],
   "security": [

@@ -16,6 +16,14 @@ func stream(answer string) string {
 		"data: " + jsonText(map[string]string{"type": "response.completed"}) + "\n\n"
 }
 
+func englishTags(names ...string) string {
+	tags := make([]map[string]string, 0, len(names))
+	for _, name := range names {
+		tags = append(tags, map[string]string{"name": name, "language": "en"})
+	}
+	return jsonText(map[string]any{"tags": tags})
+}
+
 func TestConnectionSampleRequestsJSONInInput(t *testing.T) {
 	c := oauthClient(t)
 	setupSession(t, c, registration{HostID: "host", Refresh: "session", Access: "valid", Expires: time.Now().Add(time.Hour)})
@@ -33,7 +41,10 @@ func TestConnectionSampleRequestsJSONInInput(t *testing.T) {
 		// Responses validates input messages before generation, even with top-level instructions.
 		for _, message := range body.Input {
 			if message.Role == "user" && strings.Contains(message.Content, "JSON") {
-				return reply(200, stream(`{"indices":[0]}`)), nil
+				if !strings.Contains(message.Content, "Découvrir l’astronomie") || !strings.Contains(message.Content, `"tags":["astronomie","astronomy"]`) {
+					t.Fatal("expected a fictional French article with French and English vocabulary")
+				}
+				return reply(200, stream(englishTags("astronomy"))), nil
 			}
 		}
 		return reply(200, "data: {\"type\":\"error\",\"code\":\"invalid_request_error\",\"param\":\"input\"}\n\n"), nil
@@ -49,7 +60,7 @@ func TestClassify(t *testing.T) {
 	ctx := context.Background()
 	article := Article{Title: "A tutorial", Domain: "example.invalid", Description: "https://example.invalid/guide?key=private-value and some words"}
 	tags := []string{"one", "machine learning", strings.Repeat("ⱥ", 40)}
-	result := stream(`{"indices":[1,0],"newTags":["unneeded"]}`)
+	result := stream(englishTags("machine learning", "one", "unneeded"))
 	calls := 0
 	c.http.Transport = mockTransport(func(r *http.Request) (*http.Response, error) {
 		calls++
@@ -84,7 +95,7 @@ func TestClassify(t *testing.T) {
 	if _, err := c.Classify(ctx, "available", Article{Domain: strings.Repeat("x", 256), Title: "article"}, tags, nil); !errors.Is(err, ErrArticleInput) || calls != 1 {
 		t.Fatal("invalid bookmark did not produce a local article-specific error")
 	}
-	for _, invalid := range []string{`{}`, `{"indices":[null]}`, `{"indices":["one"]}`, `{"indices":[3]}`, `{"indices":[0,1,2,0]}`} {
+	for _, invalid := range []string{`{}`, `{"indices":[0],"newTags":[]}`, `{"tags":[null]}`, `{"tags":["one"]}`, englishTags("one", "two", "three", "four")} {
 		result = stream(invalid)
 		if _, err := c.Classify(ctx, "available", article, tags, nil); !errors.Is(err, ErrModelOutput) {
 			t.Fatalf("accepted %s, %v", invalid, err)
@@ -95,18 +106,23 @@ func TestClassify(t *testing.T) {
 func TestClassifyFallback(t *testing.T) {
 	c := oauthClient(t)
 	setupSession(t, c, registration{HostID: "host", Refresh: "session", Access: "valid", Expires: time.Now().Add(time.Hour)})
-	article := Article{Title: "Deploying an app", Domain: "example.invalid"}
+	article := Article{Title: "Déployer une application avec des agents IA", Domain: "example.invalid"}
 	for _, tc := range []struct {
 		name       string
 		vocabulary []string
 		answer     string
 		want       []string
 	}{
-		{"empty vocabulary", nil, `{"indices":[],"newTags":["  CI/CD  ","ci/cd","ÉTUDES"]}`, []string{"ci/cd", "études"}},
-		{"unrelated vocabulary", []string{"music"}, `{"indices":[],"newTags":["AWS","machine learning"]}`, []string{"aws", "machine learning"}},
-		{"reuse indexed tag", []string{"cloud"}, `{"indices":[0],"newTags":["deployments"]}`, []string{"cloud"}},
-		{"reuse name", []string{"cloud"}, `{"indices":[],"newTags":["deployments","CLOUD"]}`, []string{"cloud"}},
-		{"no identifiable topic", nil, `{"indices":[],"newTags":[]}`, []string{}},
+		{"empty vocabulary", nil, englishTags("  CI/CD  ", "ci/cd", "AI agents"), []string{"ci/cd", "ai agents"}},
+		{"unrelated vocabulary", []string{"music"}, englishTags("AWS", "machine learning"), []string{"aws", "machine learning"}},
+		{"translate French vocabulary", []string{"agents ia", "développement logiciel"}, englishTags("AI agents", "software development"), []string{"ai agents", "software development"}},
+		{"existing English synonym first", []string{"agents ia", "agentic software"}, englishTags("ai agents", "AGENTIC SOFTWARE"), []string{"agentic software"}},
+		{"mixed reply reuses existing English", []string{"astronomie", "astronomy"},
+			`{"tags":[{"name":"astronomie","language":"fr"},{"name":"astronomy","language":"en"},{"name":"stars","language":"en"}]}`, []string{"astronomy"}},
+		{"mixed reply creates English fallback", []string{"agents ia"},
+			`{"tags":[{"name":"agents ia","language":"fr"},{"name":"AI Agents","language":"en"}]}`, []string{"ai agents"}},
+		{"reuse existing punctuation", []string{"tools: ci"}, englishTags("tools: ci"), []string{"tools: ci"}},
+		{"no identifiable topic", nil, englishTags(), []string{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			calls, guards := 0, 0
@@ -114,6 +130,15 @@ func TestClassifyFallback(t *testing.T) {
 				calls++
 				if guards != 1 {
 					t.Fatal("sent bookmark before checking owner consent")
+				}
+				var request struct{ Instructions string }
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Fatal(err)
+				}
+				for _, rule := range []string{"lowercase English", "existing English tags", "Translate foreign-language topics into English"} {
+					if !strings.Contains(request.Instructions, rule) {
+						t.Fatalf("missing language instruction %q", rule)
+					}
 				}
 				return reply(200, stream(tc.answer)), nil
 			})
@@ -130,13 +155,15 @@ func TestClassifyFallback(t *testing.T) {
 
 func TestInvalidTagProposals(t *testing.T) {
 	for _, answer := range []string{
-		`{"indices":[]}`, `{"indices":[],"newTags":null}`, `{"indices":[],"newTags":"cloud"}`,
-		`{"indices":[],"newTags":["cloud",null]}`, `{"indices":[],"newTags":["a","b","c","d"]}`,
-		`{"indices":[],"newTags":["  "]}`, `{"indices":[],"newTags":["https://example.org/?q=secret"]}`,
-		`{"indices":[],"newTags":["bad\u0000name"]}`,
-		jsonText(map[string]any{"indices": []int{}, "newTags": []string{strings.Repeat("x", 81)}}),
+		`{"tags":null}`, `{"tags":"cloud"}`, `{"tags":[{"name":"cloud"}]}`,
+		`{"tags":[{"name":"agents ia","language":"fr"}]}`,
+		`{"tags":[{"name":"cloud","language":"en"},{"name":"nuages"}]}`,
+		`{"tags":[{"name":"cloud","language":"en"},{"language":"fr"}]}`,
+		`{"tags":[{"name":"cloud","language":"en"},{"name":"nuages","language":"malformed"}]}`,
+		englishTags("  "), englishTags("https://example.org/?q=secret"), englishTags("bad\x00name"),
+		englishTags(strings.Repeat("x", 81)),
 	} {
-		if _, err := parseTagSelection(answer, nil); !errors.Is(err, ErrModelOutput) {
+		if _, err := parseTagSelection(answer, []string{"agents ia"}); !errors.Is(err, ErrModelOutput) {
 			t.Errorf("expected invalid selection for %s, got %v", answer, err)
 		}
 	}
@@ -191,7 +218,7 @@ func TestClassificationGuardAfterRefresh(t *testing.T) {
 			}
 		}
 		posts++
-		return reply(200, stream(`{"indices":[]}`)), nil
+		return reply(200, stream(englishTags())), nil
 	})
 	jobCanceled := errors.New("job was canceled locally")
 	go func() {

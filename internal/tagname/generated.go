@@ -8,7 +8,7 @@ import (
 )
 
 // Generated canonicalizes a model suggestion. Existing library tags can be
-// selected by index even when their owner chose a different naming style.
+// reused even when their owner chose a different naming style.
 func Generated(raw string) (string, bool) {
 	if !utf8.ValidString(raw) {
 		return "", false
