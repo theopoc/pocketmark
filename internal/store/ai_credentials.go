@@ -29,6 +29,32 @@ func (s *Store) ReadAITagCredentials(ctx context.Context) ([]byte, error) {
 	return readAIEnvelope(readCtx, s.db)
 }
 
+// ReadAIClaudeKey returns the sealed Anthropic API key, or nil when none is saved.
+func (s *Store) ReadAIClaudeKey(ctx context.Context) ([]byte, error) {
+	readCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	var envelope []byte
+	err := s.db.QueryRowContext(readCtx, "SELECT substr(envelope,1,4097) FROM ai_tag_credentials WHERE id=2").Scan(&envelope)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return envelope, err
+}
+
+// WriteAIClaudeKey saves a sealed key. A nil envelope removes it. Callers hold
+// the AI settings lock, so no token-rotation lock is needed.
+func (s *Store) WriteAIClaudeKey(ctx context.Context, envelope []byte) error {
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if envelope == nil {
+		_, err := s.db.ExecContext(writeCtx, "DELETE FROM ai_tag_credentials WHERE id=2")
+		return err
+	}
+	_, err := s.db.ExecContext(writeCtx, `INSERT INTO ai_tag_credentials(id,envelope) VALUES(2,$1)
+		ON CONFLICT(id) DO UPDATE SET envelope=EXCLUDED.envelope`, envelope)
+	return err
+}
+
 func (s *Store) tryAILock(ctx context.Context, key int64) (*sql.Conn, error) {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {

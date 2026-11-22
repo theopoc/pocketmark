@@ -52,8 +52,9 @@ export const settingsGroups = [
         id: "ai-tagging",
         icon: "tag",
         name: "AI tagging",
-        description: "Classify untagged bookmarks with your ChatGPT plan",
-        keywords: "model classify scan automatic tags OpenAI provider",
+        description: "Classify untagged bookmarks with ChatGPT or Claude",
+        keywords:
+          "model classify scan automatic tags OpenAI ChatGPT Claude Anthropic API key provider",
       },
       {
         id: "api-keys",

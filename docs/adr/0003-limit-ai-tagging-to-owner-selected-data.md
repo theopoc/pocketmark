@@ -6,7 +6,7 @@ AI tagging assigns up to three lowercase English tags, giving priority to the ow
 
 If basic capture fails, is disabled or takes too long, classification uses the available metadata. A bookmark URL used as a fallback title is omitted from the request. When the domain is the only clue, Pocketmark leaves the bookmark untagged.
 
-Imports and Floccus synchronization can add thousands of bookmarks at once. The owner can include those links and older untagged bookmarks by starting a scan in settings, where Pocketmark shows the eligible count before consuming the owner's ChatGPT plan allowance. Standalone files are outside the scope of AI tagging.
+Imports and Floccus synchronization can add thousands of bookmarks at once. The owner can include those links and older untagged bookmarks by starting a scan in settings, where Pocketmark shows the eligible count before consuming the owner's ChatGPT plan allowance or Anthropic API credit. Standalone files are outside the scope of AI tagging.
 
 The classifier uses English topic names for articles in every language. Existing technology names and acronyms used in English, such as `kubernetes` and `aws`, are eligible. When no existing English tag fits, the classifier may propose new lowercase English tags. This also allows a library to start with no tags. New tags enter the vocabulary as soon as they are saved to a bookmark.
 
@@ -20,6 +20,6 @@ Interior spaces and punctuation are preserved. `Machine Learning` becomes `machi
 
 ## Settings and quota
 
-In AI tagging settings, the owner connects a ChatGPT plan, selects a model, tests it with a fictional example and enables automatic tagging. The same screen shows the eligible count and starts a scan of untagged bookmarks. The owner can pause tagging while keeping the account connected, or disconnect it.
+In AI tagging settings, the owner connects a ChatGPT plan or an Anthropic API key (`claude-haiku-5-5` is preselected), selects a model, tests it with a fictional example and enables automatic tagging. The same screen shows the eligible count and starts a scan of untagged bookmarks. The owner can pause tagging while keeping the account connected, or disconnect it.
 
 If the plan reaches its usage limit during a scan, Pocketmark saves progress and shows how many bookmarks remain. It resumes at the time supplied by the provider when available. Otherwise, the owner can resume from settings. A resumed scan skips bookmarks it has already processed, including bookmarks that had insufficient public information to classify.

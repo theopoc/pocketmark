@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -321,4 +322,114 @@ func TestAITagSettingsCreationAndManualScan(t *testing.T) {
 	if err != nil || p.connected || state.Model != "" || state.Enabled {
 		t.Fatal(state, err)
 	}
+}
+
+type testClaudeProvider struct {
+	connected bool
+	key       string
+	articles  []aitagprovider.Article
+}
+
+func (p *testClaudeProvider) State(context.Context) (bool, error) { return p.connected, nil }
+func (p *testClaudeProvider) Connect(_ context.Context, key string) ([]aitagprovider.Model, error) {
+	if key != "sk-ant-fixture-key" {
+		return nil, aitagprovider.ErrInvalidKey
+	}
+	p.connected, p.key = true, key
+	return p.Models(context.Background())
+}
+func (p *testClaudeProvider) Disconnect(context.Context) error { p.connected = false; return nil }
+func (p *testClaudeProvider) Models(context.Context) ([]aitagprovider.Model, error) {
+	return []aitagprovider.Model{{ID: aitagprovider.DefaultClaudeModel, Name: "Claude Haiku 5.5"}, {ID: "claude-sonnet-5-5", Name: "Claude Sonnet 5.5"}}, nil
+}
+func (p *testClaudeProvider) Test(context.Context, string) error { return nil }
+func (p *testClaudeProvider) Classify(_ context.Context, model string, article aitagprovider.Article, _ []string, beforeSend func(context.Context) error) ([]string, error) {
+	if !p.connected || (model != aitagprovider.DefaultClaudeModel && model != "claude-sonnet-5-5") {
+		return nil, errors.New("unexpected classification request")
+	}
+	if err := beforeSend(context.Background()); err != nil {
+		return nil, err
+	}
+	p.articles = append(p.articles, article)
+	return []string{"machine learning"}, nil
+}
+
+func TestAITagClaudeProviderSelectionAndWorker(t *testing.T) {
+	ctx := t.Context()
+	a := newTestServer(t, "", false)
+	chatgpt, claude := &testTagProvider{}, &testClaudeProvider{}
+	a.aiTagging.provider, a.aiTagging.claude = chatgpt, claude
+	post := func(action, body string, want int) {
+		t.Helper()
+		requireStatus(t, request(a, "POST", "/api/ai-tagging/"+action, body, true, nil), want)
+	}
+	state := func() store.AITagStatus {
+		t.Helper()
+		s, err := a.Store.AITagStatus(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	post("connect-claude", `{"apiKey":"rejected"}`, 400)
+	if s := state(); s.Provider != "chatgpt" || s.Model != "" {
+		t.Fatalf("a rejected key changed settings: %+v", s)
+	}
+	post("connect-claude", `{"apiKey":"sk-ant-fixture-key"}`, 200)
+	if s := state(); s.Provider != "claude" || s.Model != aitagprovider.DefaultClaudeModel {
+		t.Fatalf("Haiku 5.5 was not preselected: %+v", s)
+	}
+	w := request(a, "GET", "/api/ai-tagging", "", true, nil)
+	requireStatus(t, w, 200)
+	var settings struct {
+		Provider string
+		Claude   struct{ Connected bool }
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &settings); err != nil || settings.Provider != "claude" || !settings.Claude.Connected {
+		t.Fatalf("settings: %s %v", w.Body, err)
+	}
+	if strings.Contains(w.Body.String(), "fixture-key") {
+		t.Fatal("settings returned the API key")
+	}
+	post("provider", `{"provider":"chatgpt"}`, 409)
+	post("model", `{"model":"unknown"}`, 400)
+	post("model", `{"model":"claude-sonnet-5-5"}`, 200)
+	post("model", `{"model":"claude-haiku-5-5"}`, 200)
+	post("test", "", 200)
+	post("enable", "", 200)
+	id, err := a.Store.Create(ctx, store.Link{URL: "https://example.org/claude", Title: "Neural networks"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = a.workAITag(ctx, false); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := a.Store.Get(ctx, id); err != nil || !slices.Equal(got.Tags, []string{"machine learning"}) || len(claude.articles) != 1 || len(chatgpt.articles) != 0 {
+		t.Fatalf("Claude did not classify the bookmark: %v %v", got.Tags, err)
+	}
+	// A rejected ChatGPT return address must not disturb the running Claude setup.
+	post("finish", `{"callback":""}`, 400)
+	if s := state(); s.Provider != "claude" || s.Model != aitagprovider.DefaultClaudeModel || !s.Enabled {
+		t.Fatalf("a failed ChatGPT connection changed Claude settings: %+v", s)
+	}
+	post("connect-claude", `{"apiKey":"sk-ant-fixture-key"}`, 409)
+	// Linking ChatGPT switches provider and pauses until a model is chosen again.
+	post("connect", "", 200)
+	post("finish", `{"callback":"sample return address"}`, 200)
+	if s := state(); s.Provider != "chatgpt" || s.Model != "" || s.Enabled {
+		t.Fatalf("ChatGPT connection kept the Claude model: %+v", s)
+	}
+	post("provider", `{"provider":"claude"}`, 200)
+	if s := state(); s.Provider != "claude" || s.Model != aitagprovider.DefaultClaudeModel || s.Enabled {
+		t.Fatalf("switching back: %+v", s)
+	}
+	post("disconnect", `{"provider":"chatgpt"}`, 200)
+	if s := state(); s.Model != aitagprovider.DefaultClaudeModel || chatgpt.connected {
+		t.Fatalf("disconnecting the idle provider changed the active one: %+v", s)
+	}
+	post("disconnect", `{"provider":"claude"}`, 200)
+	if s := state(); s.Model != "" || claude.connected {
+		t.Fatalf("disconnecting Claude kept the model: %+v", s)
+	}
+	post("provider", `{"provider":"other"}`, 400)
 }
