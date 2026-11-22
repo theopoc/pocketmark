@@ -18,27 +18,27 @@ colors:
   focus: "#7067ef"
 typography:
   headline:
-    fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
+    fontFamily: "Figtree, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
     fontSize: "26px"
     fontWeight: 650
     lineHeight: 1.3
     letterSpacing: "-.7px"
   title:
-    fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
+    fontFamily: "Figtree, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
     fontSize: "14px"
     fontWeight: 600
     lineHeight: 1.5
   body:
-    fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
+    fontFamily: "Figtree, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
     fontSize: "14px"
     lineHeight: 1.5
   label:
-    fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
+    fontFamily: "Figtree, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
     fontSize: "12px"
     fontWeight: 550
     lineHeight: 1.5
   reader:
-    fontFamily: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
+    fontFamily: "Figtree, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif"
     fontSize: "17px"
     lineHeight: 1.95
 rounded:
@@ -92,9 +92,9 @@ artifacts outside version control as described in [AGENTS.md](AGENTS.md).
 
 **Creative North Star: "The Personal Library Workspace"**
 
-A precise technology workspace for a strictly personal library. Cool white content, a slate-tinted navigation drawer and indigo controls keep attention on saved material and practical actions. The interface uses the operating system’s sans serif, authored outline SVG icons and restrained borders.
+A precise technology workspace for a strictly personal library. Cool white content, a slate-tinted navigation drawer and indigo controls keep attention on saved material and practical actions. The interface uses Figtree, authored outline SVG icons and restrained borders.
 
-Density serves finding and organizing; reading deliberately opens into a larger type size and generous measure. The React interface uses locally compiled shadcn/ui primitives styled with Pocketmark’s semantic CSS tokens. Assets remain embedded in Go; fonts remain local to the operating system.
+Density serves finding and organizing; reading deliberately opens into a larger type size and generous measure. The React interface uses locally compiled shadcn/ui primitives styled with Pocketmark’s semantic CSS tokens. Assets, including the Figtree font files, remain embedded in Go; no font is fetched from another origin.
 
 **Key Characteristics:**
 - Compact library rows with visible actions and labeled capture states.
@@ -186,7 +186,7 @@ On phones, a compact selection count, Actions launcher and clear-selection contr
 
 ## Typography
 
-**Body and interface font:** the system sans stack in the frontmatter. There is no separately loaded display face. Monospace is used for generated credentials, including API keys, authenticator setup keys and recovery codes.
+**Body and interface font:** Figtree, one embedded variable font (weights 300 to 900, Latin and Latin Extended subsets, SIL Open Font License in `internal/webui/static/fonts/OFL.txt`), with the system sans stack as fallback while it loads. There is no separate display face; titles use the semi-bold to bold weights of the same family. The Chrome extension does not load the font and keeps the system sans stack, because its toast runs inside arbitrary pages. Monospace is used for generated credentials, including API keys, authenticator setup keys and recovery codes.
 
 The hierarchy is compact: headline for library headings, title for bookmark names, body for the base interface, and label for buttons and field labels. Secondary metadata commonly uses (11px–13px). Dialog headings use 20px. The article reader title scales from 28px to 41px on desktop and from 27px to 34px on compact screens. The sign-in introduction uses (42px) on desktop and (30px) on phones; this is an entrance-specific treatment, not a general display scale.
 
@@ -368,5 +368,5 @@ Dialogs use theme-matched panels, a dimmed backdrop, labeled headings and separa
 
 ### Don't:
 - Don’t add team or public-sharing visual concepts to this personal workspace.
-- Reuse the existing React/shadcn primitives and authored icons. Keep fonts local; justify additional runtime dependencies against the frontend guide.
+- Reuse the existing React/shadcn primitives and authored icons. Keep fonts embedded and local; justify additional fonts and runtime dependencies against the frontend guide.
 - Don’t use color alone to communicate capture status.
