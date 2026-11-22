@@ -42,6 +42,9 @@ try {
     "/secondary.css",
     "/select.css",
     "/icon.svg",
+    "/fonts/figtree-latin.woff2",
+    "/fonts/figtree-latin-ext.woff2",
+    "/fonts/figtree-latin-italic.woff2",
     "/manifest.webmanifest",
     ...Object.values(manifest)
       .flatMap((item) => [item.file, ...(item.css || [])])

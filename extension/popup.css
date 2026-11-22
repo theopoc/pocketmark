@@ -1,19 +1,20 @@
 /* Compact, task-first extension of Pocketmark's dark library workspace. */
 :root {
   color-scheme: dark;
-  --ink: #e8e9ef;
-  --muted: #a3a7b6;
-  --paper: #15161b;
-  --surface: #1e2029;
-  --line: #30323e;
-  --control: #747b92;
-  --accent: #6359ed;
-  --accent-hover: #5a50df;
-  --accent-soft: #2b2750;
-  --focus: #a39aff;
-  --danger: #f58a96;
-  --success: #80c9a3;
-  --pending: #d9b87c;
+  --ink: #eef1f6;
+  --muted: #8f9bad;
+  --paper: #151922;
+  --surface: #1b212c;
+  --line: #262d3a;
+  --control: #6b778b;
+  --accent: #34d1bd;
+  --accent-hover: #2bbfab;
+  --accent-soft: #12332f;
+  --on-accent: #05231f;
+  --focus: #34d1bd;
+  --danger: #ffa39a;
+  --success: #7fe8d9;
+  --pending: #f5c76b;
 }
 * { box-sizing: border-box; }
 html { background: var(--paper); }
@@ -33,7 +34,7 @@ body {
   accent-color: var(--accent);
   caret-color: var(--focus);
 }
-::selection { color: #fff; background: #4f46e5; }
+::selection { color: var(--on-accent); background: var(--accent); }
 body.native-popup { max-inline-size: none; max-block-size: none; }
 svg { inline-size: 18px; block-size: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 h1, h2, p { margin: 0; }
@@ -55,12 +56,11 @@ h2 { font-size: 20px; font-weight: 600; letter-spacing: -.35px; line-height: 1.3
 .field { margin-bottom: 12px; min-inline-size: 0; }
 label, legend { font-size: 12px; font-weight: 600; }
 .field > label, .collection-create > label { display: block; margin-bottom: 6px; }
-input, select, button { font: inherit; border-radius: 6px; }
+input, select, button { font: inherit; border-radius: 10px; }
 input:not([type="checkbox"]), select { inline-size: 100%; min-inline-size: 0; min-block-size: 38px; padding: 9px 10px; border: 1px solid var(--control); color: var(--ink); background: var(--surface); }
 input::placeholder { color: var(--muted); opacity: 1; }
-button { padding: 9px 12px; min-block-size: 38px; border: 1px solid transparent; color: #fff; background: var(--accent); cursor: pointer; font-weight: 550; transition: background-color 160ms ease-out; }
+button { padding: 9px 12px; min-block-size: 38px; border: 1px solid transparent; color: var(--on-accent); background: var(--accent); cursor: pointer; font-weight: 550; transition: background-color 160ms ease-out; }
 button:hover { background: var(--accent-hover); }
-button:active { background: #4f46d1; }
 button:disabled { opacity: .48; cursor: default; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 :is(button, a, summary):focus-visible { outline-offset: 3px; }
@@ -166,12 +166,12 @@ summary { cursor: pointer; font-size: 11px; color: var(--muted); }
 /* Light appearance supplements the original dark palette and popup structure. */
 :root[data-theme="light"] {
   color-scheme: light;
-  --ink: #20232c; --muted: #626978; --paper: #fff; --surface: #f8f9fb;
-  --line: #e3e5eb; --control: #818896; --accent: #4f46e5;
-  --accent-hover: #4038c5; --accent-soft: #eeedff; --focus: #7067ef;
-  --danger: #b12e35; --success: #23714a; --pending: #8c5818;
+  --ink: #12161f; --muted: #5f6b7d; --paper: #fff; --surface: #f7f8fb;
+  --line: #e4e8ef; --control: #7f8a9d; --accent: #0b7a6b;
+  --accent-hover: #096b5d; --accent-soft: #e2f4f1; --on-accent: #fff; --focus: #0b7a6b;
+  --danger: #b42318; --success: #0a6d60; --pending: #8a5300;
 }
-:root[data-theme="light"] .text-button { color: #5146c8; }
+:root[data-theme="light"] .text-button { color: #0a6d60; }
 .theme-toggle { flex: none; padding-inline: 10px; }
 #collection-name-hint { color: var(--danger); }
 #collection-name-hint:empty { display: none; }

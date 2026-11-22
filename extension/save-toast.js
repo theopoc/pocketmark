@@ -35,18 +35,18 @@ globalThis.PocketmarkSaveToast = (() => {
       }
       :host::backdrop { display: none !important; }
       .toast {
-        --surface: #1e2029; --line: #30323e; --ink: #e8e9ef;
-        --success: #80c9a3; --danger: #f58a96;
+        --surface: #1b212c; --line: #262d3a; --ink: #eef1f6;
+        --success: #7fe8d9; --danger: #ffa39a;
         box-sizing: border-box; display: flex; align-items: center; gap: 12px;
         min-height: 60px; padding: 12px 16px; border-radius: 12px;
         border: 1px solid var(--line);
         background: var(--surface); color: var(--ink);
-        box-shadow: 0 6px 24px #20232c25; overflow-wrap: anywhere;
+        box-shadow: 0 6px 24px #10182825; overflow-wrap: anywhere;
         font: 500 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
       .toast.light {
-        --surface: #f8f9fb; --line: #e3e5eb; --ink: #20232c;
-        --success: #23714a; --danger: #b12e35;
+        --surface: #f7f8fb; --line: #e4e8ef; --ink: #12161f;
+        --success: #0a6d60; --danger: #b42318;
       }
       .toast.leaving { opacity: 0; }
       @media (prefers-reduced-motion: no-preference) {

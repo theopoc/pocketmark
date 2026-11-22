@@ -265,12 +265,12 @@
 .bk-running,
 .bk-retry,
 .bk-queued {
-  color: #8c5818;
-  background: #fff0da;
+  color: #8a5300;
+  background: #fff3d6;
 }
 [data-theme="dark"] :is(.bk-running, .bk-retry, .bk-queued) {
-  color: #d9b87c;
-  background: #3b3020;
+  color: #f5c76b;
+  background: #3a2e12;
 }
 .bk-pages,
 .bk-pages div {
@@ -342,7 +342,7 @@
 .modal.bk-dialog {
   padding: 0;
   border: 1px solid var(--control-line);
-  border-radius: 12px;
+  border-radius: 24px;
   width: min(560px, calc(100vw - 24px));
   max-height: calc(100dvh - 40px);
   color: var(--ink);
@@ -351,7 +351,8 @@
   overscroll-behavior: contain;
 }
 .bk-dialog .bk-modal-head h2 {
-  font-size: 20px;
+  font-size: 22px;
+  font-weight: 700;
 }
 .bk-modal-head,
 .bk-footer {

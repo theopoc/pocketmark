@@ -14,10 +14,10 @@
   --state-ink: var(--danger);
 }
 #reader-state[data-kind="pending"] {
-  --state-ink: #8c5818;
+  --state-ink: #8a5300;
 }
 [data-theme="dark"] #reader-state[data-kind="pending"] {
-  --state-ink: #d9b87c;
+  --state-ink: #f5c76b;
 }
 #reader-state .reader-state-symbol {
   display: grid;

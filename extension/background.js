@@ -43,7 +43,7 @@ function setTabBadge(tabId, saved) {
     chrome.action.setBadgeText({ tabId, text: saved ? "✓" : "" }),
     chrome.action.setTitle({ tabId, title: saved ? "Saved to Pocketmark" : "Save to Pocketmark" }),
   ];
-  if (saved) changes.push(chrome.action.setBadgeBackgroundColor({ tabId, color: "#23714a" }));
+  if (saved) changes.push(chrome.action.setBadgeBackgroundColor({ tabId, color: "#0a6d60" }));
   return Promise.all(changes);
 }
 
