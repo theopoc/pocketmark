@@ -37,7 +37,7 @@ function SettingRow({ title, description, children }) {
         <h2>{title}</h2>
         <p>{description}</p>
       </div>
-      <div className="account-row-actions">{children}</div>
+      {children && <div className="account-row-actions">{children}</div>}
     </div>
   );
 }
@@ -52,12 +52,26 @@ function AITagging({ api }) {
   const [models, setModels] = useState(null);
   const [choice, setChoice] = useState(null);
   const [apiKey, setApiKey] = useState("");
+  const [failed, setFailed] = useState("");
+  const [refocus, setRefocus] = useState(null);
   const session = useRef(null);
   const signInLink = useRef(null);
   const version = useRef(0);
   useEffect(() => {
     if (login) signInLink.current?.focus();
   }, [login]);
+  // Controls that unmount or become disabled during a request drop focus to the page.
+  useEffect(() => {
+    if (!refocus || busy) return;
+    for (const id of refocus) {
+      const node = document.getElementById(id);
+      if (node && !node.disabled) {
+        node.focus();
+        break;
+      }
+    }
+    setRefocus(null);
+  }, [refocus, busy]);
   const refresh = useCallback(
     async (signal) => {
       const request = ++version.current;
@@ -105,6 +119,7 @@ function AITagging({ api }) {
     const { signal } = session.current;
     version.current++;
     setBusy(name);
+    setFailed("");
     setError("");
     setNotice("");
     try {
@@ -124,6 +139,11 @@ function AITagging({ api }) {
         setChoice(null);
         setApiKey("");
         setModels(null);
+        setRefocus(
+          name === "provider"
+            ? ["ai-provider-trigger"]
+            : ["ai-model-trigger", "ai-claude-disconnect"],
+        );
       }
       if (name === "connect") {
         const url = new URL(result.url);
@@ -177,7 +197,12 @@ function AITagging({ api }) {
           // Keep the error and let the owner refresh the connection status.
         }
       }
-      if (!signal.aborted) setError(message);
+      if (!signal.aborted) {
+        setError(message);
+        setFailed(name);
+        if (name === "connect-claude") setRefocus(["ai-api-key"]);
+        if (name === "provider") setRefocus(["ai-provider-trigger"]);
+      }
     } finally {
       if (!signal.aborted) setBusy("");
     }
@@ -199,7 +224,7 @@ function AITagging({ api }) {
         {error}
       </p>
       {!data && !error && <p role="status">Loading tagging settings…</p>}
-      {error && (
+      {error && failed !== "connect-claude" && (
         <Button
           type="button"
           variant="outline"
@@ -213,9 +238,10 @@ function AITagging({ api }) {
         <>
           <SettingRow
             title="Provider"
-            description="Choose how Pocketmark reaches a model. Switching pauses tagging until you pick a model."
+            description="Choose how Pocketmark reaches a model. Changing the provider pauses tagging until you pick a model."
           >
             <Picker
+              id="ai-provider"
               label="Tagging provider"
               value={shown}
               disabled={disabled}
@@ -235,6 +261,15 @@ function AITagging({ api }) {
               ))}
             </Picker>
           </SettingRow>
+          {shown !== active && (
+            <p role="status" className="ai-message">
+              {providers[active]} stays active until{" "}
+              {shown === "claude"
+                ? "the API key is saved"
+                : "the connection is finished"}
+              .
+            </p>
+          )}
           {shown === "claude" && (
             <SettingRow
               title="Claude API"
@@ -248,6 +283,7 @@ function AITagging({ api }) {
             >
               {(claudeConnected || data.claude?.connectionIssue) && (
                 <Button
+                  id="ai-claude-disconnect"
                   type="button"
                   variant="outline"
                   disabled={disabled}
@@ -265,9 +301,7 @@ function AITagging({ api }) {
                 className="ai-connect"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  const value = apiKey.trim();
-                  setApiKey("");
-                  action("connect-claude", { apiKey: value });
+                  action("connect-claude", { apiKey: apiKey.trim() });
                 }}
               >
                 <label htmlFor="ai-api-key">Anthropic API key</label>
@@ -311,7 +345,8 @@ function AITagging({ api }) {
                     disabled={disabled}
                     onClick={() => action("connect")}
                   >
-                    {data.registered || reason === "reconnect"
+                    {data.registered ||
+                    (active === "chatgpt" && reason === "reconnect")
                       ? "Reconnect ChatGPT"
                       : "Connect ChatGPT"}
                   </Button>
@@ -411,6 +446,7 @@ function AITagging({ api }) {
               >
                 {models?.length > 0 && (
                   <Picker
+                    id="ai-model"
                     label="Tagging model"
                     value={data.model || ""}
                     disabled={disabled}

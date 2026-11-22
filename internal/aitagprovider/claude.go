@@ -235,8 +235,10 @@ func (c *Claude) Classify(ctx context.Context, model string, article Article, ta
 	}
 	// Sampling parameters and thinking are left at their defaults because
 	// current models reject non-default values. Low effort keeps output short.
+	// Thinking tokens count against max_tokens, so leave room. Billing follows
+	// the tokens actually generated.
 	body, err := json.Marshal(map[string]any{
-		"model": model, "max_tokens": 4096,
+		"model": model, "max_tokens": 16000,
 		"system":   taggingInstructions,
 		"messages": []map[string]string{{"role": "user", "content": prompt}},
 		"output_config": map[string]any{

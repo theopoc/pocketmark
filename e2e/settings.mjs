@@ -278,6 +278,7 @@ export async function settingsNavigationJourney(page) {
   await page.locator('#mfa-settings-title').waitFor({ state: 'visible' });
   assert.equal(await page.locator('#settings-page').getByRole('heading', { level: 1 }).evaluate(node => document.activeElement === node && node.getBoundingClientRect().top >= 0 && node.getBoundingClientRect().top < innerHeight), true);
   await aiTaggingJourney(page);
+  await claudeTaggingJourney(page);
   await backupOverviewJourney(page);
   await page.reload();
   await page.locator('[data-settings-panel="backup"]').waitFor({ state: 'visible' });
@@ -381,4 +382,65 @@ export async function refreshSessionsBeforeMFA(page) {
   await selectSettings(page, 'sessions');
   await page.locator('#sessions-refresh').click();
   await selectSettings(page, '2fa');
+}
+
+// The Claude provider takes an owner-supplied API key and preselects a model.
+export async function claudeTaggingJourney(page) {
+  const panel = page.locator('[data-settings-panel="ai-tagging"]');
+  const state = { provider: 'chatgpt', claude: { connected: false }, enabled: false, connected: false, model: '', eligible: 3, hasTags: false, remaining: 0, scan: { status: 'idle', processed: 0, remaining: 0 } };
+  const calls = [];
+  const handle = async route => {
+    const { pathname } = new URL(route.request().url());
+    const name = pathname.split('/').at(-1);
+    if (name === 'ai-tagging') return route.fulfill({ json: state });
+    calls.push(name);
+    const payload = route.request().postDataJSON();
+    switch (name) {
+      case 'connect-claude':
+        if (payload.apiKey !== 'sk-ant-fixture-key') return route.fulfill({ status: 400, json: { error: 'Anthropic did not accept this API key' } });
+        Object.assign(state, { provider: 'claude', claude: { connected: true }, model: 'claude-haiku-5-5' });
+        break;
+      case 'models': return route.fulfill({ json: { models: [{ id: 'claude-haiku-5-5', name: 'Claude Haiku 5.5' }, { id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5' }] } });
+      case 'model': assert.equal(payload.model, 'claude-sonnet-5-5'); state.model = payload.model; break;
+      case 'disconnect': assert.deepEqual(payload, { provider: 'claude' }); Object.assign(state, { claude: { connected: false }, model: '' }); break;
+      default: throw Error('Unexpected tagging action ' + name);
+    }
+    return route.fulfill({ json: { ok: true } });
+  };
+  await page.route('**/api/ai-tagging**', handle);
+  try {
+    await selectSettings(page, 'ai-tagging');
+    const action = name => panel.getByRole('button', { name, exact: true });
+    const provider = panel.getByRole('combobox', { name: 'Tagging provider' });
+    await provider.waitFor();
+    await provider.press('Enter');
+    await provider.press('End');
+    await provider.press('Enter');
+    await panel.getByText('ChatGPT plan stays active until the API key is saved.').waitFor();
+    const key = panel.getByLabel('Anthropic API key');
+    assert.equal(await key.getAttribute('type'), 'password');
+    assert.equal(await action('Save API key').isDisabled(), true);
+    await key.fill('rejected-key-value');
+    await action('Save API key').click();
+    await panel.getByText('Anthropic did not accept this API key').waitFor();
+    // A rejected key keeps the field for correction and offers no unrelated refresh.
+    assert.equal(await key.inputValue(), 'rejected-key-value');
+    assert.equal(await action('Refresh status').count(), 0);
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'ai-api-key');
+    await key.fill('sk-ant-fixture-key');
+    await action('Save API key').click();
+    const models = panel.getByRole('combobox', { name: 'Tagging model' });
+    await models.waitFor();
+    assert.match(await models.textContent(), /Claude Haiku 5\.5/);
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'ai-model-trigger');
+    await models.press('Enter');
+    await models.press('End');
+    await models.press('Enter');
+    await panel.getByText('Model saved.').waitFor();
+    await action('Disconnect').click();
+    await panel.getByLabel('Anthropic API key').waitFor();
+    assert.deepEqual(calls, ['connect-claude', 'connect-claude', 'models', 'model', 'disconnect']);
+  } finally {
+    await page.unroute('**/api/ai-tagging**', handle);
+  }
 }

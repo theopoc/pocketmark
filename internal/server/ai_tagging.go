@@ -163,12 +163,19 @@ func (a *Server) applyTaggingAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Clear activation before installing a session that could belong to a different account.
-		if taggingStoreFailed(w, a.Store.SetAITagModel(ctx, "")) {
-			return
+		// A failed attempt must not disturb Claude tagging, which does not use that session.
+		if state.Provider == "chatgpt" {
+			if taggingStoreFailed(w, a.Store.SetAITagModel(ctx, "")) {
+				return
+			}
+			a.aiTagging.stopActive()
 		}
-		a.aiTagging.stopActive()
-		if err = p.Finish(ctx, body.Callback); err == nil && taggingStoreFailed(w, a.Store.SetAITagProvider(ctx, "chatgpt")) {
-			return
+		if err = p.Finish(ctx, body.Callback); err == nil {
+			// Switching providers clears the model and the leases.
+			if taggingStoreFailed(w, a.Store.SetAITagProvider(ctx, "chatgpt")) {
+				return
+			}
+			a.aiTagging.stopActive()
 		}
 	case "/api/ai-tagging/connect-claude":
 		var body struct {
@@ -178,14 +185,16 @@ func (a *Server) applyTaggingAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		provider = "claude"
+		if connected, readErr := c.State(ctx); connected || readErr != nil {
+			fail(w, 409, "Disconnect the saved API key before saving another")
+			return
+		}
 		var models []aitagprovider.Model
 		if models, err = c.Connect(ctx, body.APIKey); err == nil {
-			if state.Provider != "claude" {
-				a.aiTagging.stopActive()
-			}
 			if taggingStoreFailed(w, a.Store.SetAITagProvider(ctx, "claude")) || taggingStoreFailed(w, a.preselectClaudeModel(ctx, models)) {
 				return
 			}
+			a.aiTagging.stopActive()
 		}
 	case "/api/ai-tagging/provider":
 		var body struct {

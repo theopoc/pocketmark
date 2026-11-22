@@ -407,6 +407,12 @@ func TestAITagClaudeProviderSelectionAndWorker(t *testing.T) {
 	if got, err := a.Store.Get(ctx, id); err != nil || !slices.Equal(got.Tags, []string{"machine learning"}) || len(claude.articles) != 1 || len(chatgpt.articles) != 0 {
 		t.Fatalf("Claude did not classify the bookmark: %v %v", got.Tags, err)
 	}
+	// A rejected ChatGPT return address must not disturb the running Claude setup.
+	post("finish", `{"callback":""}`, 400)
+	if s := state(); s.Provider != "claude" || s.Model != aitagprovider.DefaultClaudeModel || !s.Enabled {
+		t.Fatalf("a failed ChatGPT connection changed Claude settings: %+v", s)
+	}
+	post("connect-claude", `{"apiKey":"sk-ant-fixture-key"}`, 409)
 	// Linking ChatGPT switches provider and pauses until a model is chosen again.
 	post("connect", "", 200)
 	post("finish", `{"callback":"sample return address"}`, 200)
