@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 	"time"
 
 	"pocketmark/internal/aitagprovider"
 	"pocketmark/internal/observability"
+	"pocketmark/internal/store"
 )
 
 func (t *aiTagging) notify() {
@@ -61,10 +63,9 @@ func (a *Server) workAITag(ctx context.Context, captureEnabled bool) error {
 	if err != nil {
 		return err
 	}
-	if len(job.Tags) == 0 || (job.Title == "" && job.Description == "" && job.Excerpt == "") {
+	if job.Title == "" && job.Description == "" && job.Excerpt == "" {
 		return a.Store.FinishAITagJob(work, job, nil)
 	}
-	call, end := context.WithTimeout(work, 60*time.Second)
 	stale := errors.New("AI tagging job is no longer eligible")
 	var guardErr error
 	beforeSend := func(ctx context.Context) error {
@@ -78,22 +79,62 @@ func (a *Server) workAITag(ctx context.Context, captureEnabled bool) error {
 		}
 		return nil
 	}
-	tags, err := t.provider.Classify(call, job.Model, aitagprovider.Article{
+	article := aitagprovider.Article{
 		Title: job.Title, Domain: job.Domain, Description: job.Description, Excerpt: job.Excerpt,
-	}, job.Tags, beforeSend)
-	end()
-	if work.Err() != nil {
-		return work.Err()
 	}
-	if guardErr != nil {
-		return guardErr
+	var fallback []string
+	for {
+		call, end := context.WithTimeout(work, 60*time.Second)
+		tags, err := t.provider.Classify(call, job.Model, article, job.Tags, beforeSend)
+		end()
+		switch {
+		case work.Err() != nil:
+			return work.Err()
+		case guardErr != nil:
+			return guardErr
+		case errors.Is(err, stale):
+			return a.Store.FinishAITagJob(work, job, nil)
+		case err != nil:
+			return a.finishAITagError(work, job, err)
+		}
+		// The provider returns either existing selections or new names, never both.
+		if len(tags) > 0 && slices.Contains(job.Tags, tags[0]) {
+			return a.Store.FinishAITagJob(work, job, tags)
+		}
+		if fallback == nil {
+			if len(tags) == 0 {
+				return a.Store.FinishAITagJob(work, job, nil)
+			}
+			fallback = tags
+		}
+		if !job.MoreTags {
+			return a.Store.FinishAITagJob(work, job, fallback)
+		}
+		next, err := a.Store.NextAITagPage(work, job)
+		if errors.Is(err, sql.ErrNoRows) {
+			return a.Store.FinishAITagJob(work, job, nil)
+		}
+		if err != nil {
+			return err
+		}
+		job = next
+		var reused []string
+		for _, name := range fallback {
+			if slices.Contains(job.Tags, name) {
+				reused = append(reused, name)
+			}
+		}
+		if len(reused) > 0 {
+			return a.Store.FinishAITagJob(work, job, reused)
+		}
+		if len(job.Tags) == 0 {
+			// The remaining candidates were removed since the previous request.
+			return a.Store.FinishAITagJob(work, job, fallback)
+		}
 	}
-	if errors.Is(err, stale) {
-		return a.Store.FinishAITagJob(work, job, nil)
-	}
-	if err == nil {
-		return a.Store.FinishAITagJob(work, job, tags)
-	}
+}
+
+func (a *Server) finishAITagError(work context.Context, job store.AITagJob, err error) error {
 	if errors.Is(err, aitagprovider.ErrArticleInput) || errors.Is(err, aitagprovider.ErrModelOutput) {
 		observability.Logger(work).WarnContext(work, "ai_tag_bookmark_skipped", "link_id", job.ID)
 		return a.Store.FinishAITagJob(work, job, nil)

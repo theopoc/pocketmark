@@ -208,7 +208,7 @@ func taggingStoreFailed(w http.ResponseWriter, err error) bool {
 	switch {
 	case err == nil:
 		return false
-	case errors.Is(err, store.ErrAITagDisabled), errors.Is(err, store.ErrAITagScanActive), errors.Is(err, store.ErrAITagNoTags):
+	case errors.Is(err, store.ErrAITagDisabled), errors.Is(err, store.ErrAITagScanActive):
 		fail(w, 409, err.Error())
 	default:
 		handleError(w, err)

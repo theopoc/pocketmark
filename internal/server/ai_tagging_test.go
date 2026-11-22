@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -19,7 +20,9 @@ type testTagProvider struct {
 	quota        bool
 	nextError    error
 	articles     []aitagprovider.Article
+	vocabularies [][]string
 	afterRefresh func()
+	selection    func([]string) ([]string, error)
 }
 
 // Model validation may have to wait for the provider. Another replica must
@@ -111,7 +114,7 @@ func (p *testTagProvider) Models(context.Context) ([]aitagprovider.Model, error)
 func (p *testTagProvider) Test(context.Context, string) error { p.tested = true; return nil }
 func (p *testTagProvider) Disconnect(context.Context) error   { p.connected = false; return nil }
 func (p *testTagProvider) Classify(ctx context.Context, model string, article aitagprovider.Article, tags []string, beforeSend func(context.Context) error) ([]string, error) {
-	if model != "fixture" || !slices.Contains(tags, "machine learning") {
+	if model != "fixture" {
 		return nil, errors.New("unexpected classification request")
 	}
 	if p.afterRefresh != nil {
@@ -129,7 +132,106 @@ func (p *testTagProvider) Classify(ctx context.Context, model string, article ai
 		return nil, err
 	}
 	p.articles = append(p.articles, article)
+	p.vocabularies = append(p.vocabularies, slices.Clone(tags))
+	if p.selection != nil {
+		return p.selection(tags)
+	}
 	return []string{"machine learning"}, nil
+}
+
+func TestAITagWorkerChecksRemainingVocabularyBeforeCreating(t *testing.T) {
+	for _, tt := range []struct {
+		name, lastSelection, wantTag string
+		quota, pause, exact          bool
+	}{
+		{name: "reuse late synonym", lastSelection: "k8s", wantTag: "k8s"},
+		{name: "reuse exact fallback from a later page", exact: true, wantTag: "k8s"},
+		{name: "use first fallback after all pages", lastSelection: "technology", wantTag: "kubernetes"},
+		{name: "later quota preserves pending work", quota: true},
+		{name: "pause prevents next dispatch", pause: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+			a := newTestServer(t, "", false)
+			create := func(l store.Link) int64 {
+				t.Helper()
+				id, err := a.Store.Create(ctx, l)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return id
+			}
+			for group := range 8 {
+				var names []string
+				for ordinal := range 32 {
+					names = append(names, fmt.Sprintf("catalog%03d", group*32+ordinal))
+				}
+				create(store.Link{URL: fmt.Sprintf("https://fixture.example/%d", group), Tags: names})
+			}
+			create(store.Link{URL: "https://fixture.example/rare", Tags: []string{"k8s"}})
+			if err := a.Store.SetAITagModel(ctx, "fixture"); err != nil {
+				t.Fatal(err)
+			}
+			if err := a.Store.SetAITagEnabled(ctx, true); err != nil {
+				t.Fatal(err)
+			}
+			id := create(store.Link{URL: "https://example.org/article", Title: "Kubernetes deployment"})
+			provider := &testTagProvider{}
+			a.aiTagging.provider = provider
+			provider.selection = func(names []string) ([]string, error) {
+				if len(provider.vocabularies) == 1 {
+					if len(names) != 256 || slices.Contains(names, "k8s") {
+						t.Fatal("unexpected first page")
+					}
+					if tt.pause {
+						if err := a.Store.SetAITagEnabled(ctx, false); err != nil {
+							t.Fatal(err)
+						}
+					}
+					if tt.exact {
+						return []string{"k8s", "kubernetes"}, nil
+					}
+					return []string{"kubernetes"}, nil
+				}
+				if !slices.Equal(names, []string{"k8s"}) {
+					t.Fatalf("remaining candidates: %v", names)
+				}
+				if tt.quota {
+					return nil, &aitagprovider.QuotaError{}
+				}
+				return []string{tt.lastSelection}, nil
+			}
+			if err := a.workAITag(ctx, false); err != nil {
+				t.Fatal(err)
+			}
+			link, err := a.Store.Get(ctx, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			state, err := a.Store.AITagStatus(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch {
+			case tt.pause:
+				if len(link.Tags) != 0 || len(provider.articles) != 1 || state.Enabled || state.Remaining != 1 {
+					t.Fatalf("paused classification: %v, %d dispatches, %+v", link.Tags, len(provider.articles), state)
+				}
+			case tt.quota:
+				if len(link.Tags) != 0 || state.Blocked != "quota" || state.Remaining != 1 {
+					t.Fatalf("interrupted classification: %v, %+v", link.Tags, state)
+				}
+			default:
+				wantCalls := 2
+				if tt.exact {
+					wantCalls = 1
+				}
+				if !slices.Equal(link.Tags, []string{tt.wantTag}) || len(provider.articles) != wantCalls || state.Remaining != 0 {
+					t.Fatalf("completed classification: %v, %d dispatches, %+v", link.Tags, len(provider.articles), state)
+				}
+			}
+		})
+	}
 }
 
 func TestAITagSettingsCreationAndManualScan(t *testing.T) {
@@ -150,10 +252,6 @@ func TestAITagSettingsCreationAndManualScan(t *testing.T) {
 			t.Fatal(err)
 		}
 		return l
-	}
-	tag := link(`{"url":"https://example.org/tag","tags":["Machine Learning","machine learning"]}`)
-	if !slices.Equal(tag.Tags, []string{"machine learning"}) {
-		t.Fatalf("canonical tags: %v", tag.Tags)
 	}
 	old := link(`{"url":"https://example.org/before","title":"A tutorial"}`)
 	requireStatus(t, request(a, "GET", "/api/ai-tagging", "", false, nil), 401)
@@ -183,6 +281,9 @@ func TestAITagSettingsCreationAndManualScan(t *testing.T) {
 		}
 	}
 	check(fresh.ID, "machine learning")
+	if len(p.vocabularies[0]) != 0 {
+		t.Fatalf("expected an empty vocabulary for the first classification: %v", p.vocabularies[0])
+	}
 	check(old.ID)
 	post("scan", "", 200)
 	p.quota = true
@@ -199,6 +300,11 @@ func TestAITagSettingsCreationAndManualScan(t *testing.T) {
 		t.Fatal(err)
 	}
 	check(old.ID, "machine learning")
+	if len(p.vocabularies) != 2 || !slices.Equal(p.vocabularies[1], []string{"machine learning"}) {
+		t.Fatalf("the scan did not receive the tag created for the new bookmark: %v", p.vocabularies)
+	}
+	tag := link(`{"url":"https://example.org/tag","tags":["Machine Learning","machine learning"]}`)
+	check(tag.ID, "machine learning")
 	skipped := link(`{"url":"https://example.org/skipped","title":"Ambiguous article"}`)
 	after := link(`{"url":"https://example.org/after","title":"Another tutorial"}`)
 	p.nextError = aitagprovider.ErrModelOutput

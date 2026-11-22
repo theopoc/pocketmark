@@ -70,8 +70,8 @@ export function AppView() {
                   AI tagging
                 </h1>
                 <p>
-                  Use your ChatGPT plan to classify bookmarks with up to three
-                  of your existing tags.
+                  ChatGPT applies up to three tags per bookmark. It reuses your
+                  existing tags and creates lowercase tags when none fit.
                 </p>
               </header>
               <div id="ai-tagging-settings" />

@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -116,6 +118,162 @@ func TestAITagQueueConsentScanAndResume(t *testing.T) {
 	link, err := s.Get(ctx, b)
 	if err != nil || !reflect.DeepEqual(link.Tags, []string{"manual"}) {
 		t.Fatalf("late result overwrote manual edit: %v %v", link.Tags, err)
+	}
+}
+
+func TestAITagFallbackCreatesVocabularyForFollowingJobs(t *testing.T) {
+	ctx := t.Context()
+	path := filepath.Join(t.TempDir(), "library")
+	s, err := openTestStore(t, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { s.Close() }()
+	old := createLink(t, s, Link{URL: "https://existing.example", Title: "Existing article"})
+	if err = s.SetAITagModel(ctx, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.SetAITagEnabled(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.StartAITagScan(ctx); err != nil {
+		t.Fatalf("scan with no prior tags: %v", err)
+	}
+	event := createLink(t, s, Link{URL: "https://event.example", Title: "Another article"})
+	job, err := s.NextAITagJob(ctx, false)
+	if err != nil || job.ID != old || len(job.Tags) != 0 {
+		t.Fatalf("first job: %+v, %v", job, err)
+	}
+	if err = s.FinishAITagJob(ctx, job, []string{" Agents  IA ", "agents  ia", "CI/CD"}); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := openTestStore(t, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s = reopened
+	if tags := getLink(t, s, old).Tags; !reflect.DeepEqual(tags, []string{"agents  ia", "ci/cd"}) {
+		t.Fatalf("stored tags after restart: %q", tags)
+	}
+	job, err = s.NextAITagJob(ctx, false)
+	if err != nil || job.ID != event || !reflect.DeepEqual(job.Tags, []string{"agents  ia", "ci/cd"}) {
+		t.Fatalf("native bookmark did not receive generated vocabulary: %+v, %v", job, err)
+	}
+	for _, invalid := range [][]string{{"agents  ia", "new tag"}, {"test", "https://private.example"}} {
+		if err = s.FinishAITagJob(ctx, job, invalid); err == nil {
+			t.Fatalf("accepted invalid fallback %q", invalid)
+		}
+	}
+	// The last use of a selected tag can disappear while the request is in flight.
+	if err = s.Bulk(ctx, BulkChange{IDs: []int64{old}, Action: "tags", Tags: []string{"ci/cd"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.FinishAITagJob(ctx, job, []string{"agents  ia", "ci/cd"}); err != nil {
+		t.Fatal(err)
+	}
+	if tags := getLink(t, s, event).Tags; !reflect.DeepEqual(tags, []string{"ci/cd"}) {
+		t.Fatalf("removed vocabulary was recreated: %q", tags)
+	}
+}
+
+func TestAITagFallbackRechecksVocabularyAndOwnerEdits(t *testing.T) {
+	s := testStore(t)
+	ctx := t.Context()
+	createLink(t, s, Link{URL: "https://seed.example", Tags: []string{"unrelated"}})
+	if err := s.SetAITagModel(ctx, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetAITagEnabled(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	id := createLink(t, s, Link{URL: "https://events.example", Title: "An article"})
+	job, err := s.NextAITagJob(ctx, false)
+	if err != nil || !reflect.DeepEqual(job.Tags, []string{"unrelated"}) {
+		t.Fatalf("initial vocabulary: %q, %v", job.Tags, err)
+	}
+	// A tag from the model's fallback has been added elsewhere since dispatch.
+	createLink(t, s, Link{URL: "https://new-topic.example", Tags: []string{"Topic"}})
+	if err = s.FinishAITagJob(ctx, job, []string{"Novel", "TOPIC"}); err != nil {
+		t.Fatal(err)
+	}
+	if tags := getLink(t, s, id).Tags; !reflect.DeepEqual(tags, []string{"topic"}) {
+		t.Fatalf("existing name did not take priority: %q", tags)
+	}
+	id = createLink(t, s, Link{URL: "https://edited.example", Title: "Another article"})
+	job, err = s.NextAITagJob(ctx, false)
+	if err != nil || job.ID != id {
+		t.Fatalf("second job: %+v, %v", job, err)
+	}
+	if err = s.Bulk(ctx, BulkChange{IDs: []int64{id}, Action: "tags", Tags: []string{"manual"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.FinishAITagJob(ctx, job, []string{"novel"}); err != nil {
+		t.Fatal(err)
+	}
+	if tags := getLink(t, s, id).Tags; !reflect.DeepEqual(tags, []string{"manual"}) {
+		t.Fatalf("fallback overwrote owner edit: %q", tags)
+	}
+}
+
+func TestAITagVocabularyPagesKeepPriorityAndRenewLease(t *testing.T) {
+	ctx := t.Context()
+	s := testStore(t)
+	const total = 2*aiTagPageSize + 2
+	for i := 0; i < total; i += 32 {
+		var tags []string
+		for n := i; n < min(i+32, total); n++ {
+			tags = append(tags, fmt.Sprintf("topic-%03d", n))
+		}
+		createLink(t, s, Link{URL: fmt.Sprintf("https://seed.example/%d", i), Tags: tags})
+	}
+	if err := s.SetAITagModel(ctx, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetAITagEnabled(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	target := createLink(t, s, Link{URL: "https://article.example", Title: "Directly mentions topic-513"})
+	first, err := s.NextAITagJob(ctx, false)
+	if err != nil || !first.MoreTags || len(first.Tags) != aiTagPageSize || first.Tags[0] != "topic-513" {
+		t.Fatalf("first page: size=%d, more=%t, err=%v", len(first.Tags), first.MoreTags, err)
+	}
+	if err = s.FinishAITagJob(ctx, first, []string{"new suggestion"}); err == nil {
+		t.Fatal("created a tag before exhausting existing vocabulary")
+	}
+	if _, err = s.db.ExecContext(ctx, `UPDATE ai_tag_jobs SET lease_until=now()+interval '30 seconds' WHERE link_id=$1`, target); err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.NextAITagPage(ctx, first)
+	if err != nil || !second.MoreTags || len(second.Tags) != aiTagPageSize {
+		t.Fatalf("second page: size=%d, more=%t, err=%v", len(second.Tags), second.MoreTags, err)
+	}
+	var renewed bool
+	if err = s.db.QueryRowContext(ctx, `SELECT lease_until>now()+interval '90 seconds' FROM ai_tag_jobs WHERE link_id=$1`, target).Scan(&renewed); err != nil || !renewed {
+		t.Fatalf("lease not renewed for next request: %v", err)
+	}
+	// Rank changes after dispatch must not move remaining names behind the cursor.
+	createLink(t, s, Link{URL: "https://frequent.example", Tags: []string{"topic-512"}})
+	last, err := s.NextAITagPage(ctx, second)
+	if err != nil || last.MoreTags || !slices.Equal(last.Tags, []string{"topic-511", "topic-512"}) {
+		t.Fatalf("last page: %q, more=%t, err=%v", last.Tags, last.MoreTags, err)
+	}
+	seen := append(slices.Clone(first.Tags), second.Tags...)
+	seen = append(seen, last.Tags...)
+	slices.Sort(seen)
+	if len(slices.Compact(seen)) != total {
+		t.Fatal("pagination missed or repeated tags")
+	}
+	if err = s.FinishAITagJob(ctx, last, []string{"topic-512"}); err != nil {
+		t.Fatal(err)
+	}
+	if tags := getLink(t, s, target).Tags; !slices.Equal(tags, []string{"topic-512"}) {
+		t.Fatalf("selected tag from the last page: %q", tags)
+	}
+	if _, err = s.NextAITagPage(ctx, first); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("ended lease returned more vocabulary: %v", err)
 	}
 }
 
