@@ -24,6 +24,9 @@ var aiTagSchema string
 //go:embed migrations/006_reader_archive.sql
 var readerArchiveSchema string
 
+//go:embed migrations/007_ai_provider.sql
+var aiProviderSchema string
+
 func (s *Store) initializeSchema(ctx context.Context) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -89,7 +92,15 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(6)"); err != nil {
 			return err
 		}
+		fallthrough
 	case 6:
+		if _, err = tx.ExecContext(ctx, aiProviderSchema); err != nil {
+			return fmt.Errorf("migrate AI tagging provider: %w", err)
+		}
+		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(7)"); err != nil {
+			return err
+		}
+	case 7:
 	default:
 		return fmt.Errorf("unsupported Pocketmark schema version %d", version)
 	}

@@ -5594,6 +5594,155 @@
         }
       }
     },
+    "/api/ai-tagging/connect-claude": {
+      "post": {
+        "operationId": "post_ai_tagging_connect_claude",
+        "tags": [
+          "AI tagging"
+        ],
+        "summary": "Save an Anthropic API key, select the Claude provider and preselect claude-haiku-5-5",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "200": {
+            "description": "Save an Anthropic API key, select the Claude provider and preselect claude-haiku-5-5",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Connection, model, scan, or setting is not ready for this action."
+          },
+          "400": {
+            "description": "Invalid input."
+          }
+        },
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ],
+        "x-reauthentication-required": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "apiKey"
+                ],
+                "properties": {
+                  "apiKey": {
+                    "type": "string",
+                    "description": "Anthropic API key. Write-only; stored encrypted and never returned."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai-tagging/provider": {
+      "post": {
+        "operationId": "post_ai_tagging_provider",
+        "tags": [
+          "AI tagging"
+        ],
+        "summary": "Switch between the connected ChatGPT and Claude providers",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "200": {
+            "description": "Switch between the connected ChatGPT and Claude providers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Connection, model, scan, or setting is not ready for this action."
+          },
+          "400": {
+            "description": "Invalid input."
+          }
+        },
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ],
+        "x-reauthentication-required": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "provider"
+                ],
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "chatgpt",
+                      "claude"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ai-tagging/models": {
       "post": {
         "operationId": "post_ai_tagging_models",
@@ -5661,7 +5810,7 @@
         "tags": [
           "AI tagging"
         ],
-        "summary": "Select a model from the current account catalog",
+        "summary": "Select a model from the selected provider catalog",
         "responses": {
           "401": {
             "$ref": "#/components/responses/401"
@@ -5679,7 +5828,7 @@
             "$ref": "#/components/responses/ServerError"
           },
           "200": {
-            "description": "Select a model from the current account catalog",
+            "description": "Select a model from the selected provider catalog",
             "content": {
               "application/json": {
                 "schema": {
@@ -5884,7 +6033,7 @@
         "tags": [
           "AI tagging"
         ],
-        "summary": "Remove the saved ChatGPT connection and stop classification",
+        "summary": "Remove a saved provider connection. The body is optional and defaults to the selected provider",
         "responses": {
           "401": {
             "$ref": "#/components/responses/401"
@@ -5902,7 +6051,7 @@
             "$ref": "#/components/responses/ServerError"
           },
           "200": {
-            "description": "Remove the saved ChatGPT connection and stop classification",
+            "description": "Remove a saved provider connection. The body is optional and defaults to the selected provider",
             "content": {
               "application/json": {
                 "schema": {
@@ -5926,7 +6075,26 @@
             "ownerSession": []
           }
         ],
-        "x-reauthentication-required": true
+        "x-reauthentication-required": true,
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "chatgpt",
+                      "claude"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/ai-tagging/scan": {
@@ -7316,6 +7484,25 @@
       "AITagSettings": {
         "type": "object",
         "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "chatgpt",
+              "claude"
+            ],
+            "description": "Provider that classifies bookmarks. The connected, registered and connectionIssue fields describe the ChatGPT connection."
+          },
+          "claude": {
+            "type": "object",
+            "properties": {
+              "connected": {
+                "type": "boolean"
+              },
+              "connectionIssue": {
+                "type": "boolean"
+              }
+            }
+          },
           "enabled": {
             "type": "boolean"
           },

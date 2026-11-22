@@ -11,10 +11,21 @@ const statuses = {
   paused: "Scan paused",
   completed: "Scan complete",
 };
+const providers = {
+  chatgpt: "ChatGPT plan",
+  claude: "Claude API",
+};
 const reasons = {
-  quota: "Your ChatGPT plan has reached its usage limit.",
-  reconnect:
-    "Disconnect the saved ChatGPT plan, then reconnect to continue tagging.",
+  chatgpt: {
+    quota: "Your ChatGPT plan has reached its usage limit.",
+    reconnect:
+      "Disconnect the saved ChatGPT plan, then reconnect to continue tagging.",
+  },
+  claude: {
+    quota: "Your Anthropic API rate or spending limit has been reached.",
+    reconnect:
+      "Disconnect the saved API key, then save a valid key to continue tagging.",
+  },
   error: "Tagging stopped after a provider error.",
 };
 const bookmarks = (n) => n + (n === 1 ? " bookmark" : " bookmarks");
@@ -39,6 +50,8 @@ function AITagging({ api }) {
   const [login, setLogin] = useState("");
   const [callback, setCallback] = useState("");
   const [models, setModels] = useState(null);
+  const [choice, setChoice] = useState(null);
+  const [apiKey, setApiKey] = useState("");
   const session = useRef(null);
   const signInLink = useRef(null);
   const version = useRef(0);
@@ -65,6 +78,11 @@ function AITagging({ api }) {
   }, [refresh]);
 
   const scan = data?.scan;
+  const active = data?.provider || "chatgpt";
+  const shown = choice || active;
+  const claudeConnected = Boolean(data?.claude?.connected);
+  const activeConnected =
+    active === "claude" ? claudeConnected : data?.connected;
   const reason = data?.blocked || scan?.reason;
   const activeScan = ["running", "paused"].includes(scan?.status);
   const pendingNew = (data?.remaining || 0) - (scan?.remaining || 0);
@@ -102,6 +120,11 @@ function AITagging({ api }) {
       }
       const result = await post(name, body);
       if (signal.aborted) return;
+      if (name === "connect-claude" || name === "provider") {
+        setChoice(null);
+        setApiKey("");
+        setModels(null);
+      }
       if (name === "connect") {
         const url = new URL(result.url);
         if (
@@ -117,6 +140,7 @@ function AITagging({ api }) {
         setLogin("");
         setCallback("");
         setModels(null);
+        setChoice(null);
       }
       if (name === "test")
         setNotice("Connection tested with a fictional bookmark.");
@@ -126,7 +150,10 @@ function AITagging({ api }) {
       }
       if (name === "model") setNotice("Model saved.");
       await refresh(signal);
-      if (name === "finish" && !signal.aborted) {
+      if (
+        ["finish", "connect-claude", "provider"].includes(name) &&
+        !signal.aborted
+      ) {
         const catalog = await post("models", {});
         if (!signal.aborted) setModels(catalog.models);
       }
@@ -134,9 +161,9 @@ function AITagging({ api }) {
       if (signal.aborted) return;
       let message =
         err.status === 502
-          ? "The ChatGPT request failed. Check the connection and try again."
+          ? "The provider request failed. Check the connection and try again."
           : err.message;
-      if (name === "disconnect") {
+      if (name === "disconnect" && body.provider !== "claude") {
         try {
           const current = await refresh(signal);
           if (!current.connected && !current.connectionIssue) {
@@ -157,8 +184,12 @@ function AITagging({ api }) {
   }
 
   const disabled = Boolean(busy);
-  const ready = data?.connected && data.model;
+  const ready = activeConnected && data?.model;
   const canResume = data?.enabled && (reason === "quota" || reason === "error");
+  const reasonText =
+    reason === "error"
+      ? reasons.error
+      : reasons[active]?.[reason] || "Tagging is paused.";
   const retryTime = scan?.resumeAt && new Date(scan.resumeAt);
   const savedModel =
     models?.find((m) => m.id === data?.model)?.name || data?.model;
@@ -181,51 +212,134 @@ function AITagging({ api }) {
       {data && (
         <>
           <SettingRow
-            title="ChatGPT plan"
-            description={
-              data.connectionIssue
-                ? "The saved connection could not be read. Disconnect it, then connect ChatGPT again."
-                : data.connected
-                  ? "Connected to ChatGPT."
-                  : "Connect your account to use its plan allowance."
-            }
+            title="Provider"
+            description="Choose how Pocketmark reaches a model. Switching pauses tagging until you pick a model."
           >
-            {!data.connected && !data.connectionIssue && !login && (
-              <>
+            <Picker
+              label="Tagging provider"
+              value={shown}
+              disabled={disabled}
+              onChange={(event) => {
+                const next = event.target.value;
+                const linked =
+                  next === "claude" ? claudeConnected : data.connected;
+                if (next === active) setChoice(null);
+                else if (linked) action("provider", { provider: next });
+                else setChoice(next);
+              }}
+            >
+              {Object.entries(providers).map(([id, name]) => (
+                <option key={id} value={id}>
+                  {name}
+                </option>
+              ))}
+            </Picker>
+          </SettingRow>
+          {shown === "claude" && (
+            <SettingRow
+              title="Claude API"
+              description={
+                data.claude?.connectionIssue
+                  ? "The saved API key could not be read. Disconnect it, then save the key again."
+                  : claudeConnected
+                    ? "API key saved. Requests are billed to your Anthropic account."
+                    : "Paste an API key from the Anthropic Console. Pocketmark stores it encrypted and never shows it again."
+              }
+            >
+              {(claudeConnected || data.claude?.connectionIssue) && (
                 <Button
                   type="button"
-                  variant="default"
+                  variant="outline"
                   disabled={disabled}
-                  onClick={() => action("connect")}
+                  onClick={() => action("disconnect", { provider: "claude" })}
                 >
-                  {data.registered || reason === "reconnect"
-                    ? "Reconnect ChatGPT"
-                    : "Connect ChatGPT"}
+                  Disconnect
                 </Button>
-                {data.registered && (
+              )}
+            </SettingRow>
+          )}
+          {shown === "claude" &&
+            !claudeConnected &&
+            !data.claude?.connectionIssue && (
+              <form
+                className="ai-connect"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const value = apiKey.trim();
+                  setApiKey("");
+                  action("connect-claude", { apiKey: value });
+                }}
+              >
+                <label htmlFor="ai-api-key">Anthropic API key</label>
+                <Input
+                  id="ai-api-key"
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  maxLength={512}
+                  required
+                  value={apiKey}
+                  onChange={(event) => setApiKey(event.target.value)}
+                />
+                <div className="account-row-actions">
+                  <Button
+                    type="submit"
+                    variant="default"
+                    disabled={disabled || !apiKey.trim()}
+                  >
+                    {busy === "connect-claude" ? "Checking…" : "Save API key"}
+                  </Button>
+                </div>
+              </form>
+            )}
+          {shown === "chatgpt" && (
+            <SettingRow
+              title="ChatGPT plan"
+              description={
+                data.connectionIssue
+                  ? "The saved connection could not be read. Disconnect it, then connect ChatGPT again."
+                  : data.connected
+                    ? "Connected to ChatGPT."
+                    : "Connect your account to use its plan allowance."
+              }
+            >
+              {!data.connected && !data.connectionIssue && !login && (
+                <>
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="default"
                     disabled={disabled}
-                    onClick={() => action("connect", { newAccount: true })}
+                    onClick={() => action("connect")}
                   >
-                    Use another ChatGPT account
+                    {data.registered || reason === "reconnect"
+                      ? "Reconnect ChatGPT"
+                      : "Connect ChatGPT"}
                   </Button>
-                )}
-              </>
-            )}
-            {(data.connected || data.connectionIssue) && (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={disabled}
-                onClick={() => action("disconnect")}
-              >
-                Disconnect
-              </Button>
-            )}
-          </SettingRow>
-          {login && (
+                  {data.registered && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={disabled}
+                      onClick={() => action("connect", { newAccount: true })}
+                    >
+                      Use another ChatGPT account
+                    </Button>
+                  )}
+                </>
+              )}
+              {(data.connected || data.connectionIssue) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={disabled}
+                  onClick={() => action("disconnect", { provider: "chatgpt" })}
+                >
+                  Disconnect
+                </Button>
+              )}
+            </SettingRow>
+          )}
+          {shown === "chatgpt" && login && (
             <form
               className="ai-connect"
               onSubmit={(event) => {
@@ -284,12 +398,15 @@ function AITagging({ api }) {
               </div>
             </form>
           )}
-          {data.connected && (
+          {shown === active && activeConnected && (
             <>
               <SettingRow
                 title="Model"
                 description={
-                  savedModel || "Select a model available on your ChatGPT plan."
+                  savedModel ||
+                  (active === "claude"
+                    ? "Select a Claude model available to your API key."
+                    : "Select a model available on your ChatGPT plan.")
                 }
               >
                 {models?.length > 0 && (
@@ -398,15 +515,21 @@ function AITagging({ api }) {
               )}
               {reason && (
                 <p>
-                  {reasons[reason] || "Tagging is paused."}{" "}
+                  {reasonText}{" "}
                   {reason === "quota" && (
                     <>
                       <a
-                        href="https://chatgpt.com/settings/usage"
+                        href={
+                          active === "claude"
+                            ? "https://console.anthropic.com/settings/billing"
+                            : "https://chatgpt.com/settings/usage"
+                        }
                         target="_blank"
                         rel="noreferrer"
                       >
-                        Manage plan usage
+                        {active === "claude"
+                          ? "Manage API billing"
+                          : "Manage plan usage"}
                         <span className="sr-only"> (opens a new tab)</span>
                       </a>
                       .{" "}

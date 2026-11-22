@@ -22,6 +22,8 @@ var apiAccess = map[string]routeAccess{
 	"GET /api/ai-tagging":                               {owner: true},
 	"POST /api/ai-tagging/connect":                      {owner: true, confirm: true},
 	"POST /api/ai-tagging/finish":                       {owner: true, confirm: true},
+	"POST /api/ai-tagging/connect-claude":               {owner: true, confirm: true},
+	"POST /api/ai-tagging/provider":                     {owner: true, confirm: true},
 	"POST /api/ai-tagging/models":                       {owner: true},
 	"POST /api/ai-tagging/model":                        {owner: true, confirm: true},
 	"POST /api/ai-tagging/test":                         {owner: true},

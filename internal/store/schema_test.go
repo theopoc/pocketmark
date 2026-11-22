@@ -357,3 +357,37 @@ func TestAccountClaimAcrossIndependentConnections(t *testing.T) {
 		t.Fatalf("got %d owners", count)
 	}
 }
+
+func TestAIProviderUpgradeKeepsLegacySettingsAcrossRestart(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	uri := pgtest.URL(t, dir)
+	db, err := sql.Open("pgx", uri)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A schema 6 database that already has a ChatGPT connection, model and consent.
+	_, err = db.Exec(initialSchema + challengeSchema + sessionAddressSchema + backupSchema + aiTagSchema + readerArchiveSchema + `
+CREATE TABLE pocketmark_migrations(version integer PRIMARY KEY);
+INSERT INTO pocketmark_migrations VALUES (1),(2),(3),(4),(5),(6);
+INSERT INTO ai_tag_settings(id,enabled,model) VALUES(1,true,'legacy-model');
+INSERT INTO ai_tag_credentials(id,envelope) VALUES(1,'\x01020304');`)
+	db.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		s, err := Open(uri, dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		status, err := s.AITagStatus(ctx)
+		if err != nil || status.Provider != "chatgpt" || status.Model != "legacy-model" || !status.Enabled {
+			t.Fatalf("legacy settings after upgrade: %+v %v", status, err)
+		}
+		if env, err := s.ReadAITagCredentials(ctx); err != nil || !bytes.Equal(env, []byte{1, 2, 3, 4}) {
+			t.Fatalf("ChatGPT session after upgrade: %v %v", env, err)
+		}
+		s.Close()
+	}
+}
