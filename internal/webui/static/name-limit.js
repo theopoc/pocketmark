@@ -16,7 +16,17 @@
     update();
     return { update, dispose() { input.removeEventListener?.("input", update); } };
   }
-  const api = { describe, create };
+  // Match the server's Unicode simple lowercase mapping, including dotted I
+  // and Greek sigma, without changing accents or interior whitespace.
+  function tagName(value) {
+    return Array.from(value.trim(), letter => letter === "İ" ? "i" : letter.toLowerCase()).join("");
+  }
+  function tagBytes(value) {
+    // These lowercase forms take one extra UTF-8 byte. Keep labels that fit
+    // before migration editable using the same budget as the server.
+    return new TextEncoder().encode(value.replaceAll("ⱥ", "Ⱥ").replaceAll("ⱦ", "Ⱦ")).length;
+  }
+  const api = { describe, create, tagName, tagBytes };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.PocketmarkNameLimit = api;
 })(globalThis);

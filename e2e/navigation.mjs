@@ -53,7 +53,8 @@ export async function dialogDismissalJourney(page) {
         await page.locator(opener[1]).first().click();
       } else {
         if (page.url() !== libraryURL) await page.goto(libraryURL);
-        await dialog.evaluate(node => node.showModal());
+        if (id === 'navigation-dialog') await openNavigation(page);
+        else await dialog.evaluate(node => node.showModal());
       }
       // Wait for the entry animation before measuring the visible boundary.
       await dialog.evaluate(async node => { await Promise.all(node.getAnimations().map(animation => animation.finished.catch(() => {}))); });

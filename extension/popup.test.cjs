@@ -92,11 +92,11 @@ test("existing bookmark preloads editable fields, collection and selected tags",
 });
 test("save sends edited metadata and only user-selected capture formats", async () => {
   const env = await setup(); env.element("title").value = "Edited"; env.element("collection").value = "7";
-  env.element("tag-input").value = "new, docs"; env.element("capture-pdf").checked = true;
+  env.element("tag-input").value = "New, docs, NEW, Machine  Learning"; env.element("capture-pdf").checked = true;
   await env.submit("save-form");
   const message = env.calls.find((call) => call.type === "save");
   assert.equal(message.fields.title, "Edited"); assert.equal(message.fields.collectionId, 7);
-  assert.deepEqual(Array.from(message.fields.tags), ["new", "docs"]); assert.deepEqual(Array.from(message.modes), ["pdf"]);
+  assert.deepEqual(Array.from(message.fields.tags), ["new", "docs", "machine  learning"]); assert.deepEqual(Array.from(message.modes), ["pdf"]);
   assert.equal(env.element("editor").disabled, true); assert.equal(env.element("capture-pdf").checked, false);
 });
 for (const modes of [[], ["pdf", "screenshot"]]) test(`confirmed popup result stays visible for 3.5 seconds (${modes.length} captures)`, async () => {

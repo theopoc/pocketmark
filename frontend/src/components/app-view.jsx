@@ -59,6 +59,23 @@ export function AppView() {
         >
           {"\n        "}
           <SettingsFrame>
+            <section
+              className="settings-feature"
+              data-settings-panel="ai-tagging"
+              aria-labelledby="ai-tagging-title"
+              hidden
+            >
+              <header className="account-section-heading">
+                <h1 id="ai-tagging-title" tabIndex="-1">
+                  AI tagging
+                </h1>
+                <p>
+                  Use your ChatGPT plan to classify bookmarks with up to three
+                  of your existing tags.
+                </p>
+              </header>
+              <div id="ai-tagging-settings" />
+            </section>
             <AccountPanels />
             <SessionsPanel />
             {"        "}

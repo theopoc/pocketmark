@@ -24,7 +24,7 @@ export async function settingsDensityJourney(page) {
   const initialTheme = await page.locator('html').getAttribute('data-theme');
   const libraryURL = new URL(page.url());
   libraryURL.searchParams.delete('settings');
-  const sections = ['appearance', 'api-keys', '2fa', 'sessions', 'password', 'backup', 'sync', 'mobile'];
+  const sections = ['appearance', 'ai-tagging', 'api-keys', '2fa', 'sessions', 'password', 'backup', 'sync', 'mobile'];
   for (const theme of ['dark', 'light']) for (const width of [1280, 1024, 901, 900, 390, 320]) {
     await page.goto(libraryURL.href);
     await page.locator('#library-content').waitFor({ state: 'visible' });
@@ -178,12 +178,12 @@ export async function settingsNavigationJourney(page) {
   assert.equal(await page.locator('#settings-page').evaluate(node => node.tagName), 'SECTION');
   assert.equal(await page.locator('dialog[open]').count(), 0);
   assert.equal(await page.locator('#library-navigation').isVisible(), false);
-  assert.equal(await page.locator('#settings-navigation [data-settings-section]').count(), 9);
+  assert.equal(await page.locator('#settings-navigation [data-settings-section]').count(), 10);
   assert.equal(new URL(page.url()).searchParams.get('settings'), 'overview');
   assert.equal(await page.locator('#settings-section-picker').count(), 0);
   const viewport = page.viewportSize();
   const initialTheme = await page.locator('html').getAttribute('data-theme');
-  const sections = ['appearance', 'api-keys', '2fa', 'sessions', 'password', 'backup', 'sync', 'mobile'];
+  const sections = ['appearance', 'ai-tagging', 'api-keys', '2fa', 'sessions', 'password', 'backup', 'sync', 'mobile'];
   for (const theme of ['dark', 'light']) {
     if (await page.locator('html').getAttribute('data-theme') !== theme)
       await page.locator('.settings-topbar [data-theme-toggle]').click();
@@ -277,6 +277,7 @@ export async function settingsNavigationJourney(page) {
   await page.goto(legacy.href);
   await page.locator('#mfa-settings-title').waitFor({ state: 'visible' });
   assert.equal(await page.locator('#settings-page').getByRole('heading', { level: 1 }).evaluate(node => document.activeElement === node && node.getBoundingClientRect().top >= 0 && node.getBoundingClientRect().top < innerHeight), true);
+  await aiTaggingJourney(page);
   await backupOverviewJourney(page);
   await page.reload();
   await page.locator('[data-settings-panel="backup"]').waitFor({ state: 'visible' });
@@ -302,6 +303,71 @@ export async function settingsNavigationJourney(page) {
   await page.goBack();
   await find.waitFor();
   assert.equal(await find.inputValue(), 'webdav');
+}
+
+// Exercise the hosted-account setup and quota UX without using a personal plan.
+export async function aiTaggingJourney(page) {
+  const panel = page.locator('[data-settings-panel="ai-tagging"]');
+  const state = { enabled: false, connected: false, model: '', eligible: 3, hasTags: true, remaining: 0, scan: { status: 'idle', processed: 0, remaining: 0 } };
+  const calls = [], connectionRequests = [];
+  const handle = async route => {
+    const { pathname } = new URL(route.request().url());
+    const name = pathname.split('/').at(-1);
+    if (name === 'ai-tagging') return route.fulfill({ json: state });
+    calls.push(name);
+    const payload = route.request().postDataJSON();
+    assert.equal(route.request().method(), 'POST');
+    switch (name) {
+      case 'connect': connectionRequests.push(payload); return route.fulfill({ json: { url: 'https://auth.openai.com/oauth/authorize' } });
+      case 'finish': assert.equal(payload.callback, 'http://127.0.0.1/example'); state.connected = true; state.registered = true; break;
+      case 'models': return route.fulfill({ json: { models: [{ id: 'fixture', name: 'Fixture model' }] } });
+      case 'model': assert.equal(payload.model, 'fixture'); state.model = payload.model; break;
+      case 'test': assert.deepEqual(payload, {}); break;
+      case 'enable': state.enabled = true; break;
+      case 'scan': state.scan = { status: 'paused', remaining: 2, processed: 1, reason: 'quota' }; state.blocked = 'quota'; break;
+      case 'resume': state.blocked = ''; state.scan = { status: 'completed', remaining: 0, processed: 3 }; break;
+      case 'pause': state.enabled = false; break;
+      case 'disconnect': state.connected = false; state.model = ''; break;
+      default: throw Error('Unexpected tagging action ' + name);
+    }
+    return route.fulfill({ json: {} });
+  };
+  await page.route('**/api/ai-tagging**', handle);
+  try {
+    await selectSettings(page, 'ai-tagging');
+    const action = name => panel.getByRole('button', { name, exact: true });
+    await action('Connect ChatGPT').waitFor();
+    assert.equal(await action('Use another ChatGPT account').count(), 0);
+    await action('Connect ChatGPT').click();
+    assert.equal(await panel.getByRole('link', { name: /Continue with ChatGPT/ }).getAttribute('target'), '_blank');
+    await panel.getByLabel('Return address').fill('http://127.0.0.1/example');
+    await action('Finish connection').click();
+    const picker = panel.getByRole('combobox', { name: 'Tagging model' });
+    await picker.press('Enter');
+    await picker.press('End');
+    await picker.press('Enter');
+    await action('Test connection').click();
+    await panel.getByText('Connection tested with a fictional bookmark.').waitFor();
+    await action('Enable automatic tagging').click();
+    await action('Classify 3 bookmarks').click();
+    await panel.getByText('1 processed · 2 remaining').waitFor();
+    assert.equal(await panel.getByRole('link', { name: /Manage plan usage/ }).getAttribute('href'), 'https://chatgpt.com/settings/usage');
+    await action('Resume tagging').click();
+    await panel.getByText('Scan complete', { exact: true }).waitFor();
+    await action('Pause automatic tagging').click();
+    await action('Disconnect').click();
+    await action('Reconnect ChatGPT').click();
+    await action('Cancel').click();
+    await action('Use another ChatGPT account').click();
+    await panel.getByLabel('Return address').fill('http://127.0.0.1/example');
+    await action('Finish connection').click();
+    await panel.getByRole('combobox', { name: 'Tagging model' }).waitFor();
+    assert.equal(await action('Use another ChatGPT account').count(), 0);
+    assert.deepEqual(connectionRequests, [{}, {}, { newAccount: true }]);
+    assert.deepEqual(calls, ['connect', 'finish', 'models', 'model', 'test', 'enable', 'scan', 'resume', 'pause', 'disconnect', 'connect', 'connect', 'finish', 'models']);
+  } finally {
+    await page.unroute('**/api/ai-tagging**', handle);
+  }
 }
 
 export async function openSettings(page, section = 'api-keys') {

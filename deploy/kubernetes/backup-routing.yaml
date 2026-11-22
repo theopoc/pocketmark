@@ -8,7 +8,7 @@ spec:
   type: ClusterIP
   selector:
     app: pocketmark
-    pocketmark-backup-revision: backup-schema-4
+    pocketmark-backup-revision: backup-schema-6
   ports:
     - name: http
       port: 8090

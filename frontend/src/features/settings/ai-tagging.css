@@ -1,0 +1,53 @@
+.ai-settings .form-error:empty,
+.ai-settings .ai-message:empty {
+  display: none;
+}
+.ai-settings .ai-connect,
+.ai-settings .ai-progress {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.ai-settings .ai-connect > .button,
+.ai-settings .ai-progress > .button {
+  justify-self: start;
+}
+.ai-settings .ai-connect .account-row-actions {
+  justify-content: flex-start;
+}
+#settings-page .ai-connect :is(p, label),
+#settings-page .ai-progress :is(p, h2) {
+  margin: 0;
+}
+.ai-settings .ai-connect p,
+.ai-settings .ai-progress p,
+.ai-settings .ai-message {
+  color: var(--muted);
+}
+.ai-settings .ai-connect input {
+  width: 100%;
+}
+.ai-settings .ai-progress h2 {
+  font-size: 15px;
+}
+@media (max-width: 650px) {
+  #settings-page .ai-settings .account-setting-row {
+    grid-template-columns: minmax(0, 1fr);
+    display: grid;
+  }
+  .ai-settings .account-row-actions {
+    display: flex;
+    justify-content: flex-start;
+  }
+  .ai-settings :is(.button, .app-select-trigger, input) {
+    min-height: 44px;
+    max-width: 100%;
+  }
+  .ai-settings input {
+    font-size: 16px;
+  }
+}

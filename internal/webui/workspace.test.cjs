@@ -27,12 +27,12 @@ test('tags directory retains its query and the library context it returns to', (
   assert.deepEqual(readRoute(routeSearch(route)), route);
   const tag = readRoute('?tag=R%26D+%2F+web&q=cache');
   assert.deepEqual(readRoute(routeSearch(tag)), tag);
-  assert.deepEqual(tag.activeTags, ['R&D / web']);
+  assert.deepEqual(tag.activeTags, ['r&d / web']);
 });
 
 test('tag filters round trip exact names together with the library destination', () => {
   const route = readRoute('?filter=collection&collection=42&tag=R%26D+%2F+web&tag=caf%C3%A9%2C+go&tag=R%26D+%2F+web&tag=&q=cache&sort=oldest&page=2');
-  assert.deepEqual(route.activeTags, ['R&D / web', 'café, go']);
+  assert.deepEqual(route.activeTags, ['r&d / web', 'café, go']);
   assert.equal(route.collection, 42);
   assert.deepEqual(readRoute(routeSearch(route)), route);
   assert.deepEqual(new URLSearchParams(routeSearch(route)).getAll('tag'), route.activeTags);
@@ -85,6 +85,7 @@ test('tag chips retain selected tags when typing or pasting more names', () => {
   assert.deepEqual(tagValues(selected, ' web, design, été & 読書, '), ['design', 'reference', 'web', 'été & 読書']);
   assert.deepEqual(selected, ['design', 'reference']);
   assert.deepEqual(tagValues([], ' , , '), []);
+  assert.deepEqual(tagValues(['AWS'], 'aws, Machine  Learning, machine-learning, CAFÉ, İ, ΟΣ'), ['aws', 'machine  learning', 'machine-learning', 'café', 'i', 'οσ']);
 });
 
 test('many selected tags and pending text survive draft serialization without truncation', () => {
@@ -146,6 +147,8 @@ test('bookmark validation catches UTF-8 limits and unsafe URLs before submission
   assert.ok(bookmarkIssues({ ...bookmark, url: 'https://user:secret@example.com' }).url);
   assert.ok(bookmarkIssues({ ...bookmark, title: '界'.repeat(342) }).title);
   assert.ok(bookmarkIssues({ ...bookmark, tags: ['界'.repeat(27)] }).tags);
+  assert.equal(bookmarkIssues({ ...bookmark, tags: ['ȺȾ'.repeat(20)] }).tags, undefined);
+  assert.ok(bookmarkIssues({ ...bookmark, tags: ['ⱥⱦ'.repeat(20) + 'a'] }).tags);
   assert.ok(bookmarkIssues({ ...bookmark, tags: Array.from({ length: 33 }, (_, i) => 'tag' + i) }).tags);
   assert.ok(bookmarkIssues({ ...bookmark, notes: 'x'.repeat(65537) }).notes);
   const longURL = 'https://example.com/' + 'a'.repeat(1500);
@@ -200,7 +203,7 @@ test('a failed bookmark save never starts a capture and standalone files never r
 });
 
 test('settings section links retain library context and reject unknown sections', () => {
-  for (const section of ['overview', 'appearance', 'api-keys', '2fa', 'sessions', 'backup', 'password', 'sync', 'mobile']) {
+  for (const section of ['overview', 'appearance', 'ai-tagging', 'api-keys', '2fa', 'sessions', 'backup', 'password', 'sync', 'mobile']) {
     const route = readRoute(`?settings=${section}&filter=favorite&q=reading&page=3&view=tags&tagQuery=go`);
     assert.equal(route.settingsSection, section);
     assert.deepEqual(readRoute(routeSearch(route)), route);

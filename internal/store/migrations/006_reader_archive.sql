@@ -1,7 +1,7 @@
 ALTER TABLE links ADD COLUMN reader_archive bytea
     CHECK (reader_archive IS NULL OR (archive IS NOT NULL AND octet_length(reader_archive) BETWEEN 1 AND 2097216));
 
--- A replica already running schema 4 can still replace or clear the original
+-- A replica already running schema 5 can still replace or clear the original
 -- during a rolling upgrade. Its UPDATE does not know about the reading copy.
 CREATE FUNCTION discard_stale_reader_archive() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN

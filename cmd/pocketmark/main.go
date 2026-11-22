@@ -255,6 +255,9 @@ func run() (runErr error) {
 	if e = handler.ConfigureBackups(ctx, backupEnv); e != nil {
 		return e
 	}
+	taggingDone := make(chan struct{})
+	go func() { defer close(taggingDone); handler.AITagWorker(ctx, !*noCapture) }()
+	defer func() { stop(); <-taggingDone }()
 	backupDone := make(chan struct{})
 	go func() { defer close(backupDone); handler.BackupWorker(ctx) }()
 	defer func() { stop(); <-backupDone }()

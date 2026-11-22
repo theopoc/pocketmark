@@ -51,6 +51,10 @@
     {
       "name": "Health",
       "description": "Public database availability check."
+    },
+    {
+      "name": "AI tagging",
+      "description": "Connect a personal ChatGPT plan and classify untagged bookmarks."
     }
   ],
   "security": [
@@ -1166,7 +1170,7 @@
             "name": "tag",
             "in": "query",
             "required": false,
-            "description": "Exact, case-sensitive tag names. Repeat tag to require every selected tag. Empty values are ignored.",
+            "description": "Exact tag names, normalized to lowercase. Repeat tag to require every selected tag. Empty values are ignored.",
             "style": "form",
             "explode": true,
             "schema": {
@@ -5407,6 +5411,625 @@
           }
         }
       }
+    },
+    "/api/ai-tagging": {
+      "get": {
+        "operationId": "get_ai_tagging",
+        "tags": [
+          "AI tagging"
+        ],
+        "summary": "Read classifier settings and scan progress",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "200": {
+            "description": "Read classifier settings and scan progress",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AITagSettings"
+                }
+              }
+            }
+          }
+        },
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
+      }
+    },
+    "/api/ai-tagging/connect": {
+      "post": {
+        "operationId": "post_ai_tagging_connect",
+        "tags": [
+          "AI tagging"
+        ],
+        "summary": "Start ChatGPT plan authorization",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "200": {
+            "description": "Start ChatGPT plan authorization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Connection, model, scan, or setting is not ready for this action."
+          }
+        },
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ],
+        "x-reauthentication-required": true,
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "newAccount": {
+                    "type": "boolean",
+                    "description": "Register another ChatGPT account instead of reconnecting the saved account."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai-tagging/finish": {
+      "post": {
+        "operationId": "post_ai_tagging_finish",
+        "tags": [
+          "AI tagging"
+        ],
+        "summary": "Finish ChatGPT sign-in with the loopback return address",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "200": {
+            "description": "Finish ChatGPT sign-in with the loopback return address",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Connection, model, scan, or setting is not ready for this action."
+          },
+          "400": {
+            "description": "Invalid input."
+          }
+        },
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ],
+        "x-reauthentication-required": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "callback"
+                ],
+                "properties": {
+                  "callback": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai-tagging/models": {
+      "post": {
+        "operationId": "post_ai_tagging_models",
+        "tags": [
+          "AI tagging"
+        ],
+        "summary": "List models available to the connected account",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "200": {
+            "description": "List models available to the connected account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "models": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Connection, model, scan, or setting is not ready for this action."
+          }
+        },
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
+      }
+    },
+    "/api/ai-tagging/model": {
+      "post": {
+        "operationId": "post_ai_tagging_model",
+        "tags": [
+          "AI tagging"
+        ],
+        "summary": "Select a model from the current account catalog",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "200": {
+            "description": "Select a model from the current account catalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Connection, model, scan, or setting is not ready for this action."
+          },
+          "400": {
+            "description": "Invalid input."
+          }
+        },
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ],
+        "x-reauthentication-required": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "model"
+                ],
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai-tagging/test": {
+      "post": {
+        "operationId": "post_ai_tagging_test",
+        "tags": [
+          "AI tagging"
+        ],
+        "summary": "Test the selected model with a fictional bookmark",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "200": {
+            "description": "Test the selected model with a fictional bookmark",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Connection, model, scan, or setting is not ready for this action."
+          }
+        },
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
+      }
+    },
+    "/api/ai-tagging/enable": {
+      "post": {
+        "operationId": "post_ai_tagging_enable",
+        "tags": [
+          "AI tagging"
+        ],
+        "summary": "Enable background classification of new website bookmarks",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "200": {
+            "description": "Enable background classification of new website bookmarks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Connection, model, scan, or setting is not ready for this action."
+          }
+        },
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ],
+        "x-reauthentication-required": true
+      }
+    },
+    "/api/ai-tagging/pause": {
+      "post": {
+        "operationId": "post_ai_tagging_pause",
+        "tags": [
+          "AI tagging"
+        ],
+        "summary": "Pause classification and keep the connection",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "200": {
+            "description": "Pause classification and keep the connection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Connection, model, scan, or setting is not ready for this action."
+          }
+        },
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ]
+      }
+    },
+    "/api/ai-tagging/disconnect": {
+      "post": {
+        "operationId": "post_ai_tagging_disconnect",
+        "tags": [
+          "AI tagging"
+        ],
+        "summary": "Remove the saved ChatGPT connection and stop classification",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "200": {
+            "description": "Remove the saved ChatGPT connection and stop classification",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Connection, model, scan, or setting is not ready for this action."
+          }
+        },
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ],
+        "x-reauthentication-required": true
+      }
+    },
+    "/api/ai-tagging/scan": {
+      "post": {
+        "operationId": "post_ai_tagging_scan",
+        "tags": [
+          "AI tagging"
+        ],
+        "summary": "Start a new scan of the currently untagged website bookmarks",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "200": {
+            "description": "Start a new scan of the currently untagged website bookmarks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Connection, model, scan, or setting is not ready for this action."
+          }
+        },
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ],
+        "x-reauthentication-required": true
+      }
+    },
+    "/api/ai-tagging/resume": {
+      "post": {
+        "operationId": "post_ai_tagging_resume",
+        "tags": [
+          "AI tagging"
+        ],
+        "summary": "Resume classification from the saved position",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/401"
+          },
+          "403": {
+            "$ref": "#/components/responses/403"
+          },
+          "429": {
+            "$ref": "#/components/responses/429"
+          },
+          "503": {
+            "$ref": "#/components/responses/503"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "200": {
+            "description": "Resume classification from the saved position",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Connection, model, scan, or setting is not ready for this action."
+          }
+        },
+        "x-owner-only": true,
+        "security": [
+          {
+            "ownerSession": []
+          }
+        ],
+        "x-reauthentication-required": true
+      }
     }
   },
   "components": {
@@ -6686,6 +7309,70 @@
           },
           "Notification": {
             "type": "string"
+          }
+        }
+      },
+      "AITagSettings": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "connected": {
+            "type": "boolean"
+          },
+          "connectionIssue": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "hasTags": {
+            "type": "boolean"
+          },
+          "eligible": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "remaining": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "blocked": {
+            "type": "string"
+          },
+          "scan": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "idle",
+                  "running",
+                  "paused",
+                  "completed"
+                ]
+              },
+              "processed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "remaining": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "reason": {
+                "type": "string"
+              },
+              "resumeAt": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              }
+            }
+          },
+          "registered": {
+            "type": "boolean"
           }
         }
       }

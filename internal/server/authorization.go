@@ -19,6 +19,17 @@ type routeAccess struct {
 }
 
 var apiAccess = map[string]routeAccess{
+	"GET /api/ai-tagging":                               {owner: true},
+	"POST /api/ai-tagging/connect":                      {owner: true, confirm: true},
+	"POST /api/ai-tagging/finish":                       {owner: true, confirm: true},
+	"POST /api/ai-tagging/models":                       {owner: true},
+	"POST /api/ai-tagging/model":                        {owner: true, confirm: true},
+	"POST /api/ai-tagging/test":                         {owner: true},
+	"POST /api/ai-tagging/enable":                       {owner: true, confirm: true},
+	"POST /api/ai-tagging/pause":                        {owner: true},
+	"POST /api/ai-tagging/disconnect":                   {owner: true, confirm: true},
+	"POST /api/ai-tagging/scan":                         {owner: true, confirm: true},
+	"POST /api/ai-tagging/resume":                       {owner: true, confirm: true},
 	"GET /api/session":                                  {profiles: "read capture sync full"},
 	"POST /api/logout":                                  {owner: true},
 	"GET /api/account":                                  {owner: true},

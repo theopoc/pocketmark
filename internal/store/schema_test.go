@@ -159,9 +159,9 @@ func TestReaderArchiveUpgradeAndRecaptureAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.Exec(initialSchema + challengeSchema + sessionAddressSchema + backupSchema + `
+	_, err = db.Exec(initialSchema + challengeSchema + sessionAddressSchema + backupSchema + aiTagSchema + `
 CREATE TABLE pocketmark_migrations(version integer PRIMARY KEY);
-INSERT INTO pocketmark_migrations VALUES (1),(2),(3),(4);
+INSERT INTO pocketmark_migrations VALUES (1),(2),(3),(4),(5);
 INSERT INTO links(url,title,created_at,updated_at,status,archive)
 VALUES('https://example.test/old','Original',utc_timestamp_text(),utc_timestamp_text(),'ready',convert_to('original','UTF8'));`)
 	db.Close()
@@ -210,7 +210,7 @@ VALUES('https://example.test/old','Original',utc_timestamp_text(),utc_timestamp_
 	if b, err := s.ArticleArchive(ctx, 1); err != nil || string(b) != "illustrated" {
 		t.Fatalf("lost identical image on recapture: %q %v", b, err)
 	}
-	// SQL issued by already-running schema 4 replicas during a rolling upgrade.
+	// SQL issued by already-running schema 5 replicas during a rolling upgrade.
 	if _, err = s.db.Exec("UPDATE links SET archive=$1 WHERE id=1", []byte("recaptured")); err != nil {
 		t.Fatal(err)
 	}

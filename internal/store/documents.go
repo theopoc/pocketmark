@@ -76,6 +76,7 @@ func (s *Store) snapshot(ctx context.Context, anonymous bool) (*os.File, error) 
 	}
 	u.RawQuery = query.Encode()
 	cmd := exec.CommandContext(ctx, "pg_dump", "--no-owner", "--no-acl", "--no-password",
+		"--exclude-table-data=*.ai_tag_credentials", "--exclude-table-data=*.ai_tag_settings", "--exclude-table-data=*.ai_tag_jobs",
 		"--exclude-table-data=*.backup_notifications", "--exclude-table-data=*.backup_settings", "--exclude-table-data=*.backup_runs", "--exclude-table-data=*.backup_objects", "--exclude-table-data=*.backup_pending", "--exclude-table-data=*.backup_metrics", "--exclude-table-data=*.mfa_challenges", "--exclude-table-data=*.sessions", "--exclude-table-data=*.mfa_recovery", "--dbname="+u.String())
 	cmd.Env = os.Environ()
 	if user != "" {
@@ -101,7 +102,7 @@ func (s *Store) snapshot(ctx context.Context, anonymous bool) (*os.File, error) 
 // IndexDocument preserves personal metadata and ignores a stale upload after a
 // URL edit. The saved attachment remains intact if indexing fails separately.
 func (s *Store) IndexDocument(ctx context.Context, id int64, url, title, description, content string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE links SET content=$1,title=CASE WHEN title=url AND $2<>'' THEN $3 ELSE title END, description=CASE WHEN description='' THEN $4 ELSE description END,status='ready',error='',updated_at=$5 WHERE id=$6 AND url=$7`, content, title, title, description, time.Now().UTC().Format(time.RFC3339Nano), id, url)
+	_, err := s.db.ExecContext(ctx, `UPDATE links SET ai_private_title=ai_private_title OR (title=url AND $2<>''), ai_private_description=ai_private_description OR (description='' AND $4<>''), content=$1,title=CASE WHEN title=url AND $2<>'' THEN $3 ELSE title END, description=CASE WHEN description='' THEN $4 ELSE description END,status='ready',error='',updated_at=$5 WHERE id=$6 AND url=$7`, content, title, title, description, time.Now().UTC().Format(time.RFC3339Nano), id, url)
 	return err
 }
 

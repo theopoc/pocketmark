@@ -27,6 +27,7 @@ import (
 )
 
 type Server struct {
+	aiTagging         aiTagging
 	backupEnv         backup.Environment
 	telegramTransport http.RoundTripper
 	Store             *store.Store
@@ -72,6 +73,7 @@ func New(s *store.Store, token, origin string, secure bool, observers ...*observ
 	a.registerDAV(a.mux)
 	a.registerAssets(a.mux)
 	a.registerBackups(a.mux)
+	a.registerAITagging(a.mux)
 	a.registerFiles(a.mux)
 	a.mux.HandleFunc("POST /api/login", a.login)
 	a.mux.HandleFunc("POST /api/logout", func(w http.ResponseWriter, r *http.Request) {
@@ -410,6 +412,9 @@ func (a *Server) createLink(w http.ResponseWriter, r *http.Request) {
 	}
 	if link.Status == "pending" {
 		observability.Logger(r.Context()).InfoContext(r.Context(), "capture_queued", "link_id", v, "operation", "link.create")
+	}
+	if len(link.Tags) == 0 {
+		a.aiTagging.notify()
 	}
 	respond(w, 201, link)
 }
