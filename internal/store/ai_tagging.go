@@ -12,12 +12,12 @@ import (
 
 	"pocketmark/internal/capture"
 	"pocketmark/internal/fault"
+	"pocketmark/internal/tagname"
 )
 
 var (
 	ErrAITagDisabled   = errors.New("enable AI tagging first")
 	ErrAITagScanActive = errors.New("an AI tagging scan is already in progress")
-	ErrAITagNoTags     = errors.New("add a tag to a bookmark first")
 )
 
 type AITagStatus struct {
@@ -124,15 +124,12 @@ func (s *Store) StartAITagScan(ctx context.Context) error {
 	if !enabled {
 		return ErrAITagDisabled
 	}
-	var active, hasTags bool
-	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT FROM ai_tag_jobs WHERE manual),EXISTS(SELECT FROM links WHERE tags<>'[]')`).Scan(&active, &hasTags); err != nil {
+	var active bool
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT FROM ai_tag_jobs WHERE manual)`).Scan(&active); err != nil {
 		return err
 	}
 	if active {
 		return ErrAITagScanActive
-	}
-	if !hasTags {
-		return ErrAITagNoTags
 	}
 	// A single statement fixes the membership at scan start. Existing creation events
 	// become members of the scan, so one inference satisfies both requests.
@@ -160,8 +157,31 @@ type AITagJob struct {
 	ID                                         int64
 	Model, Domain, Title, Description, Excerpt string
 	Tags                                       []string
+	MoreTags                                   bool
+	firstPageTags                              []string
+	afterTag                                   string
 	lease                                      string
 	revision, inputRevision                    int64
+}
+
+const aiTagPageSize = 256
+
+// Each query fetches one extra row to determine whether another request is needed.
+func (j *AITagJob) readTagPage(rows *sql.Rows) error {
+	defer rows.Close()
+	j.Tags, j.MoreTags = nil, false
+	for rows.Next() {
+		if len(j.Tags) == aiTagPageSize {
+			j.MoreTags = true
+			break
+		}
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		j.Tags = append(j.Tags, name)
+	}
+	return rows.Err()
 }
 
 func (s *Store) NextAITagJob(ctx context.Context, captureEnabled bool) (AITagJob, error) {
@@ -235,23 +255,52 @@ func (s *Store) NextAITagJob(ctx context.Context, captureEnabled bool) (AITagJob
 		// frequency. Bound the prompt even for libraries with thousands of tags.
 		terms := strings.ToLower(strings.Join([]string{j.Domain, j.Title, j.Description, j.Excerpt}, " "))
 		rows, err := tx.QueryContext(ctx, `SELECT value FROM links,jsonb_array_elements_text(tags::jsonb) AS names(value)
-		GROUP BY value ORDER BY (strpos($1,value)>0) DESC,count(*) DESC,value COLLATE "C" LIMIT 256`, terms)
+		GROUP BY value ORDER BY (strpos($1,value)>0) DESC,count(*) DESC,value COLLATE "C" LIMIT $2`, terms, aiTagPageSize+1)
 		if err != nil {
 			return j, err
 		}
-		defer rows.Close()
-		for rows.Next() {
-			var tag string
-			if err = rows.Scan(&tag); err != nil {
-				return j, err
-			}
-			j.Tags = append(j.Tags, tag)
-		}
-		if err = rows.Err(); err != nil {
+		if err = j.readTagPage(rows); err != nil {
 			return j, err
+		}
+		if j.MoreTags {
+			j.firstPageTags = j.Tags
 		}
 	}
 	return j, tx.Commit()
+}
+
+const aiTagActiveCondition = `q.link_id=$1 AND q.lease=$2 AND q.lease_until>now()
+	AND s.id=1 AND s.enabled AND s.model=$3 AND s.blocked=''
+	AND l.tags='[]' AND q.url_hash=url_digest(l.url)
+	AND l.ai_tag_revision=$4 AND l.ai_input_revision=$5`
+
+// NextAITagPage continues in stable name order, independently of changes to tag
+// frequencies. Only the ranked first page and the current page are kept in memory.
+func (s *Store) NextAITagPage(ctx context.Context, j AITagJob) (AITagJob, error) {
+	if !j.MoreTags {
+		return j, sql.ErrNoRows
+	}
+	var id int64
+	err := s.db.QueryRowContext(ctx, `UPDATE ai_tag_jobs q SET lease_until=now()+interval '2 minutes'
+		FROM links l,ai_tag_settings s WHERE l.id=q.link_id AND `+aiTagActiveCondition+`
+		RETURNING q.link_id`, j.ID, j.lease, j.Model, j.revision, j.inputRevision).Scan(&id)
+	if err != nil {
+		return j, err
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT value COLLATE "C" AS name
+		FROM links,jsonb_array_elements_text(tags::jsonb) AS names(value)
+		WHERE value COLLATE "C">$1 AND NOT (value=ANY($2::text[])) ORDER BY name LIMIT $3`,
+		j.afterTag, j.firstPageTags, aiTagPageSize+1)
+	if err != nil {
+		return j, err
+	}
+	if err = j.readTagPage(rows); err != nil {
+		return j, err
+	}
+	if j.MoreTags {
+		j.afterTag = j.Tags[len(j.Tags)-1]
+	}
+	return j, nil
 }
 
 // AITagJobActive rechecks consent, reservation and article provenance after
@@ -263,21 +312,38 @@ func (s *Store) AITagJobActive(ctx context.Context, j AITagJob) (bool, error) {
 	var active bool
 	err := s.db.QueryRowContext(ctx, `SELECT EXISTS(
 		SELECT FROM ai_tag_jobs q JOIN links l ON l.id=q.link_id CROSS JOIN ai_tag_settings s
-		WHERE q.link_id=$1 AND q.lease=$2 AND q.lease_until>now()
-		AND s.id=1 AND s.enabled AND s.model=$3 AND s.blocked=''
-		AND l.tags='[]' AND q.url_hash=url_digest(l.url)
-		AND l.ai_tag_revision=$4 AND l.ai_input_revision=$5
-	)`, j.ID, j.lease, j.Model, j.revision, j.inputRevision).Scan(&active)
+		WHERE `+aiTagActiveCondition+`)`, j.ID, j.lease, j.Model, j.revision, j.inputRevision).Scan(&active)
 	return active, err
 }
 
 func (s *Store) FinishAITagJob(ctx context.Context, j AITagJob, tags []string) error {
 	if len(tags) > 3 {
-		return fault.Invalid("expected up to three existing tags")
+		return fault.Invalid("expected up to three tags")
 	}
-	for _, t := range tags {
-		if !slices.Contains(j.Tags, t) {
-			return fault.Invalid("unexpected tag from classifier")
+	if len(tags) > 0 && (j.Domain == "" || (j.Title == "" && j.Description == "" && j.Excerpt == "")) {
+		return fault.Invalid("cannot tag a bookmark without public article data")
+	}
+	names := make([]string, 0, len(tags))
+	newCount := 0
+	for _, name := range tags {
+		if !slices.Contains(j.Tags, name) {
+			canonical, valid := tagname.Generated(name)
+			if !valid {
+				return fault.Invalid("invalid generated tag")
+			}
+			name = canonical
+			if !slices.Contains(j.Tags, name) {
+				newCount++
+			}
+		}
+		names = append(names, name)
+	}
+	if newCount > 0 {
+		if newCount != len(tags) {
+			return fault.Invalid("cannot mix existing and generated tags")
+		}
+		if j.MoreTags {
+			return fault.Invalid("check remaining existing tags before creating tags")
 		}
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -316,14 +382,18 @@ func (s *Store) FinishAITagJob(ctx context.Context, j AITagJob, tags []string) e
 		return err
 	}
 	if n > 0 && len(tags) > 0 {
-		// Recheck usage: the owner may have removed the last occurrence of a
-		// proposed tag after classification started. Do not recreate that name.
-		_, err = tx.ExecContext(ctx, `WITH available AS (
+		// Check the current, complete vocabulary under lock. A fallback might
+		// already exist outside the prompt or have appeared during inference.
+		// Only fallback proposals may introduce a name with no remaining uses.
+		_, err = tx.ExecContext(ctx, `WITH proposed AS (
 		SELECT value,min(ord) AS first_at FROM unnest($3::text[]) WITH ORDINALITY AS p(value,ord)
-		WHERE EXISTS(SELECT FROM links WHERE tags::jsonb ? p.value FOR SHARE)
-		GROUP BY value)
+		GROUP BY value), existing AS (
+		SELECT p.* FROM proposed p WHERE EXISTS(SELECT FROM links WHERE tags::jsonb ? p.value FOR SHARE)
+		), available AS (
+		SELECT * FROM existing UNION ALL
+		SELECT * FROM proposed WHERE $4::boolean AND NOT EXISTS(SELECT FROM existing))
 		UPDATE links SET tags=(SELECT jsonb_agg(value ORDER BY first_at)::text FROM available),updated_at=utc_timestamp_text()
-		WHERE id=$1 AND ai_tag_revision=$2 AND tags='[]' AND EXISTS(SELECT FROM available)`, j.ID, j.revision, tags)
+		WHERE id=$1 AND ai_tag_revision=$2 AND tags='[]' AND EXISTS(SELECT FROM available)`, j.ID, j.revision, names, newCount > 0)
 		if err != nil {
 			return err
 		}

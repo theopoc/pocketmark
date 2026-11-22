@@ -371,7 +371,6 @@ function AITagging({ api }) {
                 disabled ||
                 !ready ||
                 !data.enabled ||
-                !data.hasTags ||
                 !data.eligible ||
                 activeScan ||
                 Boolean(reason)
@@ -381,11 +380,6 @@ function AITagging({ api }) {
               Classify {bookmarks(data.eligible)}
             </Button>
           </SettingRow>
-          {!data.hasTags && (
-            <p className="ai-message">
-              Add a tag to a bookmark to give the classifier a vocabulary.
-            </p>
-          )}
           {(statuses[scan?.status] || reason || data.remaining > 0) && (
             <section
               className="ai-progress"

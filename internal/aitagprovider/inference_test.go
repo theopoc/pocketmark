@@ -49,7 +49,7 @@ func TestClassify(t *testing.T) {
 	ctx := context.Background()
 	article := Article{Title: "A tutorial", Domain: "example.invalid", Description: "https://example.invalid/guide?key=private-value and some words"}
 	tags := []string{"one", "machine learning", strings.Repeat("ⱥ", 40)}
-	result := stream(`{"indices":[1,0]}`)
+	result := stream(`{"indices":[1,0],"newTags":["unneeded"]}`)
 	calls := 0
 	c.http.Transport = mockTransport(func(r *http.Request) (*http.Response, error) {
 		calls++
@@ -75,14 +75,11 @@ func TestClassify(t *testing.T) {
 	if err != nil || !slices.Equal(out, []string{"machine learning", "one"}) {
 		t.Fatalf("got %v, %v", out, err)
 	}
-	if _, err := c.Classify(ctx, "available", article, nil, nil); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := c.Classify(ctx, "available", Article{Domain: article.Domain}, tags, nil); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 1 {
-		t.Fatal("sent a request for an empty vocabulary or a domain alone")
+		t.Fatal("sent a request for a domain alone")
 	}
 	if _, err := c.Classify(ctx, "available", Article{Domain: strings.Repeat("x", 256), Title: "article"}, tags, nil); !errors.Is(err, ErrArticleInput) || calls != 1 {
 		t.Fatal("invalid bookmark did not produce a local article-specific error")
@@ -91,6 +88,56 @@ func TestClassify(t *testing.T) {
 		result = stream(invalid)
 		if _, err := c.Classify(ctx, "available", article, tags, nil); !errors.Is(err, ErrModelOutput) {
 			t.Fatalf("accepted %s, %v", invalid, err)
+		}
+	}
+}
+
+func TestClassifyFallback(t *testing.T) {
+	c := oauthClient(t)
+	setupSession(t, c, registration{HostID: "host", Refresh: "session", Access: "valid", Expires: time.Now().Add(time.Hour)})
+	article := Article{Title: "Deploying an app", Domain: "example.invalid"}
+	for _, tc := range []struct {
+		name       string
+		vocabulary []string
+		answer     string
+		want       []string
+	}{
+		{"empty vocabulary", nil, `{"indices":[],"newTags":["  CI/CD  ","ci/cd","ÉTUDES"]}`, []string{"ci/cd", "études"}},
+		{"unrelated vocabulary", []string{"music"}, `{"indices":[],"newTags":["AWS","machine learning"]}`, []string{"aws", "machine learning"}},
+		{"reuse indexed tag", []string{"cloud"}, `{"indices":[0],"newTags":["deployments"]}`, []string{"cloud"}},
+		{"reuse name", []string{"cloud"}, `{"indices":[],"newTags":["deployments","CLOUD"]}`, []string{"cloud"}},
+		{"no identifiable topic", nil, `{"indices":[],"newTags":[]}`, []string{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls, guards := 0, 0
+			c.http.Transport = mockTransport(func(r *http.Request) (*http.Response, error) {
+				calls++
+				if guards != 1 {
+					t.Fatal("sent bookmark before checking owner consent")
+				}
+				return reply(200, stream(tc.answer)), nil
+			})
+			result, err := c.Classify(t.Context(), "available", article, tc.vocabulary, func(context.Context) error {
+				guards++
+				return nil
+			})
+			if err != nil || calls != 1 || !slices.Equal(result, tc.want) {
+				t.Fatalf("selection=%v calls=%d err=%v", result, calls, err)
+			}
+		})
+	}
+}
+
+func TestInvalidTagProposals(t *testing.T) {
+	for _, answer := range []string{
+		`{"indices":[]}`, `{"indices":[],"newTags":null}`, `{"indices":[],"newTags":"cloud"}`,
+		`{"indices":[],"newTags":["cloud",null]}`, `{"indices":[],"newTags":["a","b","c","d"]}`,
+		`{"indices":[],"newTags":["  "]}`, `{"indices":[],"newTags":["https://example.org/?q=secret"]}`,
+		`{"indices":[],"newTags":["bad\u0000name"]}`,
+		jsonText(map[string]any{"indices": []int{}, "newTags": []string{strings.Repeat("x", 81)}}),
+	} {
+		if _, err := parseTagSelection(answer, nil); !errors.Is(err, ErrModelOutput) {
+			t.Errorf("expected invalid selection for %s, got %v", answer, err)
 		}
 	}
 }

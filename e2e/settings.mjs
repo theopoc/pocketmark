@@ -308,7 +308,7 @@ export async function settingsNavigationJourney(page) {
 // Exercise the hosted-account setup and quota UX without using a personal plan.
 export async function aiTaggingJourney(page) {
   const panel = page.locator('[data-settings-panel="ai-tagging"]');
-  const state = { enabled: false, connected: false, model: '', eligible: 3, hasTags: true, remaining: 0, scan: { status: 'idle', processed: 0, remaining: 0 } };
+  const state = { enabled: false, connected: false, model: '', eligible: 3, hasTags: false, remaining: 0, scan: { status: 'idle', processed: 0, remaining: 0 } };
   const calls = [], connectionRequests = [];
   const handle = async route => {
     const { pathname } = new URL(route.request().url());
@@ -348,6 +348,7 @@ export async function aiTaggingJourney(page) {
     await picker.press('Enter');
     await action('Test connection').click();
     await panel.getByText('Connection tested with a fictional bookmark.').waitFor();
+    assert.equal(await action('Classify 3 bookmarks').isDisabled(), true);
     await action('Enable automatic tagging').click();
     await action('Classify 3 bookmarks').click();
     await panel.getByText('1 processed · 2 remaining').waitFor();
