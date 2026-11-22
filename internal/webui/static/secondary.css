@@ -1,6 +1,6 @@
 /* Secondary surfaces. Library rows, actions, toasts and sorting retain style.css. */
 :is(#login-view, #settings-page, #help-dialog, body.api-docs) {
-  --secondary-link: #5146c8;
+  --secondary-link: #0a6d60;
   --control-border: var(--control-line);
   font-size: 14px;
   line-height: 1.6;

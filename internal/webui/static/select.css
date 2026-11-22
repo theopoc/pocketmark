@@ -14,7 +14,7 @@
 .app-select-panel {
   position: static; width: 100%; max-height: 264px; overflow: auto; overscroll-behavior: contain;
   padding: 5px; border: 1px solid var(--line); border-radius: 8px;
-  background: var(--paper); color: var(--ink); box-shadow: 0 8px 24px #171a3433;
+  background: var(--paper); color: var(--ink); box-shadow: 0 8px 24px #10182833;
   font: inherit; scrollbar-color: var(--control-line) var(--paper); scrollbar-width: thin;
 }
 .app-select-panel[popover] { position: fixed; inset: auto; margin: 0; }

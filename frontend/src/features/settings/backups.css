@@ -265,12 +265,12 @@
 .bk-running,
 .bk-retry,
 .bk-queued {
-  color: #8c5818;
-  background: #fff0da;
+  color: #8a5300;
+  background: #fff3d6;
 }
 [data-theme="dark"] :is(.bk-running, .bk-retry, .bk-queued) {
-  color: #d9b87c;
-  background: #3b3020;
+  color: #f5c76b;
+  background: #3a2e12;
 }
 .bk-pages,
 .bk-pages div {
