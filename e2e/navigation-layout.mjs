@@ -26,7 +26,7 @@ export async function navigationLayoutJourney(library) {
 
     await page.mouse.move(2, 400);
     await page.clock.fastForward(250);
-    assert.equal((await sidebar.boundingBox())?.x, 0, 'dwelling at the edge reveals the whole panel with reduced motion');
+    assert.equal((await sidebar.boundingBox())?.x, 16, 'dwelling at the edge reveals the whole floating panel with reduced motion');
     assert.equal(await mainLeft(), 0, 'temporary navigation overlays the library');
     await page.locator('.api-documentation-link').focus();
     await page.keyboard.press('Tab');
@@ -37,7 +37,7 @@ export async function navigationLayoutJourney(library) {
     await page.clock.fastForward(250);
     await page.mouse.move(600, 400);
     await page.clock.fastForward(150);
-    assert.equal((await sidebar.boundingBox())?.x, 0, 'a short detour leaves the panel in place');
+    assert.equal((await sidebar.boundingBox())?.x, 16, 'a short detour leaves the panel in place');
     await page.mouse.move(80, 400);
     await page.clock.fastForward(600);
     assert.equal(await sidebar.isVisible(), true, 'returning to the panel cancels its pending close');
@@ -55,7 +55,7 @@ export async function navigationLayoutJourney(library) {
     assert.equal(await page.evaluate(() => document.activeElement.id), 'main-content', 'hover never steals library focus');
 
     await page.locator('#open-navigation').press('Enter');
-    assert.equal((await sidebar.boundingBox())?.x, 0, 'the keyboard opener bypasses hover delays');
+    assert.equal((await sidebar.boundingBox())?.x, 16, 'the keyboard opener bypasses hover delays');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'sidebar-mode');
     await page.locator('#workspace-button').click();
     await page.locator('#import-button').hover();

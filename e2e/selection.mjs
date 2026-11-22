@@ -36,8 +36,8 @@ export async function selectionJourney(page, screenshots) {
   };
   // Releasing just outside the grid before the drag threshold must discard the gesture.
   const edge = await cards.nth(0).boundingBox();
-  await page.mouse.move(edge.x + 1, edge.y + 2); await page.mouse.down();
-  await page.mouse.move(edge.x - 1, edge.y + 2); await page.mouse.up();
+  await page.mouse.move(edge.x + 1, edge.y + 20); await page.mouse.down();
+  await page.mouse.move(edge.x - 1, edge.y + 20); await page.mouse.up();
   await page.mouse.move(edge.x + 30, edge.y + 20);
   assert.equal(await page.locator('.selection-marquee').count(), 0);
   await count(0);
@@ -71,7 +71,7 @@ export async function selectionJourney(page, screenshots) {
   await page.locator('#reader-dialog').waitFor({ state: 'hidden' });
   // Drag from a non-interactive row margin through the next row; the release must not toggle it.
   let first = await cards.nth(0).boundingBox(), second = await cards.nth(1).boundingBox();
-  await page.mouse.move(first.x + 2, first.y + 2); await page.mouse.down();
+  await page.mouse.move(first.x + 10, first.y + 10); await page.mouse.down();
   await page.mouse.move(second.x + second.width - 2, second.y + second.height - 2, { steps: 12 });
   await page.mouse.up(); await count(2);
   assert.equal(await page.locator('.selection-marquee').count(), 0);
