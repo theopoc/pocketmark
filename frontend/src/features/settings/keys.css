@@ -63,10 +63,10 @@
 #token-list .ak-head h1 {
   width: fit-content;
   margin: 0;
-  font-size: 26px;
-  line-height: 1.3;
-  font-weight: 650;
-  letter-spacing: -0.75px;
+  font-size: 34px;
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.8px;
 }
 #token-list .ak-head p {
   margin: 5px 0 0;
@@ -746,6 +746,6 @@ button.ak-expiry:focus-visible {
 }
 @media (max-width: 600px) {
   #token-list .ak-head h1 {
-    font-size: 24px;
+    font-size: 26px;
   }
 }

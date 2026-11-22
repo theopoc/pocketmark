@@ -109,7 +109,7 @@ export async function navigationJourney(page) {
   await page.locator('#sidebar').waitFor({ state: 'visible' });
   await page.locator('#sidebar-mode').click();
   assert.equal(await page.locator('#sidebar-mode').getAttribute('aria-pressed'), 'true');
-  assert.equal(await page.locator('#main-content').evaluate(el => el.getBoundingClientRect().left), 280, 'pinned navigation reserves its width');
+  assert.equal(await page.locator('#main-content').evaluate(el => el.getBoundingClientRect().left), 312, 'pinned navigation reserves its width and the floating panel margins');
   await page.mouse.move(600, 400);
   await page.reload();
   assert.equal(await page.locator('#sidebar-mode').getAttribute('aria-pressed'), 'true');
