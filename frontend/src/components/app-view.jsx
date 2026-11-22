@@ -70,8 +70,8 @@ export function AppView() {
                   AI tagging
                 </h1>
                 <p>
-                  ChatGPT applies up to three tags per bookmark. It reuses your
-                  existing tags and creates lowercase tags when none fit.
+                  ChatGPT applies up to three lowercase English tags per
+                  bookmark. It creates new tags only when none of yours fit.
                 </p>
               </header>
               <div id="ai-tagging-settings" />

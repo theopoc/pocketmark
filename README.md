@@ -21,7 +21,7 @@ A personal bookmark manager with a Go server, an embedded web interface and Post
 - Save bookmarks and capture rendered pages, screenshots or PDFs with the [Pocketmark Chrome extension](#pocketmark-chrome-extension).
 - Use the mobile web interface; sync browser bookmarks with Floccus over WebDAV.
 
-Pocketmark is for personal use. Optional [AI tagging](docs/GUIDE.md#ai-tagging) uses your ChatGPT plan to classify website bookmarks. It reuses your tags first and can create lowercase tags when none fit. Collaboration, public sharing and SSO are outside the supported scope.
+Pocketmark is for personal use. Optional [AI tagging](docs/GUIDE.md#ai-tagging) uses your ChatGPT plan to classify website bookmarks with lowercase English tags. It reuses matching tags from your library before creating new ones. Collaboration, public sharing and SSO are outside the supported scope.
 
 ## Quick start
 
