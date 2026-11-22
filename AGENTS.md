@@ -7,7 +7,8 @@ with standard-library HTTP routing, PostgreSQL through pgx, an embedded React + 
 with Vite, a Chrome capture extension and
 Floccus/WebDAV sync. Deploy with Docker Compose or a standalone Linux binary.
 Keep page rendering in the user's browser;
-collaboration, public sharing, SSO/OIDC and product automations are out of scope.
+collaboration, public sharing and SSO/OIDC are out of scope. Product automations
+are limited to owner-enabled AI tagging of untagged website bookmarks.
 
 Read the owning implementation and nearby tests before editing. Preserve library
 data and unrelated changes. Prefer the standard library and bounded, disk-backed

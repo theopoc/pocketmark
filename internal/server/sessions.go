@@ -2,7 +2,13 @@ package server
 
 import (
 	"net/http"
+
+	"pocketmark/internal/store"
 )
+
+func (a *Server) sessionClient(r *http.Request) store.SessionClient {
+	return store.SessionClient{UserAgent: r.UserAgent(), Address: a.clientAddress(r)}
+}
 
 func (a *Server) registerSessionSecurity(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/reauth", a.reauthenticate)

@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
-import './navigation-layout.mjs';
 
 const root = new URL('../internal/webui/static/', import.meta.url);
 const html = (await readFile(new URL('index.html', root), 'utf8'))
@@ -28,7 +27,9 @@ try {
       PocketmarkSelect.enhanceAll(document);
       document.getElementById('bookmark-dialog').showModal();
     }, theme);
-    assert.equal(await page.locator('.app-select-trigger').count(), 9, 'all visible app selects are enhanced');
+    const selectIDs = ['session-idle', 'tags-letter-picker', 'bookmark-collection', 'collection-parent', 'asset-viewer-select', 'annotation-color'];
+    assert.deepEqual(await page.locator('.app-select-trigger').evaluateAll(nodes => nodes.map(node => node.id).sort()),
+      selectIDs.map(id => id + '-trigger').sort(), 'all single-select controls in the app shell are enhanced');
     assert.equal(await page.locator('#bulk-collection-trigger').count(), 0, 'hidden bulk picker remains untouched');
     const trigger = page.getByRole('combobox', { name: 'Collection', exact: true });
     await page.locator('label[for="bookmark-collection-trigger"]').click();

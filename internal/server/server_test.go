@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"pocketmark/internal/capture"
 	"pocketmark/internal/pgtest"
 	"strconv"
 	"strings"
@@ -128,7 +129,7 @@ func fixtureOwnerCookie(a *testServer) *http.Cookie {
 		if e = a.Store.CreateMFAChallenge(ctx, "fixture-"+hash, store.MFAChallenge{Kind: "enroll", Salt: account.Salt, Generation: state.Generation}); e != nil {
 			panic(e)
 		}
-		if e = a.Store.ActivateMFA(ctx, "fixture-"+hash, account.Salt, state.Generation, 0, secret, nil, "", hash, time.Now().Add(time.Hour), "fixture", false); e != nil {
+		if e = a.Store.ActivateMFA(ctx, "fixture-"+hash, account.Salt, state.Generation, 0, secret, nil, "", hash, time.Now().Add(time.Hour), store.SessionClient{UserAgent: "fixture"}, false); e != nil {
 			panic(e)
 		}
 	}
@@ -336,7 +337,7 @@ func TestImportExportRoundTrip(t *testing.T) {
 	}
 	b := newTestServer(t, "", false)
 	requireStatus(t, request(b, "POST", "/api/import", w.Body.String(), true, nil), 200)
-	page, err := b.Store.List(context.Background(), store.Filter{Tag: "docs", Favorite: true})
+	page, err := b.Store.List(context.Background(), store.Filter{Tags: []string{"docs"}, Favorite: true})
 	if err != nil || page.Total != 1 || page.Links[0].Title != "A guide" || page.Links[0].CollectionID == nil {
 		t.Fatalf("roundtrip: %+v %v", page, err)
 	}
@@ -349,16 +350,26 @@ func TestArchiveAlwaysDownloadsSandboxed(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw := []byte(`<html><script>alert(document.cookie)</script></html>`)
-	finishTestCapture(t, a.Store, id, "", raw)
-	path := fmt.Sprintf("/api/links/%d/archive", id)
-	requireStatus(t, request(a, "GET", path, "", false, nil), 401)
-	w := request(a, "GET", path, "", true, nil)
-	requireStatus(t, w, 200)
-	if !bytes.Equal(w.Body.Bytes(), raw) {
-		t.Fatal("archive changed")
+	reading := []byte("<article>Saved chart</article>")
+	ctx := context.Background()
+	job, err := a.Store.Next(ctx)
+	if err != nil || job.ID != id {
+		t.Fatalf("capture claim: %v", err)
 	}
-	if w.Header().Get("Content-Type") != "application/octet-stream" || !strings.HasPrefix(w.Header().Get("Content-Disposition"), "attachment;") || w.Header().Get("Content-Security-Policy") != "sandbox; default-src 'none'" || w.Header().Get("X-Content-Type-Options") != "nosniff" {
-		t.Fatalf("unsafe archive headers: %v", w.Header())
+	if err = a.Store.Finish(ctx, job, capture.Result{HTML: raw, ReaderHTML: reading}, nil); err != nil {
+		t.Fatal(err)
+	}
+	path := fmt.Sprintf("/api/links/%d/archive", id)
+	for suffix, expected := range map[string][]byte{"": raw, "?view=article": reading} {
+		requireStatus(t, request(a, "GET", path+suffix, "", false, nil), 401)
+		w := request(a, "GET", path+suffix, "", true, nil)
+		requireStatus(t, w, 200)
+		if !bytes.Equal(w.Body.Bytes(), expected) {
+			t.Fatalf("wrong archive for %q", suffix)
+		}
+		if w.Header().Get("Content-Type") != "application/octet-stream" || !strings.HasPrefix(w.Header().Get("Content-Disposition"), "attachment;") || w.Header().Get("Content-Security-Policy") != "sandbox; default-src 'none'" || w.Header().Get("X-Content-Type-Options") != "nosniff" {
+			t.Fatalf("unsafe archive headers: %v", w.Header())
+		}
 	}
 }
 
@@ -399,7 +410,7 @@ func finishTestCapture(t *testing.T, s *store.Store, id int64, content string, a
 	if err != nil || link.ID != id {
 		t.Fatalf("claim capture %d: %+v (%v)", id, link, err)
 	}
-	if err = s.Finish(context.Background(), link, "", "", content, archive, nil); err != nil {
+	if err = s.Finish(context.Background(), link, capture.Result{Content: content, HTML: archive}, nil); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -9,10 +9,19 @@ time, with no browser process and no in-memory resource cache.
 The automatic capture accepts HTML responses up to 2 MiB, with individual tokens
 bounded to that same limit. Large inline scripts, styles and data attributes do
 not prevent text extraction within this budget; scripts and styles are excluded
-from indexed text. This server capture is separate from the browser extension's
+from indexed text. The original HTML stays available byte for byte. For the
+article panel the worker also tries to save editorial raster images in a
+separate reading copy. It considers up to 12 image positions and spends at most
+eight seconds and 2 MiB on image downloads. The illustrated HTML must fit in
+2 MiB, with up to 64 additional bytes for a charset declaration when the source
+specifies its encoding in the HTTP headers. A missing image leaves the original
+accessible. Existing bookmarks acquire these images on recapture.
+This server capture is separate from the browser extension's
 attachments: a failed automatic capture does not remove successful HTML, image
 or PDF uploads.
 
+Manual offline preservation gives editorial images priority over page
+decoration and stylesheets. It considers responsive and lazy image sources.
 Limits are deliberate: 45 seconds per snapshot, 25 HTTP resource requests
 including the main document, 2 MiB per response, 12 MiB total downloaded bytes,
 and 20 MiB final HTML. Scripts, frames, embedded media, SVG and CSS `@import`
@@ -38,14 +47,15 @@ network. Metadata and payload are committed together; interrupted uploads leave
 no empty record. Full backups preserve standalone bytes; JSON preserves metadata
 only, and HTML/XBEL browser exports exclude these records.
 
-The structured reader retains headings, paragraphs, lists, tables, code and
-safe links. It removes scripts, forms, styles and remote images, and is protected
-by an HTTP CSP sandbox. Uploaded HTML is preferred over a basic network capture.
-The reader currently accepts HTML archives up to 2 MiB, with at most 1 MiB of
-rendered markup. Larger files remain downloadable.
+The structured reader API (`GET /api/links/{id}/reader`) retains headings,
+paragraphs, lists, tables, code and safe links in an HTTP CSP sandbox. It omits
+scripts, forms, styles and remote images. It accepts HTML archives up to 2 MiB
+and returns up to 1 MiB of markup. Uploaded HTML takes priority over a basic
+network capture.
 
 | Endpoint | Behavior |
 | --- | --- |
+| `GET /api/links/{id}/archive?view=article` | Download the automatic illustrated reading copy, falling back to the original capture. Omit the query for the original. |
 | `GET /api/links/{id}/assets` | List attachment metadata |
 | `POST /api/files?name=document.pdf&collection=123` | Create standalone file and payload atomically; optional collection |
 | `POST /api/links/{id}/assets?name=page.html` | Raw binary body with its MIME Content-Type; returns attachment metadata |
@@ -56,23 +66,31 @@ rendered markup. Larger files remain downloadable.
 | `GET /api/links/{id}/reader?asset=123` | Sandboxed reader; `asset` is optional |
 | `GET /api/backup` | Owner-only ZIP (recent password confirmation for browser sessions) containing a consistent PostgreSQL dump and restore instructions |
 
-Native attachment uploads, manual preservation, rich-reader generation and backup
+Native attachment uploads, manual preservation, structured reader API requests and backup
 share one work slot; standalone uploads share the import slot.
 A competing operation on the same slot receives HTTP 409. Original downloads
-always use attachment disposition. Bookmarks open on **Saved formats**, with
-labeled HTML, Screenshot and PDF icons and explicit availability states. No article
-or description is displayed automatically. A shortcut opens the newest attachment
-of its format, with earlier copies available in the selector; Screenshot also
-includes saved raster images. When no HTML attachment exists, the basic archive
-opens as a simplified sandboxed page. Its source remains downloadable under
-Reading options when attachments exist. The **View** action in
-**Saved formats → Manage files** also opens the integrated viewer for raster images, PDFs and HTML,
-including standalone files. Its selector switches between saved attachments;
-**Download original** remains available. PDF display uses the browser's native
+always use attachment disposition.
+
+The bookmark panel reconstructs the article in the browser from a saved HTML
+copy of up to 20 MiB. It shows embedded images, diagrams, code and captions
+without fetching remote media. When rich content is unavailable or exceeds the
+reader's processing limits, the panel shows the bookmark's indexed text when
+available. HTML, screenshot and PDF shortcuts show
+which formats are available. A shortcut opens the latest saved copy of its
+format, including standalone files. Earlier copies and original downloads are
+available in the viewer. A basic HTML capture can also be opened when there is
+no HTML attachment. PDF display uses the browser's native
 viewer and may depend on browser settings.
 
+Editorial sidebars and footnotes can contain essential examples. The article
+panel preserves those alongside the main text and omits identified comment
+threads, navigation and related-story widgets. Preformatted code retains
+visible line breaks and omits hidden line numbers when copied. Saved content
+depends on what the source returned at capture time. Pages populated by
+JavaScript can be captured after rendering with the browser extension.
+
 HTML previews retain saved styles and embedded images/fonts up to the full
-20 MiB attachment limit, independently of the structural reader's 2 MiB limit.
+20 MiB attachment limit, independently of the structured reader API's 2 MiB limit.
 They use an opaque CSP sandbox with scripts, forms, frames and network resources
 blocked. The parent shell’s `frame-src blob:` policy blocks network navigation from the nested frame, including navigation initiated by saved markup. Direct HTML `/view` responses use attachment disposition: rendering requires the integrated viewer. Missing resources
 stay missing; this preserves the saved appearance, not live-site interactivity.

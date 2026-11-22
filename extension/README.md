@@ -8,7 +8,7 @@ no Linkwarden extension or service is involved. Requires Chrome 120 or newer.
 1. Open `chrome://extensions` and enable **Developer mode**.
 2. Choose **Load unpacked**, then select this `extension/` directory. Alternatively,
    extract `pocketmark-extension.zip` and select the extracted folder.
-3. In Pocketmark, sign in and create a dedicated key under **API keys**.
+3. In Pocketmark, sign in and open **Settings → API keys** and create a dedicated key with the **Editor** role.
 4. Open the extension on a regular HTTP(S) page. Under **Connection settings**,
    enter the Pocketmark server origin and the key, then click **Connect**.
 5. Approve access to that server. Chrome may close the popup while asking;
@@ -16,11 +16,18 @@ no Linkwarden extension or service is involved. Requires Chrome 120 or newer.
 
 The key stays in this browser profile's local extension storage, never Chrome
 Sync. It grants library access, not account/key administration or full backups.
-Revoke it from Pocketmark if needed. Use HTTPS except on this computer (localhost or a loopback IP).
+To revoke it permanently, turn off the key in Pocketmark, then choose **Revoke**. Use HTTPS except on this computer (localhost or a loopback IP).
 A task with pending files stays bound to its original server; retry or discard
 that task before connecting to another server.
 
 ## Save and edit
+
+Pin Pocketmark in Chrome’s toolbar to see its teal **p.** icon while browsing.
+A green **✓** means the exact page URL is in your library. Once connected, the
+extension uses Chrome’s `tabs` permission to check active HTTP(S) page URLs
+against your Pocketmark server as you browse, including their query and fragment.
+It skips automatic checks in Incognito. If your server cannot confirm a match,
+the icon shows no checkmark.
 
 The popup loads an existing bookmark for the exact URL, or starts a new one.
 Edit its **title**, **collection** and **tags**. The save action stays visible
@@ -48,13 +55,14 @@ No persistent content script or automatic capture scans your browsing activity.
 
 ## Progress, failures and manual retry
 
-One background task runs at a time. Closing the popup does not cancel it; reopen
-the popup to see progress and results. Active/failed tasks take priority over
-the editor, with retry/discard actions kept visible. The popup closes automatically
-after the bookmark and all selected captures are saved, including after a successful
-retry. Reopening it on the saved page shows a green “Saved to Pocketmark” message
-and a collapsed summary; expand it to inspect individual formats or edit the bookmark.
-Partial failures keep the popup open with the attention message and retry actions.
+One background task runs at a time. You can close the popup while it works.
+When saving finishes, the popup shows the result for 3.5 seconds after a
+successful save or 8 seconds after a failed or partial save, then closes.
+Click or use the keyboard in the popup to keep it open. If a capture fails
+after the bookmark is saved, you can retry the capture from there.
+A toast also remains visible on the source page when the browser permits it.
+Reopen Pocketmark to inspect the result, retry failed items or discard pending
+files. Reopening a completed save on the same page lets you edit the bookmark.
 Keep the source tab open and on the same URL until acquisition finishes. After acquisition, uploads do not need that tab.
 Closing Chrome interrupts work; reopening the popup marks it interrupted and
 requires a manual retry, rather than silently resuming or recapturing.
@@ -82,7 +90,10 @@ later metadata edits in Pocketmark.
 - Full-page PNG is scaled to at most 16 megapixels and 16,384 pixels per axis,
   accounting for device pixel density. Visible screenshots remain viewport-only.
 - HTML excludes scripts, frames, form controls and interactive content. External
-  styles/images that cannot be read or embedded remain omitted. Lazy content not
+  styles/images that cannot be read or embedded remain omitted. For an already
+  displayed CDN image, capture can retry its HTTPS URL anonymously when the
+  publisher permits CORS. These reads omit credentials and referrers and use
+  a shared six-second and 4 MiB budget. Lazy content not
   loaded in the tab is not synthesized. This is not a perfect site clone.
 - Browser-internal pages, the Chrome Web Store, other extension pages and pages
   that disallow capture are unsupported. Existing DevTools/debugger sessions may
@@ -98,13 +109,14 @@ python3 extension/package.py /tmp/pocketmark-extension.zip
 Run `make test-extension` for deterministic regressions. Actual browser observations
 are recorded separately in [docs/REAL_CLIENTS.md](../docs/REAL_CLIENTS.md).
 
-For a new API key, choose **Add, edit & capture — browser extension** in Settings. Read-only keys cannot save pages; Floccus keys only support WebDAV. After rotating a key, reconnect the extension with its new value.
+After rotating an API key, reconnect the extension with its new value.
 
 
 The popup offers Dark and Light appearance in its header; the choice stays in
 this browser. Dark retains its original palette. Collection creation shows an error when the server name limit is exceeded,
-including with accented letters and emoji. Shared local theme/name modules are checked by
-`python3 scripts/sync_ui_assets.py` and refreshed with `--write`.
+including with accented letters and emoji. Run `python3 scripts/sync_ui_assets.py`
+to check shared assets. Use `--write` to refresh them. Regenerating the toolbar
+PNGs from the app icon requires `rsvg-convert` from librsvg.
 
 Connections require HTTPS, except HTTP on `localhost`, `127.0.0.0/8` or `[::1]`.
 Existing remote HTTP connections must be replaced with the HTTPS server address

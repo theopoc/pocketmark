@@ -4,6 +4,7 @@ from html.parser import HTMLParser
 import json
 from pathlib import Path
 import re
+import struct
 import tempfile
 import unittest
 import zipfile
@@ -41,6 +42,12 @@ class ExtensionPackageTests(unittest.TestCase):
                 self.assertEqual(set(archive.namelist()), set(PACKAGE.FILES))
                 manifest = json.loads(archive.read("manifest.json"))
                 self.assertIn(manifest["background"]["service_worker"], archive.namelist())
+                self.assertEqual(set(manifest["icons"]), {"16", "32", "48", "128"})
+                self.assertEqual(set(manifest["action"]["default_icon"]), {"16", "24", "32", "48"})
+                for size, path in (*manifest["icons"].items(), *manifest["action"]["default_icon"].items()):
+                    icon = archive.read(path)
+                    self.assertEqual(icon[:8], b"\x89PNG\r\n\x1a\n")
+                    self.assertEqual(struct.unpack(">II", icon[16:24]), (int(size), int(size)))
                 self.assertEqual(manifest["permissions"].count("debugger"), 1)
                 self.assertIsNone(archive.testzip())
                 assets = PopupAssets()

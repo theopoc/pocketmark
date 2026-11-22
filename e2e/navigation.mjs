@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
+import { navigationLayoutJourney } from './navigation-layout.mjs';
 
 export async function openNavigation(page) {
   if (await page.locator('.showing-settings').count()) return; // Settings keeps its navigation visible.
   const desktop = await page.evaluate(() => matchMedia('(min-width: 901px) and (hover: hover) and (pointer: fine)').matches);
+  // A viewport resize can precede the media-query event that moves the navigation.
+  const opener = page.locator(`#open-navigation[aria-controls="${desktop ? 'sidebar' : 'navigation-dialog'}"]`);
   if (desktop) {
-    await page.mouse.move(2, 200);
-    await page.locator('#sidebar-mode').focus();
+    await opener.press('Enter');
   } else if (!await page.locator('#navigation-dialog').evaluate(node => node.open)) {
-    await page.locator('#open-navigation').click();
+    await opener.click();
   }
 }
 
@@ -29,6 +31,13 @@ export async function clickNavigation(page, selector) {
 // Exercise every actual dialog template, including nested overlays, with native pointer events.
 export async function dialogDismissalJourney(page) {
   const original = page.viewportSize();
+  const libraryURL = page.url();
+  const settingsOpeners = new Map([
+    ['account-dialog', ['password', '#account-edit-username']],
+    ['mfa-manage-dialog', ['2fa', '#mfa-manage-start']],
+    ['session-details-dialog', ['sessions', '.session-device-button']],
+    ['session-idle-dialog', ['sessions', '#session-idle-open']],
+  ]);
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -36,7 +45,17 @@ export async function dialogDismissalJourney(page) {
     for (const id of ids) {
       if (id === 'navigation-dialog' && width > 900) continue;
       const dialog = page.locator(`#${id}`);
-      await dialog.evaluate(node => node.showModal());
+      const opener = settingsOpeners.get(id);
+      if (opener) {
+        const destination = new URL(libraryURL);
+        destination.searchParams.set('settings', opener[0]);
+        if (page.url() !== destination.href) await page.goto(destination.href);
+        await page.locator(opener[1]).first().click();
+      } else {
+        if (page.url() !== libraryURL) await page.goto(libraryURL);
+        if (id === 'navigation-dialog') await openNavigation(page);
+        else await dialog.evaluate(node => node.showModal());
+      }
       // Wait for the entry animation before measuring the visible boundary.
       await dialog.evaluate(async node => { await Promise.all(node.getAnimations().map(animation => animation.finished.catch(() => {}))); });
       const bounds = await dialog.boundingBox();
@@ -57,6 +76,7 @@ export async function dialogDismissalJourney(page) {
       await dialog.waitFor({ state: 'hidden' });
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     }
+    if (page.url() !== libraryURL) await page.goto(libraryURL);
   }
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.locator('#help-dialog').evaluate(node => node.showModal());
@@ -81,6 +101,7 @@ export async function dialogDismissalJourney(page) {
 
 export async function navigationJourney(page) {
   const original = page.viewportSize();
+  await navigationLayoutJourney(page);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.mouse.move(500, 400);
   assert.equal(await page.locator('#sidebar').isVisible(), false);
@@ -88,6 +109,7 @@ export async function navigationJourney(page) {
   await page.locator('#sidebar').waitFor({ state: 'visible' });
   await page.locator('#sidebar-mode').click();
   assert.equal(await page.locator('#sidebar-mode').getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator('#main-content').evaluate(el => el.getBoundingClientRect().left), 312, 'pinned navigation reserves its width and the floating panel margins');
   await page.mouse.move(600, 400);
   await page.reload();
   assert.equal(await page.locator('#sidebar-mode').getAttribute('aria-pressed'), 'true');

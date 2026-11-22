@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"pocketmark/internal/backup"
 	"pocketmark/internal/fault"
 	"pocketmark/internal/observability"
 	"pocketmark/internal/store"
@@ -26,23 +27,26 @@ import (
 )
 
 type Server struct {
-	Store          *store.Store
-	observer       *observability.Observer
-	token          string
-	secure         bool
-	origin         string
-	mux            *http.ServeMux
-	requests       chan struct{}
-	iconRequests   chan struct{}
-	imports        chan struct{}
-	loginMu        sync.Mutex
-	loginAttempts  map[netip.Addr]loginWindow
-	trustedProxies []netip.Prefix
-	authRequests   chan struct{}
-	healthRequests chan struct{}
-	passwordMu     sync.Mutex
-	totpNow        func() time.Time
-	rateLimit      *requestLimiter
+	aiTagging         aiTagging
+	backupEnv         backup.Environment
+	telegramTransport http.RoundTripper
+	Store             *store.Store
+	observer          *observability.Observer
+	token             string
+	secure            bool
+	origin            string
+	mux               *http.ServeMux
+	requests          chan struct{}
+	iconRequests      chan struct{}
+	imports           chan struct{}
+	loginMu           sync.Mutex
+	loginAttempts     map[netip.Addr]loginWindow
+	trustedProxies    []netip.Prefix
+	authRequests      chan struct{}
+	healthRequests    chan struct{}
+	passwordMu        sync.Mutex
+	totpNow           func() time.Time
+	rateLimit         *requestLimiter
 }
 
 func New(s *store.Store, token, origin string, secure bool, observers ...*observability.Observer) *Server {
@@ -53,13 +57,23 @@ func New(s *store.Store, token, origin string, secure bool, observers ...*observ
 	} else {
 		a.observer = observability.New(nil, nil)
 	}
-	a.mux.HandleFunc("GET /metrics", a.observer.Metrics)
+	a.mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) {
+		m, e := s.BackupMetrics(r.Context())
+		if e != nil {
+			handleError(w, e)
+			return
+		}
+		a.observer.Metrics(w, r)
+		observability.WriteBackupMetrics(w, m)
+	})
 	a.registerAccount(a.mux)
 	a.registerMFA(a.mux)
 	a.registerSessionSecurity(a.mux)
 	a.registerLibrary(a.mux)
 	a.registerDAV(a.mux)
 	a.registerAssets(a.mux)
+	a.registerBackups(a.mux)
+	a.registerAITagging(a.mux)
 	a.registerFiles(a.mux)
 	a.mux.HandleFunc("POST /api/login", a.login)
 	a.mux.HandleFunc("POST /api/logout", func(w http.ResponseWriter, r *http.Request) {
@@ -145,6 +159,10 @@ func (a *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/dav/") || r.URL.Path == "/metrics" {
 		w.Header().Set("Cache-Control", "no-store")
+	}
+	// The embedded fonts change only with a release; a day of caching avoids refetching them on every page load.
+	if strings.HasPrefix(r.URL.Path, "/fonts/") {
+		w.Header().Set("Cache-Control", "public, max-age=86400")
 	}
 	// Public authentication bodies cannot occupy the library's work slots.
 	slots := a.requests
@@ -374,7 +392,7 @@ func (a *Server) links(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "page out of range")
 		return
 	}
-	v, e := a.Store.List(r.Context(), store.Filter{Query: q.Get("q"), Collection: q.Get("collection"), Tag: q.Get("tag"), Favorite: q.Get("favorite") == "1", Unread: q.Get("unread") == "1", Page: page, Sort: q.Get("sort"), Fuzzy: q.Get("fuzzy") == "1"})
+	v, e := a.Store.List(r.Context(), store.Filter{Query: q.Get("q"), Collection: q.Get("collection"), Tags: q["tag"], Favorite: q.Get("favorite") == "1", Unread: q.Get("unread") == "1", Page: page, Sort: q.Get("sort"), Fuzzy: q.Get("fuzzy") == "1"})
 	if e != nil {
 		handleError(w, e)
 		return
@@ -398,6 +416,9 @@ func (a *Server) createLink(w http.ResponseWriter, r *http.Request) {
 	}
 	if link.Status == "pending" {
 		observability.Logger(r.Context()).InfoContext(r.Context(), "capture_queued", "link_id", v, "operation", "link.create")
+	}
+	if len(link.Tags) == 0 {
+		a.aiTagging.notify()
 	}
 	respond(w, 201, link)
 }
@@ -453,7 +474,11 @@ func (a *Server) tags(w http.ResponseWriter, r *http.Request) {
 	respond(w, 200, tags)
 }
 func (a *Server) archive(w http.ResponseWriter, r *http.Request) {
-	raw, e := a.Store.Archive(r.Context(), id(r))
+	archive := a.Store.Archive
+	if r.URL.Query().Get("view") == "article" {
+		archive = a.Store.ArticleArchive
+	}
+	raw, e := archive(r.Context(), id(r))
 	if e != nil {
 		handleError(w, e)
 		return

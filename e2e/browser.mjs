@@ -1,14 +1,17 @@
 import { clickNavigation, openNavigation, navigationJourney, dialogDismissalJourney, breadcrumbJourney } from './navigation.mjs';
 // Real Chromium, real HTTP and PostgreSQL. Run only against the disposable smoke instance.
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
 import { selectionJourney } from './selection.mjs';
 import { reactJourney } from './react.mjs';
+import { readerBodyJourney } from './reader-body.mjs';
+import { readerImageCapture } from './reader-images.mjs';
+import { checkReaderCode, readerCodeFixture } from './reader-code.mjs';
 import { securityJourney } from './security.mjs';
-import { openSettings, refreshSessionsBeforeMFA } from './settings.mjs';
+import { openSettings, refreshSessionsBeforeMFA, selectSettings } from './settings.mjs';
 
 const base = new URL(process.env.E2E_BASE_URL);
 assert.equal(base.hostname, '127.0.0.1', 'E2E requires a disposable loopback instance');
@@ -45,6 +48,14 @@ async function assertRecoveryDownload(page, button, codes) {
   for await (const chunk of await download.createReadStream()) chunks.push(chunk);
   assert.equal(Buffer.concat(chunks).toString('utf8'), codes.join('\n') + '\n');
 }
+async function openMFAProof(page, action) {
+  const submit = page.locator(`#mfa-manage-form button[value="${action}"]`);
+  if (await submit.isVisible()) return;
+  if (await page.locator('#mfa-codes-back').isVisible()) await page.locator('#mfa-codes-back').click();
+  if (await page.locator('#mfa-proof-cancel').isVisible()) await page.locator('#mfa-proof-cancel').click();
+  await page.locator(action === 'replace' ? '#mfa-manage-start' : '#mfa-codes-start').click();
+  await submit.waitFor();
+}
 async function captureMFA(page, name) {
   if (!process.env.E2E_SCREENSHOTS) return;
   await mkdir(process.env.E2E_SCREENSHOTS, { recursive: true });
@@ -60,7 +71,7 @@ async function captureMFA(page, name) {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${name}-${suffix} overflows`);
     if (name === 'mfa-manage-replacement') {
       await page.locator('#mfa-manage-enrollment').evaluate(node => node.scrollIntoView({ block: 'start' }));
-      assert.ok(await page.locator('#settings-page').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), `${name}-${suffix} dialog overflows`);
+      assert.ok(await page.locator('#mfa-manage-dialog').evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), `${name}-${suffix} dialog overflows`);
     }
     if (name === 'mfa-enrollment' || name === 'mfa-manage-replacement') {
       const key = name === 'mfa-enrollment' ? '#mfa-secret' : '#mfa-manage-secret';
@@ -79,11 +90,11 @@ async function captureMFA(page, name) {
   await page.setViewportSize({ width: 1280, height: 1000 });
   await page.evaluate(() => { if (document.documentElement.dataset.theme !== 'dark') document.querySelector('[data-theme-toggle]').click(); });
 }
-async function holdResponse(page, path) {
+async function holdResponse(page, match) {
   let received, release;
   const ready = new Promise(resolve => { received = resolve; });
   const blocked = new Promise(resolve => { release = resolve; });
-  const url = new URL(path, base).href;
+  const url = typeof match === 'function' ? match : new URL(match, base).href;
   const handler = async route => {
     const response = await route.fetch();
     received();
@@ -185,6 +196,8 @@ try {
   await dialogDismissalJourney(page);
   await selectionJourney(page);
   await reactJourney(page, base);
+  await readerImageCapture(browser);
+  await readerBodyJourney(page, base);
   const oldSession = (await page.context().cookies()).find(cookie => cookie.name === 'pocketmark');
   await clickNavigation(page, '#logout-button');
   await page.locator('#logout-confirm').click();
@@ -216,15 +229,20 @@ try {
     assert.equal((await peer.request.post(new URL('/api/login', base).href, { data: { username, password } })).status(), 200);
     assert.equal((await peer.request.post(new URL('/api/mfa/verify', base).href, { data: { code: recoveryCodes[2] } })).status(), 200);
     await openSettings(page, '2fa');
+    await openMFAProof(page, 'codes');
     assert.equal(await page.getByText('Generating recovery codes invalidates all previous recovery codes.').isVisible(), true);
     assert.equal(await page.locator('#mfa-manage-form button[value="codes"]').getAttribute('aria-describedby'), 'mfa-codes-warning');
+    await openMFAProof(page, 'replace');
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-form button[value="replace"]').click();
     await page.locator('#mfa-manage-enrollment').waitFor({ state: 'visible' });
-    // Closing settings must not spend the recovery grant before confirmation.
+    // Discarding enrollment leaves the one-time lost-authenticator grant intact.
+    await page.locator('#mfa-manage-cancel').click();
+    await page.locator('#confirm-action-submit').click();
     await page.locator('#settings-page [data-settings-back]:visible').click();
     await page.locator('#settings-page').waitFor({ state: 'hidden' });
     await openSettings(page, '2fa');
+    await openMFAProof(page, 'replace');
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-form button[value="replace"]').click();
     await page.locator('#mfa-manage-enrollment').waitFor({ state: 'visible' });
@@ -246,9 +264,21 @@ try {
     assert.equal(replacementCodes.length, 10);
     await assertRecoveryDownload(page, '#mfa-manage-download', replacementCodes);
     assert.equal((await peer.request.get(new URL('/api/session', base).href)).status(), 401);
+    // Hidden issued codes survive internal navigation and a cancelled departure.
+    await page.locator('#mfa-codes-back').click();
+    await page.goBack();
+    await page.locator('[data-settings-panel="overview"]').waitFor({ state: 'visible' });
+    await page.goBack();
+    await page.locator('#confirm-action-cancel').click();
+    await page.locator('#settings-page [data-settings-back]').click();
+    await page.locator('#confirm-action-cancel').click();
+    await selectSettings(page, '2fa');
+    await page.locator('#mfa-codes-view-start').click();
+    assert.equal(await page.locator('#mfa-manage-codes-value').textContent(), replacementCodes.join('\n'));
     // A displayed recovery code used for replacement is consumed by the real server.
     const replaceURL = new URL('/api/mfa/replace', base).href;
     const verifyURL = new URL('/api/mfa/verify', base).href;
+    await openMFAProof(page, 'replace');
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-code').fill(replacementCodes[0].replaceAll('-', '').toLowerCase());
     await page.locator('#mfa-manage-form button[value="replace"]').click();
@@ -261,9 +291,11 @@ try {
     await page.locator('#mfa-manage-error').filter({ hasText: 'invalid authentication code' }).waitFor();
     assert.equal((await page.locator('#mfa-manage-codes-value').textContent()).trim(), replacementCodes.slice(1).join('\n'));
     await page.locator('#mfa-manage-cancel').click();
+    await page.locator('#confirm-action-submit').click();
     await page.unroute(verifyURL);
     // A failure may follow consumption of the proof, so do not present it as unused.
     await page.route(replaceURL, route => route.fulfill({ status: 429, contentType: 'application/json', body: '{"error":"Synthetic challenge limit"}' }));
+    await openMFAProof(page, 'replace');
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-code').fill(replacementCodes[1]);
     await page.locator('#mfa-manage-form button[value="replace"]').click();
@@ -271,6 +303,7 @@ try {
     assert.equal((await page.locator('#mfa-manage-codes-value').textContent()).trim(), replacementCodes.slice(2).join('\n'));
     await page.unroute(replaceURL);
     await page.route(replaceURL, route => route.fulfill({ status: 403, contentType: 'application/json', body: '{"error":"invalid or already used authentication code"}' }));
+    await openMFAProof(page, 'replace');
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-code').fill(replacementCodes[2]);
     await page.locator('#mfa-manage-form button[value="replace"]').click();
@@ -279,6 +312,7 @@ try {
     await page.unroute(replaceURL);
     const codesURL = new URL('/api/mfa/recovery-codes', base).href;
     await page.route(codesURL, route => route.fulfill({ status: 403, contentType: 'application/json', body: '{"error":"invalid or already used authentication code"}' }));
+    await openMFAProof(page, 'codes');
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-code').fill(replacementCodes[3]);
     await page.locator('#mfa-manage-form button[value="codes"]').click();
@@ -286,6 +320,7 @@ try {
     assert.equal((await page.locator('#mfa-manage-codes-value').textContent()).trim(), replacementCodes.slice(4).join('\n'));
     await page.unroute(codesURL);
     await page.route(codesURL, route => route.fulfill({ status: 403, contentType: 'application/json', body: '{"error":"incorrect password or authentication unavailable"}' }));
+    await openMFAProof(page, 'codes');
     await page.locator('#mfa-manage-password').fill('incorrect-password');
     await page.locator('#mfa-manage-code').fill(replacementCodes[4]);
     await page.locator('#mfa-manage-form button[value="codes"]').click();
@@ -299,11 +334,13 @@ try {
     await page.unroute(codesURL);
     // A 429 after proof consumption must retain its warning through a concurrent 401.
     for (const sessionFirst of [true, false]) {
-      await page.locator('#mfa-manage-password').fill(password);
-      await page.locator('#mfa-manage-code').fill(replacementCodes[4]);
+      if (await page.locator('#mfa-proof-cancel').isVisible()) await page.locator('#mfa-proof-cancel').click();
       const expired = await holdUnauthorized(page, '/api/sessions');
       await refreshSessionsBeforeMFA(page);
       await expired.ready;
+      await openMFAProof(page, 'replace');
+      await page.locator('#mfa-manage-password').fill(password);
+      await page.locator('#mfa-manage-code').fill(replacementCodes[4]);
       const limited = await holdUnauthorized(page, '/api/mfa/replace', 'Synthetic challenge limit', 429);
       await page.locator('#mfa-manage-form button[value="replace"]').click();
       await limited.ready;
@@ -324,12 +361,13 @@ try {
       await page.locator('#app-view').waitFor({ state: 'visible' });
       await openSettings(page, '2fa');
     }
-    await page.locator('#mfa-manage-password').fill(password);
-    await page.locator('#mfa-manage-code').fill(replacementCodes[4]);
     // A concurrent expired-session response must not hide codes already committed.
     const heldSession = await holdUnauthorized(page, '/api/sessions');
     await refreshSessionsBeforeMFA(page);
     await heldSession.ready;
+    await openMFAProof(page, 'codes');
+    await page.locator('#mfa-manage-password').fill(password);
+    await page.locator('#mfa-manage-code').fill(replacementCodes[4]);
     const heldCodes = await holdResponse(page, '/api/mfa/recovery-codes');
     await page.locator('#mfa-manage-form button[value="codes"]').click();
     await heldCodes.ready;
@@ -359,7 +397,7 @@ try {
     freshRecoveryCodes = (await page.locator('#mfa-manage-codes-value').textContent()).trim().split('\n');
     assert.equal(freshRecoveryCodes.length, 10);
     await page.locator('#mfa-manage-feedback').filter({ hasText: 'These recovery codes may have changed' }).waitFor();
-    await page.locator('#settings-page [data-settings-back]:visible').click();
+    await page.locator('#mfa-codes-done').click();
     await page.waitForFunction(() => document.getElementById('mfa-manage-codes-value').textContent === '');
     assert.equal(await page.locator('#mfa-manage-codes-value').textContent(), '');
     assert.equal(await page.locator('#mfa-manage-secret').inputValue(), '');
@@ -373,20 +411,23 @@ try {
     for (const sessionFirst of [true, false]) {
       await openSettings(page, '2fa');
       await page.route(codesURL, route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ recoveryCodes: replacementCodes.slice(4) }) }));
+      await openMFAProof(page, 'codes');
       await page.locator('#mfa-manage-password').fill(password);
       await page.locator('#mfa-manage-code').fill('123456');
       await page.locator('#mfa-manage-form button[value="codes"]').click();
       await page.locator('#mfa-manage-codes').waitFor({ state: 'visible' });
       await page.unroute(codesURL);
+      await page.locator('#mfa-codes-back').click();
+      const expired = await holdUnauthorized(page, '/api/sessions');
+      await refreshSessionsBeforeMFA(page);
+      await expired.ready;
       await page.route(replaceURL, route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ secret: replacementSecret, qr: replacementQR }) }));
+      await openMFAProof(page, 'replace');
       await page.locator('#mfa-manage-password').fill(password);
       await page.locator('#mfa-manage-code').fill('123456');
       await page.locator('#mfa-manage-form button[value="replace"]').click();
       await page.locator('#mfa-manage-enrollment').waitFor({ state: 'visible' });
       await page.unroute(replaceURL);
-      const expired = await holdUnauthorized(page, '/api/sessions');
-      await refreshSessionsBeforeMFA(page);
-      await expired.ready;
       const invalid = await holdUnauthorized(page, '/api/mfa/verify', 'invalid authentication code');
       await page.locator('#mfa-manage-new-code').fill('000000');
       await page.locator('#mfa-manage-verify button[type="submit"]').click();
@@ -404,13 +445,15 @@ try {
       assert.equal((await page.locator('#mfa-manage-codes-value').textContent()).trim(), replacementCodes.slice(4).join('\n'));
       await invalid.remove();
       await expired.remove();
-      await page.locator('#settings-page [data-settings-back]:visible').click();
+      await page.locator('#mfa-codes-done').click();
       await page.locator('#login-view').waitFor({ state: 'visible' });
       await page.reload();
       await page.locator('#app-view').waitFor({ state: 'visible' });
     }
   } finally { await peer.close(); }
 
+  await page.locator('#settings-page [data-settings-back]').click();
+  await page.locator('#library-content').waitFor({ state: 'visible' });
   await clickNavigation(page, '#add-collection');
   await page.locator('#collection-name').fill('é'.repeat(61));
   await page.locator('#save-collection').click();
@@ -453,7 +496,7 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Collection before save', exact: true, includeHidden: true }).count(), 0);
 
   const original = 'Browser integration bookmark';
-  const revised = 'Browser revised bookmark';
+  const revised = 'Browser revised bookmark - Example';
   await page.locator('#add-bookmark').click();
   // A private destination is deliberately rejected by the capture worker: no public network.
   await page.locator('#bookmark-url').fill('http://127.0.0.1/e2e-fixture');
@@ -507,7 +550,7 @@ try {
   await page.goto(new URL('/?tag=no-such-tag-e2e', base).href);
   await page.locator('#empty-title').filter({ hasText: 'No bookmarks with this tag' }).waitFor();
   assert.equal(await page.locator('#empty-add').isVisible(), false);
-  await page.getByRole('button', { name: 'View all bookmarks', exact: true }).click();
+  await page.getByRole('button', { name: 'Remove #no-such-tag-e2e filter', exact: true }).click();
   await card(original).waitFor();
   const moreTags = card(original).getByRole('button', { name: `Show all 6 tags for ${original}` });
   await moreTags.focus();
@@ -622,29 +665,31 @@ try {
   await card(original).getByRole('button', { name: original, exact: true }).click();
   await page.locator('#reader-dialog').waitFor({ state: 'visible' });
   await page.locator('#reader-retry-open').waitFor({ state: 'visible' });
-  assert.equal(await page.locator('#reader-files').isVisible(), false, 'unavailable reader actions are hidden after an opening failure');
   assert.equal(await page.locator('#reader-section-nav').isVisible(), false);
+  const sizeButton = page.getByRole('button', { name: /text size/i });
+  const sizeSlider = page.getByRole('slider', { name: /text size/i });
+  assert.equal(await sizeButton.isDisabled(), true);
   await page.unroute(readerURL, failReader);
   await page.locator('#reader-retry-open').click();
   await page.locator('#reader-title').filter({ hasText: original }).waitFor();
   assert.equal(await page.locator('#reader-retry-open').isVisible(), false);
-  assert.equal(await page.locator('#reader-files').isVisible(), false);
   assert.equal(await page.locator('#reader-formats').isVisible(), true);
-  assert.equal(await page.locator('#reader-content').isVisible(), false);
+  await page.locator('#reader-formats-summary').filter({ hasText: 'No saved copies yet.' }).waitFor({ state: 'attached' });
   for (const format of ['html', 'image', 'pdf']) {
-    const saved = await page.locator(`#reader-format-${format}`).getAttribute('data-saved') === 'true';
-    assert.equal(await page.locator(`#reader-format-${format}`).isVisible(), saved);
-    if (saved) assert.ok(await page.locator(`#reader-format-${format}`).evaluate(node => node.getBoundingClientRect().height >= 44));
+    const shortcut = page.locator(`#reader-format-${format}`);
+    assert.equal(await shortcut.isVisible(), true);
+    assert.equal(await shortcut.isDisabled(), true, 'This bookmark has no captures or attached files');
+    assert.ok(await shortcut.evaluate(node => node.getBoundingClientRect().height >= 44));
   }
-  await page.locator('#reader-options summary').click();
-  for (const selector of ['#reader-original', '#reader-notebook-toggle', '#reader-text-mode', '#reader-size-trigger']) {
+  for (const selector of ['#reader-original', '#reader-notebook-toggle', '#reader-page-toggle', '#reader-size-trigger']) {
     assert.ok(await page.locator(selector).evaluate(node => node.getBoundingClientRect().height >= 44), `${selector} has a mobile touch target`);
   }
-  await page.locator('#reader-files-toggle').click();
-  assert.ok(await page.locator('#asset-upload-button').evaluate(node => node.getBoundingClientRect().height >= 44));
-  const chooser = page.waitForEvent('filechooser');
-  await page.locator('#asset-upload-button').click();
-  await (await chooser).setFiles([]);
+  await sizeButton.click();
+  const sliderBounds = await sizeSlider.boundingBox();
+  assert.ok(sliderBounds && sliderBounds.x >= 0 && sliderBounds.x + sliderBounds.width <= 320 && sliderBounds.height >= 44, 'slider fits the phone viewport with a full-height touch target');
+  const textPanel = await page.locator('#reader-text-panel').boundingBox();
+  await page.mouse.click(textPanel.x + 8, textPanel.y + textPanel.height - 8);
+  assert.equal(await sizeSlider.isVisible(), false, 'an outside click dismisses text size');
   await page.getByRole('button', { name: 'Close reader', exact: true }).click();
   await page.setViewportSize({ width: 1280, height: 720 });
   await card(original).getByRole('button', { name: original, exact: true }).click();
@@ -687,11 +732,93 @@ try {
   await page.waitForFunction(() => document.activeElement.id === 'tags-letter-R');
   await page.locator('#tags-list').getByRole('button', { name: '#reading 1 bookmark' }).click();
   await card(original).waitFor();
-  assert.equal(await page.locator('#active-filters').isVisible(), false, 'the tag view has no redundant removable navigation chip');
+  const tagFilter = (tag) => page.locator('#active-filters').getByRole('button', { name: `Remove #${tag} filter`, exact: true });
+  const cardTag = (tag) => card(original).getByRole('button', { name: `#${tag}`, exact: true });
+  await tagFilter('reading').waitFor();
+  const segments = page.getByRole('group', { name: 'Filter bookmarks' });
+  const checkedSegments = segments.getByRole('radio', { checked: true });
+  const allSegment = segments.getByRole('radio', { name: 'All', exact: true });
+  const unreadSegment = segments.getByRole('radio', { name: 'Unread', exact: true });
+  assert.equal(await segments.getByRole('radio').count(), 4);
+  assert.equal(await allSegment.isChecked(), true, 'tag filtering preserves the library destination');
   await page.locator('#search').fill('synthetic-filter-check');
+  await page.waitForURL(url => url.searchParams.get('q') === 'synthetic-filter-check');
+  await allSegment.press('Space');
+  assert.deepEqual(new URL(page.url()).searchParams.getAll('tag'), ['reading']);
+  assert.equal(await allSegment.isChecked(), true);
+  await allSegment.press('ArrowRight');
+  await page.waitForURL(url => url.searchParams.get('filter') === 'unread');
+  assert.equal(new URL(page.url()).searchParams.get('q'), 'synthetic-filter-check');
+  await tagFilter('reading').waitFor();
+  assert.equal(await checkedSegments.count(), 1);
+  assert.equal(await unreadSegment.isChecked(), true);
+  assert.equal(await unreadSegment.evaluate(node => node === document.activeElement), true);
+  await page.keyboard.press('/');
+  assert.equal(await page.locator('#search').evaluate(node => node === document.activeElement), true);
+  await page.goBack();
+  await segments.getByRole('radio', { name: 'All', exact: true, checked: true }).waitFor();
+  assert.deepEqual(new URL(page.url()).searchParams.getAll('tag'), ['reading']);
+  assert.equal(new URL(page.url()).searchParams.get('q'), 'synthetic-filter-check');
+  await page.goBack();
+  await page.waitForURL(url => !url.searchParams.has('q') && url.searchParams.get('tag') === 'reading');
+  assert.equal(await allSegment.isChecked(), true, 'activating the checked radio added no history entry');
+  await page.goForward();
   await page.getByRole('button', { name: 'Remove Search: synthetic-filter-check filter', exact: true }).click();
+  await cardTag('reading').waitFor();
+  assert.equal(await cardTag('reading').getAttribute('aria-pressed'), 'true');
+  assert.equal(await cardTag('design').getAttribute('aria-pressed'), 'false');
+  const designOnly = await page.request.post(new URL('/api/links', base).href, { data: {
+    url: 'https://example.com/tag-filter-fixture', title: 'Design only', tags: ['design'],
+  } });
+  assert.equal(designOnly.status(), 201);
+  const designOnlyID = (await designOnly.json()).id;
+  await cardTag('design').press('Enter');
+  await tagFilter('design').waitFor();
+  assert.equal(await tagFilter('design').evaluate(button => button === document.activeElement), true);
+  await cardTag('design').waitFor();
+  assert.deepEqual(new URL(page.url()).searchParams.getAll('tag'), ['reading', 'design']);
+  await page.reload();
+  await cardTag('design').waitFor();
+  assert.equal(await cardTag('design').getAttribute('aria-pressed'), 'true');
+  assert.equal(await cardTag('reading').getAttribute('aria-pressed'), 'true');
+  assert.equal(await card('Design only').count(), 0, 'results must have both tags');
+  await tagFilter('reading').press('Space');
+  await card('Design only').waitFor();
+  assert.equal(await tagFilter('design').evaluate(button => button === document.activeElement), true, 'keyboard removal focuses the remaining tag');
+  assert.deepEqual(new URL(page.url()).searchParams.getAll('tag'), ['design']);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const restoredResults = await holdResponse(page, url => url.pathname === '/api/links' && url.searchParams.getAll('tag').length === 2);
+  await page.goBack();
+  await restoredResults.ready;
+  await tagFilter('reading').waitFor();
+  await openNavigation(page);
+  const frequentDesign = page.locator('#tags').getByRole('button', { name: '#design', exact: true });
+  await frequentDesign.focus();
+  restoredResults.release();
+  await cardTag('reading').waitFor();
+  await page.waitForFunction(() => document.getElementById('bookmark-grid').getAttribute('aria-busy') === 'false');
+  assert.equal(await frequentDesign.isVisible(), true, 'restored results leave the open navigation available');
+  assert.equal(await frequentDesign.evaluate(button => button === document.activeElement), true, 'restored results preserve focus on the next tag');
+  await restoredResults.remove();
+  await page.keyboard.press('Escape');
+  await card('Design only').waitFor({ state: 'detached' });
+  await cardTag('design').click();
+  await tagFilter('design').waitFor({ state: 'detached' });
+  await tagFilter('reading').press('Enter');
   await page.locator('#active-filters').waitFor({ state: 'hidden' });
-  assert.equal(new URL(page.url()).searchParams.get('tag'), 'reading', 'clearing search preserves the tag view');
+  await card('Design only').waitFor();
+  assert.equal((await page.request.delete(new URL(`/api/links/${designOnlyID}`, base).href)).status(), 200);
+  const readingResults = url => url.pathname === '/api/links' && url.searchParams.get('tag') === 'reading';
+  await page.route(readingResults, route => route.fulfill({ status: 503, json: {} }));
+  await cardTag('reading').click();
+  await page.locator('#library-error').waitFor();
+  await tagFilter('reading').waitFor();
+  const frequentReading = page.locator('#tags').getByRole('button', { name: '#reading', exact: true, includeHidden: true });
+  assert.equal(await frequentReading.getAttribute('aria-pressed'), 'true', 'the sidebar reflects a selected tag even when results fail');
+  await page.unroute(readingResults);
+  await tagFilter('reading').click();
+  await card(original).waitFor();
+  assert.equal(await frequentReading.getAttribute('aria-pressed'), 'false');
   await clickNavigation(page, '[data-filter="all"]');
   await page.setViewportSize({ width: 1280, height: 720 });
   const collectionName = 'A deliberately long collection name for mobile navigation';
@@ -715,6 +842,7 @@ try {
   await openNavigation(page);
   await collection.click();
   await page.locator('#empty-title').filter({ hasText: 'This collection is empty' }).waitFor();
+  assert.equal(await checkedSegments.count(), 0, 'a named collection has no matching segment');
   await page.locator('#empty-add').click();
   assert.equal(await page.locator('#bookmark-collection option:checked').textContent(), collectionName);
   assert.equal(await page.locator('#bookmark-collection-trigger').innerText(), collectionName);
@@ -743,6 +871,7 @@ try {
   await page.route('**/api/links?*', delayedFailure);
   await clickNavigation(page, '[data-filter="favorite"]');
   await requested;
+  assert.equal(await segments.getByRole('radio', { name: 'Favorites' }).isChecked(), true, 'sidebar navigation also selects the segment');
   assert.equal(await card(original).isVisible(), false, 'old results are hidden while a different view loads');
   assert.equal(await page.locator('#empty-state').isVisible(), false);
   assert.equal(await page.locator('#page-title').evaluate(node => document.activeElement === node), true, 'focus stays on the new view heading');
@@ -801,12 +930,13 @@ try {
   const png = await fixture.screenshot();
   await fixture.close();
   const html = `<!doctype html><style>h1 { color: rgb(12, 34, 56); } body { background: rgb(245, 240, 230); }</style>
-    <h1>Original saved appearance</h1><img id="embedded" src="data:image/png;base64,${png.toString('base64')}">
+    <article><h1>Browser revised bookmark</h1><h2>Original saved appearance</h2><figure><img id="embedded" alt="Rendered sample" src="data:image/png;base64,${png.toString('base64')}"><figcaption>Sample diagram</figcaption></figure>
+    <pre><code class="language-json">{"format": "HTML"}</code></pre>${readerCodeFixture}</article>
     <script>parent.previewCompromised = true</script><img src="/preview-leak">
     <iframe src="/preview-frame-leak"></iframe><style>@import url('/preview-style-leak');</style>
     <meta http-equiv="refresh" content="0;url=${new URL('/preview-navigation-leak', base).href}"><base href="${base.href}">
     <noscript><a id="noscript-link" href="${new URL('/preview-noscript-leak', base).href}">No-script navigation</a></noscript>
-    <a href="${new URL('/preview-link-leak', base).href}" target="_top">External link</a><a id="popup-link" href="${new URL('/preview-popup-leak', base).href}" target="_blank">Popup</a><form action="${new URL('/preview-form-leak', base).href}"><button>Submit saved form</button></form><iframe srcdoc="&lt;script&gt;parent.previewCompromised=true&lt;/script&gt;&lt;img src='${new URL('/preview-srcdoc-leak', base).href}'&gt;"></iframe><svg xmlns:xlink="http://www.w3.org/1999/xlink"><a href="#safe"><set attributeName="href" to="/preview-svg-leak"/><text y="20">SVG link</text></a><a id="xlink" xlink:href="${new URL('/preview-xlink-leak', base).href}"><text y="60">Namespaced link</text></a></svg>` + '<!-- padding -->'.repeat(145000);
+    <a href="${new URL('/preview-link-leak', base).href}" target="_top">External link</a><a id="popup-link" href="${new URL('/preview-popup-leak', base).href}" target="_blank">Popup</a><form action="${new URL('/preview-form-leak', base).href}"><button>Submit saved form</button></form><iframe srcdoc="&lt;script&gt;parent.previewCompromised=true&lt;/script&gt;&lt;img src='${new URL('/preview-srcdoc-leak', base).href}'&gt;"></iframe><svg xmlns:xlink="http://www.w3.org/1999/xlink"><a href="#safe"><set attributeName="href" to="/preview-svg-leak"/><text y="20">SVG link</text></a><a id="xlink" xlink:href="${new URL('/preview-xlink-leak', base).href}"><text y="60">Namespaced link</text></a></svg>` + '<!--' + 'x'.repeat(2 * 1024 * 1024) + '-->';
   const legacy = Buffer.concat([Buffer.from('<!doctype html><meta charset="windows-1252"><h1>Caf'), Buffer.from([0xe9, 0x20, 0x80]), Buffer.from('</h1>')]);
   let htmlAsset;
   for (const [name, media, data] of [['legacy.html', 'text/html', legacy], ['capture.html', 'text/html', Buffer.from(html)], ['capture.png', 'image/png', png], ['capture.pdf', 'application/pdf', pdf]]) {
@@ -821,6 +951,39 @@ try {
   page.on('download', () => downloads++);
   page.on('response', response => { if (new URL(response.url()).pathname.startsWith('/preview-')) leakedRequests.push(response.url()); });
   await card(revised).getByRole('button', { name: revised, exact: true }).click();
+  const article = page.locator('#reader-rich-article');
+  await article.getByText('Sample diagram', { exact: true }).waitFor();
+  assert.equal(await article.getByRole('heading', { name: 'Browser revised bookmark', exact: true }).count(), 0);
+  assert.equal(await article.getByRole('heading', { name: 'Original saved appearance' }).isVisible(), true);
+  assert.equal(await article.locator('pre code').first().innerText(), '{"format": "HTML"}');
+  await checkReaderCode(article);
+  await page.waitForFunction(() => document.querySelector('#reader-rich-article img')?.naturalWidth > 0);
+  await sizeButton.press('Enter');
+  assert.equal(await sizeSlider.inputValue(), '1');
+  assert.equal(await sizeSlider.evaluate(node => document.activeElement === node), true);
+  for (const [key, pixels] of [['Home', 15], ['ArrowRight', 17], ['ArrowRight', 20], ['ArrowRight', 22], ['ArrowRight', 24], ['ArrowRight', 28], ['End', 32]]) {
+    await page.keyboard.press(key);
+    assert.equal(await article.evaluate(node => getComputedStyle(node).fontSize), `${pixels}px`);
+    assert.equal(await sizeSlider.getAttribute('aria-valuetext'), `${pixels} pixels`);
+  }
+  await page.keyboard.press('Escape');
+  assert.equal(await sizeSlider.isVisible(), false);
+  assert.equal(await sizeButton.evaluate(node => document.activeElement === node), true);
+  const layout = page.locator('#reader-page-toggle');
+  await layout.click();
+  await page.locator('#reader-page-breadcrumb [aria-current="page"]').filter({ hasText: revised }).waitFor();
+  assert.equal(await page.evaluate(() => document.fullscreenElement), null);
+  await sizeButton.click();
+  await sizeSlider.press('Home');
+  await sizeSlider.press('ArrowRight');
+  await sizeSlider.press('Escape');
+  assert.equal(await page.locator('#reader-page-breadcrumb').isVisible(), true, 'Escape closes text size before leaving full-page reading');
+  await article.getByRole('button', {name: /Enlarge image/}).click();
+  await page.getByRole('button', {name: 'Close image', exact: true}).press('Escape');
+  assert.equal(await page.locator('#reader-page-breadcrumb').isVisible(), true);
+  await layout.press('Escape');
+  await page.locator('#reader-page-breadcrumb').waitFor({state: 'hidden'});
+  assert.equal(await article.isVisible(), true);
   const previews = '**/api/assets/*/view';
   await page.route(previews, route => route.request().method() === 'GET'
     ? route.fulfill({ status: 422, contentType: 'application/json', body: '{"error":"Synthetic preparation failure"}' })
@@ -945,6 +1108,7 @@ try {
     const expiredRequest = await holdUnauthorized(page, '/api/sessions');
     await refreshSessionsBeforeMFA(page);
     await expiredRequest.ready;
+    await openMFAProof(page, 'codes');
     await page.locator('#mfa-manage-password').fill(password);
     await page.locator('#mfa-manage-code').fill(sessionFirst ? freshRecoveryCodes[1] : authenticatorCode(currentSecret, 30));
     const gatewayFailure = await holdGatewayFailureAfterCommit(page, '/api/mfa/recovery-codes');
@@ -964,6 +1128,39 @@ try {
     await gatewayFailure.remove();
     await expiredRequest.remove();
   }
+  // A real password change validates the current password and accepts UTF-8 byte lengths.
+  await page.reload();
+  await page.locator('#app-view').waitFor({ state: 'visible' });
+  await openSettings(page, 'password');
+  await page.locator('[data-settings-panel="password"] [data-edit-password]').click();
+  await page.locator('#account-current').fill(password);
+  await page.locator('#account-password').fill('é'.repeat(6));
+  await page.locator('#account-confirm').fill('different');
+  assert.equal(await page.locator('#account-save').isDisabled(), true);
+  await page.locator('#account-confirm').fill('é'.repeat(6));
+  assert.equal(await page.locator('#account-save').isEnabled(), true);
+  const nextPassword = randomBytes(24).toString('hex');
+  await page.locator('#account-password').fill(nextPassword);
+  await page.locator('#account-confirm').fill(nextPassword);
+  await page.locator('[data-password-visibility][aria-controls="account-password"]').click();
+  assert.equal(await page.locator('#account-password').getAttribute('type'), 'text');
+  await page.locator('#account-save').click();
+  await page.locator('#account-dialog').waitFor({ state: 'hidden' });
+  assert.equal(await page.locator('#account-password').inputValue(), '');
+  assert.equal((await page.request.post(new URL('/api/reauth', base).href, { data: {password: nextPassword} })).status(), 200);
+  await page.locator('#account-edit-username').click();
+  await page.locator('#account-username').fill('renamed-owner');
+  await page.locator('#account-password').fill(nextPassword);
+  const heldRename = await holdResponse(page, '/api/account');
+  await page.locator('#account-save').click();
+  await heldRename.ready;
+  await page.goBack();
+  assert.equal(await page.locator('#account-dialog').isVisible(), true);
+  assert.equal(new URL(page.url()).searchParams.get('settings'), 'password');
+  heldRename.release();
+  await page.locator('#account-dialog').waitFor({ state: 'hidden' });
+  await heldRename.remove();
+  assert.equal(await page.locator('#account-username-value').textContent(), 'renamed-owner');
   assert.deepEqual(errors, [], 'browser must not throw uncaught JavaScript errors');
   console.log('Browser E2E passed: setup, login rejection/login, CRUD, search, reload persistence, image/PDF/HTML previews and isolation, logout.');
 } finally {

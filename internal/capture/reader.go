@@ -21,6 +21,7 @@ func Reader(src io.Reader, dst io.Writer, rawURL string) error {
 		return err
 	}
 	var excluded []string
+	var comments tokenSubtree
 	for {
 		kind := z.Next()
 		if kind == html.ErrorToken {
@@ -31,6 +32,9 @@ func Reader(src io.Reader, dst io.Writer, rawURL string) error {
 		}
 		t := z.Token()
 		if kind == html.StartTagToken || kind == html.SelfClosingTagToken {
+			if (len(excluded) == 0 || comments.depth > 0) && comments.start(t, commentContainer) {
+				continue
+			}
 			if t.Data == "main" || t.Data == "article" {
 				layout := true
 				for _, n := range excluded {
@@ -74,6 +78,9 @@ func Reader(src io.Reader, dst io.Writer, rawURL string) error {
 				return e
 			}
 		} else if kind == html.EndTagToken {
+			if comments.end(t.Data) {
+				continue
+			}
 			if len(excluded) > 0 {
 				for i := len(excluded) - 1; i >= 0; i-- {
 					if excluded[i] == t.Data {
@@ -88,7 +95,7 @@ func Reader(src io.Reader, dst io.Writer, rawURL string) error {
 					return e
 				}
 			}
-		} else if kind == html.TextToken && len(excluded) == 0 {
+		} else if kind == html.TextToken && len(excluded) == 0 && comments.depth == 0 {
 			if _, e := io.WriteString(w, html.EscapeString(t.Data)); e != nil {
 				return e
 			}

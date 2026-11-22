@@ -59,7 +59,7 @@ func TestSecurityMigrationAndRestart(t *testing.T) {
 	if _, err = s.db.Exec("UPDATE mfa SET secret=decode('0102','hex') WHERE id=1"); err != nil {
 		t.Fatal(err)
 	}
-	if err = signInSession(ctx, s, "salt", "second-cookie", time.Now().Add(time.Hour), strings.Repeat("a", 1000)); err != nil {
+	if err = signInSession(ctx, s, "salt", "second-cookie", time.Now().Add(time.Hour), SessionClient{UserAgent: strings.Repeat("a", 1000)}); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.DeleteOtherSessions(ctx, "old-cookie"); err != nil {
@@ -91,7 +91,7 @@ func TestSessionExpiryConfirmationAndIdle(t *testing.T) {
 	if err := s.SaveAccount(ctx, Account{Username: "owner", Salt: "salt", Hash: "digest"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := signInSession(ctx, s, "salt", "session", time.Now().Add(time.Hour), strings.Repeat("a", 1000)); err != nil {
+	if err := signInSession(ctx, s, "salt", "session", time.Now().Add(time.Hour), SessionClient{UserAgent: strings.Repeat("a", 1000)}); err != nil {
 		t.Fatal(err)
 	}
 	sessions, err := s.Sessions(ctx, "session")

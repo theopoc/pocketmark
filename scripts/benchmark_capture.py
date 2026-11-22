@@ -77,6 +77,7 @@ def main():
     args = parser.parse_args()
     project = "pocketmark-validation-" + secrets.token_hex(5)
     os.environ["POCKETMARK_DB_PASSWORD"] = secrets.token_hex(32)
+    os.environ["POCKETMARK_SERVER_SECRET"] = os.environ["POCKETMARK_TOKEN"] = ""
     image = json.loads(docker("image", "inspect", args.image))[0]
     config = json.loads(docker("compose", "-f", str(ROOT / "compose.yaml"), "config", "--format", "json"))
     config.pop("name", None)

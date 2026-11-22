@@ -1,3 +1,4 @@
+import { selectSettings } from './settings.mjs';
 // Disposable UI evidence across engines. This is test tooling, never served by Pocketmark.
 import assert from 'node:assert/strict';
 import { chromium, firefox, webkit, request } from 'playwright';
@@ -208,36 +209,33 @@ for (const name of selected) {
       await card.locator('.card-action.read').waitFor({ state: 'detached' });
       await page.getByRole('button', { name: 'library-notes.html', exact: true }).click();
       await page.locator('#reader-format-html').waitFor();
-      assert.equal(await page.locator('#reader-format-pdf').isVisible(), false);
-      await page.locator('#reader-files-toggle').click(); await page.locator('#asset-upload-button').waitFor();
-      assert.equal(await page.locator('#reader-notebook').isVisible(), false, 'file management does not open Notes');
-      const deleteFile = page.getByRole('button', { name: 'Delete library-notes.html', exact: true });
-      await deleteFile.hover(); await expectThemeColor(deleteFile, 'color', '--danger');
-      await deleteFile.focus(); await expectThemeColor(deleteFile, 'color', '--danger');
-      await audit(page, `${theme}-files`, name); await shot(page, `${theme}-files-mobile`, name);
-      await page.getByRole('button', { name: 'Read library-notes.html', exact: true }).click();
-      await page.locator('#reader-layout').waitFor();
-      assert.equal(await page.locator('#reader-files').isVisible(), false);
-      assert.ok(await page.locator('#reader-layout').evaluate(n => n.getBoundingClientRect().top < innerHeight && n === document.activeElement), 'Read reveals and focuses its document');
-      await page.locator('#reader-files-toggle').click();
-      await page.locator('#reader-files-close').click();
-      assert.equal(await page.locator('#reader-files-toggle').evaluate(n => n === document.activeElement), true);
+      await page.locator('#reader-rich-article').waitFor();
+      const pdfShortcut = page.locator('#reader-format-pdf');
+      assert.equal(await pdfShortcut.isVisible(), true);
+      assert.equal(await pdfShortcut.isDisabled(), true);
+      await audit(page, `${theme}-reader`, name); await shot(page, `${theme}-reader-mobile`, name);
+      await page.locator('#reader-page-toggle').click();
+      await page.locator('#reader-page-breadcrumb [aria-current="page"]').waitFor();
+      await audit(page, `${theme}-reader-page`, name); await shot(page, `${theme}-reader-page-mobile`, name);
+      await page.locator('#reader-page-toggle').press('Escape');
+      assert.equal(await page.locator('#reader-page-toggle').evaluate(n => n === document.activeElement), true);
       await page.locator('#reader-notebook-toggle').click(); await page.locator('#reader-notebook').waitFor();
       assert.equal(await page.locator('#reader-section-nav [role=tab]').count(), 2);
       await audit(page, `${theme}-notes`, name);
       await page.getByRole('button', { name: 'Close reader', exact: true }).click();
       await clickNavigation(page, '#settings-button');
-      for (const section of ['api-keys', '2fa', 'sessions', 'password', 'backup', 'sync', 'mobile']) {
-        await clickNavigation(page, `[data-settings-section="${section}"]`);
+      for (const section of ['overview', 'appearance', 'api-keys', '2fa', 'sessions', 'password', 'backup', 'sync', 'mobile']) {
+        await selectSettings(page, section);
         await noOverflow(page, section); await audit(page, `${theme}-settings-${section}`, name);
         await shot(page, `${theme}-settings-${section}`, name);
       }
       await shot(page, `${theme}-settings-mobile`, name);
       await page.setViewportSize({ width: 1280, height: 720 });
       await page.goto(new URL('/?settings=2fa', base).href);
-      await page.locator('#mfa-settings-title').waitFor();
-      assert.ok(await page.locator('#mfa-settings-title').evaluate(n => n === document.activeElement && n.getBoundingClientRect().top >= 12), 'direct settings focus stays inside the viewport');
-      await expectThemeColor(page.locator('#mfa-settings-title'), 'outlineColor', '--focus');
+      const settingsHeading = page.locator('#settings-page').getByRole('heading', { level: 1 });
+      await settingsHeading.waitFor();
+      assert.ok(await settingsHeading.evaluate(n => n === document.activeElement && n.getBoundingClientRect().top >= 12), 'direct settings focus stays inside the viewport');
+      await expectThemeColor(settingsHeading, 'outlineColor', '--focus');
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto(base.href); await clickNavigation(page, '#help-button');
       await page.locator('#help-search').fill('capture');
@@ -314,7 +312,7 @@ for (const name of selected) {
 }
 
 // Render the shipped popup with a bounded Chrome API adapter, never real account data.
-const extensionFiles = new Set(['popup.html', 'popup.css', 'icon.svg', 'name-limit.js', 'ui-theme.js', 'theme-switch.js', 'popup.js', 'common.js']);
+const extensionFiles = new Set(['popup.html', 'popup.css', 'icon.svg', 'name-limit.js', 'ui-theme.js', 'theme-switch.js', 'popup.js', 'common.js', 'selectors.js', 'save-toast.js']);
 const preview = createServer(async (req, res) => {
   const file = new URL(req.url, 'http://localhost').pathname.slice(1) || 'popup.html';
   if (!extensionFiles.has(file)) { res.writeHead(404); res.end(); return; }

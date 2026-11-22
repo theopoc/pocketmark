@@ -4,7 +4,7 @@ Start with the [development and merge policy](CI.md#development-and-merge-policy
 
 ## Rehearse packaging locally
 
-Release tooling uses **GoReleaser OSS 2.18.3**, pinned in Actions. No Pro license or additional secret is required. Linux binaries are built with CGO disabled. The native release jobs compile and smoke-check them after validation and tagging; GoReleaser's OSS `meta` archives then package those exact binaries with installation instructions. It generates the extension ZIPs and `SHA256SUMS` too. The single extension ZIP contains fourteen explicitly named production files, including its background worker, and declares `debugger` access. Tests and local data are never globbed into release archives.
+Release tooling uses **GoReleaser OSS 2.18.3**, pinned in Actions. No Pro license or additional secret is required. Linux binaries are built with CGO disabled. The native release jobs compile and smoke-check them after validation and tagging; GoReleaser's OSS `meta` archives then package those exact binaries with installation instructions. It generates the extension ZIPs and `SHA256SUMS` too. The extension ZIP contains explicitly named production files, including its background worker and Chrome icons, and declares `debugger` access. Tests and local data are never globbed into release archives.
 
 For a local packaging rehearsal, download the `linux-amd64` and `linux-arm64` Release artifacts into `artifacts/linux-amd64/` and `artifacts/linux-arm64/`, retaining their executable and `.buildinfo.txt` files. With GoReleaser 2.18.3 installed, run:
 

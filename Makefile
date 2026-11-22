@@ -1,4 +1,4 @@
-.PHONY: preflight build frontend test run check fmt-check test-extension release-check release-snapshot
+.PHONY: preflight build frontend test run up down check fmt-check test-extension release-check release-snapshot
 LDFLAGS ?= -s -w
 TEST_FLAGS ?= -race -p 1
 
@@ -37,6 +37,9 @@ check: frontend fmt-check
 	node --check e2e/polish.mjs
 	node --check e2e/browser.mjs
 	node --check e2e/react.mjs
+	node --check e2e/reader-body.mjs
+	node --check e2e/reader-code.mjs
+	node --check e2e/reader-images.mjs
 	node --check e2e/security.mjs
 	node --check e2e/settings.mjs
 	@for source in extension/*.js; do node --check "$$source" || exit; done
@@ -47,3 +50,7 @@ release-snapshot:
 	goreleaser release --snapshot --clean --config .goreleaser.yaml
 run: build
 	./bin/pocketmark
+up:
+	docker compose -f compose.dev.yaml up --build --wait
+down:
+	docker compose -f compose.dev.yaml down

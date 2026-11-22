@@ -22,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	"pocketmark/internal/backup"
 	"pocketmark/internal/capture"
 	"pocketmark/internal/fault"
 	"pocketmark/internal/observability"
@@ -29,8 +30,11 @@ import (
 	"pocketmark/internal/store"
 )
 
-func loadServerSecret(dir, configured string, allowGenerate bool) (string, error) {
-	token := strings.TrimSpace(configured)
+func loadServerSecret(dir string, allowGenerate bool) (string, error) {
+	token := strings.TrimSpace(os.Getenv("POCKETMARK_SERVER_SECRET"))
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv("POCKETMARK_TOKEN"))
+	}
 	if token == "" {
 		path := filepath.Join(dir, "server-secret")
 		raw, e := os.ReadFile(path)
@@ -116,7 +120,15 @@ func run() (runErr error) {
 	noCapture := flag.Bool("no-capture", os.Getenv("POCKETMARK_CAPTURE") == "false", "disable background page capture")
 	resetMFA := flag.Bool("reset-mfa", false, "reset MFA locally while the server is stopped")
 	resetAccount := flag.Bool("reset-account", false, "read account credentials as JSON from stdin while the server is stopped")
+	encrypted := flag.String("decrypt-backup", "", "decrypt a remote backup offline using the original server secret")
+	output := flag.String("output", "", "new ZIP path for -decrypt-backup")
 	flag.Parse()
+	if *encrypted != "" || *output != "" {
+		if *resetMFA || *resetAccount {
+			return errors.New("choose one recovery command")
+		}
+		return decryptBackup(*data, *encrypted, *output)
+	}
 	if *resetMFA && *resetAccount {
 		return fault.New("configuration", "recovery_flags_conflict", "choose only one recovery command")
 	}
@@ -170,7 +182,7 @@ func run() (runErr error) {
 	if e != nil {
 		return e
 	}
-	token, e := loadServerSecret(dir, os.Getenv("POCKETMARK_TOKEN"), setup.SetupRequired || *resetMFA)
+	token, e := loadServerSecret(dir, setup.SetupRequired || *resetMFA)
 	if e != nil {
 		return e
 	}
@@ -184,8 +196,12 @@ func run() (runErr error) {
 	}
 	if *resetMFA {
 		operation = "recovery.mfa"
-		if err := s.ResetMFA(context.Background()); err != nil {
+		paused, err := s.ResetMFAWithBackupRecovery(context.Background(), token)
+		if err != nil {
 			return err
+		}
+		if paused {
+			fmt.Fprintln(os.Stdout, "Cleared saved backup credentials that the current server secret could not decrypt. Reconfigure S3 and Telegram in Settings or the deployment environment before resuming scheduled backups. Previously encrypted backups require their original server secret.")
 		}
 		fmt.Fprintln(os.Stdout, "MFA reset. Sign in with your password to enroll a new authenticator.")
 		return nil
@@ -205,6 +221,17 @@ func run() (runErr error) {
 			observability.Error(flush, "trace_shutdown_failed", err)
 		}
 	}()
+	shutdownMetrics, e := observability.EnableBackupOTLP(ctx, traceConfig, s.BackupMetrics)
+	if e != nil {
+		return e
+	}
+	defer func() {
+		flush, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdownMetrics(flush); err != nil {
+			observability.Error(flush, "backup_metrics_shutdown_failed", err)
+		}
+	}()
 	done := make(chan struct{})
 	if !*noCapture {
 		go func() { defer close(done); worker(ctx, s, observer) }()
@@ -220,6 +247,20 @@ func run() (runErr error) {
 	if e = handler.SetTrustedProxies(os.Getenv("POCKETMARK_TRUSTED_PROXIES")); e != nil {
 		return e
 	}
+	operation = "config.backup"
+	backupEnv, e := backup.ReadEnvironment(os.Getenv)
+	if e != nil {
+		return e
+	}
+	if e = handler.ConfigureBackups(ctx, backupEnv); e != nil {
+		return e
+	}
+	taggingDone := make(chan struct{})
+	go func() { defer close(taggingDone); handler.AITagWorker(ctx, !*noCapture) }()
+	defer func() { stop(); <-taggingDone }()
+	backupDone := make(chan struct{})
+	go func() { defer close(backupDone); handler.BackupWorker(ctx) }()
+	defer func() { stop(); <-backupDone }()
 	operation = "http.serve"
 	srv := &http.Server{Addr: *addr, Handler: handler, ErrorLog: observability.HTTPErrorLog(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 * 1024}
 	errCh := make(chan error, 1)
@@ -293,7 +334,7 @@ func worker(ctx context.Context, s *store.Store, observer *observability.Observe
 			finish(fetchErr, nil)
 			return
 		} // processing jobs are recovered at the next start.
-		e = s.Finish(captureCtx, l, result.Title, result.Description, result.Content, result.HTML, fetchErr, result.Thumbnail)
+		e = s.Finish(captureCtx, l, result, fetchErr)
 		finish(fetchErr, e)
 	}
 }

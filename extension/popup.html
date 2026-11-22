@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="popup.css">
   <script src="name-limit.js" defer></script>
   <script src="common.js" defer></script>
+  <script src="save-toast.js" defer></script>
   <script src="popup.js" defer></script>
 </head>
 <body>
@@ -17,6 +18,7 @@
     <button id="theme-toggle" type="button" class="secondary theme-toggle" aria-label="Dark mode" aria-pressed="true">Dark</button>
     <button id="connection-toggle" type="button" class="text-button connection-toggle" aria-controls="settings" aria-expanded="false" hidden>Connection</button>
   </header>
+  <div id="save-feedback"></div>
   <main id="content">
     <p id="status" class="notice" role="status" aria-live="polite">Loading your library…</p>
     <section id="unsupported" class="empty-state" hidden><h2>Open a web page</h2><p>Choose a regular website tab, then open Pocketmark to save it.</p></section>
@@ -56,9 +58,9 @@
     <section id="settings" class="settings" aria-labelledby="settings-heading" hidden>
       <h2 id="settings-heading">Connect to Pocketmark</h2><p class="intro">Your bookmarks, on your own server.</p>
       <form id="settings-form">
-        <div class="field"><label for="server">Server address</label><input id="server" type="url" placeholder="https://bookmarks.example.com" aria-describedby="server-hint" spellcheck="false" required><p id="server-hint" class="hint">Use your instance address, without a path.</p></div>
-        <div class="field"><label for="token">Dedicated API key</label><input id="token" type="password" autocomplete="off" aria-describedby="key-hint" required><p id="key-hint" class="hint">In Pocketmark, open <strong>Settings → API keys</strong> and create a key with <strong>Add, edit &amp; capture</strong> permissions.</p></div>
-        <p class="privacy-note">The key stays in this Chrome profile and is never synced. Use HTTPS. HTTP is allowed only on this computer.</p>
+        <div class="field"><label for="server">Server address</label><input id="server" type="url" placeholder="https://bookmarks.example.com" aria-describedby="server-hint" spellcheck="false" required><p id="server-hint" class="hint">Use HTTPS without a path. HTTP works on this computer only.</p></div>
+        <div class="field"><label for="token">Dedicated API key</label><input id="token" type="password" autocomplete="off" aria-describedby="key-hint" required><p id="key-hint" class="hint">In Pocketmark, open <strong>Settings → API keys</strong> and create a key with the <strong>Editor</strong> role.</p></div>
+        <p class="privacy-note">Your key stays in this Chrome profile. To show the toolbar checkmark, Pocketmark sends the active page’s URL to your server as you browse outside Incognito.</p>
       </form>
     </section>
   </main>

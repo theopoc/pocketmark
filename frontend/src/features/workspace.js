@@ -1,4 +1,5 @@
-"use strict";
+import { settingsEntries } from "./settings/catalog.js";
+import nameRules from "../../../internal/webui/static/name-limit.js";
 
 // Shared, dependency-free state rules; draft contents stay in this tab's memory.
 const positive = (value, fallback = 1, max = 1000000) =>
@@ -7,15 +8,10 @@ const positive = (value, fallback = 1, max = 1000000) =>
   Number(value) > 0
     ? Math.min(Number(value), max)
     : fallback;
-const settingsSections = [
-  "api-keys",
-  "2fa",
-  "sessions",
-  "backup",
-  "password",
-  "sync",
-  "mobile",
-];
+const settingsSections = new Set([
+  "overview",
+  ...settingsEntries.map(({ id }) => id),
+]);
 function readRoute(search) {
   const params = new URLSearchParams(search);
   let filter = ["all", "inbox", "favorite", "unread", "collection"].includes(
@@ -29,16 +25,15 @@ function readRoute(search) {
     Number.MAX_SAFE_INTEGER,
   );
   if (filter === "collection" && !collection) filter = "all";
-  const tag = (params.get("tag") || "").trim();
   return {
     settingsSection: params.has("settings")
-      ? settingsSections.includes(params.get("settings"))
+      ? settingsSections.has(params.get("settings"))
         ? params.get("settings")
-        : "api-keys"
+        : "overview"
       : null,
-    filter: tag ? "all" : filter,
-    collection: !tag && filter === "collection" ? collection : null,
-    tag,
+    filter,
+    collection: filter === "collection" ? collection : null,
+    activeTags: tagValues(params.getAll("tag")),
     query: (params.get("q") || "").trim(),
     page: positive(params.get("page")),
     sort: ["newest", "oldest", "title", "title_desc", "updated"].includes(
@@ -53,12 +48,12 @@ function readRoute(search) {
 }
 function routeSearch(route) {
   const params = new URLSearchParams();
-  if (settingsSections.includes(route.settingsSection))
+  if (settingsSections.has(route.settingsSection))
     params.set("settings", route.settingsSection);
   if (route.filter !== "all") params.set("filter", route.filter);
   if (route.filter === "collection" && route.collection)
     params.set("collection", route.collection);
-  if (route.tag) params.set("tag", route.tag);
+  for (const tag of route.activeTags) params.append("tag", tag);
   if (route.query) params.set("q", route.query);
   if (route.page > 1) params.set("page", route.page);
   if (route.sort !== "newest") params.set("sort", route.sort);
@@ -160,7 +155,7 @@ function tagValues(selected, pending = "") {
   return [
     ...new Set(
       [...selected, ...pending.split(",")]
-        .map((name) => name.trim())
+        .map(nameRules.tagName)
         .filter(Boolean),
     ),
   ];
@@ -241,7 +236,7 @@ function bookmarkIssues(value) {
   const tags = tagValues(value.tags || []);
   if (tags.length > 32)
     issues.tags = "Choose up to 32 tags. Remove a tag before adding another.";
-  else if (tags.some((tag) => bytes(tag) > 80))
+  else if (tags.some((tag) => nameRules.tagBytes(tag) > 80))
     issues.tags =
       "Shorten each tag to 80 bytes or less. Accented characters and emoji can use several bytes.";
   return issues;
@@ -325,6 +320,7 @@ const workspace = {
   createDrafts,
   readerSnapshot,
   tagValues,
+  tagName: nameRules.tagName,
   searchExcerpt,
   captureFailure,
   bookmarkIssues,

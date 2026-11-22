@@ -1,4 +1,4 @@
-// Package capture retrieves one public HTML document without a browser or subresources.
+// Package capture retrieves public HTML and bounded passive resources without a browser.
 package capture
 
 import (
@@ -33,6 +33,7 @@ const (
 type Result struct {
 	Title, Description, Content string
 	HTML                        []byte
+	ReaderHTML                  []byte // optional illustrated copy; HTML always retains the source
 	Thumbnail                   []byte
 }
 
@@ -202,19 +203,20 @@ func fetch(ctx context.Context, rawURL string, client *http.Client) (captured Re
 	stage = "capture.content_type"
 	contentType := resp.Header.Get("Content-Type")
 	if contentType == "" {
-		contentType = http.DetectContentType(body)
+		contentType, _, _ = mime.ParseMediaType(http.DetectContentType(body))
 	}
 	mediaType, _, err := mime.ParseMediaType(contentType)
 	if err != nil || (mediaType != "text/html" && mediaType != "application/xhtml+xml") {
 		return Result{}, fault.New("capture", "unsupported_content", "capture requires HTML content")
 	}
 	stage = "capture.parse"
-	result, err := extract(body)
+	result, err := extractReader(decodedHTML(bytes.NewReader(body), contentType), maxToken)
 	if err != nil {
 		return Result{}, err
 	}
 	result.HTML = body
 	result.Thumbnail = thumbnail(ctx, body, resp.Request.URL, client)
+	result.ReaderHTML = selfDescribingArticle(body, illustratedArticle(ctx, body, resp.Request.URL, client), contentType)
 	return result, nil
 }
 
@@ -232,13 +234,13 @@ func readBounded(reader io.Reader) ([]byte, error) {
 var skipped = map[string]bool{"script": true, "style": true, "nav": true, "header": true, "footer": true, "svg": true, "noscript": true, "iframe": true, "template": true}
 
 func extract(body []byte) (Result, error) {
-	return extractReader(bytes.NewReader(body), maxToken)
+	return extractReader(decodedHTML(bytes.NewReader(body), ""), maxToken)
 }
 
 // ExtractDocument indexes uploaded/client-rendered HTML without loading the
 // complete archive. Large data-URL attributes remain bounded to 2 MiB each.
 func ExtractDocument(src io.Reader) (Result, error) {
-	return extractReader(io.LimitReader(src, 20<<20), 2<<20)
+	return extractReader(decodedHTML(io.LimitReader(src, 20<<20), ""), 2<<20)
 }
 
 func extractReader(src io.Reader, tokenLimit int) (Result, error) {
@@ -247,7 +249,9 @@ func extractReader(src io.Reader, tokenLimit int) (Result, error) {
 	var result Result
 	var content, title strings.Builder
 	var excluded []string
-	inHead, inTitle := false, false
+	var comments tokenSubtree
+	var summary paragraphSummary
+	inHead, inTitle, inPre := false, false, false
 	for {
 		typeOf := z.Next()
 		if typeOf == html.ErrorToken {
@@ -260,6 +264,9 @@ func extractReader(src io.Reader, tokenLimit int) (Result, error) {
 		case html.StartTagToken, html.SelfClosingTagToken:
 			token := z.Token()
 			name := token.Data
+			if (len(excluded) == 0 || comments.depth > 0) && comments.start(token, commentContainer) {
+				continue
+			}
 			// Some real pages leave nested navigation elements unclosed. A
 			// semantic content boundary can recover from layout exclusions,
 			// but must not expose content inside templates or embedded assets.
@@ -284,6 +291,18 @@ func extractReader(src io.Reader, tokenLimit int) (Result, error) {
 			}
 			if len(excluded) > 0 {
 				continue
+			}
+			if result.Description == "" && !inHead && !inPre {
+				summary.start(token)
+			}
+			if name == "pre" && !inHead {
+				if content.Len() > 0 && !inPre && content.Len() < maxText {
+					content.WriteByte('\n')
+				}
+				inPre = true
+			}
+			if name == "br" && inPre && content.Len() < maxText {
+				content.WriteByte('\n')
 			}
 			if name == "head" {
 				inHead = true
@@ -313,6 +332,9 @@ func extractReader(src io.Reader, tokenLimit int) (Result, error) {
 		case html.EndTagToken:
 			name, _ := z.TagName()
 			tag := string(name)
+			if comments.end(tag) {
+				continue
+			}
 			if len(excluded) > 0 {
 				for i := len(excluded) - 1; i >= 0; i-- {
 					if excluded[i] == tag {
@@ -322,6 +344,12 @@ func extractReader(src io.Reader, tokenLimit int) (Result, error) {
 				}
 				continue
 			}
+			if result.Description == "" && !inHead && !inPre {
+				summary.end(tag)
+			}
+			if tag == "pre" {
+				inPre = false
+			}
 			if tag == "head" {
 				inHead = false
 			}
@@ -329,17 +357,31 @@ func extractReader(src io.Reader, tokenLimit int) (Result, error) {
 				inTitle = false
 			}
 		case html.TextToken:
-			if len(excluded) > 0 {
+			if len(excluded) > 0 || comments.depth > 0 {
 				continue
 			}
 			if inTitle {
 				appendText(&title, string(z.Text()), 1024)
+			} else if inPre && !inHead {
+				for _, r := range string(z.Text()) {
+					if content.Len()+utf8.RuneLen(r) > maxText {
+						break
+					}
+					content.WriteRune(r)
+				}
 			} else if !inHead {
-				appendText(&content, string(z.Text()), maxText)
+				text := string(z.Text())
+				appendText(&content, text, maxText)
+				if result.Description == "" {
+					summary.append(text)
+				}
 			}
 		}
 	}
 	result.Title, result.Content = title.String(), content.String()
+	if result.Description == "" {
+		result.Description = summary.text.String()
+	}
 	return result, nil
 }
 

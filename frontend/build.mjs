@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 
 process.chdir(import.meta.dirname);
-await build();
+await build({ base: "/app/" });
 // Only the empty shell is rendered at build time. Private library data is fetched
 // and rendered in the browser; production never needs Node or a renderer process.
 const server = await createServer({
@@ -42,6 +42,9 @@ try {
     "/secondary.css",
     "/select.css",
     "/icon.svg",
+    "/fonts/figtree-latin.woff2",
+    "/fonts/figtree-latin-ext.woff2",
+    "/fonts/figtree-latin-italic.woff2",
     "/manifest.webmanifest",
     ...Object.values(manifest)
       .flatMap((item) => [item.file, ...(item.css || [])])

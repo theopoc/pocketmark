@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"pocketmark/internal/capture"
 	"reflect"
 	"strconv"
 	"strings"
@@ -112,7 +113,7 @@ func TestSearchTracksAllIndexedFieldsAndMutations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Finish(ctx, claimed, "", "", "Captured aardvark", []byte("archive"), nil); err != nil {
+	if err := s.Finish(ctx, claimed, capture.Result{Content: "Captured aardvark", HTML: []byte("archive")}, nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, query := range []string{"CAFE", "concur", "searchable", "durab", "observ", "syst", "aard", "cafe concurrency"} {
@@ -196,10 +197,10 @@ func TestFiltersAndPagination(t *testing.T) {
 	}{
 		{"inbox", Filter{Collection: "0"}, []int64{inbox}},
 		{"collection", Filter{Collection: strconv.FormatInt(collection, 10)}, []int64{other, filed}},
-		{"tag", Filter{Tag: "exact"}, []int64{filed, inbox}},
+		{"tag", Filter{Tags: []string{"exact"}}, []int64{filed, inbox}},
 		{"favorite", Filter{Favorite: true}, []int64{other, inbox}},
 		{"unread", Filter{Unread: true}, []int64{other, inbox}},
-		{"combined", Filter{Tag: "exact", Favorite: true, Unread: true}, []int64{inbox}},
+		{"combined", Filter{Tags: []string{"exact"}, Favorite: true, Unread: true}, []int64{inbox}},
 		{"missing", Filter{Collection: "999"}, []int64{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -322,16 +323,16 @@ func TestQueueRecoveryAndURLChangeRace(t *testing.T) {
 	if err != nil || current.URL != updated.URL {
 		t.Fatalf("new URL not queued: %+v %v", current, err)
 	}
-	if err := s.Finish(ctx, recovered, "Stale", "Stale", "old content", []byte("old archive"), nil); err != nil {
+	if err := s.Finish(ctx, recovered, capture.Result{Title: "Stale", Description: "Stale", Content: "old content", HTML: []byte("old archive")}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Finish(ctx, recovered, "", "", "", nil, errors.New("old failure")); err != nil {
+	if err := s.Finish(ctx, recovered, capture.Result{}, errors.New("old failure")); err != nil {
 		t.Fatal(err)
 	}
 	if got := getLink(t, s, id); got.Status != "processing" || got.Content != "" || got.ArchiveAvailable || got.Error != "" {
 		t.Fatalf("stale completion changed current job: %+v", got)
 	}
-	if err := s.Finish(ctx, current, "Fetched title", "Fetched description", "searchable capture", []byte("archive bytes"), nil); err != nil {
+	if err := s.Finish(ctx, current, capture.Result{Title: "Fetched title", Description: "Fetched description", Content: "searchable capture", HTML: []byte("archive bytes")}, nil); err != nil {
 		t.Fatal(err)
 	}
 	ready := getLink(t, s, id)
@@ -349,7 +350,7 @@ func TestQueueRecoveryAndURLChangeRace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Finish(ctx, job, "", "", "", nil, errors.New("timeout")); err != nil {
+	if err := s.Finish(ctx, job, capture.Result{}, errors.New("timeout")); err != nil {
 		t.Fatal(err)
 	}
 	if got := getLink(t, s, id); got.Status != "failed" || got.Error != "timeout" {

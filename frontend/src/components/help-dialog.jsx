@@ -129,11 +129,11 @@ export function HelpDialog() {
               {"\n            "}
               <p>
                 {
-                  "Open a bookmark’s title to see its saved HTML, screenshots and PDFs. Choose a format to open the latest copy and use the file selector for earlier copies. To read extracted text, choose "
+                  "Open a bookmark’s title to read its article. Choose HTML, screenshot or PDF to open a saved copy. Use "
                 }
-                <strong>{"Reading options → Text & highlights"}</strong>
+                <strong>{"Aa"}</strong>
                 {
-                  ". Reading options also contains text size, formatted view and capture controls."
+                  " to change the text size, or expand the reader to fill the page."
                 }
               </p>
               {"\n            "}
@@ -170,16 +170,12 @@ export function HelpDialog() {
                 <li>
                   {"If it failed, choose "}
                   <strong>{"Retry capture"}</strong>
-                  {". You can also use "}
-                  <strong>{"Reading options → Refresh capture"}</strong>
                   {"."}
                 </li>
                 <li>
                   {"If the site requires signing in or blocks capture, use "}
-                  <strong>{"Visit original"}</strong>
-                  {", then attach an HTML snapshot or PDF under "}
-                  <strong>{"Files"}</strong>
-                  {"."}
+                  <strong>{"Open original"}</strong>
+                  {" and save a copy with the Pocketmark extension."}
                 </li>
               </ol>
               {"\n            "}
@@ -243,10 +239,12 @@ export function HelpDialog() {
               </ol>
               {"\n            "}
               <p>
-                {"Keep your server-secret (or legacy access-token / "}
-                <code>{"POCKETMARK_TOKEN"}</code>
                 {
-                  ") separately. JSON and HTML exports contain bookmark metadata only."
+                  "Keep a separate copy of your server secret, whether supplied by "
+                }
+                <code>POCKETMARK_SERVER_SECRET</code>
+                {
+                  " or stored in the data volume. JSON and HTML exports contain bookmark metadata only."
                 }
               </p>
               {"\n          "}
@@ -267,9 +265,9 @@ export function HelpDialog() {
                 {"Create a dedicated key under "}
                 <strong>{"Settings → API keys"}</strong>
                 {" for each extension or sync app. Choose "}
-                <strong>{"Add, edit & capture"}</strong>
+                <strong>{"Editor"}</strong>
                 {" for the Pocketmark extension, or "}
-                <strong>{"Floccus sync"}</strong>
+                <strong>{"Sync"}</strong>
                 {
                   " for Floccus. Browser sign-in uses your password and an authentication or recovery code."
                 }
@@ -278,7 +276,7 @@ export function HelpDialog() {
               <p>
                 <strong>{"Settings"}</strong>
                 {
-                  " contains Floccus WebDAV instructions and mobile installation guidance."
+                  " contains Floccus sync instructions for WebDAV and mobile installation guidance."
                 }
               </p>
               {"\n            "}

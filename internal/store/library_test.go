@@ -39,7 +39,7 @@ func TestBulkAtomicAndSearchSort(t *testing.T) {
 	if e := s.Bulk(ctx, BulkChange{IDs: []int64{a, b}, Action: "tags", Tags: []string{"shared"}}); e != nil {
 		t.Fatal(e)
 	}
-	p, e := s.List(ctx, Filter{Sort: "title", Tag: "shared"})
+	p, e := s.List(ctx, Filter{Sort: "title", Tags: []string{"shared"}})
 	if e != nil || p.Total != 2 || p.Links[0].ID != b {
 		t.Fatalf("%+v %v", p, e)
 	}

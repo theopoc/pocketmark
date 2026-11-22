@@ -23,7 +23,7 @@ A self-hosted bookmark library built around one Go process, SQLite/FTS5 and an e
 - Use the web interface on desktop and mobile; installable mobile web and share-target support depend on the browser and OS.
 - Save and capture pages through the companion browser extension when browser rendering is needed.
 - Organize bookmarks in nested collections and tags, with an Inbox, favorites and read/unread status.
-- Search bookmark metadata and captured text. Open bookmarks on a choice of saved formats, showing only available HTML, Screenshot and PDF copies; never auto-open extracted text. Manage attachments beside Saved formats; keep notes and existing highlights as optional secondary tools.
+- Search bookmark metadata and captured text. Selecting a bookmark opens the saved article in a reader with direct access to HTML, screenshot and PDF copies, notes and highlights.
 - Import existing JSON or browser bookmark metadata; optionally synchronize with Floccus through WebDAV.
 - Run locally or self-host behind a configured reverse proxy. Full backups and portable metadata exports serve different purposes.
 
@@ -33,9 +33,9 @@ A self-hosted bookmark library built around one Go process, SQLite/FTS5 and an e
 - Retain Go, CGO-backed SQLite/FTS5 and the embedded, statically compiled React UI; no resident browser, database or search sidecars.
 - Prefer standard-library solutions, bounded queues and disk-backed or streamed work. Justify dependencies and caches against the RAM goal.
 - Keep origin checks, SSRF protections, request limits and archive boundaries intact.
-- Collaboration, public sharing, SSO/OIDC, RSS, AI automation, scheduled recapture and automatic backups are outside scope.
+- The owner can enable AI tagging for untagged website bookmarks. Collaboration, public sharing, SSO/OIDC, RSS and scheduled recapture are outside scope.
 - The personal Chrome extension uses the native API. Linkwarden compatibility endpoints and third-party client integration are removed; Floccus WebDAV remains.
-- Metadata JSON/HTML exports do not contain the complete archive library. The owner-only full ZIP backup preserves the database and saved assets; the server secret must be kept separately.
+- Metadata JSON/HTML exports do not contain the complete archive library. The owner can download a full ZIP or schedule encrypted full or custom backups to S3-compatible storage. A full ZIP preserves the database and saved assets; the server secret must be kept separately.
 - Third-party Android/iOS clients are outside the supported scope. Physical phones, Firefox and Safari are not established as qualified clients by the current evidence.
 
 ## Brand Commitments
@@ -59,8 +59,8 @@ The product name is Pocketmark. Keep the interface in English. Desktop and mobil
 4. Keep saving, finding and reading practical on desktop and mobile.
 5. State capture and compatibility limits honestly, using tested evidence rather than implied guarantees.
 
-## Saved-format journey
+## Reading a bookmark
 
-The owner chose a saved-format-first journey on 31 October 2026. Clicking a bookmark opens its title, source and only the saved formats that are available. Choosing a format opens its newest saved copy, with earlier copies accessible in the viewer. When no copy exists, explain how to save or attach one and keep Open original available for website bookmarks. Loading and failed checks must remain distinct from an empty archive. Extracted text and existing annotations remain secondary tools and never become the default opening destination.
+Selecting a bookmark opens its article in a side panel. Embedded images, diagrams, code and captions accompany the text when available. Readers can set the text size or expand the article to the entire Pocketmark page. HTML, screenshot and PDF icons show which copies can be opened. Choosing a format opens its newest copy, with earlier copies accessible in the viewer. Loading and failed checks are distinct from an empty archive. Website bookmarks retain their original link, and notes and highlights stay available in the reading session.
 
 The library keeps a direct Settings destination. Import explains accepted metadata files before file selection and retains its result. Single-key shortcuts are optional in this browser and apply only while browsing the library. The product remains strictly personal, served by one Go process and in English.

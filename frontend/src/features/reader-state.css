@@ -1,0 +1,82 @@
+#reader-state {
+  --state-ink: var(--muted);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-block: 0 24px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+#reader-state[data-kind="failed"] {
+  --state-ink: var(--danger);
+}
+#reader-state[data-kind="pending"] {
+  --state-ink: #8a5300;
+}
+[data-theme="dark"] #reader-state[data-kind="pending"] {
+  --state-ink: #f5c76b;
+}
+#reader-state .reader-state-symbol {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  color: var(--state-ink);
+  background: color-mix(in srgb, var(--state-ink) 11%, var(--paper));
+}
+#reader-state .reader-state-symbol .icon {
+  display: none;
+  width: 20px;
+  height: 20px;
+}
+#reader-state[data-kind="failed"] .state-failed,
+#reader-state[data-kind="pending"] .state-pending,
+#reader-state[data-kind="loading"] .state-pending,
+#reader-state[data-kind="empty"] .state-empty {
+  display: block;
+}
+#reader-state .reader-state-message {
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+#reader-status {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 650;
+}
+#reader-status-detail {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+#reader-status-detail:empty {
+  display: none;
+}
+@media (max-width: 600px) {
+  #reader-state {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+  #reader-state .reader-state-message {
+    align-self: center;
+  }
+  #reader-state .button {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+@media print {
+  #reader-state .button,
+  #reader-state .reader-state-symbol {
+    display: none;
+  }
+  #reader-state {
+    display: block;
+    color: black;
+    background: white;
+  }
+}

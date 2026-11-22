@@ -12,6 +12,18 @@ var initialSchema string
 //go:embed migrations/002_mfa_challenges.sql
 var challengeSchema string
 
+//go:embed migrations/003_session_addresses.sql
+var sessionAddressSchema string
+
+//go:embed migrations/004_backup.sql
+var backupSchema string
+
+//go:embed migrations/005_ai_tagging.sql
+var aiTagSchema string
+
+//go:embed migrations/006_reader_archive.sql
+var readerArchiveSchema string
+
 func (s *Store) initializeSchema(ctx context.Context) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -45,11 +57,44 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(2)"); err != nil {
 			return err
 		}
+		fallthrough
 	case 2:
+		if _, err = tx.ExecContext(ctx, sessionAddressSchema); err != nil {
+			return fmt.Errorf("migrate session addresses: %w", err)
+		}
+		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(3)"); err != nil {
+			return err
+		}
+		fallthrough
+	case 3:
+		if _, err = tx.ExecContext(ctx, backupSchema); err != nil {
+			return fmt.Errorf("migrate scheduled backups: %w", err)
+		}
+		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(4)"); err != nil {
+			return err
+		}
+		fallthrough
+	case 4:
+		if _, err = tx.ExecContext(ctx, aiTagSchema); err != nil {
+			return fmt.Errorf("migrate AI tagging: %w", err)
+		}
+		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(5)"); err != nil {
+			return err
+		}
+		fallthrough
+	case 5:
+		if _, err = tx.ExecContext(ctx, readerArchiveSchema); err != nil {
+			return fmt.Errorf("migrate article reading copies: %w", err)
+		}
+		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(6)"); err != nil {
+			return err
+		}
+	case 6:
 	default:
 		return fmt.Errorf("unsupported Pocketmark schema version %d", version)
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM mfa_challenges WHERE EXISTS(SELECT 1 FROM mfa WHERE restored=1);
+	if _, err = tx.ExecContext(ctx, `INSERT INTO ai_tag_settings(id) VALUES(1) ON CONFLICT DO NOTHING;
+DELETE FROM mfa_challenges WHERE EXISTS(SELECT 1 FROM mfa WHERE restored=1);
 DELETE FROM mfa_recovery WHERE EXISTS(SELECT 1 FROM mfa WHERE restored=1);
 UPDATE mfa SET last_counter=greatest(last_counter,epoch_seconds()/30+1),restored=0 WHERE restored=1`); err != nil {
 		return err

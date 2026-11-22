@@ -284,7 +284,7 @@ func (a *Server) mfaVerify(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		codes, hashes := newRecoveryCodes()
-		if err = a.Store.ActivateMFA(r.Context(), key, challenge.Salt, challenge.Generation, counter, challenge.Secret, hashes, challenge.Session, a.sessionHash(value), expires, r.UserAgent(), challenge.RecoveryGrant); err != nil {
+		if err = a.Store.ActivateMFA(r.Context(), key, challenge.Salt, challenge.Generation, counter, challenge.Secret, hashes, challenge.Session, a.sessionHash(value), expires, a.sessionClient(r), challenge.RecoveryGrant); err != nil {
 			if authFailure(w, "mfa_operation_failed", err) {
 				return
 			}
@@ -325,7 +325,7 @@ func (a *Server) mfaVerify(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err = a.Store.SignInMFA(r.Context(), key, challenge.Salt, challenge.Generation, counter, recoveryHash, a.sessionHash(value), expires, r.UserAgent()); err != nil {
+	if err = a.Store.SignInMFA(r.Context(), key, challenge.Salt, challenge.Generation, counter, recoveryHash, a.sessionHash(value), expires, a.sessionClient(r)); err != nil {
 		if authFailure(w, "mfa_operation_failed", err) {
 			return
 		}

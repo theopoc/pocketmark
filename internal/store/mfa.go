@@ -72,7 +72,7 @@ func consumeFactorTx(ctx context.Context, tx *sql.Tx, salt string, generation, c
 }
 
 // SignInMFA atomically consumes the proof and creates the session.
-func (s *Store) SignInMFA(ctx context.Context, digest, salt string, generation, counter int64, recoveryHash, sessionHash string, expires time.Time, device string) error {
+func (s *Store) SignInMFA(ctx context.Context, digest, salt string, generation, counter int64, recoveryHash, sessionHash string, expires time.Time, client SessionClient) error {
 	tx, err := s.beginAccountChange(ctx)
 	if err != nil {
 		return err
@@ -84,7 +84,7 @@ func (s *Store) SignInMFA(ctx context.Context, digest, salt string, generation, 
 	if err = consumeFactorTx(ctx, tx, salt, generation, counter, recoveryHash); err != nil {
 		return err
 	}
-	if err = insertSessionTx(ctx, tx, salt, sessionHash, expires, device, recoveryHash != ""); err != nil {
+	if err = insertSessionTx(ctx, tx, salt, sessionHash, expires, client, recoveryHash != ""); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -135,7 +135,7 @@ func insertRecoveryCodes(ctx context.Context, tx *sql.Tx, hashes []string) error
 
 // ActivateMFA replaces the factor and recovery codes in one transaction. An
 // initial enrollment creates a session; a replacement keeps only its session.
-func (s *Store) ActivateMFA(ctx context.Context, digest, salt string, generation, counter int64, encrypted []byte, hashes []string, keepSession, newSession string, expires time.Time, device string, recoveryGrant bool) error {
+func (s *Store) ActivateMFA(ctx context.Context, digest, salt string, generation, counter int64, encrypted []byte, hashes []string, keepSession, newSession string, expires time.Time, client SessionClient, recoveryGrant bool) error {
 	tx, err := s.beginAccountChange(ctx)
 	if err != nil {
 		return err
@@ -186,7 +186,7 @@ func (s *Store) ActivateMFA(ctx context.Context, digest, salt string, generation
 		if _, err = tx.ExecContext(ctx, "DELETE FROM sessions"); err != nil {
 			return err
 		}
-		if err = insertSessionTx(ctx, tx, salt, newSession, expires, device, false); err != nil {
+		if err = insertSessionTx(ctx, tx, salt, newSession, expires, client, false); err != nil {
 			return err
 		}
 	} else {
@@ -227,10 +227,15 @@ func (s *Store) ResetMFA(ctx context.Context) error {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err = tx.ExecContext(ctx, `UPDATE mfa SET secret=''::bytea,generation=generation+1,last_counter=-1,attempts=0,window_start='-infinity' WHERE id=1;
- DELETE FROM mfa_challenges;
- DELETE FROM mfa_recovery; DELETE FROM sessions`); err != nil {
+	if err = resetMFATx(ctx, tx); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+func resetMFATx(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `UPDATE mfa SET secret=''::bytea,generation=generation+1,last_counter=-1,attempts=0,window_start='-infinity' WHERE id=1;
+ DELETE FROM mfa_challenges;
+ DELETE FROM mfa_recovery; DELETE FROM sessions`)
+	return err
 }

@@ -15,19 +15,20 @@ import (
 
 // Imports intentionally exclude captured assets. Use the native ZIP for a full backup.
 type importLink struct {
-	CreatedAt    string            `json:"createdAt"`
-	UpdatedAt    string            `json:"updatedAt"`
-	ID           int64             `json:"id"`
-	URL          string            `json:"url"`
-	Title        string            `json:"title"`
-	Name         string            `json:"name"`
-	Type         string            `json:"type"`
-	Description  string            `json:"description"`
-	Notes        string            `json:"notes"`
-	CollectionID *int64            `json:"collectionId"`
-	Tags         []json.RawMessage `json:"tags"`
-	Favorite     bool              `json:"favorite"`
-	Read         bool              `json:"read"`
+	AIPublicFields *string           `json:"aiPublicFields"`
+	CreatedAt      string            `json:"createdAt"`
+	UpdatedAt      string            `json:"updatedAt"`
+	ID             int64             `json:"id"`
+	URL            string            `json:"url"`
+	Title          string            `json:"title"`
+	Name           string            `json:"name"`
+	Type           string            `json:"type"`
+	Description    string            `json:"description"`
+	Notes          string            `json:"notes"`
+	CollectionID   *int64            `json:"collectionId"`
+	Tags           []json.RawMessage `json:"tags"`
+	Favorite       bool              `json:"favorite"`
+	Read           bool              `json:"read"`
 }
 type importCollection struct {
 	Collection
@@ -141,6 +142,11 @@ func (s *Store) Import(ctx context.Context, r io.Reader) (ImportResult, error) {
 			return nil
 		}
 		l := Link{URL: in.URL, Title: in.Title, Description: in.Description, Notes: in.Notes, Tags: []string{}, CollectionID: collectionID, Favorite: in.Favorite || pinned[in.URL], Read: in.Read}
+		if in.AIPublicFields != nil {
+			l.aiPrivate = privateAIFields(*in.AIPublicFields)
+		} else if data.Format == "pocketmark" {
+			l.aiPrivate = privateAIFields("")
+		}
 		if l.Title == "" {
 			l.Title = in.Name
 		}
@@ -256,14 +262,15 @@ func (s *Store) Export(ctx context.Context, w io.Writer) error {
 	if _, e = io.WriteString(w, `],"links":[`); e != nil {
 		return e
 	}
-	rows, e = tx.QueryContext(ctx, "SELECT "+columns+" FROM links l ORDER BY id")
+	rows, e = tx.QueryContext(ctx, "SELECT "+columns+",ai_private_title,ai_private_description FROM links l ORDER BY id")
 	if e != nil {
 		return e
 	}
 	defer rows.Close()
 	first = true
 	for rows.Next() {
-		l, e := scan(rows, false)
+		var fields aiPrivateFields
+		l, e := scan(rows, false, &fields.title, &fields.description)
 		if e != nil {
 			return e
 		}
@@ -273,7 +280,11 @@ func (s *Store) Export(ctx context.Context, w io.Writer) error {
 			}
 		}
 		first = false
-		if e = enc.Encode(l); e != nil {
+		record := struct {
+			Link
+			AIPublicFields string `json:"aiPublicFields"`
+		}{l, fields.publicMarker()}
+		if e = enc.Encode(record); e != nil {
 			return e
 		}
 	}

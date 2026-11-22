@@ -133,19 +133,23 @@ func TestLoginSourceTrustAndBounds(t *testing.T) {
 	if err := a.SetTrustedProxies("10.0.0.0/24, 2001:db8:ffff::/64"); err != nil {
 		t.Fatal(err)
 	}
-	for _, tc := range []struct{ peer, forwarded, want string }{
-		{"198.51.100.1:20", "198.51.100.2", "198.51.100.1"},
-		{"10.0.0.1:20", "198.51.100.2", "198.51.100.2"},
-		{"10.0.0.1:20", "192.0.2.99, 198.51.100.2, 10.0.0.2", "198.51.100.2"},
-		{"10.0.0.1:20", "198.51.100.2, invalid", "10.0.0.1"},
-		{"[2001:db8:1::1]:20", "", "2001:db8:1::"},
-		{"[::ffff:198.51.100.1]:20", "198.51.100.2", "198.51.100.1"},
+	for _, tc := range []struct{ peer, forwarded, address, source string }{
+		{"198.51.100.1:20", "198.51.100.2", "198.51.100.1", "198.51.100.1"},
+		{"10.0.0.1:20", "198.51.100.2", "198.51.100.2", "198.51.100.2"},
+		{"10.0.0.1:20", "192.0.2.99, 198.51.100.2, 10.0.0.2", "198.51.100.2", "198.51.100.2"},
+		{"10.0.0.1:20", "198.51.100.2, invalid", "10.0.0.1", "10.0.0.1"},
+		{"[2001:db8:1::1]:20", "", "2001:db8:1::1", "2001:db8:1::"},
+		{"10.0.0.1:20", "2001:db8:1::27, 10.0.0.2", "2001:db8:1::27", "2001:db8:1::"},
+		{"[::ffff:198.51.100.1]:20", "198.51.100.2", "198.51.100.1", "198.51.100.1"},
 	} {
 		r := httptest.NewRequest("POST", "/api/login", nil)
 		r.RemoteAddr = tc.peer
 		r.Header.Set("X-Forwarded-For", tc.forwarded)
-		if got := a.clientSource(r).String(); got != tc.want {
-			t.Errorf("source %s / %s: %s != %s", tc.peer, tc.forwarded, got, tc.want)
+		if got := a.clientAddress(r).String(); got != tc.address {
+			t.Errorf("address %s / %s: %s != %s", tc.peer, tc.forwarded, got, tc.address)
+		}
+		if got := a.clientSource(r).String(); got != tc.source {
+			t.Errorf("source %s / %s: %s != %s", tc.peer, tc.forwarded, got, tc.source)
 		}
 	}
 	if err := a.SetTrustedProxies("not-a-cidr"); err == nil {

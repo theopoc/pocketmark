@@ -17,13 +17,16 @@ globalThis.Pocketmark = (() => {
     return data;
   }
   function json(method, value) { return { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) }; }
+  const bytes = (value) => new TextEncoder().encode(value).length;
+  function validateURL(value) {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || bytes(value) > 4096) throw new Error("Open a regular http(s) page with a URL of at most 4096 bytes and no credentials.");
+  }
   function validate(fields) {
-    const bytes = (value) => new TextEncoder().encode(value).length;
-    const url = new URL(fields.url);
-    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || bytes(fields.url) > 4096) throw new Error("Open a regular http(s) page with a URL shorter than 4096 bytes.");
+    validateURL(fields.url);
     if (typeof fields.title !== "string" || bytes(fields.title) > 1024) throw new Error("Title must be at most 1024 bytes.");
-    if (!Array.isArray(fields.tags) || fields.tags.length > 32 || fields.tags.some((tag) => typeof tag !== "string" || !tag.trim() || bytes(tag) > 80)) throw new Error("Use at most 32 tags, each at most 80 bytes.");
+    if (!Array.isArray(fields.tags) || fields.tags.length > 32 || fields.tags.some((tag) => typeof tag !== "string" || !tag.trim() || PocketmarkNameLimit.tagBytes(tag.trim()) > 80)) throw new Error("Use at most 32 tags, each at most 80 bytes.");
     if (fields.collectionId !== null && (!Number.isSafeInteger(fields.collectionId) || fields.collectionId <= 0)) throw new Error("Select a collection or Inbox.");
   }
-  return { formats, origin, request, json, validate };
+  return { formats, origin, request, json, validate, validateURL };
 })();

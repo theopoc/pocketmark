@@ -1,0 +1,227 @@
+.sessions-titlebar,
+.sessions-footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.sessions-titlebar {
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+}
+.sessions-titlebar h1 {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.8px;
+  line-height: 1.1;
+}
+@media (max-width: 600px) {
+  .sessions-titlebar h1 {
+    font-size: 26px;
+  }
+}
+.sessions-titlebar p {
+  margin: 5px 0 0;
+  color: var(--muted);
+}
+.sessions-titlebar .button {
+  flex: none;
+}
+#sessions-list {
+  margin: 24px 0;
+}
+.session-others-title {
+  margin: 24px 0 9px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.session-others-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.session-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  min-height: 72px;
+  min-width: 0;
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--paper);
+}
+.session-device-button,
+.session-quiet {
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+}
+.session-device-button {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  flex: 1;
+  min-width: 0;
+  gap: 13px;
+  padding: 4px 0;
+  text-align: left;
+}
+.session-browser-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--muted);
+}
+.session-browser-icon svg {
+  width: 24px;
+  height: 24px;
+}
+.session-identity {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  overflow-wrap: anywhere;
+}
+.session-identity strong {
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+.session-device-button:hover strong,
+.session-quiet:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.session-meta {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.session-current {
+  color: var(--secondary-link);
+  font-weight: 550;
+}
+.session-current::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: 1px;
+}
+.session-quiet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 3px;
+  font-size: 13px;
+  font-weight: 550;
+}
+.session-end {
+  flex: none;
+}
+.session-end:is(:hover, :focus-visible) {
+  color: var(--danger);
+}
+.sessions-footer {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.sessions-footer .session-quiet {
+  color: var(--muted);
+  font-size: 12px;
+}
+.sessions-footer strong {
+  color: var(--ink);
+  font-weight: 550;
+}
+.sessions-footer .icon {
+  width: 14px;
+  height: 14px;
+}
+.sessions-settings
+  :is(#sessions-feedback, #sessions-error, #session-idle-error):empty {
+  margin: 0;
+}
+#session-idle-form .dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+#session-idle-form .small {
+  margin: 2px 0 0;
+}
+#session-details-body .dialog-heading {
+  margin-bottom: 4px;
+}
+#session-details-body .session-card-metadata {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+  margin: 18px 0;
+  font-variant-numeric: tabular-nums;
+}
+.session-card-metadata dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+.session-card-metadata dd {
+  margin: 2px 0 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.session-card-details {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+}
+.session-card-details summary {
+  width: fit-content;
+  min-height: 32px;
+  align-content: center;
+  cursor: pointer;
+  font-size: 13px;
+}
+.session-card-details p {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .sessions-titlebar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+    padding-bottom: 17px;
+  }
+  .session-card {
+    padding: 8px 12px;
+  }
+  .session-device-button {
+    gap: 10px;
+  }
+  #sessions-list {
+    margin-top: 17px;
+  }
+  .session-quiet,
+  .session-card-details summary,
+  .sessions-settings .button {
+    min-height: 44px;
+  }
+}

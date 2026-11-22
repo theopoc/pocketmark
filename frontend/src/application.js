@@ -1,9 +1,10 @@
+import { bindDialogBackdrop } from "./lib/dialog-backdrop";
 import { disposeRegions } from "./lib/render.jsx";
 import { createSettings } from "./features/settings/controller.js";
 import { createLifecycle } from "./lib/lifecycle.js";
 import {
   renderBreadcrumbs,
-  renderFilter,
+  renderFilters,
   renderCollectionNavigation,
   renderFrequentTags,
 } from "./features/library/navigation";
@@ -15,6 +16,7 @@ import PocketmarkBulk from "./features/bulk.js";
 import PocketmarkSelection from "./features/selection.js";
 import PocketmarkTagPicker from "./features/tag-picker.js";
 import PocketmarkSecurity from "./features/security.js";
+import { renderSessions } from "./features/settings/sessions.jsx";
 import PocketmarkSelect from "../../internal/webui/static/select.js";
 import PocketmarkThemeSwitch from "../../internal/webui/static/theme-switch.js";
 import PocketmarkNameLimit from "../../internal/webui/static/name-limit.js";
@@ -34,7 +36,7 @@ export function createApplication() {
 
     filter: "all",
     collection: null,
-    tag: "",
+    activeTags: [],
     query: "",
     page: 1,
     pageSize: 40,
@@ -52,6 +54,7 @@ export function createApplication() {
     toastActionPending = false;
   let expandedBookmarkActions = null;
   const expandedBookmarkTags = new Set();
+  let frequentTags = [];
   let searchTimer;
   let tagsTimer;
   let tagsPage = 1;
@@ -121,15 +124,36 @@ export function createApplication() {
     const restored = workspace.readRoute(location.search);
     if (
       state.settingsSection &&
-      (state.mfaManagementBusy || state.deferredLogin) &&
-      restored.settingsSection !== state.settingsSection
+      (settings.keyValueProtected() || settings.passwordChangePending())
     ) {
-      history.replaceState(
-        { ...history.state },
-        "",
-        location.pathname + workspace.routeSearch(route()),
-      );
+      // Keep the dialog and the original Back destination until the operation finishes.
+      const current = location.pathname + workspace.routeSearch(route());
+      if (current !== location.pathname + location.search)
+        history.pushState({ ...history.state }, "", current);
       return;
+    }
+    const changingSection =
+      state.settingsSection &&
+      restored.settingsSection !== state.settingsSection;
+    if (changingSection) {
+      const leavingSettings = !restored.settingsSection;
+      const needsConfirmation =
+        $("mfa-manage-dialog").open ||
+        (leavingSettings && !$("mfa-manage-codes").hidden);
+      const blocked =
+        state.mfaManagementBusy ||
+        state.deferredLogin ||
+        (needsConfirmation &&
+          !(await settings.allowAccountNavigation(leavingSettings)));
+      if (request !== routeRequest) return;
+      if (blocked) {
+        history.replaceState(
+          { ...history.state },
+          "",
+          location.pathname + workspace.routeSearch(route()),
+        );
+        return;
+      }
     }
     const wasSettings = Boolean(state.settingsSection);
     if (!wasSettings && restored.settingsSection)
@@ -142,7 +166,7 @@ export function createApplication() {
     Object.assign(state, {
       filter: restored.filter,
       collection: restored.collection,
-      tag: restored.tag,
+      activeTags: restored.activeTags,
       query: restored.query,
       page: restored.page,
       sort: restored.sort,
@@ -159,7 +183,8 @@ export function createApplication() {
     reader.close();
     bulk.close();
     document.querySelectorAll("dialog[open]").forEach((dialog) => {
-      dialog.close();
+      if (dialog.id !== "mfa-manage-dialog" || state.settingsSection !== "2fa")
+        dialog.close();
     });
     if (state.settingsSection) {
       lifecycle.cancelTimeout(state.timer);
@@ -168,14 +193,16 @@ export function createApplication() {
       if (!wasSettings) await loadSettings();
       return;
     }
+    if (!initial) {
+      updateHeading();
+      $(showingTags ? "tags-title" : "page-title").focus({
+        preventScroll: true,
+      });
+    }
     await refresh();
     if (request !== routeRequest) return;
     if (showingTags) await loadTagDirectory();
     if (request !== routeRequest) return;
-    if (!initial)
-      $(showingTags ? "tags-title" : "page-title").focus({
-        preventScroll: true,
-      });
     requestAnimationFrame(() => {
       if (request === routeRequest)
         window.scrollTo({ top: scroll, behavior: "instant" });
@@ -200,8 +227,11 @@ export function createApplication() {
   lifecycle.listen(window, "beforeunload", (event) => {
     if (
       drafts.size ||
+      settings.keyValueProtected() ||
+      settings.passwordChangePending() ||
       state.mfaManagementBusy ||
-      (Boolean(state.settingsSection) && !$("mfa-manage-codes").hidden)
+      (Boolean(state.settingsSection) &&
+        (!$("mfa-manage-codes").hidden || !$("mfa-manage-enrollment").hidden))
     ) {
       event.preventDefault();
       event.returnValue = "";
@@ -266,10 +296,16 @@ export function createApplication() {
 
   function applyTheme(theme) {
     const dark = theme === "dark";
+    document.querySelectorAll("[data-settings-theme]").forEach((button) => {
+      button.setAttribute(
+        "aria-pressed",
+        String(button.dataset.settingsTheme === theme),
+      );
+    });
     document.documentElement.dataset.theme = theme;
     document.querySelector('meta[name="theme-color"]').content = dark
-      ? "#15161b"
-      : "#ffffff";
+      ? "#0d1015"
+      : "#f2f4f8";
     document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
       button.setAttribute("aria-pressed", String(dark));
       button.setAttribute("aria-label", dark ? "Dark mode" : "Light mode");
@@ -288,17 +324,21 @@ export function createApplication() {
     apply: applyTheme,
   });
   applyTheme(themeSwitch.requested);
-  document.querySelectorAll("[data-theme-toggle]").forEach((button) =>
-    lifecycle.listen(button, "click", () => {
-      const theme = themeSwitch.requested === "dark" ? "light" : "dark";
-      themeSwitch.set(theme);
-      try {
-        localStorage.setItem("pocketmark-theme", theme);
-      } catch {
-        /* Keep the session choice when storage is unavailable. */
-      }
-    }),
-  );
+  document
+    .querySelectorAll("[data-theme-toggle], [data-settings-theme]")
+    .forEach((button) =>
+      lifecycle.listen(button, "click", () => {
+        const theme =
+          button.dataset.settingsTheme ||
+          (themeSwitch.requested === "dark" ? "light" : "dark");
+        themeSwitch.set(theme);
+        try {
+          localStorage.setItem("pocketmark-theme", theme);
+        } catch {
+          /* Keep the session choice when storage is unavailable. */
+        }
+      }),
+    );
 
   let libraryView = "list";
   try {
@@ -336,6 +376,9 @@ export function createApplication() {
   );
   const sidebarRail = document.createElement("div");
   sidebarRail.className = "sidebar-rail";
+  const hoverOpenDelay = 160;
+  const hoverCloseDelay = 320;
+  let hoverTimer;
   let sidebarFixed = false;
   try {
     sidebarFixed = localStorage.getItem("pocketmark-sidebar") === "fixed";
@@ -359,6 +402,7 @@ export function createApplication() {
     );
   }
   function arrangeNavigation() {
+    resetSidebarReveal();
     navigationHost.hidden = false;
     if (navigation.open) navigation.close();
     closeWorkspacePopover();
@@ -380,11 +424,8 @@ export function createApplication() {
   }
   lifecycle.listen($("sidebar-mode"), "click", () => {
     sidebarFixed = !sidebarFixed;
-    if (!sidebarFixed) {
-      sidebarRail.classList.toggle("dismissed", sidebarRail.matches(":hover"));
-      sidebarRail.classList.remove("revealed");
-      $("open-navigation").focus({ preventScroll: true });
-    } else sidebarRail.classList.remove("dismissed");
+    resetSidebarReveal();
+    if (!sidebarFixed) $("open-navigation").focus({ preventScroll: true });
     try {
       localStorage.setItem(
         "pocketmark-sidebar",
@@ -395,12 +436,33 @@ export function createApplication() {
     }
     renderSidebarMode();
   });
-  lifecycle.listen(sidebarRail, "pointerleave", () =>
-    sidebarRail.classList.remove("dismissed"),
-  );
+  function resetSidebarReveal() {
+    lifecycle.cancelTimeout(hoverTimer);
+    sidebarRail.classList.remove("hover-open", "revealed");
+  }
+  lifecycle.listen(sidebarRail, "pointerenter", (event) => {
+    if (sidebarFixed || event.pointerType === "touch") return;
+    lifecycle.cancelTimeout(hoverTimer);
+    // Catch a retreating panel immediately when the pointer returns to it.
+    if (getComputedStyle(sidebar).visibility === "visible")
+      sidebarRail.classList.add("hover-open");
+    else
+      hoverTimer = lifecycle.timeout(
+        () => sidebarRail.classList.add("hover-open"),
+        hoverOpenDelay,
+      );
+  });
+  lifecycle.listen(sidebarRail, "pointerleave", (event) => {
+    if (event.pointerType === "touch") return;
+    lifecycle.cancelTimeout(hoverTimer);
+    if (sidebarRail.classList.contains("hover-open"))
+      hoverTimer = lifecycle.timeout(
+        () => sidebarRail.classList.remove("hover-open"),
+        hoverCloseDelay,
+      );
+  });
   lifecycle.listen(sidebar, "focusout", (event) => {
-    if (!sidebar.contains(event.relatedTarget))
-      sidebarRail.classList.remove("revealed");
+    if (!sidebar.contains(event.relatedTarget)) resetSidebarReveal();
   });
   lifecycle.listen(desktopNavigation, "change", arrangeNavigation);
   const workspaceButton = $("workspace-button");
@@ -437,7 +499,7 @@ export function createApplication() {
   function closeNavigation() {
     closeWorkspacePopover();
     if (desktopNavigation.matches) {
-      sidebarRail.classList.remove("revealed");
+      resetSidebarReveal();
       if (sidebar.contains(document.activeElement))
         $("main-content").focus({ preventScroll: true });
       return;
@@ -458,6 +520,22 @@ export function createApplication() {
     $("close-navigation").focus();
   });
   lifecycle.listen($("close-navigation"), "click", closeNavigation);
+  lifecycle.listen(document, "keydown", (event) => {
+    if (
+      event.key !== "Escape" ||
+      event.defaultPrevented ||
+      sidebarFixed ||
+      !desktopNavigation.matches ||
+      !sidebarRail.matches(".hover-open, .revealed, :focus-within") ||
+      document.querySelector("dialog[open], :popover-open")
+    )
+      return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    resetSidebarReveal();
+    if (sidebar.contains(document.activeElement))
+      $("open-navigation").focus({ preventScroll: true });
+  });
   lifecycle.listen(navigation, "cancel", (event) => {
     event.preventDefault();
     closeNavigation();
@@ -581,6 +659,7 @@ export function createApplication() {
       );
       renderSettings();
       if (!state.mfaManagementBusy) {
+        settings.showIssuedCodes();
         document
           .querySelectorAll("[data-settings-panel]")
           .forEach((section) => {
@@ -614,6 +693,7 @@ export function createApplication() {
     renderedLibraryRoute = null;
     libraryUnavailable = true;
     expandedBookmarkTags.clear();
+    frequentTags = [];
     state.links = [];
     bulk.clear();
     state.request++;
@@ -684,13 +764,19 @@ export function createApplication() {
           $("login-error").textContent = workspace.requestFailure(401);
       }
       const message =
-        response.status === 401 && loginPath
-          ? body?.error || "Check your credentials, then try again."
-          : workspace.requestFailure(
-              response.status,
-              body?.error,
-              loginPath ? body?.code : "",
-            );
+        response.status === 502 &&
+        ((path === "/api/backups/test" &&
+          body?.code === "backup_probe_failed") ||
+          (path === "/api/backups/telegram/test" &&
+            body?.code === "telegram_test_failed"))
+          ? body.error
+          : response.status === 401 && loginPath
+            ? body?.error || "Check your credentials, then try again."
+            : workspace.requestFailure(
+                response.status,
+                body?.error,
+                loginPath ? body?.code : "",
+              );
       const error = new Error(message);
       error.status = response.status;
       throw error;
@@ -700,8 +786,10 @@ export function createApplication() {
 
   const security = PocketmarkSecurity.create({
     api,
+    renderSessions,
+    confirmAction,
     toast,
-    onSessionExpired: showLogin,
+    signOutCurrent: openLogoutDialog,
   });
 
   const reader = PocketmarkReader.create({
@@ -709,7 +797,7 @@ export function createApplication() {
     drafts,
     toast,
     confirmAction,
-    onEdit: openEditor,
+    breadcrumbs: libraryBreadcrumbs,
     onChange: () => refresh(true),
     onSessionExpired: showLogin,
   });
@@ -821,7 +909,6 @@ export function createApplication() {
   }
 
   function currentTitle() {
-    if (state.tag) return `#${state.tag}`;
     if (state.filter === "collection") return collectionLabel(state.collection);
     return {
       all: "All bookmarks",
@@ -841,9 +928,7 @@ export function createApplication() {
     { passive: true },
   );
 
-  function renderBreadcrumb() {
-    const root = $("breadcrumb"),
-      key = focusedKey(root);
+  function libraryBreadcrumbs() {
     const crumbs = [
       {
         label: "My library",
@@ -869,7 +954,7 @@ export function createApplication() {
         key: "tags",
         action: () => $("all-tags").click(),
       });
-    } else if (!state.tag && state.filter === "collection") {
+    } else if (state.filter === "collection") {
       const seen = new Set();
       let collection = state.collections.find(
         (item) => String(item.id) === String(state.collection),
@@ -898,9 +983,16 @@ export function createApplication() {
       crumbs.push({
         label: currentTitle(),
         key: "current",
-        action: () => selectFilter(state.filter, state.collection, state.tag),
+        action: () => selectFilter(state.filter, state.collection),
       });
     }
+    return crumbs;
+  }
+
+  function renderBreadcrumb() {
+    const root = $("breadcrumb"),
+      key = focusedKey(root);
+    const crumbs = libraryBreadcrumbs();
     const signature = JSON.stringify(
       crumbs.map((crumb) => [crumb.key, crumb.label]),
     );
@@ -936,43 +1028,35 @@ export function createApplication() {
       unread: "Your reading list, ready when you are.",
       collection: "Bookmarks organized in this collection.",
     };
-    $("page-subtitle").textContent = state.tag
-      ? `Bookmarks tagged #${state.tag}.`
-      : descriptions[state.filter];
+    $("page-subtitle").textContent = descriptions[state.filter];
     document.querySelectorAll("[data-filter]").forEach((button) => {
-      const active =
-        !showingTags && !state.tag && button.dataset.filter === state.filter;
+      const active = !showingTags && button.dataset.filter === state.filter;
       button.classList.toggle("active", active);
       if (active) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
     });
-    document.querySelectorAll("[data-quick-filter]").forEach((button) => {
-      button.setAttribute(
-        "aria-pressed",
-        String(
-          !showingTags &&
-            !state.tag &&
-            button.dataset.quickFilter === state.filter,
-        ),
-      );
+    quickFilters.forEach((radio) => {
+      radio.checked = !showingTags && radio.value === state.filter;
     });
-    renderActiveFilters();
   }
 
   function renderActiveFilters() {
-    const root = $("active-filters"),
-      key = focusedKey(root);
-    renderFilter(root, state.query, () => {
-      lifecycle.cancelTimeout(searchTimer);
-      state.query = "";
-      $("search").value = "";
-      state.page = 1;
-      commitRoute();
-      refresh();
-      $("page-title").focus();
+    const root = $("active-filters");
+    renderFilters(root, {
+      query: state.query,
+      activeTags: state.activeTags,
+      onClearSearch: () => {
+        lifecycle.cancelTimeout(searchTimer);
+        state.query = "";
+        $("search").value = "";
+        state.page = 1;
+        commitRoute();
+        refresh();
+        (root.querySelector("button") || $("page-title")).focus();
+      },
+      onRemoveTag: toggleTagFilter,
     });
-    root.hidden = !state.query;
-    restoreFocus(root, key);
+    root.hidden = !state.query && !state.activeTags.length;
   }
 
   function focusedKey(root) {
@@ -1000,7 +1084,7 @@ export function createApplication() {
   function selectFilter(
     filter,
     collection = null,
-    tag = "",
+    activeTags = [],
     focusHeading = true,
   ) {
     lifecycle.cancelTimeout(searchTimer);
@@ -1010,7 +1094,7 @@ export function createApplication() {
     showingTags = false;
     state.filter = filter;
     state.collection = collection;
-    state.tag = tag;
+    state.activeTags = activeTags;
     state.page = 1;
     bulk.clear();
     commitRoute();
@@ -1020,6 +1104,23 @@ export function createApplication() {
     renderCollections();
     refresh();
     if (focusHeading) $("page-title").focus();
+  }
+
+  function toggleTagFilter(name) {
+    const index = state.activeTags.indexOf(name);
+    const tags =
+      index < 0
+        ? [...state.activeTags, name]
+        : state.activeTags.filter((tag) => tag !== name);
+    selectFilter(state.filter, state.collection, tags, false);
+    const filters = $("active-filters");
+    const chips = filters.querySelectorAll("[data-tag-filter]");
+    (
+      chips[index] ||
+      chips[tags.length - 1] ||
+      filters.querySelector("button") ||
+      $("page-title")
+    ).focus();
   }
 
   function orderedCollections() {
@@ -1100,11 +1201,14 @@ export function createApplication() {
     restoreFocus($("collections"), key);
   }
 
-  function renderTags(tags) {
-    $("frequent-tags-heading").hidden = !tags.length;
+  function renderTags() {
+    $("frequent-tags-heading").hidden = !frequentTags.length;
     const key = focusedKey($("tags"));
-    renderFrequentTags($("tags"), tags, state.tag, (name) =>
-      selectFilter("all", null, state.tag === name ? "" : name),
+    renderFrequentTags(
+      $("tags"),
+      frequentTags,
+      state.activeTags,
+      toggleTagFilter,
     );
     restoreFocus($("tags"), key);
   }
@@ -1202,12 +1306,10 @@ export function createApplication() {
           "aria-label",
           `${tag.count} bookmark${tag.count === 1 ? "" : "s"}`,
         );
-        button.append(name, count, icon("chevron-right"));
-        lifecycle.listen(button, "click", () => {
-          lifecycle.cancelTimeout(searchTimer);
-          selectFilter("all", null, tag.name);
-          $("page-title").focus();
-        });
+        const active = state.activeTags.includes(tag.name);
+        button.setAttribute("aria-pressed", String(active));
+        button.append(name, count, icon(active ? "check" : "chevron-right"));
+        lifecycle.listen(button, "click", () => toggleTagFilter(tag.name));
         sections.get(tag.letter).append(button);
       }
       renderTagAlphabet(result.groups, jump || result.tags[0]?.letter);
@@ -1380,12 +1482,13 @@ export function createApplication() {
       revision: state.request,
       view: libraryView,
       query: state.query,
+      activeTags: state.activeTags,
       expandedActions: expandedBookmarkActions,
       expandedTags: expandedBookmarkTags,
       onOpen: (link) => reader.open(link.id),
       onEdit: openEditor,
       onUpdate: updateLink,
-      onTag: (name) => selectFilter("all", null, name),
+      onTag: toggleTagFilter,
       onMoreTags: (link) => {
         expandedBookmarkTags.add(link.id);
         renderLinks();
@@ -1410,7 +1513,8 @@ export function createApplication() {
     grid.hidden = libraryUnavailable || libraryLoading;
     $("empty-state").hidden =
       libraryUnavailable || libraryLoading || state.links.length > 0;
-    const filtered = !!state.query || state.filter !== "all" || !!state.tag;
+    const filtered =
+      !!state.query || state.filter !== "all" || state.activeTags.length > 0;
     $("empty-title").textContent = filtered
       ? "No bookmarks found"
       : "Your library starts here";
@@ -1419,10 +1523,12 @@ export function createApplication() {
       : "Save your first bookmark, or bring your existing bookmarks with you.";
     const emptyView =
       !state.query &&
-      (state.tag
+      (state.activeTags.length
         ? [
-            "No bookmarks with this tag",
-            "Choose another tag or return to all bookmarks.",
+            state.activeTags.length === 1
+              ? "No bookmarks with this tag"
+              : "No bookmarks match all selected tags",
+            "Remove a tag filter to broaden your results.",
             false,
             "tag",
           ]
@@ -1511,13 +1617,15 @@ export function createApplication() {
     });
     if (state.query) params.set("fuzzy", "1");
     if (state.query) params.set("q", state.query);
-    if (state.tag) params.set("tag", state.tag);
+    for (const tag of state.activeTags) params.append("tag", tag);
     if (state.filter === "favorite") params.set("favorite", "1");
     if (state.filter === "unread") params.set("unread", "1");
     if (state.filter === "inbox") params.set("collection", "0");
     if (state.filter === "collection")
       params.set("collection", state.collection);
     libraryLoading = renderedLibraryRoute !== params.toString();
+    renderActiveFilters();
+    renderTags();
     if (libraryLoading) {
       if (
         $("bookmark-grid").contains(document.activeElement) ||
@@ -1556,10 +1664,11 @@ export function createApplication() {
         return refresh(quiet);
       }
       state.collections = collections || [];
+      frequentTags = (tags || []).slice(0, 12);
       $("total-count").textContent = stats.links;
       updateHeading();
       renderCollections();
-      renderTags(tags || []);
+      renderTags();
       renderLinks();
       const destination = params.toString();
       if (
@@ -1946,22 +2055,37 @@ export function createApplication() {
 
   const logoutDialog = $("logout-dialog");
   let signingOut = false;
-  lifecycle.listen($("logout-button"), "click", () => {
+  let logoutReturnFocus;
+  function openLogoutDialog(device, trigger) {
+    logoutReturnFocus = trigger || $("open-navigation");
+    const signInMessage = device
+      ? device + " will need to sign in again."
+      : "You’ll need to sign in again to access your library.";
     $("logout-confirm").className = drafts.size
       ? "button danger"
       : "button primary";
     $("logout-description").textContent = drafts.size
-      ? "Signing out will discard the unsaved drafts kept in this tab. You’ll need to sign in again to access your library."
-      : "You’ll need to sign in again to access your library.";
+      ? "Signing out will discard the unsaved drafts kept in this tab. " +
+        signInMessage
+      : signInMessage;
     $("logout-error").textContent = "";
     logoutDialog.showModal();
     $("logout-cancel").focus();
-  });
+  }
+  lifecycle.listen($("logout-button"), "click", () => openLogoutDialog());
   lifecycle.listen(logoutDialog, "cancel", (event) => {
     if (signingOut) event.preventDefault();
   });
   lifecycle.listen(logoutDialog, "close", () => {
-    if (state.signedIn) $("open-navigation").focus({ preventScroll: true });
+    if (state.signedIn) {
+      const target = logoutReturnFocus?.isConnected
+        ? logoutReturnFocus
+        : state.settingsSection === "sessions"
+          ? $("sessions-refresh")
+          : $("open-navigation");
+      target.focus({ preventScroll: true });
+    }
+    logoutReturnFocus = null;
   });
   lifecycle.listen($("logout-form"), "submit", async (event) => {
     event.preventDefault();
@@ -1990,43 +2114,15 @@ export function createApplication() {
         selectFilter(button.dataset.filter),
       ),
     );
-  document.querySelectorAll("[data-quick-filter]").forEach((button) =>
-    lifecycle.listen(button, "click", () => {
-      if (!state.tag && state.filter === button.dataset.quickFilter) return;
-      selectFilter(button.dataset.quickFilter, null, "", false);
-    }),
+  const quickFilters = document.querySelectorAll('input[name="quick-filter"]');
+  quickFilters.forEach((radio) =>
+    lifecycle.listen(radio, "change", () =>
+      selectFilter(radio.value, null, state.activeTags, false),
+    ),
   );
-  // Treat an outside click like Escape so each dialog keeps its cancellation guards.
-  document.querySelectorAll("dialog").forEach((dialog) => {
-    let backdropPress = false;
-    function outside(event) {
-      const rect = dialog.getBoundingClientRect();
-      return (
-        event.target === dialog &&
-        (event.clientX < rect.left ||
-          event.clientX > rect.right ||
-          event.clientY < rect.top ||
-          event.clientY > rect.bottom)
-      );
-    }
-    lifecycle.listen(dialog, "pointerdown", (event) => {
-      backdropPress = event.button === 0 && outside(event);
-    });
-    lifecycle.listen(dialog, "pointercancel", () => {
-      backdropPress = false;
-    });
-    lifecycle.listen(dialog, "close", () => {
-      backdropPress = false;
-    });
-    lifecycle.listen(dialog, "click", (event) => {
-      const dismiss = backdropPress && outside(event);
-      backdropPress = false;
-      if (!dismiss || !dialog.open) return;
-      if (typeof dialog.requestClose === "function") dialog.requestClose();
-      else if (dialog.dispatchEvent(new Event("cancel", { cancelable: true })))
-        dialog.close();
-    });
-  });
+  document
+    .querySelectorAll("dialog")
+    .forEach((dialog) => bindDialogBackdrop(dialog, lifecycle));
   document
     .querySelectorAll(".close-dialog")
     .forEach((button) =>
@@ -2306,25 +2402,32 @@ export function createApplication() {
   } catch {
     /* Optional preference storage. */
   }
+  const shortcutControls = document.querySelectorAll(
+    "[data-settings-shortcuts]",
+  );
   function syncShortcuts() {
-    $("keyboard-shortcuts").checked = shortcutsEnabled;
+    shortcutControls.forEach((control) => {
+      control.checked = shortcutsEnabled;
+    });
     document.querySelectorAll("[data-shortcut-hint]").forEach((node) => {
       node.hidden = !shortcutsEnabled;
     });
   }
   syncShortcuts();
-  lifecycle.listen($("keyboard-shortcuts"), "change", () => {
-    shortcutsEnabled = $("keyboard-shortcuts").checked;
-    try {
-      localStorage.setItem(
-        "pocketmark-shortcuts",
-        shortcutsEnabled ? "on" : "off",
-      );
-    } catch {
-      /* Keep this session's choice. */
-    }
-    syncShortcuts();
-  });
+  shortcutControls.forEach((control) =>
+    lifecycle.listen(control, "change", () => {
+      shortcutsEnabled = control.checked;
+      try {
+        localStorage.setItem(
+          "pocketmark-shortcuts",
+          shortcutsEnabled ? "on" : "off",
+        );
+      } catch {
+        /* Keep this session's choice. */
+      }
+      syncShortcuts();
+    }),
+  );
   lifecycle.listen(document, "keydown", (event) => {
     if (
       !shortcutsEnabled ||
@@ -2337,7 +2440,9 @@ export function createApplication() {
       event.altKey ||
       document.querySelector("dialog[open]") ||
       document.activeElement.isContentEditable ||
-      ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)
+      document.activeElement.matches(
+        'input:not([name="quick-filter"]), textarea, select',
+      )
     )
       return;
     if (event.key === "/") {

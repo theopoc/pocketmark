@@ -1,6 +1,8 @@
 import PocketmarkSelect from "../../../internal/webui/static/select.js";
 import { createLifecycle } from "../lib/lifecycle.js";
-("use strict");
+import { createReaderPage } from "./reader-page.js";
+import { bindReaderTextSize } from "./reader-text-size.js";
+import { loadReaderArticle } from "./reader-article.js";
 
 import workspace from "./workspace.js";
 
@@ -12,7 +14,7 @@ function create(
     drafts,
     toast,
     confirmAction,
-    onEdit,
+    breadcrumbs,
     onChange,
     onSessionExpired,
   },
@@ -22,6 +24,7 @@ function create(
   const document = browser.document,
     window = browser;
   const $ = (id) => document.getElementById(id);
+  const setTextSizeAvailable = bindReaderTextSize($, lifecycle, window);
   const {
     editableBookmark: editable,
     bookmarkDraftKey: draftKey,
@@ -37,13 +40,13 @@ function create(
   };
   let annotationSession = 0;
   let readerAssets = [];
-  let readerLayoutURL = "";
-  let layoutRequest = 0;
+  let articleRequest;
+  let highlighting = false;
+  let capturePending = false;
   let viewerRequest = 0;
   let retryReaderID = null;
   let activeSection = "reader-notes-form";
-  let readingView = false;
-  let filesOpen = false;
+
   let assetsState = "loading";
   const formats = [
     {
@@ -93,24 +96,25 @@ function create(
     $("reader-notebook-toggle").focus({ preventScroll: true });
   });
 
-  function showFiles(open) {
-    filesOpen = open;
-    $("reader-files").hidden = !open;
-    $("reader-files-toggle").setAttribute("aria-expanded", String(open));
-    if (open) showNotebook(false);
+  function setReaderState(kind, title = "", detail = "") {
+    const panel = $("reader-state");
+    panel.dataset.kind = kind;
+    panel.hidden = !title;
+    $("reader-status").textContent = title;
+    $("reader-status-detail").textContent = detail;
   }
-  lifecycle.listen($("reader-files-toggle"), "click", () =>
-    showFiles(!filesOpen),
-  );
-  lifecycle.listen($("reader-files-close"), "click", () => {
-    showFiles(false);
-    $("reader-files-toggle").focus({ preventScroll: true });
-  });
 
-  function emptyReaderText() {
-    return safeURL(state.reading?.url)
-      ? "No article text was saved. Open the original page to read it."
-      : "No article text was saved. Open a saved file under Saved formats → Manage files.";
+  function finishArticleState() {
+    const link = state.reading;
+    if (
+      !link ||
+      link.content ||
+      ["failed", "pending", "processing"].includes(link.status)
+    )
+      return;
+    if (assetsState === "error" || $("reader-rich-article").hasChildNodes())
+      setReaderState("");
+    else setReaderState("empty", "Article text unavailable");
   }
 
   function closeViewer() {
@@ -129,9 +133,10 @@ function create(
     return token === state.readerRequest && $("reader-dialog").open;
   }
   function invalidate() {
+    setTextSizeAvailable(false);
     closeViewer();
     state.readerRequest++;
-    layoutRequest++;
+    articleRequest?.abort();
     annotationSession++;
     state.reading = null;
     state.annotationDraft = null;
@@ -139,8 +144,8 @@ function create(
     retryReaderID = null;
     state.annotations = [];
     readerAssets = [];
-    readerLayoutURL = "";
-    $("reader-layout").removeAttribute("src");
+    $("reader-rich-article").replaceChildren();
+    $("reader-rich-article").hidden = true;
   }
   function close() {
     invalidate();
@@ -160,6 +165,7 @@ function create(
     }
   }
   const readerDialog = $("reader-dialog");
+  const page = createReaderPage({ document, lifecycle, breadcrumbs, close });
   lifecycle.listen(readerDialog, "close", () => {
     if (!readerDialog.open) invalidate();
   });
@@ -175,114 +181,90 @@ function create(
     retryReaderID = null;
     $("reader-retry-open").hidden = true;
     const scroll = recheck ? $("reader-text-panel").scrollTop : 0;
+    $("reader-text-panel").scrollTop = 0;
     const request = ++state.readerRequest;
     annotationSession++;
     state.annotationDraft = null;
     if ($("annotation-dialog").open) $("annotation-dialog").close();
     if (!recheck) {
-      readingView = false;
-      showFiles(false);
-      $("reader-options").open = false;
+      highlighting = false;
       activeSection = "reader-notes-form";
       showNotebook(false);
+      page.reset();
     }
-    $("reader-notebook-toggle").disabled = true;
-    $("reader-text-panel").scrollTop = 0;
-    $("reader-dialog").scrollTop = 0;
-    $("reader-text-panel").hidden = false;
-    $("reader-highlight").hidden = false;
-    layoutRequest++;
+    articleRequest?.abort();
+    capturePending = false;
     state.reading = null;
-    readerAssets = [];
-    readerLayoutURL = "";
-    assetsState = "loading";
-    $("reader-formats").hidden = true;
-    $("reader-formats-error").hidden = true;
-    $("reader-formats-retry").hidden = true;
-    $("reader-formats-retry").disabled = false;
     state.readerSelection = null;
-    $("reader-title").textContent = "Opening your bookmark…";
-    $("reader-domain").textContent = "";
-    $("reader-content").textContent = "";
-    $("reader-content").hidden = true;
-    for (const id of [
-      "reader-section-nav",
-      "reader-reading-bar",
-      "annotations-section",
-      "reader-files",
-    ])
-      $(id).hidden = true;
-    $("reader-layout").hidden = true;
-    $("reader-layout").removeAttribute("src");
-    $("reader-layout-mode").setAttribute("aria-pressed", "false");
-    $("reader-layout-mode").disabled = true;
-    $("reader-size").disabled = false;
-    document
-      .querySelectorAll("[data-highlight-selection]")
-      .forEach((button) => {
-        button.disabled = true;
-      });
-    $("reader-text-mode").setAttribute("aria-pressed", String(readingView));
-    $("annotation-list").replaceChildren();
-    $("asset-list").replaceChildren();
     state.annotations = [];
-    $("reader-status").textContent = "";
-    $("reader-mode-hint").textContent = "Checking saved HTML…";
-    $("reader-recheck").hidden = true;
-    $("reader-retry-capture").hidden = true;
+    readerAssets = [];
+    assetsState = "loading";
+    $("reader-notebook-toggle").disabled = true;
+    readerDialog.scrollTop = 0;
+    $("reader-title").textContent = "Opening your bookmark…";
+    page.setTitle($("reader-title").textContent);
+    for (const field of ["reader-source", "reader-read-time", "reader-content"])
+      $(field).textContent = "";
+    setReaderState("");
+    for (const field of [
+      "reader-content",
+      "reader-rich-article",
+      "reader-highlight",
+      "reader-article-mode",
+      "reader-text-mode",
+      "reader-section-nav",
+      "annotations-section",
+      "reader-formats-error",
+      "reader-formats-retry",
+      "reader-recheck",
+      "reader-retry-capture",
+      "annotations-error",
+      "annotations-retry",
+    ])
+      $(field).hidden = true;
+    $("reader-rich-article").replaceChildren();
+    $("annotation-list").replaceChildren();
     $("reader-retry-capture").removeAttribute("aria-disabled");
-    for (const section of ["annotations", "assets"]) {
-      $(section + "-error").hidden = true;
-      $(section + "-retry").hidden = true;
-      $(section + "-retry").disabled = false;
-    }
+    $("reader-formats-retry").disabled = false;
+    $("annotations-retry").disabled = false;
+    setTextSizeAvailable(false);
+    renderFormats();
     $("reader-notes").value = "";
-    $("asset-file").value = "";
-    $("asset-file").disabled = false;
-    $("asset-upload-button").removeAttribute("aria-disabled");
-    $("asset-upload-button").textContent = "Attach a saved file";
     $("reader-notes-form").querySelector("button[type=submit]").disabled =
       false;
     $("reader-error").textContent = "";
     $("reader-original").hidden = true;
-    $("reader-archive").hidden = true;
-    $("reader-capture").disabled = true;
-    $("reader-edit").disabled = true;
     $("reader-notes-form").hidden = true;
     if (!$("reader-dialog").open) $("reader-dialog").showModal();
     try {
       const link = await api(`/api/links/${id}`);
       if (!isCurrent(request)) return;
       state.reading = link;
-      $("reader-content").hidden = !readingView;
-      $("reader-formats").hidden = false;
-      renderFormats();
-      for (const id of [
-        "reader-section-nav",
-        "reader-reading-bar",
-        "annotations-section",
-      ])
-        $(id).hidden = false;
-      showFiles(filesOpen);
-      $("reader-title").textContent = link.title || link.url;
-      $("reader-domain").textContent =
-        link.type === "file"
-          ? "Saved file"
-          : safeURL(link.url) || domain(link.url);
-      $("reader-capture").hidden = link.type === "file";
+      $("reader-section-nav").hidden = false;
+      $("reader-title").textContent =
+        link.title || safeURL(link.url) || "Saved file";
+      page.setTitle($("reader-title").textContent);
       const url = safeURL(link.url);
+      const source = url ? domain(url) : "Saved file";
+      $("reader-source").textContent = source;
+      showReadTime(link.content);
       $("reader-original").hidden = !url;
       if (url) $("reader-original").href = url;
-      $("reader-archive").hidden = !link.archiveAvailable;
-      $("reader-archive").href = `/api/links/${id}/archive`;
-      $("reader-archive").setAttribute("download", "");
-      $("reader-content").textContent = link.content || emptyReaderText();
-      $("reader-status").textContent =
-        {
-          failed: `Page capture failed. ${workspace.captureFailure(link.error)} Saved files remain available.`,
-          pending: "Capture queued. You can check its status here.",
-          processing: "Capture in progress. You can check its status here.",
-        }[link.status] || "";
+      else $("reader-original").removeAttribute("href");
+      $("reader-content").textContent = link.content || "";
+      $("reader-content").hidden = !link.content;
+      setTextSizeAvailable(true);
+      if (link.status === "failed")
+        setReaderState(
+          "failed",
+          "Capture failed",
+          link.error ? workspace.captureFailure(link.error) : "",
+        );
+      else if (link.status === "pending")
+        setReaderState("pending", "Capture queued");
+      else if (link.status === "processing")
+        setReaderState("pending", "Capture in progress");
+      else if (!link.content) setReaderState("loading", "Opening article…");
       $("reader-retry-capture").hidden =
         link.status !== "failed" || link.type === "file";
       $("reader-recheck").hidden = !["pending", "processing"].includes(
@@ -292,8 +274,6 @@ function create(
       $("reader-notes").value = draft?.notes ?? link.notes ?? "";
       $("reader-notes-draft").hidden =
         !draft || draft.notes === (link.notes || "");
-      $("reader-capture").disabled = false;
-      $("reader-edit").disabled = false;
       selectSection(activeSection);
       $("reader-notebook-toggle").disabled = false;
       document
@@ -314,8 +294,8 @@ function create(
     } catch (error) {
       if (!isCurrent(request)) return;
       $("reader-title").textContent = "Could not open this bookmark";
-      $("reader-error").textContent = error.message;
-      $("reader-status").textContent = error.message;
+      page.setTitle($("reader-title").textContent);
+      setReaderState("failed", error.message || "Bookmark unavailable");
       retryReaderID = id;
       $("reader-retry-open").hidden = false;
     }
@@ -330,48 +310,42 @@ function create(
   });
 
   function readerSectionError(section, error) {
-    $(section + "-error").textContent =
-      `Could not load ${section === "assets" ? "saved files" : "highlights"}. ${error.message}`;
-    $(section + "-error").hidden = false;
-    $(section + "-retry").hidden = false;
     if (section === "assets") {
       assetsState = "error";
+      finishArticleState();
       renderFormats();
-      $("reader-formats-error").textContent =
-        "Could not check saved formats. Retry to see which copies are available.";
+      $("reader-formats-error").textContent = "Could not check saved formats.";
       $("reader-formats-error").hidden = false;
       $("reader-formats-retry").hidden = false;
-      $("reader-mode-hint").textContent =
-        "Could not check saved HTML. Retry saved files below; text view remains available.";
+    } else {
+      $("annotations-error").textContent =
+        `Could not load highlights. ${error.message}`;
+      $("annotations-error").hidden = false;
+      $("annotations-retry").hidden = false;
     }
   }
-  for (const section of ["annotations", "assets"])
-    lifecycle.listen($(section + "-retry"), "click", async () => {
-      if (!state.reading) return;
-      const id = state.reading.id,
-        request = state.readerRequest;
-      $(section + "-retry").disabled = true;
-      if (section === "assets") $("reader-formats-retry").disabled = true;
+  for (const [section, prefix, load] of [
+    ["assets", "reader-formats", loadAssets],
+    ["annotations", "annotations", loadAnnotations],
+  ]) {
+    const retry = $(prefix + "-retry");
+    lifecycle.listen(retry, "click", async () => {
+      if (!state.reading || retry.disabled) return;
+      const request = state.readerRequest;
+      retry.disabled = true;
       try {
-        await (section === "assets"
-          ? loadAssets(id, request)
-          : loadAnnotations(id, request));
+        await load(state.reading.id, request);
         if (isCurrent(request)) {
-          $(section + "-error").hidden = true;
-          $(section + "-retry").hidden = true;
+          $(prefix + "-error").hidden = true;
+          retry.hidden = true;
         }
       } catch (error) {
         if (isCurrent(request)) readerSectionError(section, error);
       } finally {
-        if (isCurrent(request)) {
-          $(section + "-retry").disabled = false;
-          if (section === "assets") $("reader-formats-retry").disabled = false;
-        }
+        if (isCurrent(request)) retry.disabled = false;
       }
     });
-  lifecycle.listen($("reader-formats-retry"), "click", () =>
-    $("assets-retry").click(),
-  );
+  }
   lifecycle.listen($("reader-recheck"), "click", () => {
     if (!state.reading) return;
     $("reader-title").tabIndex = -1;
@@ -422,17 +396,12 @@ function create(
     $("reader-notes").dispatchEvent(new browser.Event("input"));
   });
 
-  lifecycle.listen($("reader-edit"), "click", () => {
-    const link = state.reading;
-    if (!link) return;
-    close();
-    onEdit(link);
-  });
   async function capture() {
-    if (!state.reading || $("reader-capture").disabled) return;
+    if (!state.reading || capturePending || state.reading.type === "file")
+      return;
     const id = state.reading.id,
       request = state.readerRequest;
-    $("reader-capture").disabled = true;
+    capturePending = true;
     $("reader-retry-capture").setAttribute("aria-disabled", "true");
     $("reader-error").textContent = "";
     try {
@@ -440,29 +409,25 @@ function create(
       if (isCurrent(request)) {
         const retryFocused =
           document.activeElement === $("reader-retry-capture");
-        $("reader-status").textContent =
-          "Capture queued. Check its status here without closing the reader.";
+        setReaderState("pending", "Capture queued");
         $("reader-retry-capture").hidden = true;
         $("reader-recheck").hidden = false;
         if (retryFocused) $("reader-recheck").focus({ preventScroll: true });
-        toast("Capture queued.");
       }
       await onChange();
     } catch (error) {
       if (isCurrent(request)) {
-        $("reader-error").textContent = error.message;
         if (!$("reader-retry-capture").hidden)
-          $("reader-status").textContent =
-            `Could not retry capture. ${error.message}`;
+          setReaderState("failed", "Could not retry capture", error.message);
+        else $("reader-error").textContent = error.message;
       }
     } finally {
       if (isCurrent(request)) {
-        $("reader-capture").disabled = false;
+        capturePending = false;
         $("reader-retry-capture").removeAttribute("aria-disabled");
       }
     }
   }
-  lifecycle.listen($("reader-capture"), "click", capture);
   lifecycle.listen($("reader-retry-capture"), "click", capture);
   lifecycle.listen($("reader-notes-form"), "submit", async (event) => {
     event.preventDefault();
@@ -512,7 +477,6 @@ function create(
     root.replaceChildren();
     highlightAnchors.clear();
     if (!content) {
-      root.textContent = emptyReaderText();
       if (focusedMark) {
         root.tabIndex = -1;
         root.focus({ preventScroll: true });
@@ -649,7 +613,7 @@ function create(
         const show = el("button", "text-button", "Show in text");
         lifecycle.listen(show, "click", () => {
           showNotebook(false);
-          $("reader-text-mode").click();
+          setHighlighting(true);
           const currentAnchor = highlightAnchors.get(annotation.id);
           currentAnchor?.focus({ preventScroll: true });
           currentAnchor?.scrollIntoView({ block: "center", behavior: "auto" });
@@ -661,11 +625,7 @@ function create(
     }
     if (!state.annotations.length)
       $("annotation-list").append(
-        el(
-          "p",
-          "reader-section-empty muted",
-          "No highlights yet. Select a passage in the text reader, then choose Highlight. Highlights stay with the captured version.",
-        ),
+        el("p", "reader-section-empty muted", "No highlights yet."),
       );
     if (focusedEdit) {
       if (restoredEdit) restoredEdit.focus({ preventScroll: true });
@@ -727,6 +687,10 @@ function create(
   lifecycle.listen($("annotation-color"), "change", () =>
     $("annotation-form").dispatchEvent(new browser.Event("input")),
   );
+  function clearReaderSelection() {
+    state.readerSelection = null;
+    $("reader-highlight").hidden = true;
+  }
   function rememberReaderSelection() {
     const selection = window.getSelection(),
       root = $("reader-content");
@@ -737,17 +701,39 @@ function create(
     )
       return null;
     const range = selection.getRangeAt(0);
+    const article = $("reader-rich-article");
     if (
-      !root.contains(range.startContainer) ||
-      !root.contains(range.endContainer)
+      ![range.startContainer, range.endContainer].some(
+        (node) => root.contains(node) || article.contains(node),
+      )
     )
       return null;
-    const prefix = range.cloneRange();
-    prefix.selectNodeContents(root);
-    prefix.setEnd(range.startContainer, range.startOffset);
-    const start = Array.from(prefix.toString()).length,
-      quote = range.toString();
+    clearReaderSelection();
+    const quote = range.toString();
     if (!quote.trim()) return null;
+    let start;
+    if (
+      root.contains(range.startContainer) &&
+      root.contains(range.endContainer)
+    ) {
+      const prefix = range.cloneRange();
+      prefix.selectNodeContents(root);
+      prefix.setEnd(range.startContainer, range.startOffset);
+      start = Array.from(prefix.toString()).length;
+    } else {
+      if (
+        !article.contains(range.startContainer) ||
+        !article.contains(range.endContainer)
+      )
+        return null;
+      // Rich copies and extracted text may differ. Only an unambiguous exact
+      // match can be stored at an offset in the canonical Unicode text.
+      const content = state.reading.content;
+      const index = content.indexOf(quote);
+      if (index < 0 || index !== content.lastIndexOf(quote)) return null;
+      start = Array.from(content.slice(0, index)).length;
+    }
+    $("reader-highlight").hidden = false;
     state.readerSelection = {
       linkId: state.reading.id,
       quote,
@@ -757,9 +743,9 @@ function create(
     return state.readerSelection;
   }
   lifecycle.listen(document, "selectionchange", rememberReaderSelection);
-  lifecycle.listen($("reader-content"), "pointerdown", () => {
-    state.readerSelection = null;
-  });
+  for (const target of [$("reader-content"), $("reader-rich-article")]) {
+    lifecycle.listen(target, "pointerdown", clearReaderSelection);
+  }
   document.querySelectorAll("[data-highlight-selection]").forEach((button) => {
     lifecycle.listen(button, "pointerdown", (event) => {
       rememberReaderSelection();
@@ -768,7 +754,12 @@ function create(
     lifecycle.listen(button, "click", () => {
       const passage = rememberReaderSelection() || state.readerSelection;
       if (!passage || passage.linkId !== state.reading?.id) {
-        toast("Select a passage in the text reader first.", true);
+        toast(
+          $("reader-rich-article").hidden
+            ? "Select a passage in the article first."
+            : "Choose Read text for highlighting, then select a passage.",
+          true,
+        );
         return;
       }
       editAnnotation({
@@ -831,89 +822,31 @@ function create(
         event.submitter.disabled = false;
     }
   });
-  lifecycle.listen($("reader-size"), "change", () => {
-    $("reader-content").style.fontSize = `${$("reader-size").value}px`;
-  });
-  function readerMode(layout) {
-    readingView = true;
-    state.readerSelection = null;
-    $("reader-layout").hidden = !layout;
-    $("reader-content").hidden = layout;
-    if (!layout) $("reader-layout").removeAttribute("src");
-    $("reader-layout-mode").setAttribute("aria-pressed", String(layout));
-    $("reader-text-mode").setAttribute("aria-pressed", String(!layout));
-    $("reader-size").disabled = layout;
-    document
-      .querySelectorAll("[data-highlight-selection]")
-      .forEach((button) => {
-        button.disabled = layout || !state.reading?.content;
-      });
+  function showReadTime(text) {
+    const words = text?.match(/\S+/gu)?.length || 0;
+    $("reader-read-time").textContent = words
+      ? `${Math.ceil(words / 220)} min read`
+      : "";
   }
-  function readerAvailability() {
-    if (!state.reading) return;
-    const snapshot = workspace.readerSnapshot(state.reading, readerAssets);
-    readerLayoutURL = snapshot.url;
-    $("reader-layout-mode").disabled = !snapshot.url;
-    $("reader-mode-hint").textContent = snapshot.message;
-    if (!snapshot.url && readingView) readerMode(false);
+  function setHighlighting(active) {
+    highlighting = active && Boolean(state.reading?.content);
+    const rich = $("reader-rich-article");
+    const hasArticle = rich.hasChildNodes();
+    rich.hidden = !hasArticle || highlighting;
+    $("reader-content").hidden = !rich.hidden || !state.reading?.content;
+    $("reader-text-mode").hidden =
+      !hasArticle || highlighting || !state.reading?.content;
+    $("reader-article-mode").hidden = !hasArticle || !highlighting;
+    clearReaderSelection();
   }
-  lifecycle.listen($("reader-layout-mode"), "click", async () => {
-    if (!readerLayoutURL) return;
-    const request = ++layoutRequest,
-      readingRequest = state.readerRequest,
-      url = readerLayoutURL;
-    $("reader-layout-mode").disabled = true;
-    $("reader-mode-hint").textContent = "Opening formatted view…";
-    try {
-      const response = await browser.fetch(url, {
-        method: "HEAD",
-        credentials: "same-origin",
-      });
-      if (
-        request !== layoutRequest ||
-        !isCurrent(readingRequest) ||
-        url !== readerLayoutURL
-      )
-        return;
-      if (response.status === 401) {
-        expireSession();
-        return;
-      }
-      if (!response.ok)
-        throw new Error(
-          "Formatted view is unavailable. Read the text or retry after saving an HTML capture.",
-        );
-      $("reader-layout").src = url;
-      readerMode(true);
-      $("reader-layout").scrollIntoView({
-        block: "start",
-        behavior: "instant",
-      });
-      $("reader-layout").focus({ preventScroll: true });
-      $("reader-mode-hint").textContent =
-        "Formatted page · Text size and highlighting are available in Text & highlights.";
-    } catch (error) {
-      if (
-        request !== layoutRequest ||
-        !isCurrent(readingRequest) ||
-        url !== readerLayoutURL
-      )
-        return;
-      readerMode(false);
-      $("reader-mode-hint").textContent = error.message;
-    } finally {
-      if (
-        request === layoutRequest &&
-        isCurrent(readingRequest) &&
-        url === readerLayoutURL
-      )
-        $("reader-layout-mode").disabled = !readerLayoutURL;
-    }
-  });
   lifecycle.listen($("reader-text-mode"), "click", () => {
-    layoutRequest++;
-    readerMode(false);
-    readerAvailability();
+    setHighlighting(true);
+    showNotebook(false);
+    $("reader-content").focus({ preventScroll: true });
+  });
+  lifecycle.listen($("reader-article-mode"), "click", () => {
+    setHighlighting(false);
+    $("reader-rich-article").focus({ preventScroll: true });
   });
   const previewable = (asset) =>
     [
@@ -926,9 +859,7 @@ function create(
     ].includes(asset.mediaType);
   function previewAssets() {
     const assets = readerAssets.filter(previewable).sort((a, b) => b.id - a.id);
-    // The structural endpoint prefers HTML attachments, so only use it for
-    // the basic archive when no HTML attachment exists. Its source download
-    // remains available under Reading options even when attachments exist.
+    // The simplified viewer serves the latest HTML attachment ahead of the basic archive.
     if (
       assetsState === "ready" &&
       state.reading?.archiveAvailable &&
@@ -943,43 +874,53 @@ function create(
     return assets;
   }
   function renderFormats() {
-    let available = 0;
+    const assets = previewAssets();
     for (const format of formats) {
-      const copies = previewAssets().filter(format.matches);
-      const button = $("reader-format-" + format.key);
-      button.disabled = !copies.length;
-      button.hidden = !copies.length;
-      if (copies.length) available++;
-      button.setAttribute("data-saved", String(!!copies.length));
-      const status = copies.length
-        ? copies.length > 1
-          ? `Saved · ${copies.length} copies`
-          : "Saved"
-        : assetsState === "loading"
+      const copies = assets.filter(format.matches);
+      const key = "reader-format-" + format.key;
+      const button = $(key);
+      const wrapper = $(key + "-tool");
+      const available = copies.length > 0;
+      button.disabled = !available;
+      const status =
+        assetsState === "loading"
           ? "Checking…"
           : assetsState === "error"
             ? "Unknown"
             : "Not saved";
-      $("reader-format-" + format.key + "-status").textContent = status;
-      button.removeAttribute("aria-label");
-      button.title = copies.length
-        ? `Open latest saved ${format.name}`
-        : `${format.name}: ${status}`;
+      const label = available
+        ? "Open saved " + format.name
+        : `${format.name} · ${status}`;
+      const hint =
+        copies.length > 1 ? `${label} · ${copies.length} copies` : label;
+      button.setAttribute("aria-label", hint);
+      button.title = hint;
+      $(key + "-status").textContent = hint;
+      wrapper.tabIndex = available ? -1 : 0;
+      if (available) {
+        wrapper.removeAttribute("role");
+        wrapper.removeAttribute("aria-label");
+      } else {
+        wrapper.setAttribute("role", "group");
+        wrapper.setAttribute("aria-label", label);
+      }
     }
     $("reader-formats-summary").textContent =
       assetsState === "loading"
         ? "Checking saved copies…"
-        : assetsState === "error"
-          ? "Some saved copies could not be checked. Available copies are shown below."
-          : available
-            ? ""
-            : "No saved copies yet. Save HTML, attach a file, or open the original page.";
+        : assetsState === "ready" && !assets.length
+          ? "No saved copies yet."
+          : "";
   }
-  for (const format of formats)
-    lifecycle.listen($("reader-format-" + format.key), "click", () => {
+  for (const format of formats) {
+    const button = $("reader-format-" + format.key);
+    lifecycle.listen(button, "click", () => {
       const copies = previewAssets().filter(format.matches);
-      if (copies.length) openAsset(copies[0], copies);
+      if (!copies.length) return;
+      button.focus({ preventScroll: true });
+      openAsset(copies[0], copies);
     });
+  }
   lifecycle.listen($("asset-viewer-close"), "click", closeViewer);
   lifecycle.listen($("asset-viewer"), "close", () => {
     if (!$("asset-viewer").open) closeViewer();
@@ -1012,13 +953,6 @@ function create(
     $("asset-viewer-status").textContent = "Opening saved file…";
     $("asset-viewer-retry").hidden = true;
     $("asset-viewer-retry").className = "text-button";
-    $("asset-viewer-hint").textContent = asset.basicArchive
-      ? "Basic HTML capture shown as a simplified page. Download the original HTML to keep the saved source."
-      : asset.mediaType === "text/html"
-        ? "Saved appearance with embedded styles, images and fonts. Scripts, external resources and navigation are blocked; missing resources stay missing."
-        : asset.mediaType === "application/pdf"
-          ? "PDF preview uses your browser’s built-in viewer. If unavailable, download the file to open it."
-          : "Scroll to explore the saved image.";
     const failed = (message) => {
       if (current()) {
         $("asset-viewer-status").textContent = message;
@@ -1095,7 +1029,7 @@ function create(
     );
     if (asset) $("asset-viewer-status").textContent = asset.name;
   });
-  function openAsset(asset, copies = previewAssets()) {
+  function openAsset(asset, copies) {
     $("asset-viewer-select").replaceChildren(
       ...copies.map((item) => {
         const option = el("option", "", item.name);
@@ -1107,22 +1041,6 @@ function create(
     showAsset(asset.id);
   }
 
-  async function refreshAssetsAfterChange(id, request) {
-    try {
-      await loadAssets(id, request);
-      if (isCurrent(request)) {
-        $("assets-error").hidden = true;
-        $("assets-retry").hidden = true;
-      }
-    } catch (error) {
-      if (!isCurrent(request)) return;
-      readerAssets = [];
-      $("asset-list").replaceChildren();
-      readerAvailability();
-      readerSectionError("assets", error);
-    }
-  }
-
   async function loadAssets(id, request = state.readerRequest) {
     if (!isCurrent(request) || state.reading?.id !== id) return;
     const assets = await api(`/api/links/${id}/assets`);
@@ -1130,120 +1048,38 @@ function create(
     readerAssets = assets || [];
     assetsState = "ready";
     renderFormats();
-    $("reader-formats-error").hidden = true;
-    $("reader-formats-retry").hidden = true;
-    readerAvailability();
-    $("asset-list").replaceChildren();
-    for (const asset of assets || []) {
-      const row = el("div", "asset-item");
-      const download = el("a", "", asset.name);
-      download.href = `/api/assets/${asset.id}`;
-      download.setAttribute("download", "");
-      row.append(
-        download,
-        el("span", "small muted", `${(asset.size / 1024).toFixed(1)} KiB`),
-      );
-      if (previewable(asset)) {
-        const view = el("button", "text-button", "View");
-        view.setAttribute("aria-label", `View ${asset.name}`);
-        lifecycle.listen(view, "click", () => openAsset(asset));
-        row.append(view);
-      }
-      if (asset.mediaType === "text/html" && asset.size <= 2 * 1024 * 1024) {
-        const read = el("button", "text-button", "Read");
-        read.setAttribute("aria-label", `Read ${asset.name}`);
-        lifecycle.listen(read, "click", () => {
-          showFiles(false);
-          showNotebook(false);
-          $("reader-text-panel").focus({ preventScroll: true });
-          $("reader-text-panel").scrollTop = 0;
-          readerLayoutURL = `/api/links/${id}/reader?asset=${asset.id}`;
-          $("reader-layout-mode").disabled = false;
-          $("reader-layout-mode").click();
-        });
 
-        row.append(read);
-      }
-      const remove = el("button", "text-button destructive-action", "Delete");
-      remove.setAttribute("aria-label", `Delete ${asset.name}`);
-      lifecycle.listen(remove, "click", async () => {
-        if (
-          !(await confirmAction(
-            "Delete saved file?",
-            `Delete saved file “${asset.name}”?`,
-            "Delete file",
-          )) ||
-          !isCurrent(request)
-        )
-          return;
-        remove.disabled = true;
-        try {
-          await api(`/api/assets/${asset.id}`, { method: "DELETE" });
-          if (isCurrent(request)) toast("File deleted.");
-          await refreshAssetsAfterChange(id, request);
-        } catch (error) {
-          if (isCurrent(request)) {
-            toast(error.message, true);
-            remove.disabled = false;
-          }
-        }
-      });
-      row.append(remove);
-      $("asset-list").append(row);
-    }
-    if (!assets?.length)
-      $("asset-list").append(
-        el(
-          "p",
-          "reader-section-empty muted",
-          state.reading.archiveAvailable
-            ? "No attached files. The basic HTML capture is available above under Saved formats."
-            : "No attached files yet. Attach a file to keep it with this bookmark.",
-        ),
-      );
+    displaySavedArticle(request);
   }
 
-  lifecycle.listen($("asset-upload-button"), "click", () => {
-    if (!$("asset-file").disabled) $("asset-file").click();
-  });
-  lifecycle.listen($("asset-file"), "change", async () => {
-    const file = $("asset-file").files[0];
-    if (!file || !state.reading) return;
-    const id = state.reading.id,
-      request = state.readerRequest;
-    $("asset-file").disabled = true;
-    $("asset-upload-button").setAttribute("aria-disabled", "true");
-    $("asset-upload-button").textContent = "Uploading file…";
+  async function displaySavedArticle(request) {
+    articleRequest?.abort();
+    const controller = new AbortController();
+    articleRequest = controller;
     try {
-      if (file.size > 20 * 1024 * 1024)
-        throw new Error("Choose a file smaller than 20 MiB.");
-      await api(
-        `/api/links/${id}/assets?name=${encodeURIComponent(file.name)}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              file.type ||
-              (/\.html?$/i.test(file.name)
-                ? "text/html"
-                : "application/octet-stream"),
-          },
-          body: file,
-        },
-      );
-      if (isCurrent(request)) toast("File saved.");
-      await refreshAssetsAfterChange(id, request);
-    } catch (error) {
-      if (isCurrent(request)) toast(error.message, true);
-    } finally {
-      if (isCurrent(request)) {
-        $("asset-file").value = "";
-        $("asset-file").disabled = false;
-        $("asset-upload-button").removeAttribute("aria-disabled");
-        $("asset-upload-button").textContent = "Attach a saved file";
+      const fragment = await loadReaderArticle(state.reading, readerAssets, {
+        browser,
+        signal: controller.signal,
+      });
+      if (!fragment || controller.signal.aborted || !isCurrent(request)) return;
+      const rich = $("reader-rich-article");
+      rich.replaceChildren(fragment);
+      if (!state.reading.content) showReadTime(rich.textContent);
+      if (state.readerSelection) {
+        // A copy can finish loading after the reader started selecting plain text.
+        highlighting = true;
+        $("reader-article-mode").hidden = false;
+      } else {
+        setHighlighting(highlighting);
       }
+    } catch (error) {
+      if (error.status === 401) expireSession();
+      // Text and the independent, sandboxed file viewer stay available.
+    } finally {
+      if (!controller.signal.aborted && isCurrent(request))
+        finishArticleState();
     }
-  });
+  }
   return {
     open: openReader,
     close,

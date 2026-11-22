@@ -52,6 +52,7 @@ export function BookmarkCard({ link, model }) {
   const {
     view,
     query,
+    activeTags,
     expandedActions,
     expandedTags,
     onOpen,
@@ -154,10 +155,12 @@ export function BookmarkCard({ link, model }) {
                 <Button
                   key={name}
                   className="card-tag"
+                  aria-pressed={activeTags.includes(name)}
                   data-focus-key={`link:${link.id}:tag:${name}`}
                   onClick={() => onTag(name)}
                 >
-                  #{name}
+                  {activeTags.includes(name) && <Icon name="check" />}
+                  <span>#{name}</span>
                 </Button>
               ))}
             {(link.tags || []).length > 5 && !expandedTags.has(link.id) && (

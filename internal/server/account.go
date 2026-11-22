@@ -70,12 +70,12 @@ func (a *Server) account(w http.ResponseWriter, r *http.Request) {
 	if !a.requireOwner(w, r) {
 		return
 	}
-	account, err := a.Store.Account(r.Context())
+	profile, err := a.Store.AccountProfile(r.Context())
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		handleError(w, err)
 		return
 	}
-	respond(w, 200, map[string]any{"username": account.Username, "passwordEnabled": account.Hash != ""})
+	respond(w, 200, profile)
 }
 
 func (a *Server) setupStatus(w http.ResponseWriter, r *http.Request) {
@@ -161,7 +161,7 @@ func (a *Server) setAccount(w http.ResponseWriter, r *http.Request) {
 	hash := passwordHash(b.Password, salt)
 	account := store.Account{Username: b.Username, Salt: salt, Hash: hash}
 	value := "v3." + randomSecret()
-	expires, err := a.Store.SaveAccountFromSession(r.Context(), account, requestPrincipal(r).session, a.sessionHash(value), r.UserAgent())
+	expires, err := a.Store.SaveAccountFromSession(r.Context(), account, requestPrincipal(r).session, a.sessionHash(value), a.sessionClient(r))
 	if err != nil {
 		if authFailure(w, "account_operation_failed", err) {
 			return
@@ -268,6 +268,10 @@ func (a *Server) deleteToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := a.Store.DeleteAPIKey(r.Context(), id(r))
+	if errors.Is(err, store.ErrAPIKeyActive) {
+		fail(w, http.StatusConflict, store.ErrAPIKeyActive.Error())
+		return
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		fail(w, 404, "key not found")
 		return
