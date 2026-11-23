@@ -54,7 +54,18 @@ export async function dialogDismissalJourney(page) {
       } else {
         if (page.url() !== libraryURL) await page.goto(libraryURL);
         if (id === 'navigation-dialog') await openNavigation(page);
-        else await dialog.evaluate(node => node.showModal());
+        else {
+          // Re-open until a deadline: a late application render can close the dialog before it paints.
+          const deadline = Date.now() + 5000;
+          let reopened = 0;
+          do {
+            if (await dialog.evaluate(node => { if (node.open) return false; node.showModal(); return true; })) reopened++;
+            if (await dialog.isVisible()) break;
+            await page.waitForTimeout(50);
+          } while (Date.now() < deadline);
+          assert.ok(await dialog.isVisible(), `${id}: dialog opens at ${width}px`);
+          if (reopened > 1) console.warn(`${id}: dialog was closed ${reopened - 1} time(s) right after opening at ${width}px`);
+        }
       }
       // Wait for the entry animation before measuring the visible boundary.
       await dialog.evaluate(async node => { await Promise.all(node.getAnimations().map(animation => animation.finished.catch(() => {}))); });
