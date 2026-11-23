@@ -388,7 +388,7 @@ jobs:
         with:
           sbom: reports/sbom.json
           # renovate: datasource=github-releases depName=anchore/grype
-          grype-version: v0.121.0
+          grype-version: v0.122.0
           severity-cutoff: high
           fail-build: true
           only-fixed: false
