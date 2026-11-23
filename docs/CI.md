@@ -55,7 +55,7 @@ For every tracked change, including documentation, use this delivery procedure:
    outcome, CI result and any blocker.
 
 This procedure is an agent delivery responsibility, not a new GitHub Actions
-merge workflow; eligible Dependabot PRs use the separate automation below.
+merge workflow; eligible Renovate PRs use GitHub's native auto-merge, described below.
 
 For a normal PR, merging updates `main` and may update a Release Please PR. Release Please version PRs still require an explicit publication request before merging: merging one authorizes publication, so review its version and notes first. Release tags matching `v*` cannot be updated or deleted under the separate active tag ruleset.
 
@@ -138,7 +138,7 @@ Databases and session state remain disposable and independent per test.
 
 Actions use full commit SHAs; tool modules, pre-commit hooks and the Gitleaks engine are version-pinned. PR/main CI has read-only permissions and never builds or publishes Docker images. Superseded branch runs are cancelled; release validations are not cancelled by later merges. Coverage, container evidence and release bundles are retained for seven days.
 
-The separate Dependabot workflow only reads verified PR metadata before enabling auto-merge; it never executes PR code. Release Please can maintain version PRs/drafts and dispatch CI on its branch. GitHub publication receives `contents:write`; only release image build/index jobs receive `packages:write`. Publication uses the short-lived `GITHUB_TOKEN` and needs no personal token or additional registry secret.
+No workflow runs the Renovate app or executes PR code for dependency updates; the Quality job only validates its configuration. Release Please can maintain version PRs/drafts and dispatch CI on its branch. GitHub publication receives `contents:write`; only release image build/index jobs receive `packages:write`. Publication uses the short-lived `GITHUB_TOKEN` and needs no personal token or additional registry secret.
 
 The module toolchain baseline is declared in `go.mod`; the Docker builder version is declared separately in `Dockerfile`. Review their alignment when either changes and keep both toolchains patched. A numerically newer Go minor version does not imply its patch level contains every security fix. Govulncheck remains blocking rather than suppressing standard-library reports.
 
@@ -175,7 +175,7 @@ together. Retire.js reads current advisory data and checks embedded libraries
 that npm's top-level Swagger package metadata does not expose. `npm audit` also
 checks the `frontend/`, `e2e/` and `tools/quality/` lockfiles, including Commitlint. High/critical
 findings and scanner errors block; lower severities remain visible for review.
-Dependabot watches all four npm inventories.
+Renovate watches all four npm inventories.
 Neither scanner tools nor their node_modules are embedded in the application.
 
 Reproduce JavaScript SCA locally:
@@ -222,13 +222,11 @@ CI uses the [official Gitleaks action](https://github.com/gitleaks/gitleaks-acti
 
 ## Dependency updates and PR titles
 
-Dependabot checks Actions, Go modules and Docker base images weekly, with at most two open **version-update** PRs per ecosystem (security-update limits are separate). Each ecosystem groups minor and patch updates; major updates remain separate and require manual merge. Keep Actions pinned to full SHAs. Align changes to the Go directive and Docker compiler tag manually, and review the pinned tool versions embedded in `go run`, action inputs and download URLs: these are not all covered by Dependabot. A Docker update passing syntax checks alone is insufficient. [Dependabot options](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference).
+The [Renovate GitHub App](https://github.com/apps/renovate), installed on this repository only, reads `.github/renovate.json5`. It checks npm (`frontend/`, `e2e/`, `tools/security/`, `tools/quality/`), GitHub Actions, Go modules (including `tools/go/`), Docker images, pre-commit hooks and the tool versions annotated with `# renovate: datasource=… depName=…` in workflows. Updates run on Mondays (Europe/Paris). Minor and patch updates share one PR per ecosystem, with at most two open per ecosystem; each major update is its own PR, uncapped. Titles are Renovate's own and always `chore(deps): …`, so they pass Commitlint and never trigger a release. Keep Actions pinned to full SHAs and Docker images to digests (`compose.yaml` keeps the tag for deployments). Renovate raises the `go` directive and the Go builder image together. Review the pinned tools in `go tool` (`tools/go/`), `tools/quality/` and workflow inputs: a passing syntax check alone does not validate a Docker or toolchain update.
 
-Enable the repository's **Allow auto-merge** setting while retaining the active **Protect main** ruleset above. `dependabot-auto-merge.yml` handles PR creation, new commits, reopening and readiness for review. It only accepts non-draft PRs opened by `dependabot[bot]` from this repository. The SHA-pinned official `dependabot/fetch-metadata` action verifies Dependabot's signed commits; verification is never disabled. Its `update-type` is the highest semver change across the PR, so any major update in a group prevents automatic merge. Only explicit `version-update:semver-minor` and `version-update:semver-patch` metadata enable squash auto-merge; unknown or missing metadata fails closed. [Fetch Metadata documentation](https://github.com/dependabot/fetch-metadata/tree/v3.1.0).
+Every update waits seven days after publication (`minimumReleaseAge`), and each npm inventory sets `min-release-age=7` in `.npmrc` so transitive packages and lockfile maintenance obey the same delay. Security updates ignore the schedule and the delay. If npm refuses a fresh transitive security fix, add the package to `min-release-age-exclude` for that update.
 
-The workflow uses `gh pr merge --auto --squash --match-head-commit` with the event's head SHA. GitHub waits for the aggregate required `CI` check, an up-to-date branch and resolved review threads; it has no ruleset bypass. Failed, skipped, cancelled or pending CI cannot authorize merge. Keep the aggregate `CI` check required from the GitHub Actions app with strict branch updates and no bypass actors: the workflow relies on this server-side enforcement. Existing open PRs are evaluated on their next supported PR event after the workflow reaches `main`. As with other operations performed using `GITHUB_TOKEN`, the resulting merge does not trigger push-based CI or Release Please; subsequent eligible pushes to `main` pick up the dependency commits. The PR's complete CI still gates its merge. CI regression tests evaluate the actual eligibility expressions; the aggregate `CI` check provides the merge gate.
-
-`dependabot-update-branch.yml` keeps eligible PRs mergeable: Dependabot rebases only on conflicts, so a PR that is merely behind `main` would wait forever under strict branch updates. On pushes to `main`, hourly and on demand, it selects open same-repository Dependabot PRs with auto-merge enabled, skips any with failed checks, and does nothing while any selected PR has checks running (ignoring checks whose start time is over six hours old or unknown). An up-to-date PR with no `CI` check is only reported as a warning. Otherwise it comments `@dependabot rebase` (counting only its own requests) on the oldest PR that is behind, at most once per 30 minutes; after three requests that left the head unchanged it warns and moves on to the next PR. Updating the branch with `GITHUB_TOKEN` instead leaves the PR's `pull_request` run waiting for manual approval, and a dispatched `CI` run does not satisfy the required check (observed on PR 168), so the workflow relies on Dependabot's own push starting the normal `pull_request` CI and on `dependabot-auto-merge.yml` re-evaluating the PR. Both that and Dependabot honoring a comment from `github-actions[bot]` are assumptions to confirm on the first real run. The hourly schedule is the dependable trigger, with retry, because auto-merges made with `GITHUB_TOKEN` do not start push workflows. The job has `contents: read` and `pull-requests: write` only, and never checks out or executes PR code.
+Enable the repository's **Allow auto-merge** setting while retaining the active **Protect main** ruleset above. Renovate enables GitHub's native squash auto-merge on minor, patch, digest and lockfile PRs; GitHub merges them only when the required `CI` check passes on an up-to-date branch, and Renovate rebases branches that fall behind `main`. Major updates (including a new Go minor and security fixes needing a major bump) carry the `major` label, are never auto-merged, and wait for the owner to review and merge. Keep the aggregate `CI` check required with strict branch updates and no bypass actors: the server-side ruleset, not Renovate, blocks failing PRs. Keep **Dependabot alerts** on, since Renovate reads them for security updates, and **Dependabot security updates** off. Minor and patch updates to Actions and to `tools/quality` (Release Please, expression tests) auto-merge like the rest once CI passes and the seven days elapse; accepted trade-off. The dedicated `renovate-config.yml` workflow validates `.github/renovate.json5` with a pinned `renovate-config-validator`, only when that file or the workflow changes. Quality checks that npm honours `min-release-age` (npm 11.10 or later); it is not a required check on its own.
 
 Commitlint runs in Quality with the conventional configuration and a locked
 CI-only dependency inventory under `tools/quality/`. PR titles reach the CLI via
@@ -270,9 +268,8 @@ Frontend and extension regressions run once in the Web and extension job on ever
 The release expression regression checks use `@actions/expressions` only as a temporary CI/test tool; it is not an application or frontend dependency. They read the expression directly from the workflow and cover missing/empty PR outputs after a version PR is merged, ordinary opened PRs, and malformed output. Reproduce them locally with:
 
 ```sh
-npm install --prefix /tmp/pocketmark-release-expressions --no-save --no-package-lock \
-  --ignore-scripts --no-audit --no-fund @actions/expressions@0.3.61
-ACTIONS_EXPRESSIONS_PATH=/tmp/pocketmark-release-expressions/node_modules/@actions/expressions/dist/index.js \
+npm ci --prefix tools/quality --ignore-scripts --no-audit --no-fund
+ACTIONS_EXPRESSIONS_PATH="$PWD/tools/quality/node_modules/@actions/expressions/dist/index.js" \
   node --test scripts/test_release_expressions.mjs
 ```
 

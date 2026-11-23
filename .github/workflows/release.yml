@@ -145,7 +145,8 @@ jobs:
             label="tested:$REVISION"
             gh label create "$label" --force
             gh pr edit "$PR_NUMBER" --add-label "$label"
-            npx --yes --ignore-scripts --package=release-please@17.3.0 release-please github-release \
+            npm ci --prefix tools/quality --ignore-scripts --no-audit --no-fund
+            npm exec --prefix tools/quality --no -- release-please github-release \
               --repo-url "$GITHUB_REPOSITORY" --target-branch main \
               --config-file release-please-config.json --manifest-file .release-please-manifest.json \
               --label "autorelease: pending,$label" --draft --force-tag-creation --token "$GH_TOKEN"
@@ -264,6 +265,7 @@ jobs:
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         if: needs.tag.outputs.published != 'true' || needs.source.outputs.publish != 'true'
         with:
+          # renovate: datasource=github-releases depName=goreleaser/goreleaser
           version: v2.18.3
           install-only: true
       - name: Package into the draft, verify, then publish
@@ -376,6 +378,7 @@ jobs:
       - uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           image: ${{ needs.source.outputs.image }}@${{ steps.candidate.outputs.digest }}
+          # renovate: datasource=github-releases depName=anchore/syft
           syft-version: v1.55.0
           format: cyclonedx-json
           output-file: reports/sbom.json
@@ -384,6 +387,7 @@ jobs:
       - uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
         with:
           sbom: reports/sbom.json
+          # renovate: datasource=github-releases depName=anchore/grype
           grype-version: v0.121.0
           severity-cutoff: high
           fail-build: true
