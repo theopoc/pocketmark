@@ -61,12 +61,26 @@ For a normal PR, merging updates `main` and may update a Release Please PR. Rele
 
 ### Design review
 
-For interface changes, launch the project-local `design_reviewer` defined in
-[.codex/agents/design_reviewer.toml](../.codex/agents/design_reviewer.toml). Supply
-the request, merge-base, complete diff, validation results and a disposable preview
-or before/after evidence. If named custom agents are unavailable, launch a subagent
-with that file's `developer_instructions`. Apply actionable findings and re-review
-corrections; record inspected surfaces, states and unverified coverage in the PR.
+For interface changes, launch the project-local
+[`design-reviewer`](../.claude/agents/design-reviewer.md) Claude Code subagent.
+Supply the request, merge-base, complete diff, validation results and a disposable
+preview or before/after evidence. Its project hooks in
+[.claude/settings.json](../.claude/settings.json) run
+[scripts/design_review_gate.py](../scripts/design_review_gate.py): the Stop hook
+blocks a Claude turn once for each interface diff against the merge-base with
+`origin/main` (`frontend/`, `internal/webui/`, `extension/`, `DESIGN.md` or the
+README preview, excluding tests) that the named `design-reviewer` subagent has not
+seen, and again after any later edit, so corrections are re-reviewed too. Set
+`POCKETMARK_SKIP_DESIGN_REVIEW=1` only for sessions that are not delivering the
+change.
+
+The reviewer renders changes with
+[scripts/design_preview.py](../scripts/design_preview.py): a disposable
+loopback PostgreSQL cluster, server, MFA account and synthetic bookmarks in a
+private directory outside the repository. It requires `make build` and PostgreSQL 18
+server binaries (`initdb`, `pg_ctl`, `postgres`) on PATH. Apply actionable findings
+and re-review corrections; record inspected surfaces, states and unverified coverage
+in the PR.
 Current design rules belong to [DESIGN.md](../DESIGN.md); generated evidence stays
 outside version control.
 
