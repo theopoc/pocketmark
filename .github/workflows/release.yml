@@ -379,7 +379,7 @@ jobs:
         with:
           image: ${{ needs.source.outputs.image }}@${{ steps.candidate.outputs.digest }}
           # renovate: datasource=github-releases depName=anchore/syft
-          syft-version: v1.55.0
+          syft-version: v1.57.2
           format: cyclonedx-json
           output-file: reports/sbom.json
           upload-artifact: false
