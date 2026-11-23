@@ -46,6 +46,14 @@ services:
     cap_drop:
       - ALL
 
+networks:
+  default:
+    ipam:
+      config:
+        # Fixed subnet: Docker's auto-picked 192.168.0.0/20 can shadow a home LAN
+        # (e.g. 192.168.1.x) and make LAN hosts such as a NAS unreachable.
+        - subnet: 10.201.0.0/24
+
 volumes:
   dev-postgres:
   dev-state:
