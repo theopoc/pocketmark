@@ -173,7 +173,7 @@ For a SQLite library, follow the [migration procedure](MIGRATION_POSTGRESQL.md).
 
 ## Development and verification
 
-Use the [contributor checklist](../AGENTS.md#verification-and-delivery) for local checks and the [architecture map](ARCHITECTURE.md) to find the implementation and its tests. Native CI runs race tests and builds Linux AMD64 and ARM64 binaries. The [release workflow](RELEASE.md#ghcr-images) qualifies the container images. For optional RAM measurements, use the [benchmark workloads](BENCHMARK.md).
+Use the [contributor checklist](../AGENTS.md#development-workflow) for local checks and the [architecture map](ARCHITECTURE.md) to find the implementation and its tests. Native CI runs race tests and builds Linux AMD64 and ARM64 binaries. The [release workflow](RELEASE.md#ghcr-images) qualifies the container images. For optional RAM measurements, use the [benchmark workloads](BENCHMARK.md).
 
 ## Further reading
 
