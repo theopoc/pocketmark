@@ -41,8 +41,8 @@ Use artifacts built from the current clean commit; verification rejects another 
    same executables. One `.goreleaser.yaml` supplies all packaging. Archive and
    checksum verification must pass before the draft is published.
 6. GHCR publication waits for both image candidates and GitHub publication. The
-   version index contains only the two tested digests. Anonymous access denial is
-   checked once for that index. Native qualification then checks the actual tag,
+   version index contains only the two tested digests. Native qualification then
+   checks the actual tag,
    platform, source/version labels and Docker HEALTHCHECK on both architectures;
    it does not repeat the candidate's full application journeys.
 
@@ -106,11 +106,19 @@ The index publishes only `vMAJOR.MINOR.PATCH`, with no moving aliases. Existing
 version tags must already contain the same tested digests. Authorization and
 network failures are never treated as permission to replace an index. Published
 qualification checks the registry and pulled digest, platform, source/version
-labels and an isolated, read-only container's native HEALTHCHECK. The privacy
-check runs once at index level; standalone qualification checks privacy by default.
-GHCR remains private and
-requires authenticated pulls. Workflows publish artifacts; server deployment
-remains manual.
+labels and an isolated, read-only container's native HEALTHCHECK.
+
+The package is public: anyone can pull `ghcr.io/theopoc/pocketmark:vMAJOR.MINOR.PATCH`
+without authenticating. The image is built from only the validated executable and the
+Dockerfile, so it contains no source tree, history, configuration or data; the server
+secret is generated at runtime in the `/data` volume. GHCR package visibility is a
+package setting (**Package settings → Danger Zone → Change visibility**), not something
+the workflow can change or verify: qualification pulls with the workflow token, so it
+passes even if the package reverts to private. After each release, confirm anonymous
+access with `docker logout ghcr.io && docker pull ghcr.io/theopoc/pocketmark:vMAJOR.MINOR.PATCH`.
+Do not add credentials, private
+build arguments or non-public inputs to the image build. Workflows publish artifacts;
+server deployment remains manual.
 
 ### Development and publication flow
 
@@ -124,6 +132,5 @@ flowchart TD
     B --> D["Native image matrix: build, scan and test candidates"]
     GH --> I["Publish GHCR index from tested digests"]
     D --> I
-    I --> P["Anonymous access denied: once per index"]
-    P --> Q["Native qualification matrix: digest, labels and HEALTHCHECK"]
+    I --> Q["Native qualification matrix: digest, labels and HEALTHCHECK"]
 ```

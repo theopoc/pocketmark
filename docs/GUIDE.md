@@ -36,7 +36,7 @@ docker compose up --build -d
 
 Open the same local URL. Compose uses separate named volumes for PostgreSQL and the application work directory and publishes port 8090 on host loopback only. The image runs as UID/GID `10001:10001`; a custom bind-mounted data directory must be writable by that user.
 
-Tagged releases also publish a private multiarchitecture image at `ghcr.io/theopoc/pocketmark:vMAJOR.MINOR.PATCH` for Linux AMD64/ARM64. After authenticating Docker with read access to the package, use that image in place of `build: .` in your Compose configuration. Keep the same volume, port binding and resource/security settings. See [GHCR publication and verification](RELEASE.md#ghcr-images).
+Tagged releases also publish a public multiarchitecture image at `ghcr.io/theopoc/pocketmark:vMAJOR.MINOR.PATCH` for Linux AMD64/ARM64. No registry login is needed to pull it. Use that image in place of `build: .` in your Compose configuration, then update with `docker compose pull`. Keep the same volume, port binding and resource/security settings. See [GHCR publication and verification](RELEASE.md#ghcr-images).
 
 The supplied Compose configuration sets a **128 MiB application container memory limit** and one CPU. This is a deployment limit, not a guarantee that every workload completes within it. See [memory measurement methodology](BENCHMARK.md) for workload boundaries.
 
