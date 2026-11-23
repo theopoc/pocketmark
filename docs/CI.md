@@ -27,7 +27,7 @@ For every tracked change, including documentation, use this delivery procedure:
    merge-base, complete diff and validation results. Apply actionable findings,
    rerun affected checks and re-review corrections until none remain. Interface
    changes also require the [design review](#design-review) below.
-3. Complete the [applicable local checks](../AGENTS.md#verification-and-delivery).
+3. Complete the [applicable local checks](../AGENTS.md#development-workflow).
    Stage only intended files, inspect them for generated evidence and scan the
    staged changes for secrets with the pinned, redacted Gitleaks hook:
 
@@ -142,7 +142,7 @@ No workflow runs the Renovate app or executes PR code for dependency updates; th
 
 The module toolchain baseline is declared in `go.mod`; the Docker builder version is declared separately in `Dockerfile`. Review their alignment when either changes and keep both toolchains patched. A numerically newer Go minor version does not imply its patch level contains every security fix. Govulncheck remains blocking rather than suppressing standard-library reports.
 
-The deterministic container smoke test does not depend on public websites. The separate live-page workload in [BENCHMARK.md](BENCHMARK.md) measures RAM and external capture behavior; CI smoke checks are not performance measurements or native mobile UI tests. Keep runtime data, tool sessions, downloaded clients, build output and generated validation evidence out of commits, following [AGENTS.md](../AGENTS.md#verification-and-delivery). Record check results and evidence limits in the PR; use ignored `reports/` or `artifacts/` directories for local outputs.
+The deterministic container smoke test does not depend on public websites. The separate live-page workload in [BENCHMARK.md](BENCHMARK.md) measures RAM and external capture behavior; CI smoke checks are not performance measurements or native mobile UI tests. Keep runtime data, tool sessions, downloaded clients, build output and generated validation evidence out of commits, following [AGENTS.md](../AGENTS.md#development-workflow). Record check results and evidence limits in the PR; use ignored `reports/` or `artifacts/` directories for local outputs.
 
 ## Security analysis boundaries
 
@@ -216,7 +216,7 @@ Hooks run on staged files before each commit. The first run creates isolated hoo
 | Gofmt and JavaScript syntax | Go checks, compiled React/shadcn assets, frontend ESLint/formatting and extension syntax. |
 | Gitleaks | Scan the staged diff for secrets with redacted output before they enter history. |
 
-Full Go vet/race tests, extension tests, builds, actionlint and container tests stay outside the hooks to keep commits fast and avoid requiring Docker or release tools for every edit. Run the applicable local checks required by [AGENTS.md](../AGENTS.md#verification-and-delivery); hooks complement local validation and CI rather than replacing them. Run `pre-commit autoupdate` deliberately and review version changes; Renovate's pre-commit manager is disabled because it reads the SHA-pinned `rev` as a version and proposes downgrades.
+Full Go vet/race tests, extension tests, builds, actionlint and container tests stay outside the hooks to keep commits fast and avoid requiring Docker or release tools for every edit. Run the applicable local checks required by [AGENTS.md](../AGENTS.md#development-workflow); hooks complement local validation and CI rather than replacing them. Run `pre-commit autoupdate` deliberately and review version changes; Renovate's pre-commit manager is disabled because it reads the SHA-pinned `rev` as a version and proposes downgrades.
 
 CI uses the [official Gitleaks action](https://github.com/gitleaks/gitleaks-action), pinned to a full commit SHA, with engine version 8.30.1. It selects the action's `workflow_dispatch` scan mode explicitly for every caller, scanning the complete checked-out history at the selected ref rather than the event's PR/push range. Comments, SARIF uploads and summaries are disabled; output remains redacted and repository permissions remain read-only. Personal-account repositories do not require a Gitleaks action license; organization-owned repositories require `GITLEAKS_LICENSE`.
 
