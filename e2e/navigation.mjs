@@ -54,7 +54,16 @@ export async function dialogDismissalJourney(page) {
       } else {
         if (page.url() !== libraryURL) await page.goto(libraryURL);
         if (id === 'navigation-dialog') await openNavigation(page);
-        else await dialog.evaluate(node => node.showModal());
+        else {
+          // Re-open if a late application render closed the dialog before it became visible.
+          await page.waitForLoadState('networkidle');
+          for (let attempt = 0; attempt < 3; attempt++) {
+            await dialog.evaluate(node => { if (!node.open) node.showModal(); });
+            if (await dialog.isVisible()) break;
+            await page.waitForTimeout(100);
+          }
+          await dialog.waitFor({ state: 'visible' });
+        }
       }
       // Wait for the entry animation before measuring the visible boundary.
       await dialog.evaluate(async node => { await Promise.all(node.getAnimations().map(animation => animation.finished.catch(() => {}))); });
