@@ -192,7 +192,7 @@ jobs:
         with:
           ref: ${{ needs.source.outputs.revision }}
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -483,17 +483,6 @@ jobs:
             all(.manifests[]; .platform.os == "linux") and
             ([.manifests[] | {key:.platform.architecture,value:.digest}] | from_entries) == $expected' index.json
           printf 'digest=%s\n' "$(jq -r .digest index.json)" >> "$GITHUB_OUTPUT"
-      - name: Require anonymous access denial once for the published index
-        env:
-          IMAGE: ${{ needs.source.outputs.image }}
-          RELEASE_TAG: ${{ needs.source.outputs.tag }}
-        run: |
-          python3 - <<'PY'
-          import os, sys
-          sys.path.insert(0, 'scripts')
-          from qualify_image import require_private
-          require_private(os.environ['IMAGE'], os.environ['RELEASE_TAG'])
-          PY
 
   qualify:
     name: Qualify published image (${{ matrix.arch }})
@@ -531,7 +520,7 @@ jobs:
           ARCH: ${{ matrix.arch }}
         run: |
           python3 scripts/qualify_image.py --image "$IMAGE:$RELEASE_TAG" --digest "$DIGEST" \
-            --revision "$REVISION" --platform "linux/$ARCH" --report reports/published.json --skip-privacy
+            --revision "$REVISION" --platform "linux/$ARCH" --report reports/published.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

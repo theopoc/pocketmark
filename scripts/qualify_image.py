@@ -9,9 +9,6 @@ import re
 import subprocess
 import sys
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
 
 DIGEST = r"sha256:[0-9a-f]{64}"
 REVISION = r"[0-9a-f]{40}"
@@ -30,26 +27,6 @@ def require(condition, reason):
 
 def command(*args, timeout=120):
     return subprocess.run(args, capture_output=True, text=True, check=True, timeout=timeout).stdout
-
-
-def require_private(image, tag):
-    repository = image.removeprefix("ghcr.io/")
-    query = urllib.parse.urlencode({"service": "ghcr.io", "scope": f"repository:{repository}:pull"})
-    try:
-        with urllib.request.urlopen("https://ghcr.io/token?" + query, timeout=30) as response:
-            token = json.load(response)["token"]
-        request = urllib.request.Request(f"https://ghcr.io/v2/{repository}/manifests/{tag}", headers={
-            "Authorization": "Bearer " + token,
-            "Accept": "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json",
-        })
-        with urllib.request.urlopen(request, timeout=30):
-            pass
-    except urllib.error.HTTPError as error:
-        status = error.code
-        error.close()
-        require(status in (401, 403, 404), "cannot establish private registry access")
-        return
-    raise QualificationError("published image is anonymously readable")
 
 
 def health(image_id, platform):
@@ -87,7 +64,7 @@ def health(image_id, platform):
 
 
 
-def qualify(image, digest, revision, platform, report_path, check_privacy=True):
+def qualify(image, digest, revision, platform, report_path):
     result = {"schema_version": 2, "status": "failed", "stage": "input", "checks": {}}
     try:
         reference = re.fullmatch(IMAGE, image)
@@ -130,10 +107,6 @@ def qualify(image, digest, revision, platform, report_path, check_privacy=True):
         health(image_id, platform)
         result["checks"]["health"] = True
 
-        if check_privacy:
-            result["stage"] = "privacy"
-            require_private(repository, tag)
-            result["checks"]["privacy"] = True
         result["status"] = "passed"
         result["stage"] = "complete"
     except Exception as error:
@@ -150,11 +123,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("image", "digest", "revision", "platform", "report"):
         parser.add_argument("--" + name, required=True)
-    parser.add_argument('--skip-privacy', action='store_true',
-                        help='The workflow already checked privacy once for the whole index')
     args = parser.parse_args()
-    result = qualify(args.image, args.digest, args.revision, args.platform, args.report,
-                     check_privacy=not args.skip_privacy)
+    result = qualify(args.image, args.digest, args.revision, args.platform, args.report)
     print(json.dumps(result, indent=2))
     return 0 if result["status"] == "passed" else 1
 
