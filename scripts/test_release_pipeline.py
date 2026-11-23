@@ -97,10 +97,11 @@ class PipelineTests(unittest.TestCase):
             from pathlib import Path
             with Path('commands').open('a') as out: out.write(json.dumps(sys.argv[1:]) + '\\n')
         ''')
-        self.tool('npx', '''
+        self.tool('npm', '''
             import json, sys
             from pathlib import Path
-            Path('release-please-args').write_text(json.dumps(sys.argv[1:]))
+            if sys.argv[1] == 'exec':
+                Path('release-please-args').write_text(json.dumps(sys.argv[2:]))
         ''')
         result = self.execute(script('tag', '- name: Create only'), RELEASE_TAG='v1.2.3', PR_NUMBER='42')
         self.assertEqual(result.returncode, 0, result.stderr)

@@ -47,6 +47,11 @@ jobs:
           node-version: '24'
       - name: Install Commitlint
         run: npm ci --prefix tools/quality --ignore-scripts --no-audit --no-fund
+      - name: Check npm honours the release age
+        run: |
+          for dir in frontend e2e tools/security tools/quality; do
+            [[ "$(cd "$dir" && npm config get min-release-age)" == 7 ]] || { echo "::error::$dir/.npmrc min-release-age is not 7 (npm too old?)"; exit 1; }
+          done
       - name: Test Commitlint title validation
         run: node --test tools/quality/*.test.cjs
       - name: Validate the squash commit title
@@ -60,13 +65,14 @@ jobs:
       - run: go mod tidy -diff
       - run: make check
       - name: Validate workflow syntax and shell commands
-        # GitHub supports queue:max; actionlint 1.7.12 and current upstream do not.
+        # GitHub supports queue:max; pinned actionlint and current upstream do not.
         # Ignore only that unknown-key diagnostic, retaining all other lint checks.
         run: >-
-          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          go tool -modfile=tools/go/go.mod actionlint
           -ignore '^unexpected key "queue" for "concurrency" section\.' -color
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
+          # renovate: datasource=github-releases depName=goreleaser/goreleaser
           version: v2.18.3
           install-only: true
       - run: make release-check
@@ -89,6 +95,7 @@ jobs:
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # renovate: datasource=github-releases depName=gitleaks/gitleaks extractVersion=^v(?<version>.+)$
           GITLEAKS_VERSION: '8.30.1'
           # Use the action's full-history mode instead of an event range.
           GITHUB_EVENT_NAME: workflow_dispatch
@@ -96,7 +103,7 @@ jobs:
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
           GITLEAKS_ENABLE_SUMMARY: 'false'
       - name: Check reachable dependency vulnerabilities
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+        run: go tool -modfile=tools/go/go.mod govulncheck ./...
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -175,7 +182,7 @@ jobs:
             runner: ubuntu-24.04-arm
     services:
       postgres:
-        image: postgres:18-alpine
+        image: postgres:18-alpine@sha256:0115267ab5a509022df9319c77be365cef335adb71556c75f60f5360ee247e71
         env:
           POSTGRES_HOST_AUTH_METHOD: trust
         ports:
@@ -214,11 +221,9 @@ jobs:
       - name: Test workflow expressions
         if: matrix.arch == 'amd64'
         run: |
-          npm install --prefix "$RUNNER_TEMP/release-expressions" --no-save --no-package-lock \
-            --ignore-scripts --no-audit --no-fund @actions/expressions@0.3.61
-          ACTIONS_EXPRESSIONS_PATH="$RUNNER_TEMP/release-expressions/node_modules/@actions/expressions/dist/index.js" \
+          npm ci --prefix tools/quality --ignore-scripts --no-audit --no-fund
+          ACTIONS_EXPRESSIONS_PATH="$GITHUB_WORKSPACE/tools/quality/node_modules/@actions/expressions/dist/index.js" \
             RELEASE_WORKFLOW_PATH="$GITHUB_WORKSPACE/.github/workflows/release.yml" \
-            DEPENDABOT_WORKFLOW_PATH="$GITHUB_WORKSPACE/.github/workflows/dependabot-auto-merge.yml" \
             node --test scripts/test_*_expressions.mjs
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
@@ -233,7 +238,7 @@ jobs:
     timeout-minutes: 10
     services:
       postgres:
-        image: postgres:18-alpine
+        image: postgres:18-alpine@sha256:0115267ab5a509022df9319c77be365cef335adb71556c75f60f5360ee247e71
         env:
           POSTGRES_HOST_AUTH_METHOD: trust
         ports:

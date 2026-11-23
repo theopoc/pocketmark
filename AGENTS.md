@@ -79,6 +79,10 @@ Review the diff and staged paths for generated evidence before committing.
 
 ## Development workflow
 
+Architecture decision records: do not commit new files under `docs/adr/`. Write them
+locally, keep them untracked with `.git/info/exclude`, and do not link them from tracked
+files; put anything a contributor needs in the maintained guides instead.
+
 Local investigations end with their report in ignored `reports/` or outside the repo.
 For every tracked change, including documentation, follow the
 [development and merge policy](docs/CI.md#development-and-merge-policy): dedicated
