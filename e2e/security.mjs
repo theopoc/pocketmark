@@ -90,7 +90,14 @@ async function checkConcurrentKeyChanges(page, peer, url, key, password) {
 }
 
 async function verifyConcurrentKeyChanges(page, peer, url, key, password, events) {
-  await page.getByRole('searchbox', {name:'Find a key by name or role'}).fill('');
+  // Closing the key dialog queues an animation frame that refocuses its row. If it
+  // lands after the search box takes focus, Playwright's fill is silently dropped
+  // and the earlier 'editor' filter hides the peer's key. Let that frame run, then
+  // clear the filter until it sticks.
+  await page.evaluate(() => new Promise(resolve => { setTimeout(resolve, 1000); requestAnimationFrame(() => requestAnimationFrame(resolve)); }));
+  const search = page.getByRole('searchbox', {name:'Find a key by name or role'});
+  for (let attempt = 0; attempt < 5 && await search.inputValue() !== ''; attempt++) await search.fill('');
+  assert.equal(await search.inputValue(), '');
   const request = peer.request, endpoint = url('/api/tokens/' + key.id);
   assert.equal((await request.post(url('/api/reauth'), {data:{password}})).status(), 200);
   assert.equal((await request.patch(endpoint, {data:{name:'Peer renamed key'}})).status(), 200);
