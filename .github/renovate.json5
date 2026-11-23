@@ -24,8 +24,10 @@
     enabled: true,
     schedule: ['on monday'],
   },
+  // The pre-commit manager reads a SHA-pinned rev (with a "# vX.Y.Z" comment) as a version
+  // and proposes downgrades; hooks are bumped by hand with `pre-commit autoupdate`.
   'pre-commit': {
-    enabled: true,
+    enabled: false,
   },
   customManagers: [
     {
