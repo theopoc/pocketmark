@@ -31,7 +31,7 @@ jobs:
       - name: Validate the Renovate configuration
         env:
           # renovate: datasource=npm depName=renovate
-          RENOVATE_VERSION: '44.247.0'
+          RENOVATE_VERSION: '44.247.1'
         run: >-
           npx --yes --ignore-scripts --package="renovate@$RENOVATE_VERSION"
           -- renovate-config-validator --strict .github/renovate.json5
