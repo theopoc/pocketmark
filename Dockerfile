@@ -1,6 +1,6 @@
 ARG BINARY_SOURCE=build
 
-FROM node:24.14.0-alpine AS frontend
+FROM node:24.14.0-alpine@sha256:7fddd9ddeae8196abf4a3ef2de34e11f7b1a722119f91f28ddf1e99dcafdf114 AS frontend
 WORKDIR /src
 COPY frontend/package.json frontend/package-lock.json ./frontend/
 RUN npm ci --prefix frontend --ignore-scripts --no-audit --no-fund
@@ -8,7 +8,7 @@ COPY frontend ./frontend
 COPY internal/webui/static ./internal/webui/static
 RUN npm run build --prefix frontend
 
-FROM golang:1.27.4-alpine AS build
+FROM golang:1.27.4-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -23,7 +23,7 @@ COPY --chmod=0755 pocketmark /pocketmark
 
 FROM ${BINARY_SOURCE} AS binary
 
-FROM alpine:3.24 AS runtime
+FROM alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS runtime
 # CVE-2026-4738 is fixed in Alpine's zlib 1.4-r0.
 RUN apk add --no-cache --upgrade ca-certificates postgresql18-client 'zlib>=1.4-r0' && addgroup -g 10001 pocketmark && adduser -D -H -u 10001 -G pocketmark pocketmark && mkdir /data && chown pocketmark:pocketmark /data
 COPY --from=binary /pocketmark /usr/local/bin/pocketmark

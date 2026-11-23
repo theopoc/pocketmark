@@ -115,7 +115,7 @@ For visual comparisons, [the fidelity journey](../e2e/fidelity.mjs) reads `E2E_F
 
 Quality, Tests, native Build and Go CodeQL extraction all compile frontend assets.
 The amd64 Build job exercises its compiled binary in Chromium before it becomes
-a release input. Security audits the locked frontend inventory; Dependabot checks
+a release input. Security audits the locked frontend inventory; Renovate checks
 updates separately. Docker builds assets in a Node build stage and copies only
 static output into the Go build; releases keep reusing validated binaries.
 The nested `frontend/go.mod` keeps Go examples inside npm tooling out of the

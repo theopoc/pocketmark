@@ -1,0 +1,99 @@
+// Renovate GitHub App configuration; see docs/CI.md#dependency-updates-and-pr-titles.
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: ['config:recommended', 'helpers:pinGitHubActionDigests'],
+  timezone: 'Europe/Paris',
+  schedule: ['on monday'],
+  // Security updates bypass the schedule and Renovate's release age. npm still enforces
+  // min-release-age from each .npmrc; see docs/CI.md for the override.
+  minimumReleaseAge: '7 days',
+  internalChecksFilter: 'strict',
+  prHourlyLimit: 0,
+  // PR titles become the squash commit title and must pass Commitlint.
+  // Keep every update at chore(deps), including npm production dependencies.
+  semanticCommits: 'enabled',
+  semanticCommitType: 'chore',
+  semanticCommitScope: 'deps',
+  // Native GitHub auto-merge waits for the required CI check on an up-to-date branch.
+  automerge: true,
+  automergeType: 'pr',
+  platformAutomerge: true,
+  automergeStrategy: 'squash',
+  rebaseWhen: 'behind-base-branch',
+  lockFileMaintenance: {
+    enabled: true,
+    schedule: ['on monday'],
+  },
+  'pre-commit': {
+    enabled: true,
+  },
+  customManagers: [
+    {
+      description: 'Versions annotated with "# renovate: datasource=... depName=..." (tools passed as action inputs or environment variables)',
+      customType: 'regex',
+      managerFilePatterns: ['/^\\.github/workflows/[^/]+\\.ya?ml$/'],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: extractVersion=(?<extractVersion>\\S+))?\\n\\s*[\\w-]+: [\'"]?(?<currentValue>[^\'"\\s]+)[\'"]?',
+      ],
+    },
+  ],
+  packageRules: [
+    // config:recommended titles npm production dependencies fix(deps); keep chore(deps).
+    {
+      matchPackageNames: ['*'],
+      semanticCommitType: 'chore',
+    },
+    // Never auto-merge a major update, including a security fix that needs one:
+    // the owner merges it after review.
+    {
+      matchUpdateTypes: ['major'],
+      automerge: false,
+      addLabels: ['major'],
+    },
+    // Minor and patch updates share one PR per ecosystem, at most two PRs each.
+    {
+      matchManagers: ['npm'],
+      matchUpdateTypes: ['minor', 'patch'],
+      groupName: 'npm minor and patch',
+      prConcurrentLimit: 2,
+    },
+    {
+      matchManagers: ['github-actions'],
+      matchDatasources: ['github-tags', 'github-releases'],
+      matchUpdateTypes: ['minor', 'patch', 'pin', 'pinDigest', 'digest'],
+      groupName: 'actions minor and patch',
+      prConcurrentLimit: 2,
+    },
+    {
+      matchManagers: ['gomod'],
+      matchUpdateTypes: ['minor', 'patch'],
+      groupName: 'go minor and patch',
+      prConcurrentLimit: 2,
+    },
+    {
+      matchDatasources: ['docker'],
+      matchUpdateTypes: ['minor', 'patch', 'pin', 'pinDigest', 'digest'],
+      groupName: 'docker minor and patch',
+      prConcurrentLimit: 2,
+    },
+    // The go directive and the Go builder image move together; a new Go minor is reviewed by hand.
+    {
+      matchDepNames: ['go', 'golang'],
+      groupName: 'go toolchain',
+      matchUpdateTypes: ['patch'],
+      automerge: true,
+    },
+    {
+      matchDepNames: ['go', 'golang'],
+      matchUpdateTypes: ['minor', 'major'],
+      groupName: 'go toolchain',
+      automerge: false,
+      addLabels: ['major'],
+    },
+    // Deployment file: users pull Postgres patches by tag.
+    {
+      matchFileNames: ['compose.yaml'],
+      pinDigests: false,
+    },
+  ],
+}
