@@ -8,11 +8,12 @@
 /playwright-report/
 /tmp/
 /.cache/
-/.claude/
-/.codex/*
-!/.codex/agents/
-/.codex/agents/*
-!/.codex/agents/design_reviewer.toml
+/.claude/*
+!/.claude/settings.json
+!/.claude/agents/
+/.claude/agents/*
+!/.claude/agents/design-reviewer.md
+/.codex/
 /.agents/
 /.impeccable/review/
 /.impeccable/questions/
