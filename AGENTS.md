@@ -1,106 +1,82 @@
 # Pocketmark contributor instructions
 
-## Project rules
+Pocketmark: personal bookmark manager built for low server RAM. One Go process (stdlib HTTP,
+pgx/PostgreSQL), embedded React + shadcn/ui frontend (Vite), Chrome capture extension,
+Floccus/WebDAV sync. Out of scope: collaboration, public sharing, SSO/OIDC; server-side page
+rendering; automations beyond owner-enabled AI tagging.
 
-Pocketmark is a personal bookmark manager built for low server RAM: one Go process
-with standard-library HTTP routing, PostgreSQL through pgx, an embedded React + shadcn/ui frontend compiled
-with Vite, a Chrome capture extension and
-Floccus/WebDAV sync. Deploy with Docker Compose or a standalone Linux binary.
-Keep page rendering in the user's browser;
-collaboration, public sharing and SSO/OIDC are out of scope. Product automations
-are limited to owner-enabled AI tagging of untagged website bookmarks.
+Rules: read the owning code and tests before editing; preserve user data and unrelated changes;
+prefer stdlib and bounded, disk-backed work; justify any new process, dependency or in-memory cache
+against the RAM goal.
 
-Read the owning implementation and nearby tests before editing. Preserve library
-data and unrelated changes. Prefer the standard library and bounded, disk-backed
-work; justify new processes, dependencies, caches and in-memory indexes against
-the RAM goal.
+## Where to look
 
-## Read before changing
+- Cross-module changes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Persisted data or startup: `internal/store/` migrations; add a legacy-database/restart test
+- Auth, fetching, archives: [docs/API.md](docs/API.md), [docs/ARCHIVES.md](docs/ARCHIVES.md);
+  keep origin checks, SSRF filtering, request limits, bounded queues. Failures:
+  [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md#investigating-an-incident)
+- Clients and Floccus: [docs/FEATURES.md](docs/FEATURES.md), [docs/REAL_CLIENTS.md](docs/REAL_CLIENTS.md)
+- UI, API docs, extension, branding: [DESIGN.md](DESIGN.md), [docs/FRONTEND.md](docs/FRONTEND.md),
+  [design review](docs/CI.md#design-review). Reuse `internal/webui/static/icon.svg`. If the README
+  library screenshot changes, refresh `docs/pocketmark-dark-preview.jpg` from disposable data.
 
-- For changes spanning modules, start with the [ownership map and tests](docs/ARCHITECTURE.md).
-- For persisted data, initialization or restart behavior, inspect `internal/store/`
-  migrations and add a legacy-database/restart regression. `Store.Open` owns
-  initialization. For other store edits, identify the affected behavior and its tests.
-- For authentication, fetching or archives, read [API limits](docs/API.md) and
-  [archive boundaries](docs/ARCHIVES.md). Preserve origin checks, SSRF filtering,
-  request limits, bounded queues and streamed asset I/O. For failed requests or
-  capture diagnostics, use the [incident guide](docs/OBSERVABILITY.md#investigating-an-incident).
-- For client compatibility or Floccus, read [feature coverage](docs/FEATURES.md)
-  and [dated client evidence](docs/REAL_CLIENTS.md).
-- For interface changes to the web app, rendered API docs or extension, follow
-  [DESIGN.md](DESIGN.md). Written API reference edits use [the API guide](docs/API.md).
-  If the library page shown in the README changes, refresh
-  `docs/pocketmark-dark-preview.jpg` from the rendered page with disposable data
-  and verify it matches. Follow the [design and branding review](docs/CI.md#design-review)
-  requirements.
-- Branding: reuse the canonical `internal/webui/static/icon.svg` and synchronize
-  shared UI assets with the command below.
+## Hygiene
 
-## Verification and delivery
-
-Requirements: Go from `go.mod`, a C compiler, Make, Node.js 24 with npm and Python 3.
-Frontend architecture, dependency updates and development: [frontend guide](docs/FRONTEND.md).
-Make installs locked frontend dependencies and compiles assets before Go checks, tests and builds.
-Integration tests require PostgreSQL 18 client tools and a disposable cluster. Set POCKETMARK_TEST_DATABASE_URL to a database URI for a role with CREATEDB. The race detector requires a C compiler.
-
-For code changes, run all four commands:
-
-```sh
-make check           # Check formatting, vet, syntax and shared assets
-make test            # Go race tests and embedded UI regressions
-make test-extension  # Chrome extension regressions
-make build           # Build bin/pocketmark
-```
-
-When needed:
-
-```sh
-gofmt -w cmd internal                     # Fix Go formatting
-python3 scripts/sync_ui_assets.py --write # Synchronize shared UI assets
-
-# Container changes
-docker build -t pocketmark:ci .
-python3 scripts/smoke_docker.py --image pocketmark:ci
-```
-
-For environment failures, see [local preflight and failure records](docs/CI.md#local-preflight-and-failure-records).
-Use `TEST_FLAGS` for focused runs, then run the relevant full suite.
-For CI/release tooling changes, run the applicable [additional checks](docs/CI.md#reproduce-locally).
-Live-network RAM benchmarks are optional; follow [measurement boundaries](docs/BENCHMARK.md).
-
-Use disposable data and browser/device profiles. Keep secrets, personal databases,
-`.env` files, raw request logs, tool sessions, downloaded clients and binaries out
-of commits. Store generated evidence (reports, audits, research notes, benchmark
-results, validation records, screenshots, traces and profiles) outside the repo or
-in ignored `reports/` or `artifacts/`, never under `docs/`. Maintained guides,
-benchmark scripts, regression fixtures and documentation illustrations belong in
-version control.
-Review the diff and staged paths for generated evidence before committing.
+- Use disposable data and profiles. Never commit secrets, personal databases, `.env`, raw logs,
+  tool sessions, downloaded clients or binaries.
+- Generated evidence (reports, audits, benchmarks, screenshots, traces) goes outside the repo or in
+  ignored `reports/` / `artifacts/`, never `docs/`. Check staged paths before committing.
+- Do not commit `docs/adr/` files; keep ADRs local and untracked via `.git/info/exclude`.
 
 ## Development workflow
 
-Architecture decision records: do not commit new files under `docs/adr/`. Write them
-locally, keep them untracked with `.git/info/exclude`, and do not link them from tracked
-files; put anything a contributor needs in the maintained guides instead.
+Develop and test locally, against a Docker image built from your working tree. Needs Go (see
+`go.mod`), a C compiler, Make, Node.js 24, Python 3 and Docker. Setup problems:
+[docs/CI.md](docs/CI.md#local-preflight-and-failure-records).
 
-Local investigations end with their report in ignored `reports/` or outside the repo.
-For every tracked change, including documentation, follow the
-[development and merge policy](docs/CI.md#development-and-merge-policy): dedicated
-branch, complete-diff subagent review, applicable checks and redacted secret scan,
-Conventional Commit, PR to `main`, and required CI passing at the latest reviewed
-head. Interface changes also require the project-local design reviewer. Resolve
-conflicts, re-review corrections, squash-merge automatically with the validated PR
-title, and verify the merged state. Report the PR link, review outcome, CI result
-and any blocker.
+1. Create a dedicated branch.
+2. Edit the code. Format and sync shared assets when needed:
 
-## Deployment and releases
+   ```sh
+   gofmt -w cmd internal
+   python3 scripts/sync_ui_assets.py --write
+   ```
 
-Before deployment, read [configuration and backups](docs/GUIDE.md); for binaries,
-also read [Linux installation](docs/RELEASE_INSTALL.md). Use a version-pinned public GHCR
-image, or a release binary. Preserve `/data`, the server
-secret, loopback binding, resource limits and security settings. Complete account/MFA
-setup before exposure; use HTTPS and the exact public `POCKETMARK_ORIGIN`.
+3. Build the image and start the stack (app on <http://127.0.0.1:8091>, PostgreSQL included,
+   throwaway data in Docker volumes). Re-run after each change:
 
-Before changing or publishing releases, read [release instructions](docs/RELEASE.md).
-Merge version PRs or create version tags only on an explicit publication request.
-Workflows publish artifacts; server deployment is manual.
+   ```sh
+   make up
+   ```
+
+4. Try the change in the browser. Stop the stack, and add `-v` to the command to also delete its data:
+
+   ```sh
+   docker compose -f compose.dev.yaml down
+   ```
+
+5. Run the checks before opening a PR. Integration tests need PostgreSQL 18 tools and
+   `POCKETMARK_TEST_DATABASE_URL` (role with CREATEDB). Use `TEST_FLAGS` for focused runs.
+
+   ```sh
+   make check
+   make test
+   make test-extension
+   make build
+   ```
+
+6. For Dockerfile or container changes, smoke-test the image:
+
+   ```sh
+   docker build -t pocketmark:ci .
+   python3 scripts/smoke_docker.py --image pocketmark:ci
+   ```
+
+7. Review the full diff with a subagent (interface changes also need `design-reviewer`), scan for
+   secrets, then commit with a Conventional Commit message.
+8. Open a PR to `main`, wait for green CI, squash-merge. Policy:
+   [docs/CI.md](docs/CI.md#development-and-merge-policy).
+
+Deploying: read [docs/GUIDE.md](docs/GUIDE.md) (binaries: also [docs/RELEASE_INSTALL.md](docs/RELEASE_INSTALL.md)).
+Releases: [docs/RELEASE.md](docs/RELEASE.md); merge version PRs or tag only on explicit request.
