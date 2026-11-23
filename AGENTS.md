@@ -12,14 +12,15 @@ against the RAM goal.
 ## Where to look
 
 - Cross-module changes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- Persisted data or startup: `internal/store/` migrations; add a legacy-database/restart test
+- Persisted data or startup: `internal/store/` migrations (`Store.Open` owns initialization); add a
+  legacy-database/restart test
 - Auth, fetching, archives: [docs/API.md](docs/API.md), [docs/ARCHIVES.md](docs/ARCHIVES.md);
-  keep origin checks, SSRF filtering, request limits, bounded queues. Failures:
+  keep origin checks, SSRF filtering, request limits, bounded queues, streamed asset I/O. Failures:
   [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md#investigating-an-incident)
 - Clients and Floccus: [docs/FEATURES.md](docs/FEATURES.md), [docs/REAL_CLIENTS.md](docs/REAL_CLIENTS.md)
 - UI, API docs, extension, branding: [DESIGN.md](DESIGN.md), [docs/FRONTEND.md](docs/FRONTEND.md),
   [design review](docs/CI.md#design-review). Reuse `internal/webui/static/icon.svg`. If the README
-  library screenshot changes, refresh `docs/pocketmark-dark-preview.jpg` from disposable data.
+  library screenshot changes, refresh `docs/pocketmark-dark-preview.jpg` from disposable data and verify it matches.
 
 ## Hygiene
 
@@ -56,7 +57,7 @@ Develop and test locally, against a Docker image built from your working tree. N
    docker compose -f compose.dev.yaml down
    ```
 
-5. Run the checks before opening a PR. Integration tests need PostgreSQL 18 tools and
+5. For any code change, run all four checks. Integration tests need PostgreSQL 18 tools and
    `POCKETMARK_TEST_DATABASE_URL` (role with CREATEDB). Use `TEST_FLAGS` for focused runs.
 
    ```sh
@@ -73,10 +74,16 @@ Develop and test locally, against a Docker image built from your working tree. N
    python3 scripts/smoke_docker.py --image pocketmark:ci
    ```
 
+   CI/release tooling changes: run the [additional checks](docs/CI.md#reproduce-locally).
+
 7. Review the full diff with a subagent (interface changes also need `design-reviewer`), scan for
    secrets, then commit with a Conventional Commit message.
-8. Open a PR to `main`, wait for green CI, squash-merge. Policy:
+8. Open a PR to `main`, fix conflicts and re-review corrections, wait for green CI at the reviewed
+   head, squash-merge, verify the merged state, report the PR link and CI result. Policy:
    [docs/CI.md](docs/CI.md#development-and-merge-policy).
 
 Deploying: read [docs/GUIDE.md](docs/GUIDE.md) (binaries: also [docs/RELEASE_INSTALL.md](docs/RELEASE_INSTALL.md)).
+Use a version-pinned GHCR image or release binary; keep `/data`, the server secret, loopback binding
+and limits; set up account/MFA first; use HTTPS and the exact `POCKETMARK_ORIGIN`.
+Optional RAM benchmarks: [docs/BENCHMARK.md](docs/BENCHMARK.md).
 Releases: [docs/RELEASE.md](docs/RELEASE.md); merge version PRs or tag only on explicit request.
