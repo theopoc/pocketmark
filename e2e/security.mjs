@@ -48,8 +48,56 @@ async function assertKeyRouteProtected(page) {
   }), true);
 }
 
+// Records every key API response the page receives so a timeout can say whether
+// the list read lacked the peer's key or the local change never reached the server.
+function recordKeyResponses(page, url) {
+  const events = [], started = Date.now(), prefix = url('/api/tokens');
+  const handler = async response => {
+    try {
+      const request = response.request();
+      if (!response.url().startsWith(prefix)) return;
+      const event = {ms: Date.now() - started, method: request.method(), path: new URL(response.url()).pathname, status: response.status()};
+      events.push(event);
+      if (request.method() === 'GET' && response.ok()) {
+        event.keys = (await response.json()).map(({id, name, active}) => `${id}:${name}:${active}`);
+      }
+    } catch {
+      // Diagnostics must never change the result of the check they describe.
+    }
+  };
+  page.on('response', handler);
+  return {events, stop: () => page.off('response', handler)};
+}
+
+async function describeKeyPage(page) {
+  const timeout = new Promise(resolve => setTimeout(resolve, 2000, 'unavailable'));
+  return Promise.race([timeout, page.evaluate(() => ({
+    rows: [...document.querySelectorAll('#token-list tr[data-token-id]')].map(row => row.textContent.replace(/\s+/g, ' ').trim()),
+    switches: [...document.querySelectorAll('#token-list [role=switch]')].map(node => `${node.getAttribute('aria-checked')}${node.disabled ? ' disabled' : ''}`),
+    error: document.querySelector('#token-list [role=alert], #tokens-error')?.textContent?.trim() || '',
+    active: document.activeElement?.getAttribute('aria-label') || document.activeElement?.tagName,
+    search: document.querySelector('#token-list input[type=search], #token-list [role=searchbox]')?.value ?? null,
+  }))]);
+}
+
 async function checkConcurrentKeyChanges(page, peer, url, key, password) {
-  await page.getByRole('searchbox', {name:'Find a key by name or role'}).fill('');
+  const recorder = recordKeyResponses(page, url);
+  try {
+    await verifyConcurrentKeyChanges(page, peer, url, key, password, recorder.events);
+  } finally {
+    recorder.stop();
+  }
+}
+
+async function verifyConcurrentKeyChanges(page, peer, url, key, password, events) {
+  // Closing the key dialog queues an animation frame that refocuses its row. If it
+  // lands after the search box takes focus, Playwright's fill is silently dropped
+  // and the earlier 'editor' filter hides the peer's key. Let that frame run, then
+  // clear the filter until it sticks.
+  await page.evaluate(() => new Promise(resolve => { setTimeout(resolve, 1000); requestAnimationFrame(() => requestAnimationFrame(resolve)); }));
+  const search = page.getByRole('searchbox', {name:'Find a key by name or role'});
+  for (let attempt = 0; attempt < 5 && await search.inputValue() !== ''; attempt++) await search.fill('');
+  assert.equal(await search.inputValue(), '');
   const request = peer.request, endpoint = url('/api/tokens/' + key.id);
   assert.equal((await request.post(url('/api/reauth'), {data:{password}})).status(), 200);
   assert.equal((await request.patch(endpoint, {data:{name:'Peer renamed key'}})).status(), 200);
@@ -60,8 +108,14 @@ async function checkConcurrentKeyChanges(page, peer, url, key, password) {
   const toggle = row.getByRole('switch');
   // A local PATCH of access must also retrieve another session's name and row.
   await toggle.focus(); await toggle.press('Space');
-  await row.getByText('Peer renamed key', {exact:true}).waitFor();
-  await page.getByText('Peer reader', {exact:true}).waitFor();
+  try {
+    await row.getByText('Peer renamed key', {exact:true}).waitFor();
+    await page.getByText('Peer reader', {exact:true}).waitFor();
+  } catch (error) {
+    console.error('Key API responses since this check began:', JSON.stringify(events));
+    console.error('Key page:', JSON.stringify(await describeKeyPage(page).catch(() => 'unavailable')));
+    throw error;
+  }
   assert.equal(await page.locator('#token-count').textContent(), '2');
   await page.waitForFunction(id => document.activeElement === document.querySelector(`tr[data-token-id="${id}"] [role=switch]`), key.id);
   assert.equal(await page.locator('[data-settings-key-count]').first().textContent(), '1 active');
