@@ -92,8 +92,8 @@ and any blocker.
 ## Deployment and releases
 
 Before deployment, read [configuration and backups](docs/GUIDE.md); for binaries,
-also read [Linux installation](docs/RELEASE_INSTALL.md). Use a version-pinned private GHCR
-image with authenticated pulls, or a release binary. Preserve `/data`, the server
+also read [Linux installation](docs/RELEASE_INSTALL.md). Use a version-pinned public GHCR
+image, or a release binary. Preserve `/data`, the server
 secret, loopback binding, resource limits and security settings. Complete account/MFA
 setup before exposure; use HTTPS and the exact public `POCKETMARK_ORIGIN`.
 
