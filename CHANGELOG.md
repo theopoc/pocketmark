@@ -1,5 +1,52 @@
 # Changelog
 
+## [2.0.0](https://github.com/theopoc/pocketmark/compare/v1.3.4...v2.0.0) (2026-11-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* **storage:** configure PostgreSQL 18 and import existing SQLite libraries offline before starting the new server. Preserve the original server secret to retain MFA and sessions.
+
+### Features
+
+* **backup:** schedule verified remote backups ([a3b6ac9](https://github.com/theopoc/pocketmark/commit/a3b6ac9823df005025313ec2cd7059abc9ba5645))
+* **config:** add POCKETMARK_SERVER_SECRET ([026eae3](https://github.com/theopoc/pocketmark/commit/026eae3280c5997bae82151f6e1b1bc3d62eb921))
+* **dev:** start Pocketmark locally with make up ([314a4ab](https://github.com/theopoc/pocketmark/commit/314a4ab86af744d9578979e2a7fcf997ab9864e3))
+* **dev:** stop the local stack with make down ([f08fb5b](https://github.com/theopoc/pocketmark/commit/f08fb5bbe88ed7c5f88433910b5d1f6a24d41699))
+* **extension:** show saved pages and confirm saves in the tab ([fb77888](https://github.com/theopoc/pocketmark/commit/fb77888f3f9394d20385d315edf573f9df47105a))
+* **library:** group bookmark filters in a segmented control ([0b43d39](https://github.com/theopoc/pocketmark/commit/0b43d39a413c32d0121edc1b34850ca67f29b6ad))
+* **library:** refine the segmented filter selector ([22f2928](https://github.com/theopoc/pocketmark/commit/22f292894d24004adab5b4a0adcc930c74f21b62))
+* **library:** show and remove active tag filters ([c26eb64](https://github.com/theopoc/pocketmark/commit/c26eb64191b0cd0c48e9a4334c4b3bc8bd5195b2))
+* **reader:** add a graduated text size slider ([3896c48](https://github.com/theopoc/pocketmark/commit/3896c4855cf580b2c952547c89705b0512338187))
+* **reader:** open saved articles in a reading panel ([32c5c12](https://github.com/theopoc/pocketmark/commit/32c5c1297635ed2c9a3412e04e0d94300b53d349))
+* **reader:** refine article layout and capture recovery ([c7d62ef](https://github.com/theopoc/pocketmark/commit/c7d62efc4ddccb617f9639e76aca0f7aacdf37a0))
+* **settings:** redesign account security, sessions and API keys ([e1480d3](https://github.com/theopoc/pocketmark/commit/e1480d3bbda57b9d1ad77bb1dbc5d1718ea77397))
+* **settings:** redesign the personal library settings workspace ([e1d3b05](https://github.com/theopoc/pocketmark/commit/e1d3b052a61bdf29bb7387d3f4e8c454abec6fc4))
+* **storage:** replace SQLite with PostgreSQL ([1693bf7](https://github.com/theopoc/pocketmark/commit/1693bf7a38932c7e370fb1f9848ab30c215254bf))
+* **tagging:** classify bookmarks with an Anthropic API key ([#196](https://github.com/theopoc/pocketmark/issues/196)) ([8ce827a](https://github.com/theopoc/pocketmark/commit/8ce827a5750d4a52e7a472fd8f3cbebdc9f6aa63))
+* **tagging:** classify untagged bookmarks with a ChatGPT plan ([f3cee99](https://github.com/theopoc/pocketmark/commit/f3cee996a18832f86c415fa4365ed3ed0c1a279f))
+* **tagging:** create lowercase tags when no existing tag fits ([a848a17](https://github.com/theopoc/pocketmark/commit/a848a17045a8a5e1e41f07ad84323e5795cd5964))
+* **ui:** embed the Figtree font ([#192](https://github.com/theopoc/pocketmark/issues/192)) ([ff8867b](https://github.com/theopoc/pocketmark/commit/ff8867becedd52eb2e48a8f453010dda6267d298))
+* **ui:** finish the redesign with the new mark, extension and design doc ([#195](https://github.com/theopoc/pocketmark/issues/195)) ([f57d27c](https://github.com/theopoc/pocketmark/commit/f57d27ce75d3a74667f724cd32013a3aa26fb0cb))
+* **ui:** float the library panels and make selection actions icon-only ([#193](https://github.com/theopoc/pocketmark/issues/193)) ([c5157b7](https://github.com/theopoc/pocketmark/commit/c5157b7f1319348b2c62edc3b2e8f04f87e81445))
+* **ui:** replace the indigo palette with teal tokens ([#191](https://github.com/theopoc/pocketmark/issues/191)) ([f5fd793](https://github.com/theopoc/pocketmark/commit/f5fd7932ff67d74ece60cc43b5766a68192dc243))
+* **ui:** round dialogs and strengthen error toasts ([#194](https://github.com/theopoc/pocketmark/issues/194)) ([9b83186](https://github.com/theopoc/pocketmark/commit/9b83186e2e7f2ff4d8a950bd780bfa251db3a7e4))
+
+
+### Bug Fixes
+
+* **auth:** share MFA challenges across replicas ([2defb51](https://github.com/theopoc/pocketmark/commit/2defb51fae60a66f3004e31fac17e4047c406d08))
+* **backup:** route rolling exports to the target revision ([518fe5e](https://github.com/theopoc/pocketmark/commit/518fe5efc8e1aabc5581e761e3247bb0d70fa01e))
+* **extension:** keep save confirmation visible before closing ([5d03d5e](https://github.com/theopoc/pocketmark/commit/5d03d5ef64443ffccddfa91281698b35a0293068))
+* **reader:** preserve article images, asides and code formatting ([b349897](https://github.com/theopoc/pocketmark/commit/b3498970d75d1345add247f41260c497374b1b22))
+* **tagging:** classify bookmarks with English tags ([59a0042](https://github.com/theopoc/pocketmark/commit/59a004241f96695f4826a51146c8ddcfd1918051))
+* **tagging:** request JSON in ChatGPT input messages ([7913d55](https://github.com/theopoc/pocketmark/commit/7913d5524952aaf858383bcd63166aa232b489db))
+* **ui:** align components with design system ([e025b4e](https://github.com/theopoc/pocketmark/commit/e025b4e7f4252afc0953205a7f9a1e72c9a685fc))
+* **ui:** center quick-filter labels ([a479eb0](https://github.com/theopoc/pocketmark/commit/a479eb022818bb0366cf6e0c11480094b50aa162))
+* **ui:** match button colors to action roles ([25a4b89](https://github.com/theopoc/pocketmark/commit/25a4b898c57641889b78732b11f8c9b4b21aaafb))
+* **ui:** smooth sidebar expansion and collapse ([0b2c0c0](https://github.com/theopoc/pocketmark/commit/0b2c0c0c49096ae11b85bac09660b4ccc32aef56))
+* **ui:** unify toast design ([54be708](https://github.com/theopoc/pocketmark/commit/54be70879c622d49021b8c0bc27412c7ef06e646))
+
 ## [1.3.4](https://github.com/theopoc/pocketmark/compare/v1.3.3...v1.3.4) (2026-11-09)
 
 
