@@ -9,6 +9,12 @@
   minimumReleaseAge: '7 days',
   internalChecksFilter: 'strict',
   prHourlyLimit: 0,
+  // Every Renovate PR carries `dependencies`, plus its update type and `security` when it fixes
+  // a vulnerability alert.
+  labels: ['dependencies'],
+  vulnerabilityAlerts: {
+    labels: ['dependencies', 'security'],
+  },
   // PR titles become the squash commit title and must pass Commitlint.
   // Keep every update at chore(deps), including npm production dependencies.
   semanticCommits: 'enabled',
@@ -44,6 +50,14 @@
     {
       matchPackageNames: ['*'],
       semanticCommitType: 'chore',
+    },
+    {
+      matchUpdateTypes: ['minor'],
+      addLabels: ['minor'],
+    },
+    {
+      matchUpdateTypes: ['patch'],
+      addLabels: ['patch'],
     },
     // Never auto-merge a major update, including a security fix that needs one:
     // the owner merges it after review.
