@@ -1,6 +1,7 @@
 ---
 name: design-reviewer
 description: Review Pocketmark interface changes (web UI, rendered API docs, Chrome extension, branding) for conformity to DESIGN.md and for visual, responsive and accessibility regressions. Use proactively after any change under frontend/, internal/webui/ or extension/, and again after correcting its findings. Review only; it never edits files.
+model: sonnet
 disallowedTools: Edit, Write, NotebookEdit
 ---
 
