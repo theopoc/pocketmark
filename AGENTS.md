@@ -36,28 +36,15 @@ Develop and test locally, against a Docker image built from your working tree. N
 `go.mod`), a C compiler, Make, Node.js 24, Python 3 and Docker. Setup problems:
 [docs/CI.md](docs/CI.md#local-preflight-and-failure-records).
 
-1. Create a dedicated branch.
-2. Edit the code. Format and sync shared assets when needed:
-
-   ```sh
-   gofmt -w cmd internal
-   python3 scripts/sync_ui_assets.py --write
-   ```
-
-3. Build the image and start the stack (app on <http://127.0.0.1:8091>, PostgreSQL included,
-   throwaway data in Docker volumes). Re-run after each change:
+1. Create a dedicated branch in its own git worktree (one worktree per task; never share one).
+2. Edit the code, then (re)start the stack. Idempotent; prints the app URL:
 
    ```sh
    make up
    ```
 
-4. Try the change in the browser. Stop the stack, and add `-v` to the command to also delete its data:
-
-   ```sh
-   docker compose -f compose.dev.yaml down
-   ```
-
-5. For any code change, run all four checks. Integration tests need PostgreSQL 18 tools and
+3. Try the change in the browser at the printed URL.
+4. For any code change, run all four checks. Integration tests need PostgreSQL 18 tools and
    `POCKETMARK_TEST_DATABASE_URL` (role with CREATEDB). Use `TEST_FLAGS` for focused runs.
 
    ```sh
@@ -67,20 +54,27 @@ Develop and test locally, against a Docker image built from your working tree. N
    make build
    ```
 
-6. For Dockerfile or container changes, smoke-test the image:
-
-   ```sh
-   docker build -t pocketmark:ci .
-   python3 scripts/smoke_docker.py --image pocketmark:ci
-   ```
-
-   CI/release tooling changes: run the [additional checks](docs/CI.md#reproduce-locally).
-
-7. Review the full diff with a subagent (interface changes also need `design-reviewer`), scan for
+5. Review the full diff with a subagent (interface changes also need `design-reviewer`), scan for
    secrets, then commit with a Conventional Commit message.
-8. Open a PR to `main`, fix conflicts and re-review corrections, wait for green CI at the reviewed
+6. Open a PR to `main`, fix conflicts and re-review corrections, wait for green CI at the reviewed
    head, squash-merge, verify the merged state, report the PR link and CI result. Policy:
    [docs/CI.md](docs/CI.md#development-and-merge-policy).
+7. Before removing the worktree, delete its stack and data. Idempotent:
+
+   ```sh
+   make down
+   ```
+
+### Parallel worktrees
+
+Each worktree gets its own 10-port block (8000-8079, in `.env.worktree`, git-ignored), Compose
+project and image tag, so stacks run in parallel.
+
+- Use only `make up` / `make down`; never a bare `docker compose`, `docker run --name`, or another
+  worktree's project.
+- Never hard-code ports or container/volume/image names; use the URL `make up` prints.
+- Not isolated: the test database (`POCKETMARK_TEST_DATABASE_URL`) and hand-numbered migrations in
+  `internal/store/`.
 
 Deploying: read [docs/GUIDE.md](docs/GUIDE.md) (binaries: also [docs/RELEASE_INSTALL.md](docs/RELEASE_INSTALL.md)).
 Use a version-pinned GHCR image or release binary; keep `/data`, the server secret, loopback binding

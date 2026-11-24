@@ -3,7 +3,7 @@ ARG BINARY_SOURCE=build
 FROM node:24.14.0-alpine@sha256:7fddd9ddeae8196abf4a3ef2de34e11f7b1a722119f91f28ddf1e99dcafdf114 AS frontend
 WORKDIR /src
 COPY frontend/package.json frontend/package-lock.json ./frontend/
-RUN npm ci --prefix frontend --ignore-scripts --no-audit --no-fund
+RUN --mount=type=cache,target=/root/.npm npm ci --prefix frontend --ignore-scripts --no-audit --no-fund
 COPY frontend ./frontend
 COPY internal/webui/static ./internal/webui/static
 RUN npm run build --prefix frontend
@@ -11,11 +11,11 @@ RUN npm run build --prefix frontend
 FROM golang:1.27.4-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY cmd ./cmd
 COPY internal ./internal
 COPY --from=frontend /src/internal/webui/static ./internal/webui/static
-RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /pocketmark ./cmd/pocketmark
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /pocketmark ./cmd/pocketmark
 
 # Release CI supplies its validated executable in a minimal build context.
 FROM scratch AS prebuilt
