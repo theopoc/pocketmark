@@ -56,10 +56,10 @@ Develop and test locally, against a Docker image built from your working tree. N
 
 5. Review the full diff with a subagent (interface changes also need `design-reviewer`), scan for
    secrets, then commit with a Conventional Commit message.
-6. Open a PR to `main`, fix conflicts and re-review corrections, wait for green CI at the reviewed
-   head, squash-merge, verify the merged state, report the PR link and CI result. Policy:
+6. Push the branch and open a PR to `main` with `gh pr create`.
+7. Make sure CI is green; otherwise fix the failures, push again and iterate. Policy:
    [docs/CI.md](docs/CI.md#development-and-merge-policy).
-7. Before removing the worktree, delete its stack and data. Idempotent:
+8. Before removing the worktree, delete its stack and data. Idempotent:
 
    ```sh
    make down
