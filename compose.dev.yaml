@@ -29,6 +29,12 @@ services:
       PGPASSWORD: *dev_password
     volumes:
       - dev-state:/data
+    # Faster than the image's 30 s HEALTHCHECK so `make up --wait` returns quickly.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8090/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
     mem_limit: 128m
     cpus: 1.0
     pids_limit: 64
