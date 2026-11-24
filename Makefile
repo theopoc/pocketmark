@@ -51,6 +51,7 @@ release-snapshot:
 run: build
 	./bin/pocketmark
 up:
-	docker compose -f compose.dev.yaml up --build --wait
+	@scripts/dev_env.sh compose up --build --wait
+	@scripts/dev_env.sh print | sed -n 's/^POCKETMARK_DEV_URL=/app: /p'
 down:
-	docker compose -f compose.dev.yaml down
+	@scripts/dev_clean.sh

@@ -83,7 +83,7 @@ With Docker Compose v2 running, start the development stack from the repository 
 make up
 ```
 
-Open [http://localhost:8091](http://localhost:8091). The development stack has its own volumes and a built-in local database password. Run `make down` to stop it and keep your data. The next `make up` reuses the same volumes.
+`make up` prints the app URL; each checkout or git worktree gets its own port range, so several stacks can run side by side. The development stack has its own volumes and a built-in local database password. Run `make down` to delete the stack and its data.
 
 ### Native development
 
