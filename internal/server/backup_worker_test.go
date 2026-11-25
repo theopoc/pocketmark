@@ -86,14 +86,19 @@ func testS3(t *testing.T) (backup.Config, backup.Credentials, *atomic.Bool) {
 	return c, backup.Credentials{AccessKey: "fixture-id", SecretKey: "fixture-secret"}, &denyDeletes
 }
 
-func configureAndRunBackup(t *testing.T, a *testServer, c backup.Config, credentials backup.Credentials) store.BackupRun {
+func configureBackup(t *testing.T, a *testServer, c backup.Config, credentials backup.Credentials) {
 	t.Helper()
-	ctx := t.Context()
 	payload, err := json.Marshal(backup.Settings{Config: c, Credentials: credentials})
 	if err != nil {
 		t.Fatal(err)
 	}
 	requireStatus(t, request(a, "PUT", "/api/backups/settings", string(payload), true, nil), 200)
+}
+
+func configureAndRunBackup(t *testing.T, a *testServer, c backup.Config, credentials backup.Credentials) store.BackupRun {
+	t.Helper()
+	ctx := t.Context()
+	configureBackup(t, a, c, credentials)
 	requireStatus(t, request(a, "POST", "/api/backups/run", "", true, nil), 202)
 	if err := a.Store.WorkBackup(ctx, func(j store.BackupJob) error { return a.runBackup(ctx, j) }); err != nil {
 		t.Fatal(err)
