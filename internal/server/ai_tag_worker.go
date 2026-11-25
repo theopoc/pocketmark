@@ -32,11 +32,11 @@ func (t *aiTagging) stopActive() {
 // A single worker drains the durable queue. Wakeups only shorten the polling delay.
 func (a *Server) AITagWorker(ctx context.Context, captureEnabled bool) {
 	for ctx.Err() == nil {
-		err := a.workAITag(ctx, captureEnabled)
+		err := a.nextAITag(ctx, captureEnabled)
 		if err == nil {
 			continue
 		}
-		if !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, context.Canceled) {
+		if !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, context.Canceled) && !errors.Is(err, observability.ErrWorkerPanic) {
 			// Neither response text nor bookmark fields belong in diagnostics.
 			observability.Error(ctx, "ai_tag_queue_unavailable", err)
 		}
@@ -49,7 +49,31 @@ func (a *Server) AITagWorker(ctx context.Context, captureEnabled bool) {
 	}
 }
 
+// nextAITag runs one job under Recover. A job that panicked is dropped like a
+// bookmark the provider cannot tag: its lease would otherwise block the queue
+// for two minutes, then hand the same job back to the worker.
+func (a *Server) nextAITag(ctx context.Context, captureEnabled bool) error {
+	var claimed store.AITagJob
+	err := a.observer.Recover(ctx, observability.WorkerAITag, func() error {
+		return a.workAITagJob(ctx, captureEnabled, &claimed)
+	})
+	if errors.Is(err, observability.ErrWorkerPanic) && claimed.ID != 0 {
+		drop := a.observer.Recover(ctx, observability.WorkerAITag, func() error {
+			return a.Store.FinishAITagJob(ctx, claimed, nil)
+		})
+		if drop != nil && !errors.Is(drop, observability.ErrWorkerPanic) && ctx.Err() == nil {
+			observability.Error(ctx, "ai_tag_queue_unavailable", drop)
+		}
+	}
+	return err
+}
+
 func (a *Server) workAITag(ctx context.Context, captureEnabled bool) error {
+	return a.workAITagJob(ctx, captureEnabled, new(store.AITagJob))
+}
+
+// workAITagJob keeps the job it holds in claimed, so that a panic can release it.
+func (a *Server) workAITagJob(ctx context.Context, captureEnabled bool, claimed *store.AITagJob) error {
 	t := &a.aiTagging
 	work, cancel := context.WithCancel(ctx)
 	t.active.Lock()
@@ -65,6 +89,7 @@ func (a *Server) workAITag(ctx context.Context, captureEnabled bool) error {
 	if err != nil {
 		return err
 	}
+	*claimed = job
 	if job.Title == "" && job.Description == "" && job.Excerpt == "" {
 		return a.Store.FinishAITagJob(work, job, nil)
 	}
@@ -127,6 +152,7 @@ func (a *Server) workAITag(ctx context.Context, captureEnabled bool) error {
 			return err
 		}
 		job = next
+		*claimed = job
 		var reused []string
 		for _, name := range fallback {
 			if slices.Contains(job.Tags, name) {
