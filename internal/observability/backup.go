@@ -21,7 +21,18 @@ var backupInstruments = []string{"enabled", "next_timestamp_seconds", "in_progre
 
 type BackupMeasurements func(context.Context) (map[string]int64, error)
 
-func WriteBackupMetrics(w io.Writer, m map[string]int64) {
+// WriteBackupMetrics appends the stored backup metrics when ok, and always
+// pocketmark_backup_metrics_up so a failed database read is visible instead of
+// reported as zero values.
+func WriteBackupMetrics(w io.Writer, m map[string]int64, ok bool) {
+	up := 0
+	if ok {
+		up = 1
+	}
+	fmt.Fprintf(w, "# TYPE pocketmark_backup_metrics_up gauge\npocketmark_backup_metrics_up %d\n", up)
+	if !ok {
+		return
+	}
 	for _, k := range backupInstruments {
 		kind := "gauge"
 		if strings.HasSuffix(k, "_total") {
@@ -89,7 +100,7 @@ type privateMetricExporter struct{ sdk.Exporter }
 
 func (e privateMetricExporter) Export(ctx context.Context, data *metricdata.ResourceMetrics) error {
 	if err := e.Exporter.Export(ctx, data); err != nil {
-		slog.WarnContext(ctx, "backup_metrics_export_failed", ErrorAttrs(err)...)
+		Log(ctx, slog.LevelWarn, "backup_metrics_export_failed", Failure("backup_metrics_export_failed", err)+"; metrics stay available at /metrics", ErrorAttrs(err)...)
 	}
 	return nil
 }

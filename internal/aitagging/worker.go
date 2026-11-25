@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"slices"
 	"time"
 
 	"pocketmark/internal/aitagprovider"
+	"pocketmark/internal/fault"
 	"pocketmark/internal/observability"
 	"pocketmark/internal/store"
 )
@@ -42,7 +44,7 @@ func (t *Tagging) Start(ctx context.Context, captureEnabled bool) {
 		}
 		if !errors.Is(err, ErrIdle) && !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, context.Canceled) {
 			// Neither response text nor bookmark fields belong in diagnostics.
-			observability.Logger(ctx).ErrorContext(ctx, "ai_tag_queue_unavailable")
+			observability.Error(ctx, "ai_tag_queue_unavailable", err)
 		}
 		select {
 		case <-ctx.Done():
@@ -78,7 +80,7 @@ func (t *Tagging) runOnce(ctx context.Context, captureEnabled bool) error {
 	if job.Title == "" && job.Description == "" && job.Excerpt == "" {
 		return t.store.FinishAITagJob(work, job, nil)
 	}
-	stale := errors.New("AI tagging job is no longer eligible")
+	stale := fault.New("ai_tagging", "job_stale", "AI tagging job is no longer eligible")
 	var guardErr error
 	beforeSend := func(ctx context.Context) error {
 		active, err := t.store.AITagJobActive(ctx, job)
@@ -96,7 +98,7 @@ func (t *Tagging) runOnce(ctx context.Context, captureEnabled bool) error {
 	}
 	model := t.classifier(job.Provider)
 	if model == nil {
-		return t.finishError(work, job, errors.New("AI tagging provider unavailable"))
+		return t.finishError(work, job, fault.New("ai_tagging", "provider_unavailable", "AI tagging provider is not configured"))
 	}
 	var fallback []string
 	for {
@@ -152,7 +154,7 @@ func (t *Tagging) runOnce(ctx context.Context, captureEnabled bool) error {
 
 func (t *Tagging) finishError(work context.Context, job store.AITagJob, err error) error {
 	if errors.Is(err, aitagprovider.ErrArticleInput) || errors.Is(err, aitagprovider.ErrModelOutput) {
-		observability.Logger(work).WarnContext(work, "ai_tag_bookmark_skipped", "link_id", job.ID)
+		observability.Log(work, slog.LevelWarn, "ai_tag_bookmark_skipped", "AI tagging skipped a bookmark: "+observability.Describe(err), append([]any{"link_id", job.ID}, observability.ErrorAttrs(err)...)...)
 		return t.store.FinishAITagJob(work, job, nil)
 	}
 	reason := "error"
@@ -167,5 +169,14 @@ func (t *Tagging) finishError(work context.Context, job store.AITagJob, err erro
 	case errors.Is(err, aitagprovider.ErrReconnect), errors.Is(err, aitagprovider.ErrUnreadable):
 		reason = "reconnect"
 	}
+	// A quota pause with a reset time resumes on its own (WARN); other pauses need the owner (ERROR).
+	level, message := slog.LevelError, "AI tagging paused: "+observability.Describe(err)
+	if reason == "quota" {
+		message = "AI tagging paused: the provider quota is exhausted and gave no reset time"
+		if resumeAt != nil {
+			level, message = slog.LevelWarn, "AI tagging paused: the provider quota is exhausted; resuming at "+resumeAt.UTC().Format(time.RFC3339)
+		}
+	}
+	observability.Log(work, level, "ai_tag_paused", message, append([]any{"link_id", job.ID, "reason", reason}, observability.ErrorAttrs(err)...)...)
 	return t.store.BlockAITagJob(work, job, reason, resumeAt)
 }
