@@ -133,13 +133,13 @@ func (s *Store) ImportHTML(ctx context.Context, r io.Reader) (ImportResult, erro
 				mode = "link"
 				text.Reset()
 				current = &Link{CollectionID: parent}
-				if pocketmarkExport {
-					current.aiPrivate = privateAIFields("")
+				if !pocketmarkExport {
+					current.metadata = sourceOwner
 				}
 				for _, a := range token.Attr {
 					switch a.Key {
 					case "data-pocketmark-ai-public":
-						current.aiPrivate = privateAIFields(a.Val)
+						current.metadata = markedSource(a.Val)
 					case "href":
 						current.URL = a.Val
 					case "tags":
