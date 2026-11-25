@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/minio/minio-go/v7"
 	"pocketmark/internal/backup"
 	"pocketmark/internal/observability"
 	"pocketmark/internal/store"
@@ -292,7 +291,7 @@ func (a *Server) uploadBackup(ctx context.Context, j store.BackupJob, p *runProg
 	if e = p.stageAt("verify", "GetObject"); e != nil {
 		return e
 	}
-	obj, e := remote.Client.GetObject(ctx, j.Config.Bucket, key, minio.GetObjectOptions{VersionID: version})
+	obj, e := remote.Open(ctx, key, version)
 	if e != nil {
 		return e
 	}
@@ -325,17 +324,17 @@ func pruneBackup(ctx context.Context, j store.BackupJob, p *runProgress, remote 
 		// An interrupted PUT may have committed remotely before its version
 		// could be recorded. Each attempt has its own never-reused key.
 		if old == "" {
-			info, err := remote.Client.StatObject(ctx, j.Config.Bucket, object, minio.StatObjectOptions{})
+			current, found, err := remote.Version(ctx, object)
 			if err != nil {
-				if minio.ToErrorResponse(err).StatusCode != 404 {
-					return err
-				}
+				return err
+			}
+			if !found {
 				if err = j.ForgetObject(ctx, old, object); err != nil {
 					return err
 				}
 				continue
 			}
-			version = info.VersionID
+			version = current
 		}
 		if e = remote.Delete(ctx, object, version); e != nil {
 			return e

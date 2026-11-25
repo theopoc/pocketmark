@@ -21,9 +21,25 @@ import (
 
 var ErrChecksum = errors.New("backup checksum mismatch")
 
+// ObjectStore is the remote seam of a backup run. An adapter only moves
+// bytes: the run itself proves delivery by reading a copy back and comparing
+// its length and digest (ADR 0001), so an adapter cannot report a verified copy.
+type ObjectStore interface {
+	// Put stores n bytes under key and returns the version it created, if any.
+	Put(ctx context.Context, key string, r io.Reader, n int64) (version string, err error)
+	// Open reads one version of key; an empty version reads the current one.
+	Open(ctx context.Context, key, version string) (io.ReadCloser, error)
+	// Version reports the current version of key; found is false when absent.
+	Version(ctx context.Context, key string) (version string, found bool, err error)
+	// Delete removes one version of key permanently.
+	Delete(ctx context.Context, key, version string) error
+	Close()
+}
+
+// Remote is the S3-compatible ObjectStore adapter.
 type Remote struct {
-	Client    *minio.Client
-	Config    Config
+	client    *minio.Client
+	config    Config
 	transport *http.Transport
 }
 
@@ -46,22 +62,38 @@ func NewRemote(c Config, k Credentials) (*Remote, error) {
 }
 func (r *Remote) Close() { r.transport.CloseIdleConnections() }
 func (r *Remote) Put(ctx context.Context, key string, reader io.Reader, n int64) (string, error) {
-	info, e := r.Client.PutObject(ctx, r.Config.Bucket, key, reader, n, minio.PutObjectOptions{ContentType: "application/octet-stream", NumThreads: 1, PartSize: 8 << 20})
+	info, e := r.client.PutObject(ctx, r.config.Bucket, key, reader, n, minio.PutObjectOptions{ContentType: "application/octet-stream", NumThreads: 1, PartSize: 8 << 20})
 	return info.VersionID, e
 }
-func (r *Remote) Delete(ctx context.Context, key, version string) error {
-	return r.Client.RemoveObject(ctx, r.Config.Bucket, key, minio.RemoveObjectOptions{VersionID: version})
+func (r *Remote) Open(ctx context.Context, key, version string) (io.ReadCloser, error) {
+	return r.client.GetObject(ctx, r.config.Bucket, key, minio.GetObjectOptions{VersionID: version})
 }
+func (r *Remote) Version(ctx context.Context, key string) (string, bool, error) {
+	info, e := r.client.StatObject(ctx, r.config.Bucket, key, minio.StatObjectOptions{})
+	if e != nil {
+		if minio.ToErrorResponse(e).StatusCode == 404 {
+			return "", false, nil
+		}
+		return "", false, e
+	}
+	return info.VersionID, true, nil
+}
+func (r *Remote) Delete(ctx context.Context, key, version string) error {
+	return r.client.RemoveObject(ctx, r.config.Bucket, key, minio.RemoveObjectOptions{VersionID: version})
+}
+
+// Probe writes, reads back and deletes a random object under the configured
+// prefix. It returns the S3 operation that failed.
 func (r *Remote) Probe(ctx context.Context) (string, error) {
 	var seed [16]byte
 	rand.Read(seed[:])
-	key := r.Config.Prefix + "/.probe/" + hex.EncodeToString(seed[:])
+	key := r.config.Prefix + "/.probe/" + hex.EncodeToString(seed[:])
 	version, e := r.Put(ctx, key, bytes.NewReader(seed[:]), 16)
 	if e != nil {
 		return "PutObject", e
 	}
 	get := func() error {
-		f, e := r.Client.GetObject(ctx, r.Config.Bucket, key, minio.GetObjectOptions{VersionID: version})
+		f, e := r.Open(ctx, key, version)
 		if e != nil {
 			return e
 		}
