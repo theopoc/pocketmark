@@ -7,14 +7,14 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"math/big"
+	"pocketmark/internal/fault"
 	"slices"
 	"strings"
 	"time"
 )
 
-var errIdentity = errors.New("ChatGPT sign-in identity could not be verified")
+var errIdentity = fault.New("ai_tagging", "chatgpt_identity_unverified", "ChatGPT sign-in identity could not be verified")
 
 // The issuer and key endpoint are fixed. No JWT header can select a URL.
 func (c *Client) verifyIdentity(ctx context.Context, raw, audience, nonce string) (string, error) {

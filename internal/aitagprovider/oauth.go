@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"pocketmark/internal/fault"
 	"slices"
 	"strings"
 	"time"
@@ -38,7 +39,7 @@ func (c *Client) start(ctx context.Context, newAccount bool) (string, error) {
 	var location string
 	err := c.withLock(ctx, func(reg *registration, save func() error) error {
 		if newAccount && reg.Refresh != "" {
-			return errors.New("disconnect the current ChatGPT account first")
+			return fault.New("ai_tagging", "chatgpt_already_connected", "disconnect the current ChatGPT account first")
 		}
 		if reg.HostID == "" {
 			var id [16]byte
@@ -67,7 +68,7 @@ func (c *Client) start(ctx context.Context, newAccount bool) (string, error) {
 	return location, err
 }
 
-var ErrCallback = errors.New("paste the complete loopback callback from the current ChatGPT sign-in")
+var ErrCallback = fault.New("ai_tagging", "chatgpt_callback_invalid", "paste the complete loopback callback from the current ChatGPT sign-in")
 
 func (c *Client) Finish(ctx context.Context, callback string) error {
 	if len(callback) > 16<<10 {
@@ -239,7 +240,7 @@ func (c *Client) access(ctx context.Context) (string, error) {
 }
 
 // Disconnect removes renewable credentials while preserving the verified registration.
-var ErrRevocation = errors.New("disconnected locally; remote revocation was not confirmed; manage access in ChatGPT Settings")
+var ErrRevocation = fault.New("ai_tagging", "chatgpt_revocation_unconfirmed", "disconnected locally; remote revocation was not confirmed; manage access in ChatGPT Settings")
 
 func (c *Client) Disconnect(ctx context.Context) error {
 	return c.withEnvelope(ctx, func(raw []byte, write func([]byte) error) error {

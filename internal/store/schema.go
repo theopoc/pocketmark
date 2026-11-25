@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"pocketmark/internal/fault"
 )
 
 //go:embed migrations/001_initial.sql
@@ -47,7 +48,7 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 	switch version {
 	case 0:
 		if _, err = tx.ExecContext(ctx, initialSchema); err != nil {
-			return fmt.Errorf("initialize PostgreSQL schema: %w", err)
+			return fault.Cause("database", "initialize_postgresql_schema", "PostgreSQL schema step failed: initialize PostgreSQL schema", err)
 		}
 		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(1)"); err != nil {
 			return err
@@ -55,7 +56,7 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 		fallthrough
 	case 1:
 		if _, err = tx.ExecContext(ctx, challengeSchema); err != nil {
-			return fmt.Errorf("migrate MFA challenges: %w", err)
+			return fault.Cause("database", "migrate_mfa_challenges", "PostgreSQL schema step failed: migrate MFA challenges", err)
 		}
 		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(2)"); err != nil {
 			return err
@@ -63,7 +64,7 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 		fallthrough
 	case 2:
 		if _, err = tx.ExecContext(ctx, sessionAddressSchema); err != nil {
-			return fmt.Errorf("migrate session addresses: %w", err)
+			return fault.Cause("database", "migrate_session_addresses", "PostgreSQL schema step failed: migrate session addresses", err)
 		}
 		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(3)"); err != nil {
 			return err
@@ -71,7 +72,7 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 		fallthrough
 	case 3:
 		if _, err = tx.ExecContext(ctx, backupSchema); err != nil {
-			return fmt.Errorf("migrate scheduled backups: %w", err)
+			return fault.Cause("database", "migrate_scheduled_backups", "PostgreSQL schema step failed: migrate scheduled backups", err)
 		}
 		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(4)"); err != nil {
 			return err
@@ -79,7 +80,7 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 		fallthrough
 	case 4:
 		if _, err = tx.ExecContext(ctx, aiTagSchema); err != nil {
-			return fmt.Errorf("migrate AI tagging: %w", err)
+			return fault.Cause("database", "migrate_ai_tagging", "PostgreSQL schema step failed: migrate AI tagging", err)
 		}
 		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(5)"); err != nil {
 			return err
@@ -87,7 +88,7 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 		fallthrough
 	case 5:
 		if _, err = tx.ExecContext(ctx, readerArchiveSchema); err != nil {
-			return fmt.Errorf("migrate article reading copies: %w", err)
+			return fault.Cause("database", "migrate_article_reading_copies", "PostgreSQL schema step failed: migrate article reading copies", err)
 		}
 		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(6)"); err != nil {
 			return err
@@ -95,14 +96,14 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 		fallthrough
 	case 6:
 		if _, err = tx.ExecContext(ctx, aiProviderSchema); err != nil {
-			return fmt.Errorf("migrate AI tagging provider: %w", err)
+			return fault.Cause("database", "migrate_ai_tagging_provider", "PostgreSQL schema step failed: migrate AI tagging provider", err)
 		}
 		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(7)"); err != nil {
 			return err
 		}
 	case 7:
 	default:
-		return fmt.Errorf("unsupported Pocketmark schema version %d", version)
+		return fault.New("database", "schema_version_unsupported", fmt.Sprintf("database schema version %d is newer than this Pocketmark; upgrade Pocketmark", version))
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO ai_tag_settings(id) VALUES(1) ON CONFLICT DO NOTHING;
 DELETE FROM mfa_challenges WHERE EXISTS(SELECT 1 FROM mfa WHERE restored=1);

@@ -258,7 +258,7 @@ func TestCaptureHTTPStatusLogging(t *testing.T) {
 				t.Fatalf("capture data leaked: %s", logs.String())
 			}
 			entries := records(t, &logs)
-			if len(entries) != 1 || entries[0]["outcome"] != "failed" || entries[0]["level"] != "WARN" || entries[0]["error_kind"] != "http" || entries[0]["http_status"] != float64(status) || entries[0]["http_status_text"] != http.StatusText(status) {
+			if len(entries) != 1 || entries[0]["outcome"] != "failed" || entries[0]["level"] != "ERROR" || entries[0]["msg"] != strings.TrimSpace(fmt.Sprintf("Capture failed: remote server answered HTTP %d %s", status, http.StatusText(status))) || entries[0]["error_kind"] != "http" || entries[0]["http_status"] != float64(status) || entries[0]["http_status_text"] != http.StatusText(status) {
 				t.Fatalf("missing HTTP diagnostic: %v", entries)
 			}
 		})

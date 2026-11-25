@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"pocketmark/internal/backup"
@@ -45,7 +46,7 @@ func (a *Server) registerBackups(m *http.ServeMux) {
 			handleError(w, e)
 			return
 		}
-		observability.Logger(r.Context()).Info("backup_queued", "backup_id", id)
+		observability.Log(r.Context(), slog.LevelInfo, "backup_queued", "Manual backup queued", "backup_id", id)
 		respond(w, 202, map[string]string{"id": id})
 	})
 	m.HandleFunc("POST /api/backups/{id}/cancel", func(w http.ResponseWriter, r *http.Request) {
@@ -178,7 +179,7 @@ func (a *Server) ConfigureBackups(ctx context.Context, env backup.Environment) e
 				// Keep the owner interface available to supply missing fields, for
 				// example after recovering the account with a replacement secret.
 				state.effective.Enabled = false
-				observability.Logger(ctx).Warn("backup_schedule_incomplete", "reason", err.Error())
+				observability.Log(ctx, slog.LevelWarn, "backup_schedule_incomplete", "Scheduled backups paused until the configuration is complete", "reason", err.Error())
 			}
 		}
 		err = a.saveBackupState(ctx, state)
@@ -275,7 +276,7 @@ func (a *Server) testBackup(w http.ResponseWriter, r *http.Request) {
 	op, e := remote.Probe(ctx)
 	if e != nil {
 		code, status, _ := backup.Diagnosis(e)
-		observability.Logger(ctx).Warn("backup_probe_failed", "operation", op, "error_code", code, "http_status", status)
+		observability.Log(ctx, slog.LevelError, "backup_probe_failed", "S3 connection test failed at "+op+": "+backup.Reason(e), "operation", op, "error_code", code, "http_status", status)
 		respond(w, 502, map[string]string{"code": "backup_probe_failed", "error": "S3 connection test failed at " + op + " (" + code + ")."})
 		return
 	}

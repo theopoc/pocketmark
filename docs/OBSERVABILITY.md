@@ -8,9 +8,17 @@ by default. When enabled, backup metrics also export via OTLP/HTTP every 30 seco
 ## JSON logs
 
 `POCKETMARK_LOG_LEVEL` defaults to `INFO`; `DEBUG`, `WARN` and `ERROR` are also
-supported. Every application log has `time`, `level`, `service` and `msg` fields.
-Events include `server_started`, `server_stopped`, `http_request`,
-`capture_finished`, `capture_queue_failed`, and `trace_export_failed`.
+supported. Every application log has `time`, `level`, `service`, `msg` and `event`
+fields: `msg` is a readable sentence that explains a failure's cause, and `event` is
+the stable identifier to query. A process that cannot continue logs one `FATAL`
+record before exiting. [Logging conventions](LOGGING.md) define the severity levels
+and how failures get their messages.
+Events include `server_started`, `server_stopped`, `process_failed` (FATAL),
+`http_request`, `capture_finished`, `capture_queue_failed`, `backup_finished`,
+`backup_probe_failed`, `backup_notification_failed`, `ai_tag_queue_unavailable`,
+`ai_tag_bookmark_skipped`, `ai_tag_paused` and `trace_export_failed`. Startup
+configuration errors, including tracing settings, are reported once by
+`process_failed`.
 
 HTTP events include a newly generated `request_id` (also returned as
 `X-Request-ID`), normalized `method`, registered `route` template, `status`,
@@ -19,7 +27,7 @@ rejections as well as handlers. Successful health probes and metric scrapes log
 only at `DEBUG`; failures still log at `WARN`/`ERROR`. HTTP 4xx uses `WARN`, 5xx
 uses `ERROR`, and other requests use `INFO`. Handled failures emit a separate, correlated diagnostic event. Validation and
 constraint failures remain 4xx/WARN; unexpected internal failures return 500,
-PostgreSQL lock, serialization and deadlock errors returns 503, and upstream failures/timeouts return 502/504.
+PostgreSQL lock, serialization and deadlock errors and failed PostgreSQL connections return 503, and upstream failures/timeouts return 502/504.
 Unavailable authentication storage returns 503, not an invalid-credential 401.
 Canceled requests use INFO diagnostics; their access record retains its HTTP status.
 A completed HTTP response can still have `outcome:"failed"` when a stream fails
@@ -30,8 +38,9 @@ Automatic captures log their numeric `link_id`, random per-attempt `capture_id`,
 `failed`, `save_failed`, or `canceled`. A failed fetch is logged even when PostgreSQL
 successfully saves the failure. Capture details remain available in the library.
 `fetch_error` and `save_error` retain separate diagnostics when both phases fail;
-`canceled` does not overwrite them. Persistence failures use ERROR; ordinary fetch
-failures use WARN. `capture_queued` correlates direct create/retry requests with
+`canceled` does not overwrite them. Fetch and persistence failures use ERROR, with
+the cause in `msg` (for example `Capture failed: remote server answered HTTP 403
+Forbidden`); captures canceled by shutdown use INFO. `capture_queued` correlates direct create/retry requests with
 `link_id` and `request_id`; `link_updated` identifies edits that can requeue a URL.
 Bulk imports remain aggregate requests, not a per-link provenance journal.
 Rejected HTTP responses include `error_kind:"http"`, numeric `http_status` and
@@ -46,7 +55,9 @@ cookies, passwords, request/response bodies, capture content and panic values.
 Errors expose `error_kind`, stable `error_code`, the underlying `error_type`,
 known `operation` when available, and HTTP status, PostgreSQL SQLSTATE and system error codes. Codes
 separate blocked destinations, size/content/redirect limits, DNS failures,
-timeouts, permission errors and unexpected faults. They never copy raw messages.
+timeouts, permission errors and unexpected faults. `msg` holds the developer-owned
+fault message and a fixed sentence for the typed cause; it never copies raw error
+text from libraries, remote services or tools.
 Unexpected errors include up to four code-location frames in `source`. Panics
 include up to 16 frames in `stack`: function names, basename and line only, without
 arguments, panic values, source text or absolute filesystem paths. The low-level
@@ -62,7 +73,8 @@ belong to the deployment.
 
 1. Find `request_id` from the response's `X-Request-ID` header, then collect all
    records with that ID. The extension CORS policy exposes this header too.
-2. Read the diagnostic event's `error_code`, `operation`, native codes and `source`;
+2. Read the diagnostic event's `msg` for the cause, then `error_code`, `operation`,
+   native codes and `source`;
    use `http_request` for route, status, duration and final outcome. A 401/403 is
    an expected authentication/policy refusal; authentication storage outages are 503.
 3. For background capture, join `capture_queued`/`link_updated` to

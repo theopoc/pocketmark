@@ -88,7 +88,7 @@ func TestOperationalFailuresAndValidationHaveDifferentStatus(t *testing.T) {
 		// Exercise storage failure after authentication has already succeeded.
 		a.observer.HTTP(w, httptest.NewRequest("GET", path, nil), path, handler)
 		requireStatus(t, w, 500)
-		if !strings.Contains(logs.String(), `"msg":"request_failed"`) {
+		if !strings.Contains(logs.String(), `"event":"request_failed"`) {
 			t.Fatal("storage failure missing")
 		}
 	}
@@ -106,7 +106,7 @@ func TestCaptureQueueCorrelationAndOfflineFailure(t *testing.T) {
 	if err := json.NewDecoder(logs).Decode(&entry); err != nil {
 		t.Fatal(err)
 	}
-	if entry["msg"] != "capture_queued" || entry["link_id"] != float64(id) || entry["request_id"] != w.Header().Get("X-Request-ID") {
+	if entry["event"] != "capture_queued" || entry["link_id"] != float64(id) || entry["request_id"] != w.Header().Get("X-Request-ID") {
 		t.Fatalf("queue correlation: %v", entry)
 	}
 	logs.Reset()

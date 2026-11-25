@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"pocketmark/internal/backup"
+	"pocketmark/internal/fault"
 	"pocketmark/internal/store"
 )
 
@@ -190,5 +191,23 @@ func TestIncompleteEnabledBackupEnvironmentLeavesSettingsAvailable(t *testing.T)
 	w = request(a, "GET", "/api/backups", "", true, nil)
 	if json.Unmarshal(w.Body.Bytes(), &state) != nil || state.Settings.Next == nil || state.Settings.SetupError != "" {
 		t.Fatal("schedule did not resume")
+	}
+}
+
+func TestTelegramRejectionsExplainTheFix(t *testing.T) {
+	for status, code := range map[int]string{
+		http.StatusBadRequest:          "telegram_chat_rejected",
+		http.StatusUnauthorized:        "telegram_token_rejected",
+		http.StatusForbidden:           "telegram_chat_forbidden",
+		http.StatusNotFound:            "telegram_token_rejected",
+		http.StatusInternalServerError: "telegram_rejected",
+	} {
+		err := sendBackupTelegram(context.Background(), telegramRoundTrip(func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(`{"ok":false}`))}, nil
+		}), "123:example", "42", "test")
+		var app *fault.Error
+		if !errors.As(err, &app) || app.Code != code || strings.Contains(err.Error(), "123:example") {
+			t.Fatalf("HTTP %d: %v", status, err)
+		}
 	}
 }
