@@ -7,6 +7,7 @@
 - **Full backup** is a consistent copy of the library, captures, attachments and account records used to restore a Pocketmark instance. Recovery also requires the original server secret, kept separately. [Backup and restore](docs/GUIDE.md#back-up-everything).
 - **Metadata export** contains bookmark metadata for transfer between libraries.
 - **AI tagging** assigns lowercase English tags to an untagged website bookmark. It reuses relevant English tags from the library and can create new ones when none fit.
+- **AI tagging provider** is the connected ChatGPT plan or Anthropic API key that classifies bookmarks. One is selected at a time; changing it clears the selected model and pauses AI tagging.
 - **Backup schedule** is the recurring time and choice of contents for an instance’s remote backups.
 - **Backup run** is one scheduled or owner-triggered operation to save a restore point in the configured remote storage. Retries belong to the same run.
 - **Backup window** is the time a remote backup run has to produce a verified copy and complete required retention, including time spent retrying. A manual request waiting for an earlier run to finish gets its own window when it starts.
