@@ -34,6 +34,8 @@ services:
     tmpfs:
       - /var/lib/garage:size=256m
     # The image has no shell: ask the Garage CLI (over RPC) for the default bucket.
+    # Keep the bucket name in sync with &s3_bucket and POCKETMARK_TEST_S3_BUCKET
+    # in scripts/dev_env.sh.
     healthcheck:
       test: ["CMD", "/garage", "bucket", "info", "pocketmark-dev"]
       interval: 2s
