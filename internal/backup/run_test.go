@@ -10,6 +10,7 @@ import (
 	"io"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -337,10 +338,9 @@ func TestRunRetriesTemporaryFailureThenResumesAtRetention(t *testing.T) {
 }
 
 func TestRunGivesUpWhenBackupWindowHasEnded(t *testing.T) {
+	// No earlier run: the journal's connection is fresh, so its statements are
+	// not prepared yet. Preparing one under an ended window must not close it.
 	f := newRunFixture(t, 7)
-	// Warm the pooled connection: a fresh one is currently closed by the first
-	// journal call made with an already-ended window, leaving the run active.
-	f.run(true, nil)
 	puts := f.remote.puts
 	run := f.run(true, func(j *backup.Job) {
 		ended := time.Now().Add(-time.Second)
@@ -348,6 +348,38 @@ func TestRunGivesUpWhenBackupWindowHasEnded(t *testing.T) {
 	})
 	if run.Status != "failed" || run.Diagnostic["error_code"] != "deadline_exceeded" || f.remote.puts != puts {
 		t.Fatal(run.Status, run.Diagnostic, f.remote.puts-puts)
+	}
+}
+
+func TestRunFinishesWhenWindowEndsDuringJournalWrite(t *testing.T) {
+	f := newRunFixture(t, 7)
+	lock, err := f.db.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Rollback()
+	var blocked atomic.Bool
+	run := f.run(true, func(j *backup.Job) {
+		// Block the journal's next progress write past the end of the window.
+		if _, err := lock.Exec("SELECT FROM backup_runs WHERE id=$1 FOR UPDATE", j.ID); err != nil {
+			t.Fatal(err)
+		}
+		ends := time.Now().Add(300 * time.Millisecond)
+		j.Deadline = &ends
+		time.AfterFunc(time.Second, func() {
+			// Prove the journal write was waiting on the lock past the window.
+			var waiting int
+			if err := f.db.QueryRow("SELECT count(*) FROM pg_locks WHERE NOT granted").Scan(&waiting); err == nil {
+				blocked.Store(waiting > 0)
+			}
+			_ = lock.Rollback()
+		})
+	})
+	if !blocked.Load() {
+		t.Fatal("no journal write was blocked when the window ended")
+	}
+	if run.Status != "failed" || run.Diagnostic["error_code"] != "deadline_exceeded" || f.remote.puts != 0 {
+		t.Fatal(run.Status, run.Diagnostic, f.remote.puts)
 	}
 }
 
