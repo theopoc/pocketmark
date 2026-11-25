@@ -126,6 +126,7 @@ scrape_configs:
 | `pocketmark_go_managed_memory_bytes` | Go runtime memory minus released heap; excludes PostgreSQL and native allocations and is **not RSS**. |
 | `pocketmark_go_heap_live_bytes` | Live Go heap measured at the last garbage collection. |
 | `pocketmark_go_goroutines` | Current Go goroutines. |
+| `pocketmark_backup_metrics_up` | `1` when this scrape read the [backup metrics](#scheduled-backup-signals) from PostgreSQL, `0` when that read failed or took longer than 2 seconds. |
 
 Duration buckets are 5, 10, 25, 50, 100, 250 and 500 ms, then 1, 2.5, 5, 10, 30
 and 60 seconds, plus `+Inf`. Counters reset on process restart. Scrapes count as
@@ -137,10 +138,33 @@ combination. Unknown methods become `_OTHER`; unknown routes become `_unmatched`
 Routes use templates such as `/api/links/{id}` and `/dav/`, never bookmark IDs or
 WebDAV filenames. Overflow requests remain in the aggregate histogram. The registry
 uses fixed histograms and a bounded map, with no Prometheus client dependency,
-background polling, database scan or per-bookmark state. Scrapes copy the bounded
-snapshot, release the lock, then stream the response. The existing eight-request
-admission limit also covers scrapes. `/api/stats` remains the on-demand source for
-library totals and pending/failed capture counts.
+background polling or per-bookmark state. Scrapes copy the bounded snapshot,
+release the lock, then stream the response. Scrapes have their own two admission
+slots, so a library saturating the eight general slots does not blind monitoring,
+and scrapes never take a library slot; a third concurrent scrape receives 503.
+`/api/stats` remains the on-demand source for library totals and pending/failed
+capture counts.
+
+A scrape reads PostgreSQL twice: once to authenticate the session or API key,
+then once for the small `backup_metrics` table. The whole scrape has a 3-second
+budget, below Prometheus' default 10-second scrape timeout, and the backup read
+at most 2 seconds of it. When the backup read fails or times out, the scrape
+still returns 200 with every process metric, omits the `pocketmark_backup_*`
+values, reports `pocketmark_backup_metrics_up 0` and logs
+`backup_metrics_read_failed` at `WARN`. Authentication cannot skip the database,
+so while PostgreSQL is unreachable, or too slow to authenticate within the
+budget, `/metrics` returns 503 like other authenticated routes, logs
+`authentication_failed` at `ERROR`, and Prometheus records the target as down.
+A hung database thus holds a scrape and its slot for at most 3 seconds. Alert on
+the scrape itself as well as on the application:
+
+| Alert | Expression |
+| --- | --- |
+| Pocketmark unscrapable (process down, auth storage unavailable or overloaded) | `up{job="pocketmark"} == 0` for 2m |
+| Backup metrics unreadable | `max(pocketmark_backup_metrics_up) == 0` for 5m |
+
+`/healthz` pings PostgreSQL without authentication and `/livez` checks only the
+process, so they separate a database outage from a dead process.
 
 ## Optional OpenTelemetry traces
 
