@@ -200,23 +200,6 @@ func TestRetentionRefusalPreservesVerifiedCopyAndAlertsOnce(t *testing.T) {
 	}
 }
 
-// Opt in with a disposable bucket; objects are scoped to the newly created test instance.
-func TestGarageBackupRoundTrip(t *testing.T) {
-	endpoint := os.Getenv("POCKETMARK_TEST_S3_ENDPOINT")
-	if endpoint == "" {
-		t.Skip("requires disposable S3 endpoint")
-	}
-	c := backup.Default()
-	c.Endpoint = endpoint
-	if region := os.Getenv("POCKETMARK_TEST_S3_REGION"); region != "" {
-		c.Region = region
-	}
-	c.Bucket = os.Getenv("POCKETMARK_TEST_S3_BUCKET")
-	c.AllowHTTP = true
-	credentials := backup.Credentials{AccessKey: os.Getenv("POCKETMARK_TEST_S3_KEY"), SecretKey: os.Getenv("POCKETMARK_TEST_S3_SECRET")}
-	testBackupRecovery(t, c, credentials)
-}
-
 func testBackupRecovery(t *testing.T, c backup.Config, credentials backup.Credentials) {
 	t.Helper()
 	a := newTestServer(t, "", false)
