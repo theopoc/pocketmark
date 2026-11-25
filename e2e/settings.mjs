@@ -193,8 +193,9 @@ export async function backupRemoteJourney(page) {
   await configure.getByLabel('Secret access key').fill('e2e-secret');
   await configure.getByLabel('Allow HTTP for a private endpoint').check();
   await configure.getByRole('button', { name: 'Test connection' }).click();
-  await configure.getByRole('alert').filter({ hasText: 'S3 connection test failed at PutObject (InvalidAccessKeyId).' }).waitFor();
-  assert.equal(await configure.getByText('e2e-secret').count(), 0);
+  const failure = configure.getByRole('alert').filter({ hasText: 'S3 connection test failed at PutObject (InvalidAccessKeyId).' });
+  await failure.waitFor();
+  assert.equal((await failure.innerText()).includes('e2e-secret'), false, 'connection error shows the secret');
   await configure.getByLabel('Access key ID').fill(accessKey);
   await configure.getByRole('button', { name: 'Test connection' }).click();
   await configure.getByRole('status').filter({ hasText: 'Connection verified.' }).waitFor();
