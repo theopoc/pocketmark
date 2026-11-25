@@ -11,6 +11,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -415,7 +416,7 @@ func (a *Server) createLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if link.Status == "pending" {
-		observability.Logger(r.Context()).InfoContext(r.Context(), "capture_queued", "link_id", v, "operation", "link.create")
+		observability.Log(r.Context(), slog.LevelInfo, "capture_queued", "Bookmark created; capture queued", "link_id", v, "operation", "link.create")
 	}
 	if len(link.Tags) == 0 {
 		a.aiTagging.notify()
@@ -439,7 +440,7 @@ func (a *Server) updateLink(w http.ResponseWriter, r *http.Request) {
 		handleError(w, e)
 		return
 	}
-	observability.Logger(r.Context()).InfoContext(r.Context(), "link_updated", "link_id", id(r))
+	observability.Log(r.Context(), slog.LevelInfo, "link_updated", "Bookmark updated", "link_id", id(r))
 	a.getLink(w, r)
 }
 func (a *Server) deleteLink(w http.ResponseWriter, r *http.Request) {
@@ -454,7 +455,7 @@ func (a *Server) captureLink(w http.ResponseWriter, r *http.Request) {
 		handleError(w, e)
 		return
 	}
-	observability.Logger(r.Context()).InfoContext(r.Context(), "capture_queued", "link_id", id(r), "operation", "capture.queue")
+	observability.Log(r.Context(), slog.LevelInfo, "capture_queued", "Capture retry queued", "link_id", id(r), "operation", "capture.queue")
 	respond(w, 202, map[string]bool{"ok": true})
 }
 func (a *Server) stats(w http.ResponseWriter, r *http.Request) {
@@ -520,7 +521,7 @@ func ValidateOrigin(raw string) error {
 	}
 	u, e := url.Parse(raw)
 	if e != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
-		return errors.New("POCKETMARK_ORIGIN must be an http(s) origin without a path")
+		return fault.New("configuration", "invalid_origin", "POCKETMARK_ORIGIN must be an http(s) origin without a path")
 	}
 	return nil
 }

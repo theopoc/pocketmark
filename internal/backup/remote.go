@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -17,9 +18,12 @@ import (
 	"os/exec"
 	"syscall"
 	"time"
+
+	"pocketmark/internal/fault"
+	"pocketmark/internal/observability"
 )
 
-var ErrChecksum = errors.New("backup checksum mismatch")
+var ErrChecksum = fault.New("backup", "checksum_mismatch", "uploaded backup checksum does not match the local archive")
 
 type Remote struct {
 	Client    *minio.Client
@@ -32,7 +36,7 @@ func NewRemote(c Config, k Credentials) (*Remote, error) {
 		return nil, e
 	}
 	if k.AccessKey == "" || k.SecretKey == "" {
-		return nil, errors.New("missing S3 credentials")
+		return nil, fault.New("backup", "s3_credentials_missing", "S3 access key or secret key is missing")
 	}
 	u, _ := url.Parse(c.Endpoint)
 	tr := http.DefaultTransport.(*http.Transport).Clone()
@@ -92,11 +96,15 @@ func Diagnosis(e error) (code string, status int, retry bool) {
 	var cert *tls.CertificateVerificationError
 	var exit *exec.ExitError
 	var pg *pgconn.PgError
+	var app *fault.Error
 	switch {
-	case errors.Is(e, ErrLibrarySize):
-		return "library_zip_too_large", 0, false
-	case errors.Is(e, ErrChecksum):
-		return "checksum_mismatch", 0, false
+	case errors.Is(e, context.Canceled):
+		return "cancelled", 0, false
+	case errors.Is(e, context.DeadlineExceeded):
+		return "timeout", 0, true
+	case errors.As(e, &app) && app.Kind == "backup":
+		// Backup faults (checksum, size, pg_dump causes) already carry their code.
+		return app.Code, 0, false
 	case errors.As(e, &cert):
 		return "certificate_verification", 0, false
 	case errors.Is(e, syscall.ENOSPC):
@@ -107,8 +115,6 @@ func Diagnosis(e error) (code string, status int, retry bool) {
 		return "pg_dump_failed", 0, false
 	case errors.As(e, &pg):
 		return "postgresql", 0, pg.Code == "40001" || pg.Code == "40P01"
-	case errors.Is(e, context.Canceled):
-		return "cancelled", 0, false
 	}
 	var n net.Error
 	if errors.As(e, &n) {
@@ -117,9 +123,33 @@ func Diagnosis(e error) (code string, status int, retry bool) {
 		}
 		return "network_error", 0, true
 	}
-	if errors.Is(e, context.DeadlineExceeded) {
-		return "timeout", 0, true
-	}
 
 	return "operation_failed", 0, false
+}
+
+var s3Reasons = map[string]string{
+	"AccessDenied":          "S3 denied access; check the key permissions and the bucket policy",
+	"SignatureDoesNotMatch": "S3 rejected the secret access key",
+	"InvalidAccessKeyId":    "S3 does not recognize the access key ID",
+	"NoSuchBucket":          "the S3 bucket does not exist",
+	"SlowDown":              "S3 is throttling requests",
+	"RequestTimeout":        "S3 timed out waiting for the request body",
+	"InternalError":         "S3 reported an internal error",
+	"ServiceUnavailable":    "S3 is unavailable",
+}
+
+// Reason explains a backup failure in one log-safe sentence. S3 error codes
+// come from a fixed list; anything else uses the generic classification.
+func Reason(e error) string {
+	var s minio.ErrorResponse
+	if errors.As(e, &s) {
+		if reason, ok := s3Reasons[s.Code]; ok {
+			return fmt.Sprintf("%s (HTTP %d)", reason, s.StatusCode)
+		}
+		return fmt.Sprintf("S3 request failed (HTTP %d %s)", s.StatusCode, http.StatusText(s.StatusCode))
+	}
+	if errors.Is(e, exec.ErrNotFound) {
+		return "pg_dump is not installed or not in PATH"
+	}
+	return observability.Describe(e)
 }

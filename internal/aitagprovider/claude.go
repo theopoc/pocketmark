@@ -10,6 +10,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"pocketmark/internal/fault"
 	"strings"
 	"time"
 )
@@ -24,7 +25,7 @@ const (
 
 var (
 	// ErrInvalidKey reports a key that Anthropic rejected or that is malformed.
-	ErrInvalidKey = errors.New("the Anthropic API key was not accepted")
+	ErrInvalidKey = fault.New("ai_tagging", "anthropic_key_rejected", "the Anthropic API key was not accepted")
 
 	tagSchema = map[string]any{
 		"type": "object",

@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"time"
+
+	"pocketmark/internal/fault"
 )
 
 var (
@@ -64,7 +66,7 @@ func (s *Store) snapshot(ctx context.Context, anonymous bool) (*os.File, error) 
 	// libpq accepts a connection URI as --dbname. Keep credentials out of argv.
 	u, err := url.Parse(s.databaseURL)
 	if err != nil {
-		return nil, errors.New("invalid database configuration")
+		return nil, fault.New("configuration", "database_url_invalid", "POCKETMARK_DATABASE_URL is not a valid PostgreSQL connection URI")
 	}
 	password, hasPassword := u.User.Password()
 	user := u.User.Username()
@@ -86,8 +88,10 @@ func (s *Store) snapshot(ctx context.Context, anonymous bool) (*os.File, error) 
 		cmd.Env = append(cmd.Env, "PGPASSWORD="+password)
 	}
 	cmd.Stdout = f
+	stderr := &tailBuffer{}
+	cmd.Stderr = stderr
 	if err = cmd.Run(); err != nil {
-		return nil, fmt.Errorf("PostgreSQL backup: %w", err)
+		return nil, pgDumpFailure(err, stderr.b)
 	}
 	if _, err = f.WriteString("\nUPDATE public.mfa SET restored=1 WHERE id=1;\n"); err != nil {
 		return nil, err
@@ -151,4 +155,48 @@ func (s *Store) ReaderDocument(ctx context.Context, id int64, assetID *int64) ([
 		return nil, ErrNoReaderDocument
 	}
 	return body, nil
+}
+
+// tailBuffer keeps the last 4 KiB of pg_dump diagnostics to classify a failure.
+type tailBuffer struct{ b []byte }
+
+func (t *tailBuffer) Write(p []byte) (int, error) {
+	t.b = append(t.b, p...)
+	if len(t.b) > 4096 {
+		t.b = append(t.b[:0], t.b[len(t.b)-4096:]...)
+	}
+	return len(p), nil
+}
+
+var pgDumpCauses = []struct{ match, code, message string }{
+	{"server version mismatch", "pg_dump_version_mismatch", "pg_dump is older than the PostgreSQL server; install a pg_dump of the same major version or newer"},
+	{"password authentication failed", "pg_dump_authentication_failed", "pg_dump could not authenticate to PostgreSQL; check the password in POCKETMARK_DATABASE_URL"},
+	{"no password supplied", "pg_dump_authentication_failed", "pg_dump could not authenticate to PostgreSQL; POCKETMARK_DATABASE_URL has no password"},
+	{"does not exist", "pg_dump_object_missing", "pg_dump could not find the database or role named in POCKETMARK_DATABASE_URL"},
+	{"permission denied", "pg_dump_permission_denied", "pg_dump lacks permission to read a table; grant the role read access to the schema"},
+	{"could not connect", "pg_dump_connection_failed", "pg_dump could not connect to PostgreSQL"},
+	{"connection to server", "pg_dump_connection_failed", "pg_dump could not connect to PostgreSQL"},
+	{"no space left on device", "pg_dump_disk_full", "pg_dump ran out of disk space"},
+}
+
+// pgDumpFailure selects a static message from pg_dump's diagnostics. The tool's
+// output is matched only, never copied: it can name hosts, roles and objects.
+func pgDumpFailure(err error, stderr []byte) error {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err // Cancellation and timeouts keep their own classification.
+	}
+	lower := bytes.ToLower(stderr)
+	for _, cause := range pgDumpCauses {
+		if bytes.Contains(lower, []byte(cause.match)) {
+			return fault.Cause("backup", cause.code, cause.message, err)
+		}
+	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		return fault.Cause("backup", "pg_dump_failed", fmt.Sprintf("pg_dump exited with status %d", exit.ExitCode()), err)
+	}
+	if errors.Is(err, exec.ErrNotFound) {
+		return fault.Cause("backup", "pg_dump_missing", "pg_dump is not installed or not in PATH", err)
+	}
+	return fault.Cause("backup", "pg_dump_failed", "pg_dump could not run", err)
 }

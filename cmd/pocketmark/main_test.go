@@ -140,7 +140,7 @@ func TestWorkerReportsPersistedCaptureFailure(t *testing.T) {
 type captureLog struct{ finished chan []byte }
 
 func (w *captureLog) Write(p []byte) (int, error) {
-	if bytes.Contains(p, []byte(`"msg":"capture_finished"`)) {
+	if bytes.Contains(p, []byte(`"event":"capture_finished"`)) {
 		select {
 		case w.finished <- bytes.Clone(p):
 		default:
@@ -178,7 +178,7 @@ func TestForcedShutdownIsDiagnosable(t *testing.T) {
 		t.Fatal("active request was not forcibly closed")
 	}
 	<-done
-	for _, want := range []string{`"msg":"server_shutdown_failed"`, `"operation":"http.shutdown"`, `"error_code":"deadline_exceeded"`} {
+	for _, want := range []string{`"event":"server_shutdown_failed"`, `"operation":"http.shutdown"`, `"error_code":"deadline_exceeded"`} {
 		if !strings.Contains(logs.String(), want) {
 			t.Fatalf("missing shutdown diagnostic: %s", logs.String())
 		}
