@@ -129,7 +129,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version: '26'
       - name: Create only the tested PR's tag and draft
         if: github.event_name == 'pull_request'
         env:
@@ -199,7 +199,7 @@ jobs:
           cache-dependency-path: go.sum
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '24'
+          node-version: '26'
       - name: Build distribution binary or recover published bytes
         env:
           GH_TOKEN: ${{ github.token }}
@@ -397,7 +397,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: matrix.arch == 'amd64'
         with:
-          node-version: '24'
+          node-version: '26'
       - name: Install browser tooling once
         if: matrix.arch == 'amd64'
         run: |
