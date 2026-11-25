@@ -3392,7 +3392,7 @@
           "Monitoring"
         ],
         "summary": "Read Prometheus metrics",
-        "description": "Authenticated; read/full keys or owner. Bounded labels do not contain bookmark URLs or credential material. Process metrics are always returned; backup metrics are included only when their database read succeeds within 2 seconds, as reported by pocketmark_backup_metrics_up. Authentication needs the database, so a database outage returns 503. Allowed API key profiles: read, full.",
+        "description": "Authenticated; read/full keys or owner. Bounded labels do not contain bookmark URLs or credential material. Process metrics are always returned; backup metrics are included only when their database read succeeds within 2 seconds, as reported by pocketmark_backup_metrics_up. The whole scrape has a 3-second budget. Authentication needs the database, so a database outage or authentication slower than 3 seconds returns 503. Allowed API key profiles: read, full.",
         "responses": {
           "5XX": {
             "$ref": "#/components/responses/ServerError"
@@ -7702,7 +7702,7 @@
         }
       },
       "503": {
-        "description": "Server busy (eight library slots, two authentication slots or two readiness slots), database unavailable, or session persistence failed.",
+        "description": "Server busy (eight library slots, two authentication slots, two readiness slots or two metrics scrape slots), database unavailable, or session persistence failed.",
         "content": {
           "application/json": {
             "schema": {
