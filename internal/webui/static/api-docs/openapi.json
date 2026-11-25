@@ -3,7 +3,7 @@
   "info": {
     "title": "Pocketmark HTTP API",
     "version": "1.0.0",
-    "description": "Native API for your personal bookmark library. JSON errors have an error field. Operational failures use 500, 503 (unavailable storage/authentication), or 502/504 (upstream failure/timeout). X-Request-ID correlates responses with server diagnostics. Invalid credentials remain 401; validation remains 4xx. Browser requests use the existing owner session automatically; integrations send `Authorization: Bearer <key>`. Named keys cannot manage the account, API keys or full backups. First-run setup, login and health are public. Mutations enforce same-origin browser checks; configure POCKETMARK_ORIGIN to the exact public origin behind a reverse proxy. Limits measured in bytes are UTF-8 byte limits, not character counts. At most eight concurrent library requests; excess work returns 503. “Try it out” performs real operations on this instance. WebDAV /dav/ and removed Linkwarden compatibility routes are outside this reference. Public authentication has two separate slots and a five-second POST body deadline. /healthz has separate readiness slots; /livez checks process liveness independently. All HTTP requests except GET/HEAD health probes share a per-client token bucket: 10 requests/second, burst 100 by default (POCKETMARK_RATE_LIMIT and POCKETMARK_RATE_BURST). IPv6 clients share a /64. Rejection occurs before authentication/body reads and returns 429 with Retry-After. At most 256 sources are tracked; new sources fail closed at capacity. State resets on restart. Trusted forwarding requires POCKETMARK_TRUSTED_PROXIES. Security controls: owner-only actions, five-minute password confirmation, scoped expiring API keys, immediate key rotation and revocable browser sessions. WebDAV nonstandard methods are described by x-webdav-methods; they are not native OAS operations."
+    "description": "Native API for your personal bookmark library. JSON errors have an error field. Operational failures use 500, 503 (unavailable storage/authentication), or 502/504 (upstream failure/timeout). X-Request-ID correlates responses with server diagnostics. Invalid credentials remain 401; validation remains 4xx. Browser requests use the existing owner session automatically; integrations send `Authorization: Bearer <key>`. Named keys cannot manage the account, API keys or full backups. First-run setup, login and health are public. Mutations enforce same-origin browser checks; configure POCKETMARK_ORIGIN to the exact public origin behind a reverse proxy. Limits measured in bytes are UTF-8 byte limits, not character counts. At most eight concurrent library requests; excess work returns 503. “Try it out” performs real operations on this instance. WebDAV /dav/ and removed Linkwarden compatibility routes are outside this reference. Public authentication has two separate slots and a five-second POST body deadline. /healthz has separate readiness slots and /metrics separate scrape slots; /livez checks process liveness independently. All HTTP requests except GET/HEAD health probes share a per-client token bucket: 10 requests/second, burst 100 by default (POCKETMARK_RATE_LIMIT and POCKETMARK_RATE_BURST). IPv6 clients share a /64. Rejection occurs before authentication/body reads and returns 429 with Retry-After. At most 256 sources are tracked; new sources fail closed at capacity. State resets on restart. Trusted forwarding requires POCKETMARK_TRUSTED_PROXIES. Security controls: owner-only actions, five-minute password confirmation, scoped expiring API keys, immediate key rotation and revocable browser sessions. WebDAV nonstandard methods are described by x-webdav-methods; they are not native OAS operations."
   },
   "servers": [
     {
@@ -3392,7 +3392,7 @@
           "Monitoring"
         ],
         "summary": "Read Prometheus metrics",
-        "description": "Authenticated; read/full keys or owner. Bounded labels do not contain bookmark URLs or credential material. Allowed API key profiles: read, full.",
+        "description": "Authenticated; read/full keys or owner. Bounded labels do not contain bookmark URLs or credential material. Process metrics are always returned; backup metrics are included only when their database read succeeds within 2 seconds, as reported by pocketmark_backup_metrics_up. The whole scrape has a 3-second budget. Authentication needs the database, so a database outage or authentication slower than 3 seconds returns 503. Allowed API key profiles: read, full.",
         "responses": {
           "5XX": {
             "$ref": "#/components/responses/ServerError"
@@ -7702,7 +7702,7 @@
         }
       },
       "503": {
-        "description": "Server busy (eight library slots, two authentication slots or two readiness slots), database unavailable, or session persistence failed.",
+        "description": "Server busy (eight library slots, two authentication slots, two readiness slots or two metrics scrape slots), database unavailable, or session persistence failed.",
         "content": {
           "application/json": {
             "schema": {
