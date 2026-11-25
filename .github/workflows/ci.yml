@@ -346,10 +346,12 @@ jobs:
       - name: Require every validation job to succeed
         env:
           RESULTS: ${{ toJSON(needs) }}
+          CODE: ${{ needs.changes.outputs.code }}
+          EVENT: ${{ github.event_name }}
         run: |
           # Heavy jobs are skipped only for Markdown-only PRs; the title job only runs on PRs.
-          jq -e --arg code "${{ needs.changes.outputs.code }}" '
+          jq -e --arg code "$CODE" --arg event "$EVENT" '
             .changes.result == "success"
-            and (.title.result == "success" or (.title.result == "skipped" and "${{ github.event_name }}" != "pull_request"))
-            and ([.quality, .security, .sast, .test, .extension][] | .result == "success" or ($code == "false" and .result == "skipped"))
+            and (.title.result == "success" or (.title.result == "skipped" and $event != "pull_request"))
+            and all([.quality, .security, .sast, .test, .extension][]; .result == "success" or ($code == "false" and .result == "skipped"))
           ' <<< "$RESULTS"
