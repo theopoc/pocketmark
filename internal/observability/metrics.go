@@ -48,6 +48,7 @@ type measurements struct {
 	httpErrors   atomic.Uint64
 	queueErrors  atomic.Uint64
 	exportErrors atomic.Uint64
+	workerPanics [workerCount]atomic.Uint64
 }
 
 func (m *measurements) observeHTTP(key httpLabels, elapsed time.Duration) {
@@ -113,6 +114,10 @@ func (o *Observer) Metrics(w http.ResponseWriter, _ *http.Request) {
 	}
 	fmt.Fprintf(w, "# TYPE pocketmark_http_in_flight gauge\npocketmark_http_in_flight %d\n# TYPE pocketmark_capture_queue_errors_total counter\npocketmark_capture_queue_errors_total %d\n# TYPE pocketmark_trace_export_errors_total counter\npocketmark_trace_export_errors_total %d\n", m.inflight.Load(), m.queueErrors.Load(), m.exportErrors.Load())
 	fmt.Fprintf(w, "# TYPE pocketmark_http_failures_total counter\npocketmark_http_failures_total %d\n", m.httpErrors.Load())
+	fmt.Fprintln(w, "# HELP pocketmark_worker_panics_total Panics recovered in background workers.\n# TYPE pocketmark_worker_panics_total counter")
+	for i, worker := range workers {
+		fmt.Fprintf(w, "pocketmark_worker_panics_total{worker=%q} %d\n", worker.label, m.workerPanics[i].Load())
+	}
 
 	samples := []metrics.Sample{{Name: "/memory/classes/total:bytes"}, {Name: "/memory/classes/heap/released:bytes"}, {Name: "/gc/heap/live:bytes"}, {Name: "/sched/goroutines:goroutines"}}
 	metrics.Read(samples)
