@@ -1,9 +1,9 @@
 package server
 
 import (
-	"fmt"
 	"net/http"
 	"net/netip"
+	"pocketmark/internal/fault"
 	"strings"
 	"time"
 )
@@ -21,7 +21,7 @@ func (a *Server) SetTrustedProxies(raw string) error {
 		for _, part := range strings.Split(raw, ",") {
 			prefix, err := netip.ParsePrefix(strings.TrimSpace(part))
 			if err != nil {
-				return fmt.Errorf("POCKETMARK_TRUSTED_PROXIES must contain comma-separated CIDRs: %w", err)
+				return fault.New("configuration", "invalid_trusted_proxies", "POCKETMARK_TRUSTED_PROXIES must contain comma-separated CIDRs")
 			}
 			prefixes = append(prefixes, prefix.Masked())
 		}

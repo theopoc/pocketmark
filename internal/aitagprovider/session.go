@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"pocketmark/internal/fault"
 	"time"
 )
 
@@ -23,12 +24,12 @@ const (
 )
 
 var (
-	ErrReconnect  = errors.New("connect your ChatGPT plan again")
-	ErrUnreadable = errors.New("the saved ChatGPT connection cannot be opened; disconnect and connect it again")
-	errSession    = errors.New("could not read or save the protected ChatGPT connection")
-	errProvider   = errors.New("ChatGPT could not complete the request")
-	errInvalid    = errors.New("ChatGPT returned an invalid response")
-	errGrant      = errors.New("ChatGPT plan access was not granted")
+	ErrReconnect  = fault.New("ai_tagging", "chatgpt_reconnect_required", "connect your ChatGPT plan again")
+	ErrUnreadable = fault.New("ai_tagging", "chatgpt_session_unreadable", "the saved ChatGPT connection cannot be opened; disconnect and connect it again")
+	errSession    = fault.New("ai_tagging", "chatgpt_session_storage_failed", "could not read or save the protected ChatGPT connection")
+	errProvider   = fault.New("ai_tagging", "chatgpt_request_failed", "ChatGPT could not complete the request")
+	errInvalid    = fault.New("ai_tagging", "chatgpt_invalid_response", "ChatGPT returned an invalid response")
+	errGrant      = fault.New("ai_tagging", "chatgpt_grant_missing", "ChatGPT plan access was not granted")
 )
 
 type QuotaError struct{ RetryAt time.Time }

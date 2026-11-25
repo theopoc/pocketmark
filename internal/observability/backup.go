@@ -89,7 +89,7 @@ type privateMetricExporter struct{ sdk.Exporter }
 
 func (e privateMetricExporter) Export(ctx context.Context, data *metricdata.ResourceMetrics) error {
 	if err := e.Exporter.Export(ctx, data); err != nil {
-		slog.WarnContext(ctx, "backup_metrics_export_failed", ErrorAttrs(err)...)
+		Log(ctx, slog.LevelWarn, "backup_metrics_export_failed", Failure("backup_metrics_export_failed", err)+"; metrics stay available at /metrics", ErrorAttrs(err)...)
 	}
 	return nil
 }

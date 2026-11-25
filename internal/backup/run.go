@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,6 +12,7 @@ import (
 	"path"
 	"time"
 
+	"pocketmark/internal/fault"
 	"pocketmark/internal/observability"
 )
 
@@ -79,7 +79,7 @@ var retryDelays = []time.Duration{time.Minute, 5 * time.Minute, 15 * time.Minute
 // It returns an error only when the outcome itself could not be recorded.
 func (r Runner) Run(parent context.Context, j Job, journal Journal) error {
 	if j.Deadline == nil {
-		return errors.New("active backup missing deadline")
+		return fault.New("backup", "deadline_missing", "active backup has no deadline; the job row is inconsistent")
 	}
 	ctx, cancel := context.WithDeadline(parent, *j.Deadline)
 	defer cancel()
@@ -168,13 +168,23 @@ func (r Runner) Run(parent context.Context, j Job, journal Journal) error {
 	if status != "retry" {
 		retry = 0
 	}
-	level := slog.LevelInfo
-	if status == "failed" {
-		level = slog.LevelError
-	} else if status == "retry" {
-		level = slog.LevelWarn
+	level, message := slog.LevelInfo, fmt.Sprintf("Backup completed (%d bytes)", p.bytes)
+	reason := "the backup window ended before the backup finished"
+	if e != nil && diag["error_code"] != "deadline_exceeded" {
+		reason = Reason(e)
 	}
-	slog.Log(finish, level, "backup_finished", "backup_id", j.ID, "trigger", j.Trigger, "attempt", j.Attempt, "status", status, "stage", p.stage, "diagnostic", diag, "bytes", p.bytes, "retry_seconds", retry.Seconds())
+	switch status {
+	case "cancelled":
+		message = "Backup canceled by the owner"
+	case "retry":
+		// A retry keeps the backup going: WARN, as the next attempt may succeed.
+		level = slog.LevelWarn
+		message = fmt.Sprintf("Backup attempt %d failed at stage %s, retrying in %s: %s", j.Attempt, p.stage, retry, reason)
+	case "failed":
+		level = slog.LevelError
+		message = fmt.Sprintf("Backup failed at stage %s: %s", p.stage, reason)
+	}
+	observability.Log(finish, level, "backup_finished", message, "backup_id", j.ID, "trigger", j.Trigger, "attempt", j.Attempt, "status", status, "stage", p.stage, "diagnostic", diag, "bytes", p.bytes, "retry_seconds", retry.Seconds())
 	return nil
 }
 
@@ -316,7 +326,7 @@ func prune(ctx context.Context, j Job, journal Journal, p *progress, remote Obje
 		if e = journal.ForgetObject(ctx, old, object); e != nil {
 			return e
 		}
-		slog.Info("backup_object_expired", "backup_id", j.ID, "expired_backup_id", old)
+		observability.Log(ctx, slog.LevelInfo, "backup_object_expired", "Expired backup deleted by retention policy", "backup_id", j.ID, "expired_backup_id", old)
 	}
 }
 
@@ -340,7 +350,7 @@ func (p *progress) stageAt(stage, operation string) error {
 	p.start = now
 	p.stage = stage
 	p.operation = operation
-	slog.InfoContext(p.ctx, "backup_stage", "backup_id", p.job.ID, "attempt", p.job.Attempt, "stage", stage, "operation", operation)
+	observability.Log(p.ctx, slog.LevelInfo, "backup_stage", "Backup entered stage "+stage, "backup_id", p.job.ID, "attempt", p.job.Attempt, "stage", stage, "operation", operation)
 	return p.persist()
 }
 func (p *progress) persist() error {
