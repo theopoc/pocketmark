@@ -315,6 +315,7 @@ var panickedCapture = fault.Cause("capture", "worker_panic", "Capture stopped on
 func captureWorker(ctx context.Context, s *store.Store, observer *observability.Observer, fetch func(context.Context, string) (capture.Result, error)) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
+	observer.Beat(observability.WorkerCapture)
 	wait := func() bool {
 		select {
 		case <-ctx.Done():
@@ -329,6 +330,7 @@ func captureWorker(ctx context.Context, s *store.Store, observer *observability.
 		}
 		l, e := s.Next(ctx)
 		if errors.Is(e, sql.ErrNoRows) {
+			observer.Beat(observability.WorkerCapture)
 			if !wait() {
 				return
 			}
@@ -364,6 +366,10 @@ func captureWorker(ctx context.Context, s *store.Store, observer *observability.
 			return
 		}
 		finish(fetchErr, e)
+		if panicked == nil && e == nil {
+			// A recovered panic is not activity: a loop that panics on every job goes stale.
+			observer.Beat(observability.WorkerCapture)
+		}
 		if panicked != nil && !wait() {
 			return
 		}

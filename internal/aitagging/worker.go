@@ -37,8 +37,14 @@ func (t *Tagging) stopActive() {
 // process; wakeups only shorten the polling delay. With captureEnabled, a
 // bookmark waits briefly for its basic capture before classification.
 func (t *Tagging) Start(ctx context.Context, captureEnabled bool) {
+	t.observer.Beat(observability.WorkerAITag)
 	for ctx.Err() == nil {
 		err := t.next(ctx, captureEnabled)
+		if err == nil || errors.Is(err, ErrIdle) || errors.Is(err, sql.ErrNoRows) {
+			// A finished job or an empty (or paused) queue proves the loop is alive;
+			// a recovered panic does not.
+			t.observer.Beat(observability.WorkerAITag)
+		}
 		if err == nil {
 			continue
 		}
