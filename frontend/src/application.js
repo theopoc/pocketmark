@@ -567,11 +567,13 @@ export function createApplication() {
   function toast(message, error = false, action = null, favorite = null) {
     lifecycle.cancelTimeout(toastTimer);
     toastActionPending = true;
-    const notice = $("toast");
     // Native dialogs live in the top layer. Feedback must be in that same
     // layer to be visible and exposed to assistive technology.
     const dialogs = [...document.querySelectorAll("dialog[open]")];
     (dialogs.at(-1) || document.body).append(toastHost);
+    // Read the node only once the host is attached: React-owned dialogs can
+    // unmount while holding it, and getElementById ignores detached nodes.
+    const notice = $("toast");
     notice.replaceChildren(
       icon(error ? "warning" : favorite !== null ? "star" : "info"),
       el("span", "toast-message", message),

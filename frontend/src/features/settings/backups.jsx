@@ -144,6 +144,11 @@ function Modal({ title, busy, close, children }) {
     node.showModal();
     return () => {
       lifecycle.dispose();
+      // A toast shown while this dialog was open lives inside it. Keep it
+      // alive in the document when React removes the dialog.
+      const toastHost = document.getElementById("toast-root");
+      if (toastHost && node.contains(toastHost))
+        document.body.append(toastHost);
       if (node.open) node.close();
       if (opener?.isConnected) opener.focus({ preventScroll: true });
     };
