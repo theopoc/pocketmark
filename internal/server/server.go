@@ -45,28 +45,21 @@ type Server struct {
 	trustedProxies    []netip.Prefix
 	authRequests      chan struct{}
 	healthRequests    chan struct{}
+	metricsRequests   chan struct{}
 	passwordMu        sync.Mutex
 	totpNow           func() time.Time
 	rateLimit         *requestLimiter
 }
 
 func New(s *store.Store, token, origin string, secure bool, observers ...*observability.Observer) *Server {
-	a := &Server{Store: s, token: token, origin: strings.TrimSuffix(origin, "/"), secure: secure, mux: http.NewServeMux(), requests: make(chan struct{}, 8), iconRequests: make(chan struct{}, 2), imports: make(chan struct{}, 1), authRequests: make(chan struct{}, 2), healthRequests: make(chan struct{}, 2), loginAttempts: make(map[netip.Addr]loginWindow), totpNow: time.Now}
+	a := &Server{Store: s, token: token, origin: strings.TrimSuffix(origin, "/"), secure: secure, mux: http.NewServeMux(), requests: make(chan struct{}, 8), iconRequests: make(chan struct{}, 2), imports: make(chan struct{}, 1), authRequests: make(chan struct{}, 2), healthRequests: make(chan struct{}, 2), metricsRequests: make(chan struct{}, 2), loginAttempts: make(map[netip.Addr]loginWindow), totpNow: time.Now}
 	a.rateLimit = newRequestLimiter(10, 100)
 	if len(observers) > 0 && observers[0] != nil {
 		a.observer = observers[0]
 	} else {
 		a.observer = observability.New(nil, nil)
 	}
-	a.mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) {
-		m, e := s.BackupMetrics(r.Context())
-		if e != nil {
-			handleError(w, e)
-			return
-		}
-		a.observer.Metrics(w, r)
-		observability.WriteBackupMetrics(w, m)
-	})
+	a.mux.HandleFunc("GET /metrics", a.metrics)
 	a.registerAccount(a.mux)
 	a.registerMFA(a.mux)
 	a.registerSessionSecurity(a.mux)
@@ -174,6 +167,9 @@ func (a *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	} else if r.URL.Path == "/healthz" {
 		slots = a.healthRequests
+	} else if r.URL.Path == "/metrics" {
+		// Scrapes must stay observable while library requests hold every general slot.
+		slots = a.metricsRequests
 	} else if r.URL.Path == "/livez" {
 		slots = nil
 	}
@@ -206,6 +202,13 @@ func (a *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			fail(w, 403, "cross-site request rejected")
 			return
 		}
+	}
+	if r.URL.Path == "/metrics" {
+		// A hung PostgreSQL must not hold a scrape, or its slot, past the budget:
+		// authentication and the backup read both run under this deadline.
+		ctx, cancel := context.WithTimeout(r.Context(), metricsRequestTimeout)
+		defer cancel()
+		*r = *r.WithContext(ctx)
 	}
 	if !a.authorize(w, r) {
 		return

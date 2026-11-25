@@ -65,7 +65,11 @@ func (o *Observer) Capture(ctx context.Context, id int64) (context.Context, func
 			level, message = slog.LevelInfo, "Capture canceled; it will be retried at the next start"
 		}
 		attrs = append(attrs, "canceled", ctx.Err() != nil)
-		logEvent(ctx, logger, level, "capture_finished", message, attrs...)
+		// Recover already logged the panic as worker_panic with this logger's IDs;
+		// only a failure to save it as failed still needs a record.
+		if !errors.Is(fetchErr, ErrWorkerPanic) || saveErr != nil {
+			logEvent(ctx, logger, level, "capture_finished", message, attrs...)
+		}
 		span.SetAttributes(attribute.String("capture.outcome", captureOutcomes[outcome]))
 		span.End()
 	}

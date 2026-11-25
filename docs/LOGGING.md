@@ -99,6 +99,12 @@ worker loop, or `main`. Store and domain code return faults and do not log. The
 HTTP access record (`http_request`) adds the route, status and duration; it does
 not repeat the cause.
 
+A background worker runs each job under `observer.Recover(ctx, worker, run)`. A
+panic is then logged as `worker_panic` and returned as
+`observability.ErrWorkerPanic`: the loop moves the job to its failed state, does
+not log it again, and waits for its next poll before taking another job. Add new workers to the
+fixed `observability.Worker` list, which bounds the metric labels.
+
 ## Privacy
 
 Logs, metrics and spans never contain bookmark URLs, raw paths, query strings,
