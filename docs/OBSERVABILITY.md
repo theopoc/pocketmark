@@ -126,6 +126,7 @@ scrape_configs:
 | `pocketmark_go_managed_memory_bytes` | Go runtime memory minus released heap; excludes PostgreSQL and native allocations and is **not RSS**. |
 | `pocketmark_go_heap_live_bytes` | Live Go heap measured at the last garbage collection. |
 | `pocketmark_go_goroutines` | Current Go goroutines. |
+| `pocketmark_backup_metrics_up` | `1` when this scrape read the [backup metrics](#scheduled-backup-signals) from PostgreSQL, `0` when that read failed or took longer than 2 seconds. |
 | `pocketmark_queue_pending` | Unfinished jobs (waiting or in progress) by `queue`: `capture`, `ai_tagging`, `backup`. |
 | `pocketmark_queue_oldest_age_seconds` | Age of the oldest unfinished job by `queue`; `0` when the queue is empty. |
 | `pocketmark_queue_metrics_up` | `1` when this scrape read the queue gauges from PostgreSQL, `0` when the read failed or timed out (2 seconds at most). |
@@ -141,12 +142,35 @@ combination. Unknown methods become `_OTHER`; unknown routes become `_unmatched`
 Routes use templates such as `/api/links/{id}` and `/dav/`, never bookmark IDs or
 WebDAV filenames. Overflow requests remain in the aggregate histogram. The registry
 uses fixed histograms and a bounded map, with no Prometheus client dependency,
-background polling or per-bookmark state. Each scrape runs two small PostgreSQL
-reads: backup counters, and the queue backlog through a partial index of
-unfinished captures, the drained AI tagging queue and the pruned backup history. Scrapes copy the bounded snapshot, release the lock, then
-stream the response. The existing eight-request
-admission limit also covers scrapes. `/api/stats` remains the on-demand source for
-library totals and pending/failed capture counts.
+background polling or per-bookmark state. Scrapes copy the bounded snapshot,
+release the lock, then stream the response. Scrapes have their own two admission
+slots, so a library saturating the eight general slots does not blind monitoring,
+and scrapes never take a library slot; a third concurrent scrape receives 503.
+`/api/stats` remains the on-demand source for library totals and pending/failed
+capture counts.
+
+A scrape reads PostgreSQL three times: once to authenticate the session or API
+key, once for the small `backup_metrics` table, and once for the
+[queue backlog](#queue-and-worker-signals) through a partial index of unfinished
+captures, the drained AI tagging queue and the pruned backup history. The whole
+scrape has a 3-second budget, below Prometheus' default 10-second scrape timeout,
+and each optional read at most 2 seconds of what remains. When the backup read fails or times out, the scrape
+still returns 200 with every process metric, omits the `pocketmark_backup_*`
+values, reports `pocketmark_backup_metrics_up 0` and logs
+`backup_metrics_read_failed` at `WARN`. Authentication cannot skip the database,
+so while PostgreSQL is unreachable, or too slow to authenticate within the
+budget, `/metrics` returns 503 like other authenticated routes, logs
+`authentication_failed` at `ERROR`, and Prometheus records the target as down.
+A hung database thus holds a scrape and its slot for at most 3 seconds. Alert on
+the scrape itself as well as on the application:
+
+| Alert | Expression |
+| --- | --- |
+| Pocketmark unscrapable (process down, auth storage unavailable or overloaded) | `up{job="pocketmark"} == 0` for 2m |
+| Backup metrics unreadable | `max(pocketmark_backup_metrics_up) == 0` for 5m |
+
+`/healthz` pings PostgreSQL without authentication and `/livez` checks only the
+process, so they separate a database outage from a dead process.
 
 ### Queue and worker signals
 
@@ -179,7 +203,7 @@ several replicas, `max` keeps the freshest heartbeat:
 | AI tagging queue stuck | `max(pocketmark_queue_pending{queue="ai_tagging"}) > 0 and on() ((time() - max(pocketmark_worker_last_activity_timestamp_seconds{worker="ai_tagging"})) > 900 or absent(pocketmark_worker_last_activity_timestamp_seconds{worker="ai_tagging"}))` |
 | Backup queue stuck | `max(pocketmark_queue_pending{queue="backup"}) > 0 and on() (time() - max(pocketmark_worker_last_activity_timestamp_seconds{worker="backup_run"})) > 600 and on() max(pocketmark_backup_in_progress) == 0` |
 | Backup scheduler stalled | `(time() - max(pocketmark_worker_last_activity_timestamp_seconds{worker="backup_schedule"})) > 600` |
-| Queue gauges unavailable | `max_over_time(pocketmark_queue_metrics_up[10m]) == 0` |
+| Queue gauges unavailable | `max(pocketmark_queue_metrics_up) == 0` for 5m |
 | Capture backlog slow | `max(pocketmark_queue_oldest_age_seconds{queue="capture"}) > 3600` |
 
 A stuck alert means the loop is blocked or failing every iteration: search stderr
