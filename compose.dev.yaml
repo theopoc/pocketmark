@@ -54,8 +54,6 @@ services:
     depends_on:
       dev-postgres:
         condition: service_healthy
-      dev-garage:
-        condition: service_healthy
     ports:
       - "127.0.0.1:${POCKETMARK_DEV_PORT:?run make up}:8090"
     environment:

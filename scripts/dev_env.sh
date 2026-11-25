@@ -8,7 +8,7 @@
 # reused and the env file is only rewritten when its content changes.
 #
 #   scripts/dev_env.sh init      allocate + write .env.worktree (default)
-#   scripts/dev_env.sh print     print KEY=value pairs (project, ports, urls, S3 credentials)
+#   scripts/dev_env.sh print     print KEY=value pairs (project, ports, urls; credentials hidden)
 #   scripts/dev_env.sh project   print the Compose project name only
 #   scripts/dev_env.sh compose … run `docker compose` for this worktree's stack
 #   scripts/dev_env.sh release   free this worktree's slot (used by dev_clean.sh, make down)
@@ -145,7 +145,8 @@ cmd_init() {
 
 cmd_print() {
   [ -f "$root/$ENV_FILE" ] || die "$ENV_FILE missing; run make up"
-  grep -v '^#' "$root/$ENV_FILE"
+  # Credentials stay in the file (read by compose and make test), not in logs.
+  grep -v '^#' "$root/$ENV_FILE" | sed -E 's/^([A-Z0-9_]*(SECRET|ACCESS_KEY|_KEY)[A-Z0-9_]*)=.*/\1=<hidden>/'
 }
 
 cmd_compose() {
