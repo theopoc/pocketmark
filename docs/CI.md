@@ -109,14 +109,22 @@ any tag or distribution build is created.
 
 | Validation | Checks |
 | --- | --- |
-| Quality | PR title, formatting/vet, checksums/tidy, syntax, actionlint and GoReleaser configuration. |
+| PR title | Commitlint on the squash commit title; runs on every PR, including Markdown-only ones. |
+| Quality | Formatting/vet, checksums/tidy, syntax, actionlint and GoReleaser configuration. |
 | Security | Redacted Gitleaks, reachable Go vulnerabilities, npm audits, Swagger vendor equality and Retire.js. |
 | SAST | Parallel full CodeQL analysis for Go and JavaScript; findings or incomplete results block. |
 | Tests | Native Go race tests on AMD64 and ARM64; Python and expression regressions run once on AMD64. |
 | Web and extension | JavaScript tests, production frontend with a disposable server, Chromium selectors and extension ZIP validation, once on AMD64. |
 
-The final **CI** job depends on every validation job and rejects failed, cancelled
-or skipped results. Configure the **Protect main** ruleset to require this stable
+A `Changes` job lists the PR's files through the API. When every changed file (including
+rename sources) is Markdown under `docs/`, the repository root, `.github/` or `.claude/`,
+Quality, Security, SAST, Tests and Web and extension are skipped; the PR title check still runs.
+Markdown under `internal/webui/` (embedded) and `extension/` (packaged) counts as code. Schedule,
+dispatch and `workflow_call` runs always validate everything. The workflow itself must keep
+running (no `paths-ignore`), otherwise the required `CI` check would stay pending and block merging.
+
+The final **CI** job depends on every validation job and rejects failed or cancelled
+results; it accepts skipped results only for the five heavy jobs on a Markdown-only PR. Configure the **Protect main** ruleset to require this stable
 `CI` check from GitHub Actions with strict branch updates. Migrating an existing
 ruleset requires replacing the previous nine check names, including the removed
 `Build (amd64)`, `Build (arm64)` and `Extension` checks. Workflow YAML does not
@@ -237,7 +245,7 @@ SQLite. Commitlint's other conventional defaults apply, including a 100-characte
 header limit. Only the title is checked because it becomes the squash commit;
 intermediate commits are not checked. Dispatch, push and scheduled runs validate
 source rather than PR metadata. Metadata edits rerun the full suite and title
-validation together. For a future busy repository, consider an independent
+validation together (title validation alone for Markdown-only PRs). For a future busy repository, consider an independent
 required metadata check and `merge_group` support before enabling a merge queue.
 
 ## Reproduce locally
