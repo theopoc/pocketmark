@@ -72,15 +72,15 @@ type Page struct {
 
 func Open(databaseURL, directory string) (*Store, error) {
 	if databaseURL == "" {
-		return nil, errors.New("POCKETMARK_DATABASE_URL is required")
+		return nil, fault.New("configuration", "database_url_missing", "POCKETMARK_DATABASE_URL is required")
 	}
 	u, err := url.Parse(databaseURL)
 	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") {
-		return nil, errors.New("expected a PostgreSQL connection URI")
+		return nil, fault.New("configuration", "database_url_invalid", "POCKETMARK_DATABASE_URL must be a postgres:// or postgresql:// URI")
 	}
 	cfg, err := pgx.ParseConfig(databaseURL)
 	if err != nil {
-		return nil, errors.New("invalid PostgreSQL connection configuration")
+		return nil, fault.New("configuration", "database_url_invalid", "POCKETMARK_DATABASE_URL could not be parsed as PostgreSQL connection settings")
 	}
 	directory, err = filepath.Abs(directory)
 	if err != nil {

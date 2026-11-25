@@ -4,8 +4,9 @@ import (
 	"crypto/hkdf"
 	"crypto/sha256"
 	"encoding/base64"
-	"errors"
 	"io"
+
+	"pocketmark/internal/fault"
 
 	"filippo.io/age"
 )
@@ -48,7 +49,7 @@ func DecryptArchive(r io.Reader, secret string) (io.Reader, error) {
 // age encryption, including the directory that zip.Writer emits on Close.
 const MaxLibraryZIP = 64 << 30
 
-var ErrLibrarySize = errors.New("custom library ZIP exceeds restore limit")
+var ErrLibrarySize = fault.New("backup", "library_zip_too_large", "custom library ZIP exceeds the restore limit")
 
 type limitedZIP struct {
 	w         io.Writer

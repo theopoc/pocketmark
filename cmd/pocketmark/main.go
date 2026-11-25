@@ -104,11 +104,12 @@ func resetAccountFromInput(s *store.Store, input io.Reader) error {
 func main() {
 	if err := observability.ConfigureLogging(os.Stderr, os.Getenv("POCKETMARK_LOG_LEVEL")); err != nil {
 		observability.ConfigureLogging(os.Stderr, "INFO")
-		slog.Error("logging_configuration_failed", "error", err.Error())
+		observability.Fatal(context.Background(), "logging_configuration_failed", err)
 		os.Exit(1)
 	}
 	if e := run(); e != nil {
-		observability.Error(context.Background(), "process_failed", e)
+		// The process cannot continue: FATAL, then exit.
+		observability.Fatal(context.Background(), "process_failed", e)
 		os.Exit(1)
 	}
 }
@@ -125,7 +126,7 @@ func run() (runErr error) {
 	flag.Parse()
 	if *encrypted != "" || *output != "" {
 		if *resetMFA || *resetAccount {
-			return errors.New("choose one recovery command")
+			return fault.New("configuration", "recovery_flags_conflict", "choose only one recovery command")
 		}
 		return decryptBackup(*data, *encrypted, *output)
 	}
@@ -145,7 +146,6 @@ func run() (runErr error) {
 	operation = "config.tracing"
 	traceConfig, err := observability.TraceConfigFromEnv()
 	if err != nil {
-		slog.Error("telemetry_configuration_failed", "error", err.Error())
 		return err
 	}
 	// A soft Go heap budget, not an RSS cap; PostgreSQL memory is separate.
@@ -265,7 +265,7 @@ func run() (runErr error) {
 	srv := &http.Server{Addr: *addr, Handler: handler, ErrorLog: observability.HTTPErrorLog(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 * 1024}
 	errCh := make(chan error, 1)
 	go func() {
-		slog.Info("server_started", "listen", *addr, "capture_enabled", !*noCapture, "otel_enabled", traceConfig.Enabled)
+		observability.Log(ctx, slog.LevelInfo, "server_started", "Pocketmark listening on "+*addr, "listen", *addr, "capture_enabled", !*noCapture, "otel_enabled", traceConfig.Enabled)
 		errCh <- srv.ListenAndServe()
 	}()
 	select {
@@ -277,9 +277,13 @@ func run() (runErr error) {
 	defer cancel()
 	forced := shutdownHTTP(shutdown, srv)
 	<-done
-	slog.Info("server_stopped", "forced", forced)
+	stopped := "Pocketmark stopped gracefully"
+	if forced {
+		stopped = "Pocketmark stopped after forcing open connections closed"
+	}
+	observability.Log(context.Background(), slog.LevelInfo, "server_stopped", stopped, "forced", forced)
 	if e != nil && !errors.Is(e, http.ErrServerClosed) {
-		return fmt.Errorf("HTTP server: %w", e)
+		return fault.Cause("server", "http_server_failed", "HTTP server stopped unexpectedly", e)
 	}
 	return nil
 }

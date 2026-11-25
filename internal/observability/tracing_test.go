@@ -49,7 +49,7 @@ func TestExportFailureLogsAreSanitizedAndRateLimited(t *testing.T) {
 	if strings.Contains(logs.String(), "private-") {
 		t.Fatal("collector error leaked")
 	}
-	if r := records(t, &logs); len(r) != 1 || r[0]["msg"] != "trace_export_failed" {
+	if r := records(t, &logs); len(r) != 1 || r[0]["event"] != "trace_export_failed" {
 		t.Fatalf("unbounded warnings: %v", r)
 	}
 }
