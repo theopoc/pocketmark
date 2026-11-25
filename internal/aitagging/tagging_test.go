@@ -1,16 +1,21 @@
 package aitagging_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"pocketmark/internal/aitagging"
 	"pocketmark/internal/aitagprovider"
+	"pocketmark/internal/observability"
 	"pocketmark/internal/pgtest"
 	"pocketmark/internal/store"
 )
@@ -186,8 +191,8 @@ func TestSettingsSerializeAcrossInstances(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "replica.db")
 	firstStore, secondStore := openStore(t, path), openStore(t, path)
 	p := &waitingModelProvider{started: make(chan struct{}), proceed: make(chan struct{})}
-	first := aitagging.New(firstStore, p, &testClaudeProvider{})
-	second := aitagging.New(secondStore, &testTagProvider{}, &testClaudeProvider{})
+	first := aitagging.New(firstStore, p, &testClaudeProvider{}, nil)
+	second := aitagging.New(secondStore, &testTagProvider{}, &testClaudeProvider{}, nil)
 	finished := make(chan error, 1)
 	go func() { finished <- first.SelectModel(t.Context(), "fixture") }()
 	select {
@@ -243,7 +248,7 @@ func TestWorkerChecksRemainingVocabularyBeforeCreating(t *testing.T) {
 			must(t, s.SetAITagEnabled(ctx, true))
 			id := create(t, s, store.Link{URL: "https://example.org/article", Title: "Kubernetes deployment"})
 			provider := &testTagProvider{}
-			tagging := aitagging.New(s, provider, &testClaudeProvider{})
+			tagging := aitagging.New(s, provider, &testClaudeProvider{}, nil)
 			provider.selection = func(names []string) ([]string, error) {
 				if len(provider.vocabularies) == 1 {
 					if len(names) != 256 || slices.Contains(names, "k8s") {
@@ -297,7 +302,7 @@ func TestSettingsCreationAndManualScan(t *testing.T) {
 	ctx := t.Context()
 	s := newStore(t)
 	p := &testTagProvider{}
-	tagging := aitagging.New(s, p, &testClaudeProvider{})
+	tagging := aitagging.New(s, p, &testClaudeProvider{}, nil)
 	old := create(t, s, store.Link{URL: "https://example.org/before", Title: "A tutorial"})
 	refusedWith(t, tagging.Enable(ctx), aitagging.ErrNoModel)
 	if u, err := tagging.StartChatGPT(ctx, false); err != nil || u == "" {
@@ -361,7 +366,7 @@ func TestClaudeProviderSelectionAndWorker(t *testing.T) {
 	ctx := t.Context()
 	s := newStore(t)
 	chatgpt, claude := &testTagProvider{}, &testClaudeProvider{}
-	tagging := aitagging.New(s, chatgpt, claude)
+	tagging := aitagging.New(s, chatgpt, claude, nil)
 	providerFailed(t, tagging.ConnectClaude(ctx, "rejected"), aitagprovider.ErrInvalidKey)
 	if st := status(t, s); st.Provider != "chatgpt" || st.Model != "" {
 		t.Fatalf("a rejected key changed settings: %+v", st)
@@ -411,4 +416,56 @@ func TestClaudeProviderSelectionAndWorker(t *testing.T) {
 		t.Fatalf("disconnecting Claude kept the model: %+v", st)
 	}
 	refusedWith(t, tagging.SelectProvider(ctx, "other"), aitagging.ErrUnknownProvider)
+}
+
+type panicLog struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (w *panicLog) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.Write(p)
+}
+
+func TestWorkerDropsPanickedJobAndContinues(t *testing.T) {
+	ctx := t.Context()
+	s := newStore(t)
+	logs := &panicLog{}
+	observer := observability.New(slog.New(slog.NewJSONHandler(logs, nil)), nil)
+	must(t, s.SetAITagModel(ctx, "fixture"))
+	must(t, s.SetAITagEnabled(ctx, true))
+	poison := create(t, s, store.Link{URL: "https://example.org/poison", Title: "Poison article"})
+	next := create(t, s, store.Link{URL: "https://example.org/next", Title: "Next article"})
+	provider := &testTagProvider{}
+	provider.selection = func([]string) ([]string, error) {
+		if provider.articles[len(provider.articles)-1].Title == "Poison article" {
+			panic("private-panic-value")
+		}
+		return []string{"machine learning"}, nil
+	}
+	tagging := aitagging.New(s, provider, &testClaudeProvider{}, observer)
+	if err := tagging.RunOnce(ctx); !errors.Is(err, observability.ErrWorkerPanic) {
+		t.Fatalf("panicked job: %v", err)
+	}
+	must(t, tagging.RunOnce(ctx))
+	// The dropped job is not handed back: the queue is empty.
+	if err := tagging.RunOnce(ctx); !errors.Is(err, aitagging.ErrIdle) {
+		t.Fatalf("panicked job was queued again: %v", err)
+	}
+	logs.mu.Lock()
+	output := logs.buf.String()
+	logs.mu.Unlock()
+	if strings.Contains(output, "private-panic-value") {
+		t.Fatalf("panic value leaked: %s", output)
+	}
+	if n := strings.Count(output, `"event":"worker_panic"`); n != 1 || !strings.Contains(output, `"worker":"ai_tag"`) {
+		t.Fatalf("want one ai_tag worker_panic record, got %d: %s", n, output)
+	}
+	checkTags(t, s, poison)
+	checkTags(t, s, next, "machine learning")
+	if state := status(t, s); state.Remaining != 0 || state.Blocked != "" {
+		t.Fatalf("queue: %+v", state)
+	}
 }

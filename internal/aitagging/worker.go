@@ -38,11 +38,11 @@ func (t *Tagging) stopActive() {
 // bookmark waits briefly for its basic capture before classification.
 func (t *Tagging) Start(ctx context.Context, captureEnabled bool) {
 	for ctx.Err() == nil {
-		err := t.runOnce(ctx, captureEnabled)
+		err := t.next(ctx, captureEnabled)
 		if err == nil {
 			continue
 		}
-		if !errors.Is(err, ErrIdle) && !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, context.Canceled) {
+		if !errors.Is(err, ErrIdle) && !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, context.Canceled) && !errors.Is(err, observability.ErrWorkerPanic) {
 			// Neither response text nor bookmark fields belong in diagnostics.
 			observability.Error(ctx, "ai_tag_queue_unavailable", err)
 		}
@@ -56,10 +56,31 @@ func (t *Tagging) Start(ctx context.Context, captureEnabled bool) {
 }
 
 // RunOnce classifies one queued bookmark without waiting for its capture, or
-// returns ErrIdle. A settings change made meanwhile cancels the request.
-func (t *Tagging) RunOnce(ctx context.Context) error { return t.runOnce(ctx, false) }
+// returns ErrIdle. A settings change made meanwhile cancels the request. A
+// panic is logged and returned as observability.ErrWorkerPanic; the job it held
+// is dropped like a bookmark the provider cannot tag.
+func (t *Tagging) RunOnce(ctx context.Context) error { return t.next(ctx, false) }
 
-func (t *Tagging) runOnce(ctx context.Context, captureEnabled bool) error {
+// next runs one job under Recover. A job that panicked is dropped: its lease
+// would otherwise block the queue for two minutes, then hand the same job back.
+func (t *Tagging) next(ctx context.Context, captureEnabled bool) error {
+	var claimed store.AITagJob
+	err := t.observer.Recover(ctx, observability.WorkerAITag, func() error {
+		return t.runJob(ctx, captureEnabled, &claimed)
+	})
+	if errors.Is(err, observability.ErrWorkerPanic) && claimed.ID != 0 {
+		drop := t.observer.Recover(ctx, observability.WorkerAITag, func() error {
+			return t.store.FinishAITagJob(ctx, claimed, nil)
+		})
+		if drop != nil && !errors.Is(drop, observability.ErrWorkerPanic) && ctx.Err() == nil {
+			observability.Error(ctx, "ai_tag_queue_unavailable", drop)
+		}
+	}
+	return err
+}
+
+// runJob keeps the job it holds in claimed, so that a panic can release it.
+func (t *Tagging) runJob(ctx context.Context, captureEnabled bool, claimed *store.AITagJob) error {
 	work, cancel := context.WithCancel(ctx)
 	t.active.Lock()
 	t.cancel = cancel
@@ -77,6 +98,7 @@ func (t *Tagging) runOnce(ctx context.Context, captureEnabled bool) error {
 	if err != nil {
 		return err
 	}
+	*claimed = job
 	if job.Title == "" && job.Description == "" && job.Excerpt == "" {
 		return t.store.FinishAITagJob(work, job, nil)
 	}
@@ -136,6 +158,7 @@ func (t *Tagging) runOnce(ctx context.Context, captureEnabled bool) error {
 			return err
 		}
 		job = next
+		*claimed = job
 		var reused []string
 		for _, name := range fallback {
 			if slices.Contains(job.Tags, name) {

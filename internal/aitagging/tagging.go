@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"pocketmark/internal/aitagprovider"
+	"pocketmark/internal/observability"
 	"pocketmark/internal/store"
 )
 
@@ -85,20 +86,25 @@ func failed(err error, provider string) error {
 // replicas; any change that could invalidate a running classification cancels
 // it before returning.
 type Tagging struct {
-	store   *store.Store
-	chatgpt ChatGPTPlan
-	claude  ClaudeKey
-	wake    chan struct{}
-	active  sync.Mutex
-	cancel  context.CancelFunc
+	store    *store.Store
+	observer *observability.Observer
+	chatgpt  ChatGPTPlan
+	claude   ClaudeKey
+	wake     chan struct{}
+	active   sync.Mutex
+	cancel   context.CancelFunc
 }
 
-// New builds the module. Both providers are required.
-func New(s *store.Store, chatgpt ChatGPTPlan, claude ClaudeKey) *Tagging {
+// New builds the module. Both providers are required; a nil observer logs to
+// the default logger.
+func New(s *store.Store, chatgpt ChatGPTPlan, claude ClaudeKey, observer *observability.Observer) *Tagging {
 	if chatgpt == nil || claude == nil {
 		panic("aitagging: both providers are required")
 	}
-	return &Tagging{store: s, chatgpt: chatgpt, claude: claude, wake: make(chan struct{}, 1)}
+	if observer == nil {
+		observer = observability.New(nil, nil)
+	}
+	return &Tagging{store: s, observer: observer, chatgpt: chatgpt, claude: claude, wake: make(chan struct{}, 1)}
 }
 
 // Status is what the owner sees in AI tagging settings.

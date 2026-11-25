@@ -102,8 +102,8 @@ func TestAITagSettingsSerializeAcrossServers(t *testing.T) {
 	}
 	first, second := replica(), replica()
 	p := &testTagProvider{started: make(chan struct{}), proceed: make(chan struct{})}
-	first.tagging = aitagging.New(first.Store, p, &testClaudeProvider{})
-	second.tagging = aitagging.New(second.Store, &testTagProvider{}, &testClaudeProvider{})
+	first.tagging = aitagging.New(first.Store, p, &testClaudeProvider{}, first.observer)
+	second.tagging = aitagging.New(second.Store, &testTagProvider{}, &testClaudeProvider{}, second.observer)
 	finished := make(chan int, 1)
 	go func() {
 		finished <- request(first, "POST", "/api/ai-tagging/model", `{"model":"fixture"}`, true, nil).Code
@@ -127,7 +127,7 @@ func TestAITagSettingsSerializeAcrossServers(t *testing.T) {
 func TestAITagSettingsRoutesAndCreationWakeup(t *testing.T) {
 	a := newTestServer(t, "", false)
 	p := &testTagProvider{}
-	a.tagging = aitagging.New(a.Store, p, &testClaudeProvider{})
+	a.tagging = aitagging.New(a.Store, p, &testClaudeProvider{}, a.observer)
 	post := func(action, body string, want int) *httptest.ResponseRecorder {
 		t.Helper()
 		w := request(a, "POST", "/api/ai-tagging/"+action, body, true, nil)
@@ -183,7 +183,7 @@ func TestAITagSettingsRoutesAndCreationWakeup(t *testing.T) {
 
 func TestAITagClaudeRoutes(t *testing.T) {
 	a := newTestServer(t, "", false)
-	a.tagging = aitagging.New(a.Store, &testTagProvider{}, &testClaudeProvider{})
+	a.tagging = aitagging.New(a.Store, &testTagProvider{}, &testClaudeProvider{}, a.observer)
 	post := func(action, body string, want int) {
 		t.Helper()
 		requireStatus(t, request(a, "POST", "/api/ai-tagging/"+action, body, true, nil), want)
@@ -228,7 +228,7 @@ func TestAITagProviderFailureMessages(t *testing.T) {
 	} {
 		a := newTestServer(t, "", false)
 		chatgpt, claude := &testTagProvider{connected: true}, &testClaudeProvider{connected: true}
-		a.tagging = aitagging.New(a.Store, chatgpt, claude)
+		a.tagging = aitagging.New(a.Store, chatgpt, claude, a.observer)
 		model := "fixture"
 		if tt.claude {
 			requireStatus(t, request(a, "POST", "/api/ai-tagging/provider", `{"provider":"claude"}`, true, nil), 200)

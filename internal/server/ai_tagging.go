@@ -12,7 +12,7 @@ import (
 )
 
 func (a *Server) registerAITagging(m *http.ServeMux) {
-	a.tagging = aitagging.New(a.Store, aitagprovider.New(a.Store, a.token), aitagprovider.NewClaude(a.Store, a.token))
+	a.tagging = aitagging.New(a.Store, aitagprovider.New(a.Store, a.token), aitagprovider.NewClaude(a.Store, a.token), a.observer)
 	m.HandleFunc("GET /api/ai-tagging", a.taggingSettings)
 	ok := map[string]bool{"ok": true}
 	m.HandleFunc("POST /api/ai-tagging/connect", a.taggingAction(func(w http.ResponseWriter, r *http.Request) (any, error) {
