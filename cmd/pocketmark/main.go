@@ -305,9 +305,25 @@ func env(key, fallback string) string {
 	return fallback
 }
 func worker(ctx context.Context, s *store.Store, observer *observability.Observer) {
+	captureWorker(ctx, s, observer, capture.Fetch)
+}
+
+// panickedCapture is the failure saved on a link whose capture panicked. Marking
+// it failed stops the expired reservation from re-running it every two minutes.
+var panickedCapture = fault.Cause("capture", "worker_panic", "Capture stopped on an internal error; retry it, or report the worker_panic log record", observability.ErrWorkerPanic)
+
+func captureWorker(ctx context.Context, s *store.Store, observer *observability.Observer, fetch func(context.Context, string) (capture.Result, error)) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	observer.Beat(observability.WorkerCapture)
+	wait := func() bool {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-ticker.C:
+			return true
+		}
+	}
 	for {
 		if ctx.Err() != nil {
 			return
@@ -315,35 +331,47 @@ func worker(ctx context.Context, s *store.Store, observer *observability.Observe
 		l, e := s.Next(ctx)
 		if errors.Is(e, sql.ErrNoRows) {
 			observer.Beat(observability.WorkerCapture)
-			select {
-			case <-ctx.Done():
+			if !wait() {
 				return
-			case <-ticker.C:
-				continue
 			}
+			continue
 		}
 		if e != nil {
 			if ctx.Err() != nil {
 				return
 			}
 			observer.QueueError(ctx, e)
-			select {
-			case <-ctx.Done():
+			if !wait() {
 				return
-			case <-ticker.C:
-				continue
 			}
+			continue
 		}
 		captureCtx, finish := observer.Capture(ctx, l.ID)
-		result, fetchErr := capture.Fetch(captureCtx, l.URL)
+		var fetchErr error
+		panicked := observer.Recover(captureCtx, observability.WorkerCapture, func() error {
+			var result capture.Result
+			result, fetchErr = fetch(captureCtx, l.URL)
+			if ctx.Err() != nil {
+				return nil
+			} // processing jobs are recovered at the next start.
+			e = s.Finish(captureCtx, l, result, fetchErr)
+			return nil
+		})
+		if panicked != nil {
+			fetchErr = panickedCapture
+			e = s.Finish(captureCtx, l, capture.Result{}, fetchErr)
+		}
 		if ctx.Err() != nil {
 			finish(fetchErr, nil)
 			return
-		} // processing jobs are recovered at the next start.
-		e = s.Finish(captureCtx, l, result, fetchErr)
+		}
 		finish(fetchErr, e)
-		if e == nil {
+		if panicked == nil && e == nil {
+			// A recovered panic is not activity: a loop that panics on every job goes stale.
 			observer.Beat(observability.WorkerCapture)
+		}
+		if panicked != nil && !wait() {
+			return
 		}
 	}
 }

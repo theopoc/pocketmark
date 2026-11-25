@@ -56,8 +56,8 @@ func TestQueueStatsReportBacklogAndOldestAge(t *testing.T) {
 	if c := q["capture"]; c.Pending != 2 || c.OldestAgeSeconds < 599 || c.OldestAgeSeconds > 900 {
 		t.Fatalf("capture: %+v", c)
 	}
-	if a := q["ai_tagging"]; a.Pending != 1 || a.OldestAgeSeconds < 179 || a.OldestAgeSeconds > 400 {
-		t.Fatalf("ai_tagging: %+v", a)
+	if a := q["ai_tag"]; a.Pending != 1 || a.OldestAgeSeconds < 179 || a.OldestAgeSeconds > 400 {
+		t.Fatalf("ai_tag: %+v", a)
 	}
 	// Finished runs leave the backup queue.
 	if b := q["backup"]; b.Pending != 1 || b.OldestAgeSeconds < 119 || b.OldestAgeSeconds > 400 {

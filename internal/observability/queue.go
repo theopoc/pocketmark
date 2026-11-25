@@ -9,24 +9,10 @@ import (
 	"time"
 )
 
-// Worker names a background loop that reports a heartbeat. The set is fixed so
-// the heartbeat gauge has a bounded label set and lives in a fixed array.
-type Worker int
-
-const (
-	WorkerCapture Worker = iota
-	WorkerAITagging
-	WorkerBackupSchedule
-	WorkerBackupNotify
-	WorkerBackupRun
-	workerCount
-)
-
-var workerNames = [workerCount]string{"capture", "ai_tagging", "backup_schedule", "backup_notify", "backup_run"}
-
-// Beat records that w finished an iteration without a queue error: it polled
-// an empty queue or completed a job. Call it once when the loop starts too, so
-// a loop that hangs in its first iteration still exposes a series that ages.
+// Beat records that w finished an iteration without a queue error or a
+// recovered panic: it polled an empty queue or completed a job. Call it once when
+// the loop starts too, so a loop that hangs in its first iteration still exposes
+// a series that ages.
 func (o *Observer) Beat(w Worker) {
 	if w >= 0 && w < workerCount {
 		o.measurements.heartbeats[w].Store(time.Now().Unix())
@@ -46,7 +32,7 @@ func (o *Observer) WriteWorkerMetrics(w io.Writer) {
 	fmt.Fprintln(w, "# HELP pocketmark_worker_last_activity_timestamp_seconds Unix time a background loop last finished an iteration without a queue error.\n# TYPE pocketmark_worker_last_activity_timestamp_seconds gauge")
 	for i := range o.measurements.heartbeats {
 		if at := o.measurements.heartbeats[i].Load(); at != 0 {
-			fmt.Fprintf(w, "pocketmark_worker_last_activity_timestamp_seconds{worker=%q} %d\n", workerNames[i], at)
+			fmt.Fprintf(w, "pocketmark_worker_last_activity_timestamp_seconds{worker=%q} %d\n", workers[i].label, at)
 		}
 	}
 }

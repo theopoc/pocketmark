@@ -16,7 +16,7 @@ and how failures get their messages.
 Events include `server_started`, `server_stopped`, `process_failed` (FATAL),
 `http_request`, `capture_finished`, `capture_queue_failed`, `backup_finished`,
 `backup_probe_failed`, `backup_notification_failed`, `ai_tag_queue_unavailable`,
-`ai_tag_bookmark_skipped`, `ai_tag_paused` and `trace_export_failed`. Startup
+`ai_tag_bookmark_skipped`, `ai_tag_paused`, `worker_panic` and `trace_export_failed`. Startup
 configuration errors, including tracing settings, are reported once by
 `process_failed`.
 
@@ -60,7 +60,16 @@ fault message and a fixed sentence for the typed cause; it never copies raw erro
 text from libraries, remote services or tools.
 Unexpected errors include up to four code-location frames in `source`. Panics
 include up to 16 frames in `stack`: function names, basename and line only, without
-arguments, panic values, source text or absolute filesystem paths. The low-level
+arguments, panic values, source text or absolute filesystem paths.
+A panic in a background worker does not stop the process. It is logged once at
+ERROR as `worker_panic`, with `worker` (`capture`, `ai_tag`, `backup_schedule`,
+`backup_notification` or `backup`), `error_code:"panic"` and `stack`, then the
+worker waits for its next poll (2 seconds; 10 seconds for AI tagging). The job is not retried in a loop: a capture
+is marked failed (retry it from the library), an AI tagging job is dropped like a
+bookmark the provider cannot tag (even when the panic happens while its input is read), a backup run is finished as failed with
+`diagnostic.error_code:"panic"` (and alerts like any failed run), and a claimed
+backup alert is recorded as `unknown` a minute later. A capture panic carries the
+capture's `link_id` and `capture_id` and replaces its `capture_finished` record. The low-level
 HTTP server event classifies known protocol/TLS/panic prefixes without copying
 connection text. `process_failed` identifies the startup phase; configuration
 errors use safe codes. `server_shutdown_failed` records a failed drain, and
@@ -83,7 +92,10 @@ belong to the deployment.
    failure detail in PostgreSQL. Capture traces remain independent roots.
 4. Correlate `trace_id` when tracing is enabled, but keep logs as the diagnostic
    source when spans are unsampled or lost. Alert on the failure counter's rate,
-   capture `save_failed` outcomes and queue errors; inspect latency alongside them.
+   capture `save_failed` outcomes, queue errors and `pocketmark_worker_panics_total`;
+   inspect latency alongside them. For a worker panic, the `worker_panic` record's
+   `stack` names the code location and its `link_id` or the failed backup run
+   identifies the job.
 
 Store/domain code returns typed failures and does not log. The request, worker or
 process boundary logs the handled failure once; an HTTP completion event adds
@@ -122,12 +134,13 @@ scrape_configs:
 | `pocketmark_http_in_flight` | Requests currently being handled, including the scrape itself. |
 | `pocketmark_capture_duration_seconds` | Histogram/counter by capture `outcome`. |
 | `pocketmark_capture_queue_errors_total` | Failures to claim the next queued capture. |
+| `pocketmark_worker_panics_total` | Panics recovered in background workers, by `worker`; any increase is a bug to report with the `worker_panic` stack. |
 | `pocketmark_trace_export_errors_total` | Failed OTLP export batches; excludes spans discarded before export when the queue is full. |
 | `pocketmark_go_managed_memory_bytes` | Go runtime memory minus released heap; excludes PostgreSQL and native allocations and is **not RSS**. |
 | `pocketmark_go_heap_live_bytes` | Live Go heap measured at the last garbage collection. |
 | `pocketmark_go_goroutines` | Current Go goroutines. |
 | `pocketmark_backup_metrics_up` | `1` when this scrape read the [backup metrics](#scheduled-backup-signals) from PostgreSQL, `0` when that read failed or took longer than 2 seconds. |
-| `pocketmark_queue_pending` | Unfinished jobs (waiting or in progress) by `queue`: `capture`, `ai_tagging`, `backup`. |
+| `pocketmark_queue_pending` | Unfinished jobs (waiting or in progress) by `queue`: `capture`, `ai_tag`, `backup`. |
 | `pocketmark_queue_oldest_age_seconds` | Age of the oldest unfinished job by `queue`; `0` when the queue is empty. |
 | `pocketmark_queue_metrics_up` | `1` when this scrape read the queue gauges from PostgreSQL, `0` when the read failed or timed out (2 seconds at most). |
 | `pocketmark_worker_last_activity_timestamp_seconds` | Unix time a background loop last finished an iteration without a queue error, by `worker`. |
@@ -181,15 +194,17 @@ Queue gauges and worker heartbeats tell them apart:
   the same shared values. `capture` counts `pending` and `processing` links and ages
   them from the moment they last entered the queue (creation, retry, URL change);
   links pending before the upgrade that added this gauge count from the upgrade.
-  `ai_tagging` counts queued and leased jobs, including jobs held while AI tagging
+  `ai_tag` counts queued and leased jobs, including jobs held while AI tagging
   is disabled or paused for quota. `backup` counts unfinished runs, including one
   waiting for a retry.
 - **Heartbeats** (`pocketmark_worker_last_activity_timestamp_seconds`) are process
-  memory. Workers: `capture`, `ai_tagging`, `backup_schedule`, `backup_notify` and
-  `backup_run`. A loop sets it on start and after every iteration that finishes
-  without a queue error: an empty poll, a paused queue or a finished job, whether
-  the job itself succeeded or failed. A loop that never started has no series
-  (`capture` under `-no-capture`). One `backup_run` iteration lasts a whole backup,
+  memory, with the same `worker` labels as `pocketmark_worker_panics_total`:
+  `capture`, `ai_tag`, `backup_schedule`, `backup_notification` and `backup`.
+  A loop sets it on start and after every iteration that finishes without a
+  queue error: an empty poll, a paused queue or a finished job, whether
+  the job itself succeeded or failed. A recovered panic does not count, so a loop
+  that panics on every job goes stale. A loop that never started has no series
+  (`capture` under `-no-capture`). One `backup` iteration lasts a whole backup,
   up to its configured window.
 - If the queue read fails, the scrape still returns every other metric with
   `pocketmark_queue_metrics_up 0` and logs `queue_metrics_unavailable` at WARN.
@@ -200,14 +215,15 @@ several replicas, `max` keeps the freshest heartbeat:
 | Alert | Expression |
 | --- | --- |
 | Capture queue stuck | `max(pocketmark_queue_pending{queue="capture"}) > 0 and on() ((time() - max(pocketmark_worker_last_activity_timestamp_seconds{worker="capture"})) > 600 or absent(pocketmark_worker_last_activity_timestamp_seconds{worker="capture"}))` |
-| AI tagging queue stuck | `max(pocketmark_queue_pending{queue="ai_tagging"}) > 0 and on() ((time() - max(pocketmark_worker_last_activity_timestamp_seconds{worker="ai_tagging"})) > 900 or absent(pocketmark_worker_last_activity_timestamp_seconds{worker="ai_tagging"}))` |
-| Backup queue stuck | `max(pocketmark_queue_pending{queue="backup"}) > 0 and on() (time() - max(pocketmark_worker_last_activity_timestamp_seconds{worker="backup_run"})) > 600 and on() max(pocketmark_backup_in_progress) == 0` |
+| AI tagging queue stuck | `max(pocketmark_queue_pending{queue="ai_tag"}) > 0 and on() ((time() - max(pocketmark_worker_last_activity_timestamp_seconds{worker="ai_tag"})) > 900 or absent(pocketmark_worker_last_activity_timestamp_seconds{worker="ai_tag"}))` |
+| Backup queue stuck | `max(pocketmark_queue_pending{queue="backup"}) > 0 and on() (time() - max(pocketmark_worker_last_activity_timestamp_seconds{worker="backup"})) > 600 and on() max(pocketmark_backup_in_progress) == 0` |
 | Backup scheduler stalled | `(time() - max(pocketmark_worker_last_activity_timestamp_seconds{worker="backup_schedule"})) > 600` |
 | Queue gauges unavailable | `max(pocketmark_queue_metrics_up) == 0` for 5m |
 | Capture backlog slow | `max(pocketmark_queue_oldest_age_seconds{queue="capture"}) > 3600` |
 
 A stuck alert means the loop is blocked or failing every iteration: search stderr
-for `capture_queue_failed`, `ai_tag_queue_unavailable` or `backup_*_failed`. A slow
+for `worker_panic`, `capture_queue_failed`, `ai_tag_queue_unavailable` or
+`backup_*_failed`. A slow
 backlog with fresh heartbeats means the worker is alive but behind, for example
 after a large import, or that AI tagging is paused (check its status in Settings).
 The `absent` term also fires when no process runs that loop, for example while

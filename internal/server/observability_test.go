@@ -68,7 +68,7 @@ func TestMetricsExposeQueueBacklogAndWorkerHeartbeats(t *testing.T) {
 	for _, want := range []string{
 		"pocketmark_queue_metrics_up 1\n",
 		`pocketmark_queue_pending{queue="capture"} 1` + "\n",
-		`pocketmark_queue_pending{queue="ai_tagging"} 0` + "\n",
+		`pocketmark_queue_pending{queue="ai_tag"} 0` + "\n",
 		`pocketmark_queue_pending{queue="backup"} 0` + "\n",
 		`pocketmark_queue_oldest_age_seconds{queue="capture"} `,
 	} {
@@ -86,7 +86,7 @@ func TestMetricsExposeQueueBacklogAndWorkerHeartbeats(t *testing.T) {
 	go func() { defer workers.Done(); a.AITagWorker(ctx, false) }()
 	go func() { defer workers.Done(); a.BackupWorker(ctx) }()
 	defer func() { cancel(); workers.Wait() }()
-	want := []string{"ai_tagging", "backup_schedule", "backup_notify", "backup_run"}
+	want := []string{"ai_tag", "backup_schedule", "backup_notification", "backup"}
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		body = request(a, "GET", "/metrics", "", true, nil).Body.String()

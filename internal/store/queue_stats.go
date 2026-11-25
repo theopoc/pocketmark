@@ -11,14 +11,14 @@ import (
 // QueueStats reads the backlog of the durable queues in one statement: jobs not
 // yet finished (waiting or in progress) and the age of the oldest one.
 //   - capture: links_capture_queue holds only unfinished captures.
-//   - ai_tagging: ai_tag_jobs holds only queued or leased jobs and is drained.
+//   - ai_tag: ai_tag_jobs holds only queued or leased jobs and is drained.
 //   - backup: backup_runs is pruned to a few dozen rows.
 func (s *Store) QueueStats(ctx context.Context) ([]observability.QueueStat, error) {
 	rows, err := s.db.QueryContext(ctx, `
 SELECT 'capture',count(*),coalesce(extract(epoch FROM now()-min(capture_queued)),0)::float8
 FROM links WHERE status IN ('pending','processing')
 UNION ALL
-SELECT 'ai_tagging',count(*),coalesce(extract(epoch FROM now()-min(queued)),0)::float8 FROM ai_tag_jobs
+SELECT 'ai_tag',count(*),coalesce(extract(epoch FROM now()-min(queued)),0)::float8 FROM ai_tag_jobs
 UNION ALL
 SELECT 'backup',count(*),coalesce(extract(epoch FROM now()-min(requested)),0)::float8
 FROM backup_runs WHERE finished IS NULL`)

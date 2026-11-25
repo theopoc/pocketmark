@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -10,9 +11,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"pocketmark/internal/capture"
 	"pocketmark/internal/observability"
 	"pocketmark/internal/store"
 )
@@ -183,4 +186,84 @@ func TestForcedShutdownIsDiagnosable(t *testing.T) {
 			t.Fatalf("missing shutdown diagnostic: %s", logs.String())
 		}
 	}
+}
+
+func TestCaptureWorkerSurvivesPanickedCapture(t *testing.T) {
+	s, err := openTestStore(t, filepath.Join(t.TempDir(), "panic.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	bad, err := s.Create(ctx, store.Link{URL: "http://127.0.0.1/private-poison"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	good, err := s.Create(ctx, store.Link{URL: "http://127.0.0.1/next"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := &lockedLog{ready: make(chan struct{})}
+	o := observability.New(slog.New(slog.NewJSONHandler(log, nil)), nil)
+	fetch := func(_ context.Context, url string) (capture.Result, error) {
+		if strings.Contains(url, "poison") {
+			panic("private-panic-value " + url)
+		}
+		return capture.Result{Title: "Next"}, nil
+	}
+	done := make(chan struct{})
+	go func() { defer close(done); captureWorker(ctx, s, o, fetch) }()
+	select {
+	case <-log.ready:
+	case <-time.After(10 * time.Second):
+		t.Error("worker did not capture the next link")
+	}
+	cancel()
+	<-done
+	output := log.String()
+	if strings.Contains(output, "private-") {
+		t.Fatalf("panic value or URL leaked: %s", output)
+	}
+	if n := strings.Count(output, `"event":"worker_panic"`); n != 1 {
+		t.Fatalf("want one worker_panic record, got %d: %s", n, output)
+	}
+	if !strings.Contains(output, fmt.Sprintf(`"link_id":%d`, bad)) {
+		t.Fatalf("worker_panic misses the link: %s", output)
+	}
+	link, err := s.Get(context.Background(), bad)
+	if err != nil || link.Status != "failed" || !strings.Contains(link.Error, "internal error") {
+		t.Fatalf("panicked link: %+v %v", link, err)
+	}
+	if link, err = s.Get(context.Background(), good); err != nil || link.Status != "ready" {
+		t.Fatalf("next link: %+v %v", link, err)
+	}
+	w := httptest.NewRecorder()
+	o.Metrics(w, nil)
+	if !strings.Contains(w.Body.String(), `pocketmark_worker_panics_total{worker="capture"} 1`) {
+		t.Fatal("missing worker panic metric")
+	}
+}
+
+// lockedLog collects worker output and signals the first successful capture.
+type lockedLog struct {
+	mu    sync.Mutex
+	buf   bytes.Buffer
+	ready chan struct{}
+	once  sync.Once
+}
+
+func (w *lockedLog) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if bytes.Contains(p, []byte(`"outcome":"ready"`)) {
+		w.once.Do(func() { close(w.ready) })
+	}
+	return w.buf.Write(p)
+}
+
+func (w *lockedLog) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
 }

@@ -18,13 +18,13 @@ func TestWorkerHeartbeatsOnlyForStartedLoops(t *testing.T) {
 	}
 	before := time.Now().Unix()
 	o.Beat(WorkerCapture)
-	o.Beat(WorkerBackupRun)
+	o.Beat(WorkerBackup)
 	o.Beat(Worker(-1))
 	o.Beat(workerCount)
 	out.Reset()
 	o.WriteWorkerMetrics(&out)
 	body := out.String()
-	for _, worker := range []string{"capture", "backup_run"} {
+	for _, worker := range []string{"capture", "backup"} {
 		var at int64
 		prefix := fmt.Sprintf("pocketmark_worker_last_activity_timestamp_seconds{worker=%q} ", worker)
 		i := strings.Index(body, prefix)

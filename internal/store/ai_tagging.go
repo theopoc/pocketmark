@@ -201,6 +201,25 @@ func (j *AITagJob) readTagPage(rows *sql.Rows) error {
 }
 
 func (s *Store) NextAITagJob(ctx context.Context, captureEnabled bool) (AITagJob, error) {
+	var reserved int64
+	returned := false
+	defer func() {
+		// A panic while reading the job's input (an archive parser, say) rolls
+		// back the reservation, and the same job would come first again. Drop it,
+		// like a bookmark the provider cannot tag, without recovering: the
+		// worker's recovery still logs the panic with its stack.
+		if !returned && reserved != 0 {
+			drop, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			s.db.ExecContext(drop, "DELETE FROM ai_tag_jobs WHERE link_id=$1 AND (lease_until IS NULL OR lease_until<=now())", reserved)
+		}
+	}()
+	j, err := s.nextAITagJob(ctx, captureEnabled, &reserved)
+	returned = true
+	return j, err
+}
+
+func (s *Store) nextAITagJob(ctx context.Context, captureEnabled bool, reserved *int64) (AITagJob, error) {
 	var j AITagJob
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -231,6 +250,7 @@ func (s *Store) NextAITagJob(ctx context.Context, captureEnabled bool) (AITagJob
 	if err != nil {
 		return j, err
 	}
+	*reserved = j.ID
 	var rawURL string
 	var legacyPublicArchive []byte
 	err = tx.QueryRowContext(ctx, `SELECT l.url,l.ai_tag_revision,l.ai_input_revision,
