@@ -51,9 +51,9 @@ func garageS3(t *testing.T) (backup.Config, backup.Credentials) {
 			if object.Err == nil {
 				object.Err = remote.Client.RemoveObject(ctx, c.Bucket, object.Key, minio.RemoveObjectOptions{})
 			}
+			// Keep going: drain the listing and try every object.
 			if object.Err != nil {
 				t.Error("cleanup:", object.Err)
-				return
 			}
 		}
 	})
@@ -195,6 +195,8 @@ func TestGarageMultipartUpload(t *testing.T) {
 	data := make([]byte, 17<<20+123)
 	rand.Read(data)
 	key := c.Prefix + "/multipart.bin"
+	// Listing cleanup only sees completed objects; abort parts of a failed upload.
+	t.Cleanup(func() { remote.Client.RemoveIncompleteUpload(context.Background(), c.Bucket, key) })
 	if _, err := remote.Put(t.Context(), key, bytes.NewReader(data), int64(len(data))); err != nil {
 		t.Fatal(err)
 	}
