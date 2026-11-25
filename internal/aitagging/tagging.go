@@ -95,8 +95,8 @@ type Tagging struct {
 
 // New builds the module. Both providers are required.
 func New(s *store.Store, chatgpt ChatGPTPlan, claude ClaudeKey) *Tagging {
-	if s == nil || chatgpt == nil || claude == nil {
-		panic("aitagging: store and both providers are required")
+	if chatgpt == nil || claude == nil {
+		panic("aitagging: both providers are required")
 	}
 	return &Tagging{store: s, chatgpt: chatgpt, claude: claude, wake: make(chan struct{}, 1)}
 }
