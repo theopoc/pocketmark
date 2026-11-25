@@ -4,43 +4,89 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"net/http/httptest"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"pocketmark/internal/aitagging"
 	"pocketmark/internal/aitagprovider"
-	"pocketmark/internal/store"
 )
 
+// AI tagging rules are covered by internal/aitagging. These tests check the
+// HTTP mapping: routes, status codes, messages and the creation wakeup.
+
 type testTagProvider struct {
-	connected    bool
-	tested       bool
-	quota        bool
-	nextError    error
-	articles     []aitagprovider.Article
-	vocabularies [][]string
-	afterRefresh func()
-	selection    func([]string) ([]string, error)
+	connected bool
+	testErr   error
+	started   chan struct{}
+	proceed   chan struct{}
 }
 
-// Model validation may have to wait for the provider. Another replica must
-// not change the account between validation and saving the model.
-type waitingModelProvider struct {
-	testTagProvider
-	started chan struct{}
-	proceed chan struct{}
+func (p *testTagProvider) State(context.Context) (bool, bool, error) {
+	return p.connected, p.connected, nil
+}
+func (p *testTagProvider) Start(context.Context) (string, error) {
+	return "https://auth.openai.com/", nil
+}
+func (p *testTagProvider) StartNew(ctx context.Context) (string, error) { return p.Start(ctx) }
+func (p *testTagProvider) Finish(_ context.Context, callback string) error {
+	if callback == "" {
+		return aitagprovider.ErrCallback
+	}
+	p.connected = true
+	return nil
+}
+func (p *testTagProvider) Models(ctx context.Context) ([]aitagprovider.Model, error) {
+	if p.started != nil {
+		close(p.started)
+		select {
+		case <-p.proceed:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	return []aitagprovider.Model{{ID: "fixture", Name: "Fixture model"}}, nil
+}
+func (p *testTagProvider) Test(context.Context, string) error { return p.testErr }
+func (p *testTagProvider) Disconnect(context.Context) error   { p.connected = false; return nil }
+func (p *testTagProvider) Classify(ctx context.Context, _ string, _ aitagprovider.Article, _ []string, beforeSend func(context.Context) error) ([]string, error) {
+	if err := beforeSend(ctx); err != nil {
+		return nil, err
+	}
+	return []string{"machine learning"}, nil
 }
 
-func (p *waitingModelProvider) Models(ctx context.Context) ([]aitagprovider.Model, error) {
-	close(p.started)
-	select {
-	case <-p.proceed:
-		return p.testTagProvider.Models(ctx)
-	case <-ctx.Done():
-		return nil, ctx.Err()
+type testClaudeProvider struct {
+	connected bool
+	testErr   error
+}
+
+func (p *testClaudeProvider) State(context.Context) (bool, error) { return p.connected, nil }
+func (p *testClaudeProvider) Connect(_ context.Context, key string) ([]aitagprovider.Model, error) {
+	if key != "sk-ant-fixture-key" {
+		return nil, aitagprovider.ErrInvalidKey
+	}
+	p.connected = true
+	return p.Models(context.Background())
+}
+func (p *testClaudeProvider) Disconnect(context.Context) error { p.connected = false; return nil }
+func (p *testClaudeProvider) Models(context.Context) ([]aitagprovider.Model, error) {
+	return []aitagprovider.Model{{ID: aitagprovider.DefaultClaudeModel, Name: "Claude Haiku 5.5"}}, nil
+}
+func (p *testClaudeProvider) Test(context.Context, string) error { return p.testErr }
+func (p *testClaudeProvider) Classify(context.Context, string, aitagprovider.Article, []string, func(context.Context) error) ([]string, error) {
+	return nil, errors.New("unexpected classification request")
+}
+
+func requireFailure(t *testing.T, w *httptest.ResponseRecorder, status int, message string) {
+	t.Helper()
+	requireStatus(t, w, status)
+	var body struct{ Error string }
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || body.Error != message {
+		t.Fatalf("message %q, expected %q: %v", body.Error, message, err)
 	}
 }
 
@@ -55,9 +101,9 @@ func TestAITagSettingsSerializeAcrossServers(t *testing.T) {
 		return wrapTestServer(t, New(s, testToken, "", false), path)
 	}
 	first, second := replica(), replica()
-	p := &waitingModelProvider{started: make(chan struct{}), proceed: make(chan struct{})}
-	first.aiTagging.provider = p
-	second.aiTagging.provider = &testTagProvider{}
+	p := &testTagProvider{started: make(chan struct{}), proceed: make(chan struct{})}
+	first.tagging = aitagging.New(first.Store, p, &testClaudeProvider{})
+	second.tagging = aitagging.New(second.Store, &testTagProvider{}, &testClaudeProvider{})
 	finished := make(chan int, 1)
 	go func() {
 		finished <- request(first, "POST", "/api/ai-tagging/model", `{"model":"fixture"}`, true, nil).Code
@@ -75,361 +121,123 @@ func TestAITagSettingsSerializeAcrossServers(t *testing.T) {
 	if status := <-finished; status != 200 {
 		t.Fatalf("select model: %d", status)
 	}
-	requireStatus(t, rejected, 409)
-	ctx := t.Context()
-	if _, err := first.Store.Create(ctx, store.Link{URL: "https://example.org/tag", Tags: []string{"Machine Learning"}}); err != nil {
-		t.Fatal(err)
-	}
-	if err := first.Store.SetAITagEnabled(ctx, true); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := first.Store.Create(ctx, store.Link{URL: "https://example.org/pending", Title: "Waiting for refresh"}); err != nil {
-		t.Fatal(err)
-	}
-	p.afterRefresh = func() {
-		requireStatus(t, request(second, "POST", "/api/ai-tagging/pause", "", true, nil), 200)
-	}
-	if err := first.workAITag(ctx, false); err != nil || len(p.articles) != 0 {
-		t.Fatalf("paused job sent article after token refresh: %v", err)
-	}
-	requireStatus(t, request(second, "POST", "/api/ai-tagging/disconnect", "", true, nil), 200)
+	requireFailure(t, rejected, 409, "Another AI tagging settings request is in progress")
 }
 
-func (p *testTagProvider) State(context.Context) (bool, bool, error) {
-	return p.connected, p.connected, nil
-}
-func (p *testTagProvider) Start(context.Context) (string, error) {
-	return "https://auth.openai.com/", nil
-}
-func (p *testTagProvider) StartNew(ctx context.Context) (string, error) { return p.Start(ctx) }
-func (p *testTagProvider) Finish(_ context.Context, callback string) error {
-	if callback == "" {
-		return aitagprovider.ErrCallback
-	}
-	p.connected = true
-	return nil
-}
-func (p *testTagProvider) Models(context.Context) ([]aitagprovider.Model, error) {
-	return []aitagprovider.Model{{ID: "fixture", Name: "Fixture model"}}, nil
-}
-func (p *testTagProvider) Test(context.Context, string) error { p.tested = true; return nil }
-func (p *testTagProvider) Disconnect(context.Context) error   { p.connected = false; return nil }
-func (p *testTagProvider) Classify(ctx context.Context, model string, article aitagprovider.Article, tags []string, beforeSend func(context.Context) error) ([]string, error) {
-	if model != "fixture" {
-		return nil, errors.New("unexpected classification request")
-	}
-	if p.afterRefresh != nil {
-		p.afterRefresh()
-	}
-	if err := beforeSend(ctx); err != nil {
-		return nil, err
-	}
-	if p.quota {
-		return nil, &aitagprovider.QuotaError{}
-	}
-	if p.nextError != nil {
-		err := p.nextError
-		p.nextError = nil
-		return nil, err
-	}
-	p.articles = append(p.articles, article)
-	p.vocabularies = append(p.vocabularies, slices.Clone(tags))
-	if p.selection != nil {
-		return p.selection(tags)
-	}
-	return []string{"machine learning"}, nil
-}
-
-func TestAITagWorkerChecksRemainingVocabularyBeforeCreating(t *testing.T) {
-	for _, tt := range []struct {
-		name, lastSelection, wantTag string
-		quota, pause, exact          bool
-	}{
-		{name: "reuse late synonym", lastSelection: "k8s", wantTag: "k8s"},
-		{name: "reuse exact fallback from a later page", exact: true, wantTag: "k8s"},
-		{name: "use first fallback after all pages", lastSelection: "technology", wantTag: "kubernetes"},
-		{name: "later quota preserves pending work", quota: true},
-		{name: "pause prevents next dispatch", pause: true},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := t.Context()
-			a := newTestServer(t, "", false)
-			create := func(l store.Link) int64 {
-				t.Helper()
-				id, err := a.Store.Create(ctx, l)
-				if err != nil {
-					t.Fatal(err)
-				}
-				return id
-			}
-			for group := range 8 {
-				var names []string
-				for ordinal := range 32 {
-					names = append(names, fmt.Sprintf("catalog%03d", group*32+ordinal))
-				}
-				create(store.Link{URL: fmt.Sprintf("https://fixture.example/%d", group), Tags: names})
-			}
-			create(store.Link{URL: "https://fixture.example/rare", Tags: []string{"k8s"}})
-			if err := a.Store.SetAITagModel(ctx, "fixture"); err != nil {
-				t.Fatal(err)
-			}
-			if err := a.Store.SetAITagEnabled(ctx, true); err != nil {
-				t.Fatal(err)
-			}
-			id := create(store.Link{URL: "https://example.org/article", Title: "Kubernetes deployment"})
-			provider := &testTagProvider{}
-			a.aiTagging.provider = provider
-			provider.selection = func(names []string) ([]string, error) {
-				if len(provider.vocabularies) == 1 {
-					if len(names) != 256 || slices.Contains(names, "k8s") {
-						t.Fatal("unexpected first page")
-					}
-					if tt.pause {
-						if err := a.Store.SetAITagEnabled(ctx, false); err != nil {
-							t.Fatal(err)
-						}
-					}
-					if tt.exact {
-						return []string{"k8s", "kubernetes"}, nil
-					}
-					return []string{"kubernetes"}, nil
-				}
-				if !slices.Equal(names, []string{"k8s"}) {
-					t.Fatalf("remaining candidates: %v", names)
-				}
-				if tt.quota {
-					return nil, &aitagprovider.QuotaError{}
-				}
-				return []string{tt.lastSelection}, nil
-			}
-			if err := a.workAITag(ctx, false); err != nil {
-				t.Fatal(err)
-			}
-			link, err := a.Store.Get(ctx, id)
-			if err != nil {
-				t.Fatal(err)
-			}
-			state, err := a.Store.AITagStatus(ctx)
-			if err != nil {
-				t.Fatal(err)
-			}
-			switch {
-			case tt.pause:
-				if len(link.Tags) != 0 || len(provider.articles) != 1 || state.Enabled || state.Remaining != 1 {
-					t.Fatalf("paused classification: %v, %d dispatches, %+v", link.Tags, len(provider.articles), state)
-				}
-			case tt.quota:
-				if len(link.Tags) != 0 || state.Blocked != "quota" || state.Remaining != 1 {
-					t.Fatalf("interrupted classification: %v, %+v", link.Tags, state)
-				}
-			default:
-				wantCalls := 2
-				if tt.exact {
-					wantCalls = 1
-				}
-				if !slices.Equal(link.Tags, []string{tt.wantTag}) || len(provider.articles) != wantCalls || state.Remaining != 0 {
-					t.Fatalf("completed classification: %v, %d dispatches, %+v", link.Tags, len(provider.articles), state)
-				}
-			}
-		})
-	}
-}
-
-func TestAITagSettingsCreationAndManualScan(t *testing.T) {
-	ctx := context.Background()
+func TestAITagSettingsRoutesAndCreationWakeup(t *testing.T) {
 	a := newTestServer(t, "", false)
 	p := &testTagProvider{}
-	a.aiTagging.provider = p
-	post := func(action, body string, want int) {
+	a.tagging = aitagging.New(a.Store, p, &testClaudeProvider{})
+	post := func(action, body string, want int) *httptest.ResponseRecorder {
 		t.Helper()
-		requireStatus(t, request(a, "POST", "/api/ai-tagging/"+action, body, true, nil), want)
+		w := request(a, "POST", "/api/ai-tagging/"+action, body, true, nil)
+		requireStatus(t, w, want)
+		return w
 	}
-	link := func(body string) store.Link {
-		t.Helper()
-		w := request(a, "POST", "/api/links", body, true, nil)
-		requireStatus(t, w, 201)
-		var l store.Link
-		if err := json.Unmarshal(w.Body.Bytes(), &l); err != nil {
-			t.Fatal(err)
-		}
-		return l
-	}
-	old := link(`{"url":"https://example.org/before","title":"A tutorial"}`)
 	requireStatus(t, request(a, "GET", "/api/ai-tagging", "", false, nil), 401)
-	post("enable", "", 409)
-	post("connect", "", 200)
+	requireFailure(t, request(a, "POST", "/api/ai-tagging/enable", "", true, nil), 409, "Connect a provider and choose a model first")
+	if w := post("connect", "", 200); !strings.Contains(w.Body.String(), `"url":"https://auth.openai.com/"`) {
+		t.Fatalf("connect: %s", w.Body)
+	}
+	requireFailure(t, request(a, "POST", "/api/ai-tagging/finish", `{"callback":""}`, true, nil), 400, "The return address is invalid or expired. Start the connection again")
 	post("finish", `{"callback":"sample return address"}`, 200)
-	post("models", "", 200)
-	post("model", `{"model":"unknown"}`, 400)
+	requireFailure(t, request(a, "POST", "/api/ai-tagging/connect", "", true, nil), 409, "Disconnect the saved ChatGPT plan before starting a new connection")
+	requireFailure(t, request(a, "POST", "/api/ai-tagging/finish", `{"callback":"again"}`, true, nil), 409, "Disconnect the saved ChatGPT plan before starting a new connection")
+	if w := post("models", "", 200); !strings.Contains(w.Body.String(), `"fixture"`) || w.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("models: %s", w.Body)
+	}
+	requireFailure(t, request(a, "POST", "/api/ai-tagging/model", `{"model":"unknown"}`, true, nil), 400, "Choose a model available on this ChatGPT plan")
 	post("model", `{"model":"fixture"}`, 200)
 	post("test", "", 200)
-	if !p.tested || len(p.articles) != 0 {
-		t.Fatal("testing the connection used a bookmark")
-	}
 	post("enable", "", 200)
-	fresh := link(`{"url":"https://example.org/new?private=abc","title":"New article","notes":"Owner notes"}`)
-	if err := a.workAITag(ctx, false); err != nil {
-		t.Fatal(err)
-	}
-	if len(p.articles) != 1 || p.articles[0] != (aitagprovider.Article{Title: "New article", Domain: "example.org"}) {
-		t.Fatal("unexpected information sent for classification")
-	}
-	check := func(id int64, expected ...string) {
-		t.Helper()
-		l, err := a.Store.Get(ctx, id)
-		if err != nil || !slices.Equal(l.Tags, expected) {
-			t.Fatalf("bookmark %d tags %v, expected %v: %v", id, l.Tags, expected, err)
-		}
-	}
-	check(fresh.ID, "machine learning")
-	if len(p.vocabularies[0]) != 0 {
-		t.Fatalf("expected an empty vocabulary for the first classification: %v", p.vocabularies[0])
-	}
-	check(old.ID)
 	post("scan", "", 200)
-	p.quota = true
-	if err := a.workAITag(ctx, false); err != nil {
-		t.Fatal(err)
-	}
-	state, err := a.Store.AITagStatus(ctx)
-	if err != nil || state.ScanStatus != "paused" || state.Blocked != "quota" || state.ScanRemaining != 1 {
-		t.Fatal(state, err)
-	}
 	post("resume", "", 200)
-	p.quota = false
-	if err := a.workAITag(ctx, false); err != nil {
+
+	// Creating an untagged bookmark wakes an idle worker before its next poll.
+	ctx, stop := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() { defer close(done); a.AITagWorker(ctx, false) }()
+	defer func() { stop(); <-done }()
+	time.Sleep(300 * time.Millisecond)
+	w := request(a, "POST", "/api/links", `{"url":"https://example.org/new","title":"New article"}`, true, nil)
+	requireStatus(t, w, 201)
+	var created struct{ ID int64 }
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
 		t.Fatal(err)
 	}
-	check(old.ID, "machine learning")
-	if len(p.vocabularies) != 2 || !slices.Equal(p.vocabularies[1], []string{"machine learning"}) {
-		t.Fatalf("the scan did not receive the tag created for the new bookmark: %v", p.vocabularies)
-	}
-	tag := link(`{"url":"https://example.org/tag","tags":["Machine Learning","machine learning"]}`)
-	check(tag.ID, "machine learning")
-	skipped := link(`{"url":"https://example.org/skipped","title":"Ambiguous article"}`)
-	after := link(`{"url":"https://example.org/after","title":"Another tutorial"}`)
-	p.nextError = aitagprovider.ErrModelOutput
-	for range 2 {
-		if err := a.workAITag(ctx, false); err != nil {
-			t.Fatal(err)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		l, err := a.Store.Get(t.Context(), created.ID)
+		if err == nil && slices.Equal(l.Tags, []string{"machine learning"}) {
+			break
 		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the new bookmark did not wake the worker: %v %v", l.Tags, err)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
-	check(skipped.ID)
-	check(after.ID, "machine learning")
 	post("pause", "", 200)
 	post("disconnect", "", 200)
-	state, err = a.Store.AITagStatus(ctx)
-	if err != nil || p.connected || state.Model != "" || state.Enabled {
-		t.Fatal(state, err)
-	}
+	requireFailure(t, request(a, "POST", "/api/ai-tagging/scan", "", true, nil), 409, "enable AI tagging first")
 }
 
-type testClaudeProvider struct {
-	connected bool
-	key       string
-	articles  []aitagprovider.Article
-}
-
-func (p *testClaudeProvider) State(context.Context) (bool, error) { return p.connected, nil }
-func (p *testClaudeProvider) Connect(_ context.Context, key string) ([]aitagprovider.Model, error) {
-	if key != "sk-ant-fixture-key" {
-		return nil, aitagprovider.ErrInvalidKey
-	}
-	p.connected, p.key = true, key
-	return p.Models(context.Background())
-}
-func (p *testClaudeProvider) Disconnect(context.Context) error { p.connected = false; return nil }
-func (p *testClaudeProvider) Models(context.Context) ([]aitagprovider.Model, error) {
-	return []aitagprovider.Model{{ID: aitagprovider.DefaultClaudeModel, Name: "Claude Haiku 5.5"}, {ID: "claude-sonnet-5-5", Name: "Claude Sonnet 5.5"}}, nil
-}
-func (p *testClaudeProvider) Test(context.Context, string) error { return nil }
-func (p *testClaudeProvider) Classify(_ context.Context, model string, article aitagprovider.Article, _ []string, beforeSend func(context.Context) error) ([]string, error) {
-	if !p.connected || (model != aitagprovider.DefaultClaudeModel && model != "claude-sonnet-5-5") {
-		return nil, errors.New("unexpected classification request")
-	}
-	if err := beforeSend(context.Background()); err != nil {
-		return nil, err
-	}
-	p.articles = append(p.articles, article)
-	return []string{"machine learning"}, nil
-}
-
-func TestAITagClaudeProviderSelectionAndWorker(t *testing.T) {
-	ctx := t.Context()
+func TestAITagClaudeRoutes(t *testing.T) {
 	a := newTestServer(t, "", false)
-	chatgpt, claude := &testTagProvider{}, &testClaudeProvider{}
-	a.aiTagging.provider, a.aiTagging.claude = chatgpt, claude
+	a.tagging = aitagging.New(a.Store, &testTagProvider{}, &testClaudeProvider{})
 	post := func(action, body string, want int) {
 		t.Helper()
 		requireStatus(t, request(a, "POST", "/api/ai-tagging/"+action, body, true, nil), want)
 	}
-	state := func() store.AITagStatus {
-		t.Helper()
-		s, err := a.Store.AITagStatus(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return s
-	}
-	post("connect-claude", `{"apiKey":"rejected"}`, 400)
-	if s := state(); s.Provider != "chatgpt" || s.Model != "" {
-		t.Fatalf("a rejected key changed settings: %+v", s)
-	}
+	requireFailure(t, request(a, "POST", "/api/ai-tagging/connect-claude", `{"apiKey":"rejected"}`, true, nil), 400, "Anthropic did not accept this API key")
 	post("connect-claude", `{"apiKey":"sk-ant-fixture-key"}`, 200)
-	if s := state(); s.Provider != "claude" || s.Model != aitagprovider.DefaultClaudeModel {
-		t.Fatalf("Haiku 5.5 was not preselected: %+v", s)
-	}
 	w := request(a, "GET", "/api/ai-tagging", "", true, nil)
 	requireStatus(t, w, 200)
 	var settings struct {
 		Provider string
+		Model    string
 		Claude   struct{ Connected bool }
 	}
-	if err := json.Unmarshal(w.Body.Bytes(), &settings); err != nil || settings.Provider != "claude" || !settings.Claude.Connected {
+	if err := json.Unmarshal(w.Body.Bytes(), &settings); err != nil || settings.Provider != "claude" || settings.Model != aitagprovider.DefaultClaudeModel || !settings.Claude.Connected {
 		t.Fatalf("settings: %s %v", w.Body, err)
 	}
-	if strings.Contains(w.Body.String(), "fixture-key") {
-		t.Fatal("settings returned the API key")
+	if strings.Contains(w.Body.String(), "fixture-key") || w.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("settings returned the API key or allowed caching")
 	}
-	post("provider", `{"provider":"chatgpt"}`, 409)
-	post("model", `{"model":"unknown"}`, 400)
-	post("model", `{"model":"claude-sonnet-5-5"}`, 200)
-	post("model", `{"model":"claude-haiku-5-5"}`, 200)
-	post("test", "", 200)
-	post("enable", "", 200)
-	id, err := a.Store.Create(ctx, store.Link{URL: "https://example.org/claude", Title: "Neural networks"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = a.workAITag(ctx, false); err != nil {
-		t.Fatal(err)
-	}
-	if got, err := a.Store.Get(ctx, id); err != nil || !slices.Equal(got.Tags, []string{"machine learning"}) || len(claude.articles) != 1 || len(chatgpt.articles) != 0 {
-		t.Fatalf("Claude did not classify the bookmark: %v %v", got.Tags, err)
-	}
-	// A rejected ChatGPT return address must not disturb the running Claude setup.
-	post("finish", `{"callback":""}`, 400)
-	if s := state(); s.Provider != "claude" || s.Model != aitagprovider.DefaultClaudeModel || !s.Enabled {
-		t.Fatalf("a failed ChatGPT connection changed Claude settings: %+v", s)
-	}
-	post("connect-claude", `{"apiKey":"sk-ant-fixture-key"}`, 409)
-	// Linking ChatGPT switches provider and pauses until a model is chosen again.
-	post("connect", "", 200)
-	post("finish", `{"callback":"sample return address"}`, 200)
-	if s := state(); s.Provider != "chatgpt" || s.Model != "" || s.Enabled {
-		t.Fatalf("ChatGPT connection kept the Claude model: %+v", s)
-	}
-	post("provider", `{"provider":"claude"}`, 200)
-	if s := state(); s.Provider != "claude" || s.Model != aitagprovider.DefaultClaudeModel || s.Enabled {
-		t.Fatalf("switching back: %+v", s)
-	}
-	post("disconnect", `{"provider":"chatgpt"}`, 200)
-	if s := state(); s.Model != aitagprovider.DefaultClaudeModel || chatgpt.connected {
-		t.Fatalf("disconnecting the idle provider changed the active one: %+v", s)
-	}
+	requireFailure(t, request(a, "POST", "/api/ai-tagging/provider", `{"provider":"chatgpt"}`, true, nil), 409, "Connect this provider first")
+	requireFailure(t, request(a, "POST", "/api/ai-tagging/model", `{"model":"unknown"}`, true, nil), 400, "Choose a model available for this API key")
+	requireFailure(t, request(a, "POST", "/api/ai-tagging/connect-claude", `{"apiKey":"sk-ant-fixture-key"}`, true, nil), 409, "Disconnect the saved API key before saving another")
+	requireFailure(t, request(a, "POST", "/api/ai-tagging/provider", `{"provider":"other"}`, true, nil), 400, "Choose ChatGPT or Claude")
+	requireFailure(t, request(a, "POST", "/api/ai-tagging/disconnect", `{"provider":"other"}`, true, nil), 400, "Choose ChatGPT or Claude")
 	post("disconnect", `{"provider":"claude"}`, 200)
-	if s := state(); s.Model != "" || claude.connected {
-		t.Fatalf("disconnecting Claude kept the model: %+v", s)
+}
+
+func TestAITagProviderFailureMessages(t *testing.T) {
+	for _, tt := range []struct {
+		claude  bool
+		err     error
+		status  int
+		message string
+	}{
+		{false, &aitagprovider.QuotaError{}, 429, "Your ChatGPT plan usage limit has been reached"},
+		{true, &aitagprovider.QuotaError{}, 429, "Your Anthropic API rate or spending limit has been reached"},
+		{false, aitagprovider.ErrReconnect, 409, "Reconnect your ChatGPT plan in settings"},
+		{true, aitagprovider.ErrReconnect, 409, "Replace your Anthropic API key in settings"},
+		{true, aitagprovider.ErrInvalidKey, 400, "Anthropic did not accept this API key"},
+		{false, aitagprovider.ErrRevocation, 502, "Disconnected locally. Check connected apps in ChatGPT to revoke access"},
+		{false, errors.New("network"), 502, "AI tagging request failed. Check the connection and try again"},
+	} {
+		a := newTestServer(t, "", false)
+		chatgpt, claude := &testTagProvider{connected: true}, &testClaudeProvider{connected: true}
+		a.tagging = aitagging.New(a.Store, chatgpt, claude)
+		model := "fixture"
+		if tt.claude {
+			requireStatus(t, request(a, "POST", "/api/ai-tagging/provider", `{"provider":"claude"}`, true, nil), 200)
+			claude.testErr = tt.err
+			model = aitagprovider.DefaultClaudeModel
+		} else {
+			chatgpt.testErr = tt.err
+		}
+		requireStatus(t, request(a, "POST", "/api/ai-tagging/model", `{"model":"`+model+`"}`, true, nil), 200)
+		requireFailure(t, request(a, "POST", "/api/ai-tagging/test", "", true, nil), tt.status, tt.message)
 	}
-	post("provider", `{"provider":"other"}`, 400)
 }

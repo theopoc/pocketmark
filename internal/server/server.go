@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"pocketmark/internal/aitagging"
 	"pocketmark/internal/backup"
 	"pocketmark/internal/fault"
 	"pocketmark/internal/observability"
@@ -27,7 +28,7 @@ import (
 )
 
 type Server struct {
-	aiTagging         aiTagging
+	tagging           *aitagging.Tagging
 	backupEnv         backup.Environment
 	telegramTransport http.RoundTripper
 	Store             *store.Store
@@ -418,7 +419,7 @@ func (a *Server) createLink(w http.ResponseWriter, r *http.Request) {
 		observability.Logger(r.Context()).InfoContext(r.Context(), "capture_queued", "link_id", v, "operation", "link.create")
 	}
 	if len(link.Tags) == 0 {
-		a.aiTagging.notify()
+		a.tagging.Notify()
 	}
 	respond(w, 201, link)
 }
