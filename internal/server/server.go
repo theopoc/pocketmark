@@ -66,6 +66,12 @@ func New(s *store.Store, token, origin string, secure bool, observers ...*observ
 		}
 		a.observer.Metrics(w, r)
 		observability.WriteBackupMetrics(w, m)
+		a.observer.WriteWorkerMetrics(w)
+		// A slow or unavailable database must not take the rest of the scrape down.
+		read, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		queues, e := s.QueueStats(read)
+		observability.WriteQueueMetrics(r.Context(), w, queues, e)
 	})
 	a.registerAccount(a.mux)
 	a.registerMFA(a.mux)

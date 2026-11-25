@@ -31,8 +31,13 @@ func (t *aiTagging) stopActive() {
 
 // A single worker drains the durable queue. Wakeups only shorten the polling delay.
 func (a *Server) AITagWorker(ctx context.Context, captureEnabled bool) {
+	a.observer.Beat(observability.WorkerAITagging)
 	for ctx.Err() == nil {
 		err := a.workAITag(ctx, captureEnabled)
+		if err == nil || errors.Is(err, sql.ErrNoRows) {
+			// A finished job or an empty (or paused) queue both prove the loop is alive.
+			a.observer.Beat(observability.WorkerAITagging)
+		}
 		if err == nil {
 			continue
 		}

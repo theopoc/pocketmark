@@ -126,6 +126,10 @@ scrape_configs:
 | `pocketmark_go_managed_memory_bytes` | Go runtime memory minus released heap; excludes PostgreSQL and native allocations and is **not RSS**. |
 | `pocketmark_go_heap_live_bytes` | Live Go heap measured at the last garbage collection. |
 | `pocketmark_go_goroutines` | Current Go goroutines. |
+| `pocketmark_queue_pending` | Unfinished jobs (waiting or in progress) by `queue`: `capture`, `ai_tagging`, `backup`. |
+| `pocketmark_queue_oldest_age_seconds` | Age of the oldest unfinished job by `queue`; `0` when the queue is empty. |
+| `pocketmark_queue_metrics_up` | `1` when this scrape read the queue gauges from PostgreSQL, `0` when the read failed or timed out (2 seconds at most). |
+| `pocketmark_worker_last_activity_timestamp_seconds` | Unix time a background loop last finished an iteration without a queue error, by `worker`. |
 
 Duration buckets are 5, 10, 25, 50, 100, 250 and 500 ms, then 1, 2.5, 5, 10, 30
 and 60 seconds, plus `+Inf`. Counters reset on process restart. Scrapes count as
@@ -137,10 +141,53 @@ combination. Unknown methods become `_OTHER`; unknown routes become `_unmatched`
 Routes use templates such as `/api/links/{id}` and `/dav/`, never bookmark IDs or
 WebDAV filenames. Overflow requests remain in the aggregate histogram. The registry
 uses fixed histograms and a bounded map, with no Prometheus client dependency,
-background polling, database scan or per-bookmark state. Scrapes copy the bounded
-snapshot, release the lock, then stream the response. The existing eight-request
+background polling or per-bookmark state. Each scrape runs two small PostgreSQL
+reads: backup counters, and the queue backlog through a partial index of
+unfinished captures, the drained AI tagging queue and the pruned backup history. Scrapes copy the bounded snapshot, release the lock, then
+stream the response. The existing eight-request
 admission limit also covers scrapes. `/api/stats` remains the on-demand source for
 library totals and pending/failed capture counts.
+
+### Queue and worker signals
+
+A blocked queue and an empty one both stop producing capture or backup events.
+Queue gauges and worker heartbeats tell them apart:
+
+- **Queues** (`pocketmark_queue_*`) come from PostgreSQL, so every replica reports
+  the same shared values. `capture` counts `pending` and `processing` links and ages
+  them from the moment they last entered the queue (creation, retry, URL change);
+  links pending before the upgrade that added this gauge count from the upgrade.
+  `ai_tagging` counts queued and leased jobs, including jobs held while AI tagging
+  is disabled or paused for quota. `backup` counts unfinished runs, including one
+  waiting for a retry.
+- **Heartbeats** (`pocketmark_worker_last_activity_timestamp_seconds`) are process
+  memory. Workers: `capture`, `ai_tagging`, `backup_schedule`, `backup_notify` and
+  `backup_run`. A loop sets it on start and after every iteration that finishes
+  without a queue error: an empty poll, a paused queue or a finished job, whether
+  the job itself succeeded or failed. A loop that never started has no series
+  (`capture` under `-no-capture`). One `backup_run` iteration lasts a whole backup,
+  up to its configured window.
+- If the queue read fails, the scrape still returns every other metric with
+  `pocketmark_queue_metrics_up 0` and logs `queue_metrics_unavailable` at WARN.
+
+Example PromQL alert rules. Thresholds must exceed one normal iteration; with
+several replicas, `max` keeps the freshest heartbeat:
+
+| Alert | Expression |
+| --- | --- |
+| Capture queue stuck | `max(pocketmark_queue_pending{queue="capture"}) > 0 and on() ((time() - max(pocketmark_worker_last_activity_timestamp_seconds{worker="capture"})) > 600 or absent(pocketmark_worker_last_activity_timestamp_seconds{worker="capture"}))` |
+| AI tagging queue stuck | `max(pocketmark_queue_pending{queue="ai_tagging"}) > 0 and on() ((time() - max(pocketmark_worker_last_activity_timestamp_seconds{worker="ai_tagging"})) > 900 or absent(pocketmark_worker_last_activity_timestamp_seconds{worker="ai_tagging"}))` |
+| Backup queue stuck | `max(pocketmark_queue_pending{queue="backup"}) > 0 and on() (time() - max(pocketmark_worker_last_activity_timestamp_seconds{worker="backup_run"})) > 600 and on() max(pocketmark_backup_in_progress) == 0` |
+| Backup scheduler stalled | `(time() - max(pocketmark_worker_last_activity_timestamp_seconds{worker="backup_schedule"})) > 600` |
+| Queue gauges unavailable | `max_over_time(pocketmark_queue_metrics_up[10m]) == 0` |
+| Capture backlog slow | `max(pocketmark_queue_oldest_age_seconds{queue="capture"}) > 3600` |
+
+A stuck alert means the loop is blocked or failing every iteration: search stderr
+for `capture_queue_failed`, `ai_tag_queue_unavailable` or `backup_*_failed`. A slow
+backlog with fresh heartbeats means the worker is alive but behind, for example
+after a large import, or that AI tagging is paused (check its status in Settings).
+The `absent` term also fires when no process runs that loop, for example while
+links wait under `-no-capture`; drop it if that is intended.
 
 ## Optional OpenTelemetry traces
 

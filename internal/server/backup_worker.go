@@ -25,13 +25,16 @@ import (
 func (a *Server) BackupWorker(ctx context.Context) {
 	since := time.Now()
 	var workers sync.WaitGroup
-	loop := func(work func() error, event string) {
+	loop := func(work func() error, event string, worker observability.Worker) {
 		defer workers.Done()
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
+		a.observer.Beat(worker)
 		for ctx.Err() == nil {
 			if err := work(); err != nil && ctx.Err() == nil {
 				observability.Error(ctx, event, err)
+			} else if err == nil {
+				a.observer.Beat(worker)
 			}
 			select {
 			case <-ctx.Done():
@@ -41,11 +44,11 @@ func (a *Server) BackupWorker(ctx context.Context) {
 		}
 	}
 	workers.Add(3)
-	go loop(func() error { return a.Store.ScheduleBackup(ctx, since) }, "backup_schedule_failed")
-	go loop(func() error { return a.dispatchBackupNotification(ctx) }, "backup_notification_worker_failed")
+	go loop(func() error { return a.Store.ScheduleBackup(ctx, since) }, "backup_schedule_failed", observability.WorkerBackupSchedule)
+	go loop(func() error { return a.dispatchBackupNotification(ctx) }, "backup_notification_worker_failed", observability.WorkerBackupNotify)
 	go loop(func() error {
 		return a.Store.WorkBackup(ctx, func(j store.BackupJob) error { return a.runBackup(ctx, j) })
-	}, "backup_worker_failed")
+	}, "backup_worker_failed", observability.WorkerBackupRun)
 	workers.Wait()
 }
 

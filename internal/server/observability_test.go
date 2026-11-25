@@ -2,10 +2,13 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"pocketmark/internal/observability"
 )
@@ -55,4 +58,49 @@ func namedAPIKey(t *testing.T, a *testServer) string {
 		t.Fatal(err)
 	}
 	return result.Token
+}
+
+func TestMetricsExposeQueueBacklogAndWorkerHeartbeats(t *testing.T) {
+	a := newTestServer(t, "", false)
+	requireStatus(t, request(a, "POST", "/api/links", `{"url":"https://queued.example.test/"}`, true, nil), 201)
+	body := request(a, "GET", "/metrics", "", true, nil).Body.String()
+	for _, want := range []string{
+		"pocketmark_queue_metrics_up 1\n",
+		`pocketmark_queue_pending{queue="capture"} 1` + "\n",
+		`pocketmark_queue_pending{queue="ai_tagging"} 0` + "\n",
+		`pocketmark_queue_pending{queue="backup"} 0` + "\n",
+		`pocketmark_queue_oldest_age_seconds{queue="capture"} `,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if strings.Contains(body, "pocketmark_worker_last_activity_timestamp_seconds{") {
+		t.Error("heartbeat for a loop that never started")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var workers sync.WaitGroup
+	workers.Add(2)
+	go func() { defer workers.Done(); a.AITagWorker(ctx, false) }()
+	go func() { defer workers.Done(); a.BackupWorker(ctx) }()
+	defer func() { cancel(); workers.Wait() }()
+	want := []string{"ai_tagging", "backup_schedule", "backup_notify", "backup_run"}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		body = request(a, "GET", "/metrics", "", true, nil).Body.String()
+		missing := ""
+		for _, worker := range want {
+			if !strings.Contains(body, `pocketmark_worker_last_activity_timestamp_seconds{worker="`+worker+`"} `) {
+				missing = worker
+			}
+		}
+		if missing == "" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no %s heartbeat:\n%s", missing, body)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }

@@ -307,12 +307,14 @@ func env(key, fallback string) string {
 func worker(ctx context.Context, s *store.Store, observer *observability.Observer) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
+	observer.Beat(observability.WorkerCapture)
 	for {
 		if ctx.Err() != nil {
 			return
 		}
 		l, e := s.Next(ctx)
 		if errors.Is(e, sql.ErrNoRows) {
+			observer.Beat(observability.WorkerCapture)
 			select {
 			case <-ctx.Done():
 				return
@@ -340,5 +342,8 @@ func worker(ctx context.Context, s *store.Store, observer *observability.Observe
 		} // processing jobs are recovered at the next start.
 		e = s.Finish(captureCtx, l, result, fetchErr)
 		finish(fetchErr, e)
+		if e == nil {
+			observer.Beat(observability.WorkerCapture)
+		}
 	}
 }
