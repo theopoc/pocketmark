@@ -7,6 +7,7 @@ Pocketmark keeps one Go process, PostgreSQL and an embedded React + shadcn/ui in
 | Module | Owns | Main test surface |
 | --- | --- | --- |
 | `cmd/pocketmark/` | Configuration, lifecycle and the bounded capture worker. | Store queue/recovery tests and release container smoke tests. |
+| `internal/aitagging/` | AI tagging settings rules for the selected AI tagging provider, the settings lock, cancellation of in-flight requests, and the worker that classifies queued bookmarks. | Settings and worker tests through its interface with fake providers and disposable stores. |
 | `internal/backup/` | Backup configuration, cron and IANA times, encryption and S3-compatible storage operations. | DST, environment precedence, integrity and remote recovery tests. |
 | `internal/capture/` | Network filtering, pinned DNS, redirects, extraction and bounded passive snapshots. | Capture, layout and offline tests. |
 | `internal/server/` | HTTP authentication, request limits, routes, shared upload staging and work slots. | Real HTTP handler tests with disposable stores. |

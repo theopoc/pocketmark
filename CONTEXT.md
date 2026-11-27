@@ -7,6 +7,7 @@
 - **Full backup** is a consistent copy of the library, captures, attachments and account records used to restore a Pocketmark instance. Recovery also requires the original server secret, kept separately. [Backup and restore](docs/GUIDE.md#back-up-everything).
 - **Metadata export** contains bookmark metadata for transfer between libraries.
 - **AI tagging** assigns lowercase English tags to an untagged website bookmark. It reuses relevant English tags from the library and can create new ones when none fit.
+- **AI tagging provider** is the connected ChatGPT plan or Anthropic API key that classifies bookmarks. One is selected at a time; changing it clears the selected model and pauses AI tagging.
 - **AI-public metadata** is what AI tagging may send to its provider: a title or description the owner entered, and what basic capture found on the public page, including a short excerpt. Personal notes, attachments, text uploaded from the owner’s browser and URL parameters stay local; a URL used as a fallback title is omitted.
 - **Metadata source** is where a bookmark’s title and description came from: the owner, basic capture, a browser upload, or an imported or synced record whose marker says which fields are AI-public. It decides whether each field is AI-public.
 - **Backup schedule** is the recurring time and choice of contents for an instance’s remote backups.
