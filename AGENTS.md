@@ -16,7 +16,8 @@ against the RAM goal.
   legacy-database/restart test
 - Auth, fetching, archives: [docs/API.md](docs/API.md), [docs/ARCHIVES.md](docs/ARCHIVES.md);
   keep origin checks, SSRF filtering, request limits, bounded queues, streamed asset I/O. Failures:
-  [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md#investigating-an-incident)
+  [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md#investigating-an-incident); new logs and errors follow
+  [docs/LOGGING.md](docs/LOGGING.md)
 - Clients and Floccus: [docs/FEATURES.md](docs/FEATURES.md), [docs/REAL_CLIENTS.md](docs/REAL_CLIENTS.md)
 - UI, API docs, extension, branding: [DESIGN.md](DESIGN.md), [docs/FRONTEND.md](docs/FRONTEND.md),
   [design review](docs/CI.md#design-review). Reuse `internal/webui/static/icon.svg`. If the README
@@ -45,7 +46,9 @@ Develop and test locally, against a Docker image built from your working tree. N
 
 3. Try the change in the browser at the printed URL.
 4. For any code change, run all four checks. Integration tests need PostgreSQL 18 tools and
-   `POCKETMARK_TEST_DATABASE_URL` (role with CREATEDB). Use `TEST_FLAGS` for focused runs.
+   `POCKETMARK_TEST_DATABASE_URL` (role with CREATEDB). With a `make up` stack, `make test` also runs
+   the backup tests against its Garage bucket ([S3 storage](docs/CI.md#s3-storage-for-backup-tests)).
+   Use `TEST_FLAGS` for focused runs.
 
    ```sh
    make check

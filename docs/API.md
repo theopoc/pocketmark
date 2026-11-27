@@ -196,7 +196,7 @@ WebDAV supports `OPTIONS`, `PROPFIND`, `GET`, `HEAD`, `PUT`, `DELETE` and `MOVE`
 | Collection name | 1–120 bytes after trimming |
 | Search query | 512 bytes; page must not exceed 1,000,000 |
 | Import | 8 MiB, 10,000 links, 2,000 collections; one import at a time. JSON also allows 10,000 pinned links, 32 tags per record and 64 nesting levels; counts include repeated fields and are checked before typed allocation. JSON/HTML receive to disk before any write transaction |
-| Concurrent HTTP requests | Eight general request slots; separate authentication and health slots; excess requests receive 503 |
+| Concurrent HTTP requests | Eight general request slots; separate authentication, health and metrics slots; excess requests receive 503 |
 | HTTP request rate | Per client IP: 10 requests/second with a 100-request burst; excess requests receive 429 |
 | Login attempts | Ten per minute per client address (IPv6 /64), up to 256 tracked windows; excess requests receive 429 |
 

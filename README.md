@@ -112,4 +112,5 @@ During development, enable auto-merge for the pull request so it merges into `ma
 - [Browser extension](extension/README.md) — installation and capture tools.
 - [API](docs/API.md) — endpoints and request limits.
 - [Observability](docs/OBSERVABILITY.md) — JSON logs, authenticated metrics and optional OpenTelemetry traces.
+- [Logging conventions](docs/LOGGING.md) — severity levels and failure messages for server logs.
 - [Development and CI](docs/CI.md) — checks and releases.

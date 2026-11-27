@@ -124,7 +124,7 @@ func TestIgnoredResponseWriteFailureIsRecordedOnce(t *testing.T) {
 				w.Write([]byte("another chunk"))
 			})
 			entries := records(t, &logs)
-			if len(entries) != 2 || entries[0]["msg"] != "response_write_failed" || entries[1]["outcome"] != "failed" || o.measurements.httpErrors.Load() != 1 {
+			if len(entries) != 2 || entries[0]["event"] != "response_write_failed" || entries[1]["outcome"] != "failed" || o.measurements.httpErrors.Load() != 1 {
 				t.Fatalf("write failure missing/duplicated: %v", entries)
 			}
 		})

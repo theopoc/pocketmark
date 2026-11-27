@@ -1,18 +1,18 @@
 package main
 
 import (
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
 
 	"pocketmark/internal/backup"
+	"pocketmark/internal/fault"
 )
 
 // Publish the private ZIP only after age authenticates the complete stream.
 func decryptBackup(dir, input, output string) error {
 	if input == "" || output == "" {
-		return errors.New("supply -decrypt-backup FILE and -output ZIP")
+		return fault.New("configuration", "decrypt_arguments_missing", "supply -decrypt-backup FILE and -output ZIP")
 	}
 	secret, err := loadServerSecret(dir, false)
 	if err != nil {
