@@ -106,7 +106,10 @@ func (s *Store) snapshot(ctx context.Context, anonymous bool) (*os.File, error) 
 // IndexDocument preserves personal metadata and ignores a stale upload after a
 // URL edit. The saved attachment remains intact if indexing fails separately.
 func (s *Store) IndexDocument(ctx context.Context, id int64, url, title, description, content string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE links SET ai_private_title=ai_private_title OR (title=url AND $2<>''), ai_private_description=ai_private_description OR (description='' AND $4<>''), content=$1,title=CASE WHEN title=url AND $2<>'' THEN $3 ELSE title END, description=CASE WHEN description='' THEN $4 ELSE description END,status='ready',error='',updated_at=$5 WHERE id=$6 AND url=$7`, content, title, title, description, time.Now().UTC().Format(time.RFC3339Nano), id, url)
+	var args sqlArgs
+	set := metadataWrite{source: sourceUpload, title: title, description: description}.assignments(&args)
+	_, err := s.db.ExecContext(ctx, `UPDATE links SET `+set+`,content=`+args.add(content)+`,status='ready',error='',updated_at=`+args.add(time.Now().UTC().Format(time.RFC3339Nano))+
+		` WHERE id=`+args.add(id)+` AND url=`+args.add(url), args...)
 	return err
 }
 
