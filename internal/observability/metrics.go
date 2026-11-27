@@ -48,6 +48,7 @@ type measurements struct {
 	httpErrors   atomic.Uint64
 	queueErrors  atomic.Uint64
 	exportErrors atomic.Uint64
+	heartbeats   [workerCount]atomic.Int64
 	workerPanics [workerCount]atomic.Uint64
 }
 

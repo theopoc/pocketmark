@@ -3392,7 +3392,7 @@
           "Monitoring"
         ],
         "summary": "Read Prometheus metrics",
-        "description": "Authenticated; read/full keys or owner. Bounded labels do not contain bookmark URLs or credential material. Process metrics are always returned; backup metrics are included only when their database read succeeds within 2 seconds, as reported by pocketmark_backup_metrics_up. The whole scrape has a 3-second budget. Authentication needs the database, so a database outage or authentication slower than 3 seconds returns 503. Allowed API key profiles: read, full.",
+        "description": "Authenticated; read/full keys or owner. Bounded labels do not contain bookmark URLs or credential material. Process metrics and worker heartbeats are always returned; backup metrics and queue backlog gauges are each included only when their database read succeeds within 2 seconds, as reported by pocketmark_backup_metrics_up and pocketmark_queue_metrics_up. The whole scrape has a 3-second budget. Authentication needs the database, so a database outage or authentication slower than 3 seconds returns 503. Allowed API key profiles: read, full.",
         "responses": {
           "5XX": {
             "$ref": "#/components/responses/ServerError"

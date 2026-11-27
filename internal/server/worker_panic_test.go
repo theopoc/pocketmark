@@ -47,53 +47,7 @@ func requireOnePanic(t *testing.T, logs *panicLog, worker string) {
 	}
 }
 
-func TestAITagWorkerDropsPanickedJobAndContinues(t *testing.T) {
-	ctx := t.Context()
-	a := newTestServer(t, "", false)
-	logs := logPanics(a)
-	if err := a.Store.SetAITagModel(ctx, "fixture"); err != nil {
-		t.Fatal(err)
-	}
-	if err := a.Store.SetAITagEnabled(ctx, true); err != nil {
-		t.Fatal(err)
-	}
-	poison, err := a.Store.Create(ctx, store.Link{URL: "https://example.org/poison", Title: "Poison article"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	next, err := a.Store.Create(ctx, store.Link{URL: "https://example.org/next", Title: "Next article"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	provider := &testTagProvider{}
-	provider.selection = func([]string) ([]string, error) {
-		if provider.articles[len(provider.articles)-1].Title == "Poison article" {
-			panic("private-panic-value")
-		}
-		return []string{"machine learning"}, nil
-	}
-	a.aiTagging.provider = provider
-	if err := a.nextAITag(ctx, false); !errors.Is(err, observability.ErrWorkerPanic) {
-		t.Fatalf("panicked job: %v", err)
-	}
-	if err := a.nextAITag(ctx, false); err != nil {
-		t.Fatalf("next job: %v", err)
-	}
-	// The dropped job is not handed back: the queue is empty.
-	if err := a.nextAITag(ctx, false); err == nil {
-		t.Fatal("panicked job was queued again")
-	}
-	requireOnePanic(t, logs, "ai_tag")
-	if link, err := a.Store.Get(ctx, poison); err != nil || len(link.Tags) != 0 {
-		t.Fatalf("panicked link: %v %v", link.Tags, err)
-	}
-	if link, err := a.Store.Get(ctx, next); err != nil || len(link.Tags) != 1 {
-		t.Fatalf("next link: %v %v", link.Tags, err)
-	}
-	if state, err := a.Store.AITagStatus(ctx); err != nil || state.Remaining != 0 || state.Blocked != "" {
-		t.Fatalf("queue: %+v %v", state, err)
-	}
-}
+// The AI tagging worker panic test lives with the module in internal/aitagging.
 
 func TestBackupWorkerFailsPanickedRunAndContinues(t *testing.T) {
 	ctx := t.Context()

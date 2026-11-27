@@ -1,4 +1,4 @@
-package server
+package aitagging
 
 import (
 	"context"
@@ -14,14 +14,18 @@ import (
 	"pocketmark/internal/store"
 )
 
-func (t *aiTagging) notify() {
+// ErrIdle means no queued bookmark is ready for classification.
+var ErrIdle = errors.New("no AI tagging work is ready")
+
+// Notify shortens the worker's wait, for instance after a bookmark is created.
+func (t *Tagging) Notify() {
 	select {
 	case t.wake <- struct{}{}:
 	default:
 	}
 }
 
-func (t *aiTagging) stopActive() {
+func (t *Tagging) stopActive() {
 	t.active.Lock()
 	defer t.active.Unlock()
 	if t.cancel != nil {
@@ -29,37 +33,50 @@ func (t *aiTagging) stopActive() {
 	}
 }
 
-// A single worker drains the durable queue. Wakeups only shorten the polling delay.
-func (a *Server) AITagWorker(ctx context.Context, captureEnabled bool) {
+// Start drains the durable queue until ctx ends. A single worker runs per
+// process; wakeups only shorten the polling delay. With captureEnabled, a
+// bookmark waits briefly for its basic capture before classification.
+func (t *Tagging) Start(ctx context.Context, captureEnabled bool) {
+	t.observer.Beat(observability.WorkerAITag)
 	for ctx.Err() == nil {
-		err := a.nextAITag(ctx, captureEnabled)
+		err := t.next(ctx, captureEnabled)
+		if err == nil || errors.Is(err, ErrIdle) || errors.Is(err, sql.ErrNoRows) {
+			// A finished job or an empty (or paused) queue proves the loop is alive;
+			// a recovered panic does not.
+			t.observer.Beat(observability.WorkerAITag)
+		}
 		if err == nil {
 			continue
 		}
-		if !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, context.Canceled) && !errors.Is(err, observability.ErrWorkerPanic) {
+		if !errors.Is(err, ErrIdle) && !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, context.Canceled) && !errors.Is(err, observability.ErrWorkerPanic) {
 			// Neither response text nor bookmark fields belong in diagnostics.
 			observability.Error(ctx, "ai_tag_queue_unavailable", err)
 		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-a.aiTagging.wake:
+		case <-t.wake:
 		case <-time.After(10 * time.Second):
 		}
 	}
 }
 
-// nextAITag runs one job under Recover. A job that panicked is dropped like a
-// bookmark the provider cannot tag: its lease would otherwise block the queue
-// for two minutes, then hand the same job back to the worker.
-func (a *Server) nextAITag(ctx context.Context, captureEnabled bool) error {
+// RunOnce classifies one queued bookmark without waiting for its capture, or
+// returns ErrIdle. A settings change made meanwhile cancels the request. A
+// panic is logged and returned as observability.ErrWorkerPanic; the job it held
+// is dropped like a bookmark the provider cannot tag.
+func (t *Tagging) RunOnce(ctx context.Context) error { return t.next(ctx, false) }
+
+// next runs one job under Recover. A job that panicked is dropped: its lease
+// would otherwise block the queue for two minutes, then hand the same job back.
+func (t *Tagging) next(ctx context.Context, captureEnabled bool) error {
 	var claimed store.AITagJob
-	err := a.observer.Recover(ctx, observability.WorkerAITag, func() error {
-		return a.workAITagJob(ctx, captureEnabled, &claimed)
+	err := t.observer.Recover(ctx, observability.WorkerAITag, func() error {
+		return t.runJob(ctx, captureEnabled, &claimed)
 	})
 	if errors.Is(err, observability.ErrWorkerPanic) && claimed.ID != 0 {
-		drop := a.observer.Recover(ctx, observability.WorkerAITag, func() error {
-			return a.Store.FinishAITagJob(ctx, claimed, nil)
+		drop := t.observer.Recover(ctx, observability.WorkerAITag, func() error {
+			return t.store.FinishAITagJob(ctx, claimed, nil)
 		})
 		if drop != nil && !errors.Is(drop, observability.ErrWorkerPanic) && ctx.Err() == nil {
 			observability.Error(ctx, "ai_tag_queue_unavailable", drop)
@@ -68,13 +85,8 @@ func (a *Server) nextAITag(ctx context.Context, captureEnabled bool) error {
 	return err
 }
 
-func (a *Server) workAITag(ctx context.Context, captureEnabled bool) error {
-	return a.workAITagJob(ctx, captureEnabled, new(store.AITagJob))
-}
-
-// workAITagJob keeps the job it holds in claimed, so that a panic can release it.
-func (a *Server) workAITagJob(ctx context.Context, captureEnabled bool, claimed *store.AITagJob) error {
-	t := &a.aiTagging
+// runJob keeps the job it holds in claimed, so that a panic can release it.
+func (t *Tagging) runJob(ctx context.Context, captureEnabled bool, claimed *store.AITagJob) error {
 	work, cancel := context.WithCancel(ctx)
 	t.active.Lock()
 	t.cancel = cancel
@@ -85,18 +97,21 @@ func (a *Server) workAITagJob(ctx context.Context, captureEnabled bool, claimed 
 		t.cancel = nil
 		t.active.Unlock()
 	}()
-	job, err := a.Store.NextAITagJob(work, captureEnabled)
+	job, err := t.store.NextAITagJob(work, captureEnabled)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrIdle
+	}
 	if err != nil {
 		return err
 	}
 	*claimed = job
 	if job.Title == "" && job.Description == "" && job.Excerpt == "" {
-		return a.Store.FinishAITagJob(work, job, nil)
+		return t.store.FinishAITagJob(work, job, nil)
 	}
 	stale := fault.New("ai_tagging", "job_stale", "AI tagging job is no longer eligible")
 	var guardErr error
 	beforeSend := func(ctx context.Context) error {
-		active, err := a.Store.AITagJobActive(ctx, job)
+		active, err := t.store.AITagJobActive(ctx, job)
 		if err != nil {
 			guardErr = err
 			return err
@@ -109,12 +124,9 @@ func (a *Server) workAITagJob(ctx context.Context, captureEnabled bool, claimed 
 	article := aitagprovider.Article{
 		Title: job.Title, Domain: job.Domain, Description: job.Description, Excerpt: job.Excerpt,
 	}
-	var model classifier = t.provider
-	if job.Provider == "claude" {
-		model = t.claude
-	}
+	model := t.classifier(job.Provider)
 	if model == nil {
-		return a.finishAITagError(work, job, fault.New("ai_tagging", "provider_unavailable", "AI tagging provider is not configured"))
+		return t.finishError(work, job, fault.New("ai_tagging", "provider_unavailable", "AI tagging provider is not configured"))
 	}
 	var fallback []string
 	for {
@@ -127,26 +139,26 @@ func (a *Server) workAITagJob(ctx context.Context, captureEnabled bool, claimed 
 		case guardErr != nil:
 			return guardErr
 		case errors.Is(err, stale):
-			return a.Store.FinishAITagJob(work, job, nil)
+			return t.store.FinishAITagJob(work, job, nil)
 		case err != nil:
-			return a.finishAITagError(work, job, err)
+			return t.finishError(work, job, err)
 		}
 		// The provider returns either existing selections or new names, never both.
 		if len(tags) > 0 && slices.Contains(job.Tags, tags[0]) {
-			return a.Store.FinishAITagJob(work, job, tags)
+			return t.store.FinishAITagJob(work, job, tags)
 		}
 		if fallback == nil {
 			if len(tags) == 0 {
-				return a.Store.FinishAITagJob(work, job, nil)
+				return t.store.FinishAITagJob(work, job, nil)
 			}
 			fallback = tags
 		}
 		if !job.MoreTags {
-			return a.Store.FinishAITagJob(work, job, fallback)
+			return t.store.FinishAITagJob(work, job, fallback)
 		}
-		next, err := a.Store.NextAITagPage(work, job)
+		next, err := t.store.NextAITagPage(work, job)
 		if errors.Is(err, sql.ErrNoRows) {
-			return a.Store.FinishAITagJob(work, job, nil)
+			return t.store.FinishAITagJob(work, job, nil)
 		}
 		if err != nil {
 			return err
@@ -160,19 +172,19 @@ func (a *Server) workAITagJob(ctx context.Context, captureEnabled bool, claimed 
 			}
 		}
 		if len(reused) > 0 {
-			return a.Store.FinishAITagJob(work, job, reused)
+			return t.store.FinishAITagJob(work, job, reused)
 		}
 		if len(job.Tags) == 0 {
 			// The remaining candidates were removed since the previous request.
-			return a.Store.FinishAITagJob(work, job, fallback)
+			return t.store.FinishAITagJob(work, job, fallback)
 		}
 	}
 }
 
-func (a *Server) finishAITagError(work context.Context, job store.AITagJob, err error) error {
+func (t *Tagging) finishError(work context.Context, job store.AITagJob, err error) error {
 	if errors.Is(err, aitagprovider.ErrArticleInput) || errors.Is(err, aitagprovider.ErrModelOutput) {
 		observability.Log(work, slog.LevelWarn, "ai_tag_bookmark_skipped", "AI tagging skipped a bookmark: "+observability.Describe(err), append([]any{"link_id", job.ID}, observability.ErrorAttrs(err)...)...)
-		return a.Store.FinishAITagJob(work, job, nil)
+		return t.store.FinishAITagJob(work, job, nil)
 	}
 	reason := "error"
 	var resumeAt *time.Time
@@ -195,5 +207,5 @@ func (a *Server) finishAITagError(work context.Context, job store.AITagJob, err 
 		}
 	}
 	observability.Log(work, level, "ai_tag_paused", message, append([]any{"link_id", job.ID, "reason", reason}, observability.ErrorAttrs(err)...)...)
-	return a.Store.BlockAITagJob(work, job, reason, resumeAt)
+	return t.store.BlockAITagJob(work, job, reason, resumeAt)
 }

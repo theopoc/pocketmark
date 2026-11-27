@@ -46,7 +46,9 @@ Develop and test locally, against a Docker image built from your working tree. N
 
 3. Try the change in the browser at the printed URL.
 4. For any code change, run all four checks. Integration tests need PostgreSQL 18 tools and
-   `POCKETMARK_TEST_DATABASE_URL` (role with CREATEDB). Use `TEST_FLAGS` for focused runs.
+   `POCKETMARK_TEST_DATABASE_URL` (role with CREATEDB). With a `make up` stack, `make test` also runs
+   the backup tests against its Garage bucket ([S3 storage](docs/CI.md#s3-storage-for-backup-tests)).
+   Use `TEST_FLAGS` for focused runs.
 
    ```sh
    make check
