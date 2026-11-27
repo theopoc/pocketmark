@@ -1,10 +1,10 @@
 package server
 
 import (
-	"errors"
 	"math"
 	"net/http"
 	"net/netip"
+	"pocketmark/internal/fault"
 	"strconv"
 	"sync"
 	"time"
@@ -38,7 +38,7 @@ func newRequestLimiter(rate, burst int) *requestLimiter {
 // Zero does not disable protection; invalid configuration must fail startup.
 func (a *Server) SetRateLimit(rate, burst int) error {
 	if rate < 1 || rate > 1000 || burst < 1 || burst > 10000 {
-		return errors.New("POCKETMARK_RATE_LIMIT must be 1–1000 requests/second and POCKETMARK_RATE_BURST must be 1–10000 requests")
+		return fault.New("configuration", "invalid_rate_limit", "POCKETMARK_RATE_LIMIT must be 1–1000 requests/second and POCKETMARK_RATE_BURST must be 1–10000 requests")
 	}
 	a.rateLimit = newRequestLimiter(rate, burst)
 	return nil

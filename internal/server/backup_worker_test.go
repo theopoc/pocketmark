@@ -86,14 +86,19 @@ func testS3(t *testing.T) (backup.Config, backup.Credentials, *atomic.Bool) {
 	return c, backup.Credentials{AccessKey: "fixture-id", SecretKey: "fixture-secret"}, &denyDeletes
 }
 
-func configureAndRunBackup(t *testing.T, a *testServer, c backup.Config, credentials backup.Credentials) store.BackupRun {
+func configureBackup(t *testing.T, a *testServer, c backup.Config, credentials backup.Credentials) {
 	t.Helper()
-	ctx := t.Context()
 	payload, err := json.Marshal(backup.Settings{Config: c, Credentials: credentials})
 	if err != nil {
 		t.Fatal(err)
 	}
 	requireStatus(t, request(a, "PUT", "/api/backups/settings", string(payload), true, nil), 200)
+}
+
+func configureAndRunBackup(t *testing.T, a *testServer, c backup.Config, credentials backup.Credentials) store.BackupRun {
+	t.Helper()
+	ctx := t.Context()
+	configureBackup(t, a, c, credentials)
 	requireStatus(t, request(a, "POST", "/api/backups/run", "", true, nil), 202)
 	if err := a.Store.WorkBackup(ctx, func(j store.BackupJob) error { return a.runBackup(ctx, j) }); err != nil {
 		t.Fatal(err)
@@ -198,23 +203,6 @@ func TestRetentionRefusalPreservesVerifiedCopyAndAlertsOnce(t *testing.T) {
 	if err := a.db.QueryRow("SELECT status,notification FROM backup_runs WHERE id=$1", failed.ID).Scan(&status, &notification); err != nil || status != "failed" || notification != "sent" {
 		t.Fatal("later cleanup changed the historical failure", status, notification, err)
 	}
-}
-
-// Opt in with a disposable bucket; objects are scoped to the newly created test instance.
-func TestGarageBackupRoundTrip(t *testing.T) {
-	endpoint := os.Getenv("POCKETMARK_TEST_S3_ENDPOINT")
-	if endpoint == "" {
-		t.Skip("requires disposable S3 endpoint")
-	}
-	c := backup.Default()
-	c.Endpoint = endpoint
-	if region := os.Getenv("POCKETMARK_TEST_S3_REGION"); region != "" {
-		c.Region = region
-	}
-	c.Bucket = os.Getenv("POCKETMARK_TEST_S3_BUCKET")
-	c.AllowHTTP = true
-	credentials := backup.Credentials{AccessKey: os.Getenv("POCKETMARK_TEST_S3_KEY"), SecretKey: os.Getenv("POCKETMARK_TEST_S3_SECRET")}
-	testBackupRecovery(t, c, credentials)
 }
 
 func testBackupRecovery(t *testing.T, c backup.Config, credentials backup.Credentials) {

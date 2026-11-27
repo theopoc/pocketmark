@@ -17,6 +17,7 @@ import (
 
 	"github.com/minio/minio-go/v7"
 	"pocketmark/internal/backup"
+	"pocketmark/internal/fault"
 	"pocketmark/internal/observability"
 	"pocketmark/internal/store"
 )
@@ -24,13 +25,18 @@ import (
 func (a *Server) BackupWorker(ctx context.Context) {
 	since := time.Now()
 	var workers sync.WaitGroup
-	loop := func(work func() error, event string) {
+	loop := func(worker observability.Worker, work func() error, event string) {
 		defer workers.Done()
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
+		a.observer.Beat(worker)
 		for ctx.Err() == nil {
-			if err := work(); err != nil && ctx.Err() == nil {
+			// A panic is logged by Recover; the loop waits for the next tick.
+			err := a.observer.Recover(ctx, worker, work)
+			if err != nil && ctx.Err() == nil && !errors.Is(err, observability.ErrWorkerPanic) {
 				observability.Error(ctx, event, err)
+			} else if err == nil {
+				a.observer.Beat(worker)
 			}
 			select {
 			case <-ctx.Done():
@@ -40,12 +46,31 @@ func (a *Server) BackupWorker(ctx context.Context) {
 		}
 	}
 	workers.Add(3)
-	go loop(func() error { return a.Store.ScheduleBackup(ctx, since) }, "backup_schedule_failed")
-	go loop(func() error { return a.dispatchBackupNotification(ctx) }, "backup_notification_worker_failed")
-	go loop(func() error {
-		return a.Store.WorkBackup(ctx, func(j store.BackupJob) error { return a.runBackup(ctx, j) })
+	go loop(observability.WorkerBackupSchedule, func() error { return a.Store.ScheduleBackup(ctx, since) }, "backup_schedule_failed")
+	// A panicked alert keeps its claim; the next claim records it as unknown
+	// after a minute instead of sending it twice.
+	go loop(observability.WorkerBackupNotification, func() error { return a.dispatchBackupNotification(ctx) }, "backup_notification_worker_failed")
+	go loop(observability.WorkerBackup, func() error {
+		return a.Store.WorkBackup(ctx, func(j store.BackupJob) error { return a.backupJob(ctx, j, a.runBackup) })
 	}, "backup_worker_failed")
 	workers.Wait()
+}
+
+// backupJob runs one claimed backup under Recover. A run that panicked is
+// finished as failed on the job's own connection, which still holds the backup
+// lock: left running, it would be claimed and re-run at the next tick.
+func (a *Server) backupJob(ctx context.Context, j store.BackupJob, run func(context.Context, store.BackupJob) error) error {
+	err := a.observer.Recover(ctx, observability.WorkerBackup, func() error { return run(ctx, j) })
+	if !errors.Is(err, observability.ErrWorkerPanic) || ctx.Err() != nil {
+		return err
+	}
+	finish, release := context.WithTimeout(ctx, 10*time.Second)
+	defer release()
+	// sql.ErrNoRows: the run had already finished before the panic.
+	if _, e := j.Finish(finish, "failed", 0, map[string]any{"error_code": "panic"}); e != nil && !errors.Is(e, sql.ErrNoRows) {
+		return e
+	}
+	return err
 }
 
 type runProgress struct {
@@ -67,7 +92,7 @@ func (p *runProgress) stageAt(stage, operation string) error {
 	p.start = now
 	p.stage = stage
 	p.operation = operation
-	slog.InfoContext(p.ctx, "backup_stage", "backup_id", p.job.ID, "attempt", p.job.Attempt, "stage", stage, "operation", operation)
+	observability.Log(p.ctx, slog.LevelInfo, "backup_stage", "Backup entered stage "+stage, "backup_id", p.job.ID, "attempt", p.job.Attempt, "stage", stage, "operation", operation)
 	return p.persist()
 }
 func (p *runProgress) persist() error {
@@ -85,7 +110,7 @@ func (p *runProgress) Write(b []byte) (int, error) {
 }
 func (a *Server) runBackup(parent context.Context, j store.BackupJob) error {
 	if j.Deadline == nil {
-		return errors.New("active backup missing deadline")
+		return fault.New("backup", "deadline_missing", "active backup has no deadline; the job row is inconsistent")
 	}
 	ctx, cancel := context.WithDeadline(parent, *j.Deadline)
 	defer cancel()
@@ -174,13 +199,23 @@ func (a *Server) runBackup(parent context.Context, j store.BackupJob) error {
 	if status != "retry" {
 		retry = 0
 	}
-	level := slog.LevelInfo
-	if status == "failed" {
-		level = slog.LevelError
-	} else if status == "retry" {
-		level = slog.LevelWarn
+	level, message := slog.LevelInfo, fmt.Sprintf("Backup completed (%d bytes)", p.bytes)
+	reason := "the backup window ended before the backup finished"
+	if e != nil && diag["error_code"] != "deadline_exceeded" {
+		reason = backup.Reason(e)
 	}
-	slog.Log(finish, level, "backup_finished", "backup_id", j.ID, "trigger", j.Trigger, "attempt", j.Attempt, "status", status, "stage", p.stage, "diagnostic", diag, "bytes", p.bytes, "retry_seconds", retry.Seconds())
+	switch status {
+	case "cancelled":
+		message = "Backup canceled by the owner"
+	case "retry":
+		// A retry keeps the backup going: WARN, as the next attempt may succeed.
+		level = slog.LevelWarn
+		message = fmt.Sprintf("Backup attempt %d failed at stage %s, retrying in %s: %s", j.Attempt, p.stage, retry, reason)
+	case "failed":
+		level = slog.LevelError
+		message = fmt.Sprintf("Backup failed at stage %s: %s", p.stage, reason)
+	}
+	observability.Log(finish, level, "backup_finished", message, "backup_id", j.ID, "trigger", j.Trigger, "attempt", j.Attempt, "status", status, "stage", p.stage, "diagnostic", diag, "bytes", p.bytes, "retry_seconds", retry.Seconds())
 	return nil
 }
 
@@ -343,6 +378,6 @@ func pruneBackup(ctx context.Context, j store.BackupJob, p *runProgress, remote 
 		if e = j.ForgetObject(ctx, old, object); e != nil {
 			return e
 		}
-		slog.Info("backup_object_expired", "backup_id", j.ID, "expired_backup_id", old)
+		observability.Log(ctx, slog.LevelInfo, "backup_object_expired", "Expired backup deleted by retention policy", "backup_id", j.ID, "expired_backup_id", old)
 	}
 }

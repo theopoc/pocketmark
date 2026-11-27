@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"log/slog"
 	"pocketmark/internal/fault"
 	"time"
@@ -44,23 +45,31 @@ func (o *Observer) Capture(ctx context.Context, id int64) (context.Context, func
 		o.measurements.captures[outcome].observe(elapsed)
 		o.measurements.mu.Unlock()
 		attrs := []any{"outcome", captureOutcomes[outcome], "duration_ms", float64(elapsed) / float64(time.Millisecond)}
-		level := slog.LevelInfo
+		// A failed capture is a failed operation: ERROR, with the cause in the message.
+		level, message := slog.LevelInfo, "Capture completed"
 		if err != nil {
-			level = slog.LevelWarn
+			level = slog.LevelError
 			attrs = append(attrs, ErrorAttrs(err)...)
 			span.SetStatus(codes.Error, captureOutcomes[outcome])
 		}
-		if saveErr != nil {
-			level = slog.LevelError
-		}
 		if fetchErr != nil {
+			message = "Capture failed: " + Describe(fetchErr)
 			attrs = append(attrs, "fetch_error", attributeMap(ErrorAttrs(fault.Wrap("capture.fetch", fetchErr))))
 		}
 		if saveErr != nil {
+			message = "Capture result could not be saved: " + Describe(saveErr)
 			attrs = append(attrs, "save_error", attributeMap(ErrorAttrs(fault.Wrap("capture.persist", saveErr))))
 		}
+		if ctx.Err() != nil && (saveErr == nil || errors.Is(saveErr, context.Canceled)) {
+			// Shutdown cancels in-flight captures; they are retried at the next start.
+			level, message = slog.LevelInfo, "Capture canceled; it will be retried at the next start"
+		}
 		attrs = append(attrs, "canceled", ctx.Err() != nil)
-		logger.Log(ctx, level, "capture_finished", attrs...)
+		// Recover already logged the panic as worker_panic with this logger's IDs;
+		// only a failure to save it as failed still needs a record.
+		if !errors.Is(fetchErr, ErrWorkerPanic) || saveErr != nil {
+			logEvent(ctx, logger, level, "capture_finished", message, attrs...)
+		}
 		span.SetAttributes(attribute.String("capture.outcome", captureOutcomes[outcome]))
 		span.End()
 	}

@@ -2,12 +2,13 @@ package observability
 
 import (
 	"context"
-	"errors"
+	"log/slog"
 	"math"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"pocketmark/internal/fault"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -36,7 +37,7 @@ func TraceConfigFromEnv() (TraceConfig, error) {
 	if value := os.Getenv("POCKETMARK_OTEL_ENABLED"); value != "" {
 		enabled, err := strconv.ParseBool(value)
 		if err != nil {
-			return c, errors.New("POCKETMARK_OTEL_ENABLED must be true or false")
+			return c, fault.New("configuration", "invalid_otel_enabled", "POCKETMARK_OTEL_ENABLED must be true or false")
 		}
 		c.Enabled = enabled
 	}
@@ -48,13 +49,13 @@ func TraceConfigFromEnv() (TraceConfig, error) {
 		c.ServiceName = "pocketmark"
 	}
 	if len(c.ServiceName) > 128 {
-		return c, errors.New("OTEL_SERVICE_NAME exceeds 128 bytes")
+		return c, fault.New("configuration", "invalid_otel_service_name", "OTEL_SERVICE_NAME exceeds 128 bytes")
 	}
 	c.SampleRatio = 0.1
 	if value := os.Getenv("POCKETMARK_OTEL_SAMPLE_RATIO"); value != "" {
 		ratio, err := strconv.ParseFloat(value, 64)
 		if err != nil || math.IsNaN(ratio) || math.IsInf(ratio, 0) || ratio < 0 || ratio > 1 {
-			return c, errors.New("POCKETMARK_OTEL_SAMPLE_RATIO must be between 0 and 1")
+			return c, fault.New("configuration", "invalid_otel_sample_ratio", "POCKETMARK_OTEL_SAMPLE_RATIO must be between 0 and 1")
 		}
 		c.SampleRatio = ratio
 	}
@@ -75,7 +76,7 @@ func TraceConfigFromEnv() (TraceConfig, error) {
 func validateTraceEndpoint(endpoint string) error {
 	u, err := url.Parse(endpoint)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || len(endpoint) > 2048 {
-		return errors.New("OTLP trace endpoint must be an HTTP(S) URL without credentials, query or fragment")
+		return fault.New("configuration", "invalid_otlp_endpoint", "OTLP trace endpoint must be an HTTP(S) URL without credentials, query or fragment")
 	}
 	return nil
 }
@@ -90,7 +91,7 @@ func (o *Observer) EnableTracing(ctx context.Context, c TraceConfig) (func(conte
 		return nil, err
 	}
 	if math.IsNaN(c.SampleRatio) || math.IsInf(c.SampleRatio, 0) || c.SampleRatio < 0 || c.SampleRatio > 1 || len(c.ServiceName) > 128 {
-		return nil, errors.New("invalid trace sampling ratio or service name")
+		return nil, fault.New("configuration", "invalid_trace_config", "invalid trace sampling ratio or service name")
 	}
 	transport := &http.Transport{
 		Proxy:        http.ProxyFromEnvironment,
@@ -110,7 +111,7 @@ func (o *Observer) EnableTracing(ctx context.Context, c TraceConfig) (func(conte
 	)
 	if err != nil {
 		transport.CloseIdleConnections()
-		return nil, errors.New("could not initialize OTLP HTTP exporter")
+		return nil, fault.New("configuration", "otlp_exporter_failed", "could not initialize OTLP HTTP exporter")
 	}
 	processor := sdktrace.NewBatchSpanProcessor(&reportingExporter{SpanExporter: exporter, observer: o},
 		sdktrace.WithMaxQueueSize(traceQueueSize), sdktrace.WithMaxExportBatchSize(traceBatchSize),
@@ -136,7 +137,7 @@ func (e *reportingExporter) ExportSpans(ctx context.Context, spans []sdktrace.Re
 		e.observer.measurements.exportErrors.Add(1)
 		now, previous := time.Now().Unix(), e.nextLog.Load()
 		if now >= previous && e.nextLog.CompareAndSwap(previous, now+60) {
-			e.observer.logger.Warn("trace_export_failed", ErrorAttrs(err)...)
+			logEvent(ctx, e.observer.logger, slog.LevelWarn, "trace_export_failed", Failure("trace_export_failed", err)+"; spans in this batch are dropped", ErrorAttrs(err)...)
 		}
 	}
 	// Best effort: no retries, and no default SDK handler printing collector URLs

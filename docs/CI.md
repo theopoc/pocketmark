@@ -271,6 +271,14 @@ python3 scripts/smoke_docker.py --image pocketmark:ci --browser
 
 The browser dependency is pinned and locked under `e2e/`; it is test tooling only and is not copied into the application image. The browser runs on the CI runner, outside the server's 128 MiB container limit. Selector checks cover the web UI and extension at desktop and narrow viewport sizes in both themes; the separate container browser journey exercises the running server. The Web and extension job runs the complete browser journey against a compiled temporary server before release tagging. `python3 scripts/smoke_frontend.py --binary bin/pocketmark` reproduces that journey with disposable data. These Chromium checks do not qualify Firefox, Safari, native mobile clients or full accessibility.
 
+### S3 storage for backup tests
+
+Backup tests use three S3 targets:
+
+- **httptest fixture** (`testS3` in `internal/server/backup_worker_test.go`): always runs, in CI too. It covers signing, retention and refusals, with uploads capped at 2 MiB.
+- **Garage from the dev stack**: `make up` starts a single-node Garage (`dev-garage`) that bootstraps its own layout, access key and `pocketmark-dev` bucket. Its S3 API is published on the second port of the worktree's block (`s3:` line of `make up`). Data lives in tmpfs and `make up` recreates the container, so each stack starts with an empty bucket. The access key, secret and RPC secret are generated once per worktree in `.env.worktree` and removed by `make down`. The dev app receives this destination through `POCKETMARK_BACKUP_S3_*` (schedule left paused). `make test` exports the file's `POCKETMARK_TEST_S3_*` values, which enables the `TestGarage*` tests: real round trip, connection test, error diagnoses, retention deletion and multipart upload. Without a stack these tests skip; with `.env.worktree` present but the stack stopped they fail. Garage does not run in CI.
+- **In-memory S3 (`tools/go/fakes3`, gofakes3)**: `scripts/smoke_frontend.py` builds and starts it for the browser journey. The journey configures the destination through the real form, checks a failed and a successful connection test, then backs up a custom library and checks the stored object. It accepts one generated access key ID and does not verify signatures. The Docker smoke has no such server and skips that journey.
+
 Frontend and extension regressions run once in the Web and extension job on every validation run. Selector Chromium checks run in ordinary source CI; the container journey runs during release, and ordinary source CI does not build containers.
 
 The release expression regression checks use `@actions/expressions` only as a temporary CI/test tool; it is not an application or frontend dependency. They read the expression directly from the workflow and cover missing/empty PR outputs after a version PR is merged, ordinary opened PRs, and malformed output. Reproduce them locally with:

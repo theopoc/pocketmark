@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -81,9 +82,9 @@ func (o *Observer) HTTP(w http.ResponseWriter, r *http.Request, route string, ne
 		aborted := false
 		if problem != nil {
 			if problem != http.ErrAbortHandler {
-				logger.ErrorContext(ctx, "http_panic", "error_code", "panic", "stack", stackFrames(3, 16))
+				logEvent(ctx, logger, slog.LevelError, "http_panic", "Request handler panicked; returned HTTP 500", "error_code", "panic", "stack", stackFrames(3, 16))
 			} else {
-				logger.ErrorContext(ctx, "http_stream_aborted", "error_code", "stream_aborted")
+				logEvent(ctx, logger, slog.LevelError, "http_stream_aborted", "Response stream aborted before completion", "error_code", "stream_aborted")
 			}
 			failure.failed.Store(true)
 			aborted = problem == http.ErrAbortHandler || response.status != 0
@@ -116,7 +117,7 @@ func (o *Observer) HTTP(w http.ResponseWriter, r *http.Request, route string, ne
 			outcome = "failed"
 			o.measurements.httpErrors.Add(1)
 		}
-		logger.Log(ctx, level, "http_request", "status", status, "outcome", outcome, "duration_ms", float64(elapsed)/float64(time.Millisecond), "bytes_written", response.bytes)
+		logEvent(ctx, logger, level, "http_request", strings.TrimSpace(fmt.Sprintf("%s %s answered %d %s", method, route, status, http.StatusText(status))), "status", status, "outcome", outcome, "duration_ms", float64(elapsed)/float64(time.Millisecond), "bytes_written", response.bytes)
 		if span != nil {
 			span.SetAttributes(attribute.Int("http.response.status_code", status))
 			if status >= 500 {
