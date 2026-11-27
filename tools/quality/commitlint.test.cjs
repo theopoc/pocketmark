@@ -8,7 +8,7 @@ const root = resolve(__dirname, "../..");
 const workflow = readFileSync(join(root, ".github/workflows/ci.yml"), "utf8");
 // Run the actual title-validation shell block with untrusted metadata.
 const script = workflow.split("      - name: Validate the squash commit title\n")[1]
-  .split("        run: |\n")[1].split("      - run:")[0]
+  .split("        run: |\n")[1].split(/\n\s*\n/)[0]
   .split("\n").map((line) => line.replace(/^          /, "")).join("\n");
 function lint(title) {
   return spawnSync("bash", ["-e", "-o", "pipefail", "-c", script], {
