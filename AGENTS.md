@@ -16,7 +16,8 @@ against the RAM goal.
   legacy-database/restart test
 - Auth, fetching, archives: [docs/API.md](docs/API.md), [docs/ARCHIVES.md](docs/ARCHIVES.md);
   keep origin checks, SSRF filtering, request limits, bounded queues, streamed asset I/O. Failures:
-  [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md#investigating-an-incident)
+  [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md#investigating-an-incident); new logs and errors follow
+  [docs/LOGGING.md](docs/LOGGING.md)
 - Clients and Floccus: [docs/FEATURES.md](docs/FEATURES.md), [docs/REAL_CLIENTS.md](docs/REAL_CLIENTS.md)
 - UI, API docs, extension, branding: [DESIGN.md](DESIGN.md), [docs/FRONTEND.md](docs/FRONTEND.md),
   [design review](docs/CI.md#design-review). Reuse `internal/webui/static/icon.svg`. If the README

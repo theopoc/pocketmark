@@ -104,11 +104,12 @@ func resetAccountFromInput(s *store.Store, input io.Reader) error {
 func main() {
 	if err := observability.ConfigureLogging(os.Stderr, os.Getenv("POCKETMARK_LOG_LEVEL")); err != nil {
 		observability.ConfigureLogging(os.Stderr, "INFO")
-		slog.Error("logging_configuration_failed", "error", err.Error())
+		observability.Fatal(context.Background(), "logging_configuration_failed", err)
 		os.Exit(1)
 	}
 	if e := run(); e != nil {
-		observability.Error(context.Background(), "process_failed", e)
+		// The process cannot continue: FATAL, then exit.
+		observability.Fatal(context.Background(), "process_failed", e)
 		os.Exit(1)
 	}
 }
@@ -125,7 +126,7 @@ func run() (runErr error) {
 	flag.Parse()
 	if *encrypted != "" || *output != "" {
 		if *resetMFA || *resetAccount {
-			return errors.New("choose one recovery command")
+			return fault.New("configuration", "recovery_flags_conflict", "choose only one recovery command")
 		}
 		return decryptBackup(*data, *encrypted, *output)
 	}
@@ -145,7 +146,6 @@ func run() (runErr error) {
 	operation = "config.tracing"
 	traceConfig, err := observability.TraceConfigFromEnv()
 	if err != nil {
-		slog.Error("telemetry_configuration_failed", "error", err.Error())
 		return err
 	}
 	// A soft Go heap budget, not an RSS cap; PostgreSQL memory is separate.
@@ -265,7 +265,7 @@ func run() (runErr error) {
 	srv := &http.Server{Addr: *addr, Handler: handler, ErrorLog: observability.HTTPErrorLog(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 * 1024}
 	errCh := make(chan error, 1)
 	go func() {
-		slog.Info("server_started", "listen", *addr, "capture_enabled", !*noCapture, "otel_enabled", traceConfig.Enabled)
+		observability.Log(ctx, slog.LevelInfo, "server_started", "Pocketmark listening on "+*addr, "listen", *addr, "capture_enabled", !*noCapture, "otel_enabled", traceConfig.Enabled)
 		errCh <- srv.ListenAndServe()
 	}()
 	select {
@@ -277,9 +277,13 @@ func run() (runErr error) {
 	defer cancel()
 	forced := shutdownHTTP(shutdown, srv)
 	<-done
-	slog.Info("server_stopped", "forced", forced)
+	stopped := "Pocketmark stopped gracefully"
+	if forced {
+		stopped = "Pocketmark stopped after forcing open connections closed"
+	}
+	observability.Log(context.Background(), slog.LevelInfo, "server_stopped", stopped, "forced", forced)
 	if e != nil && !errors.Is(e, http.ErrServerClosed) {
-		return fmt.Errorf("HTTP server: %w", e)
+		return fault.Cause("server", "http_server_failed", "HTTP server stopped unexpectedly", e)
 	}
 	return nil
 }
@@ -301,40 +305,73 @@ func env(key, fallback string) string {
 	return fallback
 }
 func worker(ctx context.Context, s *store.Store, observer *observability.Observer) {
+	captureWorker(ctx, s, observer, capture.Fetch)
+}
+
+// panickedCapture is the failure saved on a link whose capture panicked. Marking
+// it failed stops the expired reservation from re-running it every two minutes.
+var panickedCapture = fault.Cause("capture", "worker_panic", "Capture stopped on an internal error; retry it, or report the worker_panic log record", observability.ErrWorkerPanic)
+
+func captureWorker(ctx context.Context, s *store.Store, observer *observability.Observer, fetch func(context.Context, string) (capture.Result, error)) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
+	observer.Beat(observability.WorkerCapture)
+	wait := func() bool {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-ticker.C:
+			return true
+		}
+	}
 	for {
 		if ctx.Err() != nil {
 			return
 		}
 		l, e := s.Next(ctx)
 		if errors.Is(e, sql.ErrNoRows) {
-			select {
-			case <-ctx.Done():
+			observer.Beat(observability.WorkerCapture)
+			if !wait() {
 				return
-			case <-ticker.C:
-				continue
 			}
+			continue
 		}
 		if e != nil {
 			if ctx.Err() != nil {
 				return
 			}
 			observer.QueueError(ctx, e)
-			select {
-			case <-ctx.Done():
+			if !wait() {
 				return
-			case <-ticker.C:
-				continue
 			}
+			continue
 		}
 		captureCtx, finish := observer.Capture(ctx, l.ID)
-		result, fetchErr := capture.Fetch(captureCtx, l.URL)
+		var fetchErr error
+		panicked := observer.Recover(captureCtx, observability.WorkerCapture, func() error {
+			var result capture.Result
+			result, fetchErr = fetch(captureCtx, l.URL)
+			if ctx.Err() != nil {
+				return nil
+			} // processing jobs are recovered at the next start.
+			e = s.Finish(captureCtx, l, result, fetchErr)
+			return nil
+		})
+		if panicked != nil {
+			fetchErr = panickedCapture
+			e = s.Finish(captureCtx, l, capture.Result{}, fetchErr)
+		}
 		if ctx.Err() != nil {
 			finish(fetchErr, nil)
 			return
-		} // processing jobs are recovered at the next start.
-		e = s.Finish(captureCtx, l, result, fetchErr)
+		}
 		finish(fetchErr, e)
+		if panicked == nil && e == nil {
+			// A recovered panic is not activity: a loop that panics on every job goes stale.
+			observer.Beat(observability.WorkerCapture)
+		}
+		if panicked != nil && !wait() {
+			return
+		}
 	}
 }
