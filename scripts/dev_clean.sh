@@ -17,7 +17,8 @@ if ! command -v docker >/dev/null || ! docker info >/dev/null 2>&1; then
 fi
 
 # Placeholder values only satisfy the compose file's required variables.
-POCKETMARK_DEV_PORT=0 POCKETMARK_DEV_IMAGE="$project:dev" \
+POCKETMARK_DEV_PORT=0 POCKETMARK_DEV_IMAGE="$project:dev" POCKETMARK_DEV_S3_PORT=0 \
+  POCKETMARK_DEV_S3_ACCESS_KEY=- POCKETMARK_DEV_S3_SECRET_KEY=- POCKETMARK_DEV_GARAGE_RPC_SECRET=- \
   docker compose -p "$project" -f compose.dev.yaml down --volumes --remove-orphans --rmi local >/dev/null 2>&1 || true
 
 # Sweep anything left under the project label (stack started from another path, partial failures).

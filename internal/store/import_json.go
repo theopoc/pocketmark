@@ -143,9 +143,9 @@ func (s *Store) Import(ctx context.Context, r io.Reader) (ImportResult, error) {
 		}
 		l := Link{URL: in.URL, Title: in.Title, Description: in.Description, Notes: in.Notes, Tags: []string{}, CollectionID: collectionID, Favorite: in.Favorite || pinned[in.URL], Read: in.Read}
 		if in.AIPublicFields != nil {
-			l.aiPrivate = privateAIFields(*in.AIPublicFields)
-		} else if data.Format == "pocketmark" {
-			l.aiPrivate = privateAIFields("")
+			l.metadata = markedSource(*in.AIPublicFields)
+		} else if data.Format != "pocketmark" {
+			l.metadata = sourceOwner
 		}
 		if l.Title == "" {
 			l.Title = in.Name
