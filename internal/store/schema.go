@@ -28,6 +28,9 @@ var readerArchiveSchema string
 //go:embed migrations/007_ai_provider.sql
 var aiProviderSchema string
 
+//go:embed migrations/008_capture_queue.sql
+var captureQueueSchema string
+
 func (s *Store) initializeSchema(ctx context.Context) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -101,7 +104,15 @@ func (s *Store) initializeSchema(ctx context.Context) error {
 		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(7)"); err != nil {
 			return err
 		}
+		fallthrough
 	case 7:
+		if _, err = tx.ExecContext(ctx, captureQueueSchema); err != nil {
+			return fault.Cause("database", "migrate_capture_queue_age", "PostgreSQL schema step failed: migrate capture queue age", err)
+		}
+		if _, err = tx.ExecContext(ctx, "INSERT INTO pocketmark_migrations VALUES(8)"); err != nil {
+			return err
+		}
+	case 8:
 	default:
 		return fault.New("database", "schema_version_unsupported", fmt.Sprintf("database schema version %d is newer than this Pocketmark; upgrade Pocketmark", version))
 	}

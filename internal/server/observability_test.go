@@ -2,10 +2,12 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -57,6 +59,76 @@ func namedAPIKey(t *testing.T, a *testServer) string {
 		t.Fatal(err)
 	}
 	return result.Token
+}
+
+func TestMetricsExposeQueueBacklogAndWorkerHeartbeats(t *testing.T) {
+	a := newTestServer(t, "", false)
+	requireStatus(t, request(a, "POST", "/api/links", `{"url":"https://queued.example.test/"}`, true, nil), 201)
+	body := request(a, "GET", "/metrics", "", true, nil).Body.String()
+	for _, want := range []string{
+		"pocketmark_queue_metrics_up 1\n",
+		`pocketmark_queue_pending{queue="capture"} 1` + "\n",
+		`pocketmark_queue_pending{queue="ai_tag"} 0` + "\n",
+		`pocketmark_queue_pending{queue="backup"} 0` + "\n",
+		`pocketmark_queue_oldest_age_seconds{queue="capture"} `,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if strings.Contains(body, "pocketmark_worker_last_activity_timestamp_seconds{") {
+		t.Error("heartbeat for a loop that never started")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var workers sync.WaitGroup
+	workers.Add(2)
+	go func() { defer workers.Done(); a.AITagWorker(ctx, false) }()
+	go func() { defer workers.Done(); a.BackupWorker(ctx) }()
+	defer func() { cancel(); workers.Wait() }()
+	want := []string{"ai_tag", "backup_schedule", "backup_notification", "backup"}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		body = request(a, "GET", "/metrics", "", true, nil).Body.String()
+		missing := ""
+		for _, worker := range want {
+			if !strings.Contains(body, `pocketmark_worker_last_activity_timestamp_seconds{worker="`+worker+`"} `) {
+				missing = worker
+			}
+		}
+		if missing == "" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no %s heartbeat:\n%s", missing, body)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	// A slow queue read drops only the queue gauges, with one WARN.
+	var logs bytes.Buffer
+	a = a.withServer(New(a.Store, testToken, "", false, observability.New(slog.New(slog.NewJSONHandler(&logs, nil)), nil)))
+	defer func(previous time.Duration) { queueMetricsTimeout = previous }(queueMetricsTimeout)
+	queueMetricsTimeout = 200 * time.Millisecond
+	tx, err := a.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec("LOCK TABLE ai_tag_jobs IN ACCESS EXCLUSIVE MODE"); err != nil {
+		t.Fatal(err)
+	}
+	w := request(a, "GET", "/metrics", "", true, nil)
+	requireStatus(t, w, 200)
+	body = w.Body.String()
+	for _, want := range []string{"pocketmark_queue_metrics_up 0\n", "pocketmark_backup_metrics_up 1\n", "pocketmark_go_goroutines"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("slow queue read: missing %q", want)
+		}
+	}
+	if strings.Contains(body, "pocketmark_queue_pending{") || strings.Count(logs.String(), `"level":"WARN"`) != 1 || !strings.Contains(logs.String(), "queue_metrics_unavailable") {
+		t.Fatalf("slow queue read:\n%s\n%s", body, logs.String())
+	}
 }
 
 func TestMetricsSurviveBackupMetricsDatabaseFailure(t *testing.T) {
