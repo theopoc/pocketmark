@@ -53,18 +53,13 @@ export async function dialogDismissalJourney(page) {
         await page.locator(opener[1]).first().click();
       } else {
         if (page.url() !== libraryURL) await page.goto(libraryURL);
+        // The application shows the library in the same task as its initial route restore, which
+        // closes every open dialog; a dialog opened before then closes mid-assertion.
+        await page.locator('#app-view').waitFor({ state: 'visible' });
         if (id === 'navigation-dialog') await openNavigation(page);
         else {
-          // Re-open until a deadline: a late application render can close the dialog before it paints.
-          const deadline = Date.now() + 5000;
-          let reopened = 0;
-          do {
-            if (await dialog.evaluate(node => { if (node.open) return false; node.showModal(); return true; })) reopened++;
-            if (await dialog.isVisible()) break;
-            await page.waitForTimeout(50);
-          } while (Date.now() < deadline);
+          await dialog.evaluate(node => node.showModal());
           assert.ok(await dialog.isVisible(), `${id}: dialog opens at ${width}px`);
-          if (reopened > 1) console.warn(`${id}: dialog was closed ${reopened - 1} time(s) right after opening at ${width}px`);
         }
       }
       // Wait for the entry animation before measuring the visible boundary.
