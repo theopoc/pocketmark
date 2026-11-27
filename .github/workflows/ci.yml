@@ -29,8 +29,65 @@ env:
   CGO_ENABLED: '1'
 
 jobs:
+  changes:
+    name: Changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - name: Detect Markdown-only pull requests
+        id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.revision == '' && github.event.pull_request.number || '' }}
+        run: |
+          # Only direct PR runs can be Markdown-only; reusable calls (release) and other triggers validate everything.
+          if [[ -z "$PR_NUMBER" ]]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Include previous names so renaming a source file to .md still counts as code.
+          files=$(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" \
+            --jq '.[] | .filename, (.previous_filename // empty)')
+          # Markdown under internal/webui/ (embedded) and extension/ (packaged) ships in artifacts.
+          if grep -qvE '^(docs/.*|[^/]+)\.md$|^\.github/[^/]+\.md$|^\.claude/.*\.md$' <<< "$files"; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+            echo "Markdown-only change: skipping validation jobs." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  title:
+    name: PR title
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.revision || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Install Commitlint
+        run: npm ci --prefix tools/quality --ignore-scripts --no-audit --no-fund
+      - name: Validate the squash commit title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          [[ "$PR_TITLE" != *$'\n'* && "$PR_TITLE" != *$'\r'* ]]
+          printf '%s\n' "$PR_TITLE" | tools/quality/node_modules/.bin/commitlint --strict
+
   quality:
     name: Quality
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -54,13 +111,6 @@ jobs:
           done
       - name: Test Commitlint title validation
         run: node --test tools/quality/*.test.cjs
-      - name: Validate the squash commit title
-        if: github.event_name == 'pull_request'
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          [[ "$PR_TITLE" != *$'\n'* && "$PR_TITLE" != *$'\r'* ]]
-          printf '%s\n' "$PR_TITLE" | tools/quality/node_modules/.bin/commitlint --strict
       - run: go mod verify
       - run: go mod tidy -diff
       - run: make check
@@ -79,6 +129,8 @@ jobs:
 
   security:
     name: Security
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -120,6 +172,8 @@ jobs:
 
   sast:
     name: SAST (${{ matrix.language }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
@@ -170,6 +224,8 @@ jobs:
 
   test:
     name: Tests (${{ matrix.arch }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     strategy:
@@ -234,6 +290,8 @@ jobs:
 
   extension:
     name: Web and extension
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     services:
@@ -280,7 +338,7 @@ jobs:
 
   gate:
     name: CI
-    needs: [quality, security, sast, test, extension]
+    needs: [changes, title, quality, security, sast, test, extension]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 2
@@ -288,4 +346,12 @@ jobs:
       - name: Require every validation job to succeed
         env:
           RESULTS: ${{ toJSON(needs) }}
-        run: jq -e 'all(.[]; .result == "success")' <<< "$RESULTS"
+          CODE: ${{ needs.changes.outputs.code }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          # Heavy jobs are skipped only for Markdown-only PRs; the title job only runs on PRs.
+          jq -e --arg code "$CODE" --arg event "$EVENT" '
+            .changes.result == "success"
+            and (.title.result == "success" or (.title.result == "skipped" and $event != "pull_request"))
+            and all([.quality, .security, .sast, .test, .extension][]; .result == "success" or ($code == "false" and .result == "skipped"))
+          ' <<< "$RESULTS"
