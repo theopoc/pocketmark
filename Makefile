@@ -8,7 +8,10 @@ frontend: frontend/node_modules/.package-lock.json
 	npm run build --prefix frontend
 build: frontend
 	go build -trimpath -ldflags='$(LDFLAGS)' -o bin/pocketmark ./cmd/pocketmark
+# With a `make up` stack, backup tests also run against its Garage bucket.
 test: frontend
+	@set -a; if [ -f .env.worktree ]; then eval "$$(grep '^POCKETMARK_TEST_S3_' .env.worktree)"; fi; set +a; \
+	echo "go test $(TEST_FLAGS) ./... ($${POCKETMARK_TEST_S3_ENDPOINT:-no S3 endpoint})"; \
 	go test $(TEST_FLAGS) ./...
 	node --test internal/webui/*.test.cjs
 	npm test --prefix frontend
@@ -51,7 +54,8 @@ release-snapshot:
 run: build
 	./bin/pocketmark
 up:
+	@scripts/dev_env.sh compose rm --stop --force dev-garage
 	@scripts/dev_env.sh compose up --build --wait
-	@scripts/dev_env.sh print | sed -n 's/^POCKETMARK_DEV_URL=/app: /p'
+	@scripts/dev_env.sh print | sed -n 's/^POCKETMARK_DEV_URL=/app: /p; s/^POCKETMARK_DEV_S3_URL=/s3:  /p'
 down:
 	@scripts/dev_clean.sh

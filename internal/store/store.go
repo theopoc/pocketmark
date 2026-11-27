@@ -29,7 +29,7 @@ type Store struct {
 	databaseURL string
 }
 type Link struct {
-	aiPrivate        aiPrivateFields
+	metadata         metadataSource
 	captureAttempt   int64
 	HasThumbnail     bool     `json:"hasThumbnail,omitempty"`
 	ID               int64    `json:"id"`
@@ -183,7 +183,8 @@ func insertLink(ctx context.Context, ex executor, l Link, skipDuplicate bool) (i
 		query += " ON CONFLICT (url_digest(url)) DO NOTHING"
 	}
 	var id int64
-	err := ex.QueryRowContext(ctx, query+" RETURNING id", l.URL, l.Title, l.Description, l.Notes, l.CollectionID, string(tags), l.Favorite, l.Read, now, now, status, l.aiPrivate.title, l.aiPrivate.description).Scan(&id)
+	private := l.metadata.insertPrivacy()
+	err := ex.QueryRowContext(ctx, query+" RETURNING id", l.URL, l.Title, l.Description, l.Notes, l.CollectionID, string(tags), l.Favorite, l.Read, now, now, status, private.title, private.description).Scan(&id)
 	return id, err
 }
 func (s *Store) Create(ctx context.Context, l Link) (int64, error) {
@@ -192,6 +193,7 @@ func (s *Store) Create(ctx context.Context, l Link) (int64, error) {
 		return 0, err
 	}
 	defer tx.Rollback()
+	l.metadata = sourceOwner
 	id, err := Insert(ctx, tx, l)
 	if err != nil {
 		return 0, err
@@ -218,10 +220,14 @@ func (s *Store) Update(ctx context.Context, id int64, l Link) error {
 		return err
 	}
 	tags, _ := json.Marshal(l.Tags)
-	r, err := s.db.ExecContext(ctx, `UPDATE links SET ai_private_title=ai_private_title AND title=$1,ai_private_description=ai_private_description AND description=$2,title=$1,description=$2,notes=$3,collection_id=$4,tags=$5,favorite=$6,read=$7,updated_at=$8,
- status=CASE WHEN url<>$9 THEN 'pending' ELSE status END,error=CASE WHEN url<>$10 THEN '' ELSE error END,
- content=CASE WHEN url<>$11 THEN '' ELSE content END,archive=CASE WHEN url<>$12 THEN NULL ELSE archive END,
- reader_archive=CASE WHEN url<>$12 THEN NULL ELSE reader_archive END,url=$13 WHERE id=$14`, l.Title, l.Description, l.Notes, l.CollectionID, string(tags), l.Favorite, l.Read, time.Now().UTC().Format(time.RFC3339Nano), l.URL, l.URL, l.URL, l.URL, l.URL, id)
+	var args sqlArgs
+	set := metadataWrite{source: sourceOwner, title: l.Title, description: l.Description}.assignments(&args)
+	u := args.add(l.URL)
+	r, err := s.db.ExecContext(ctx, `UPDATE links SET `+set+`,notes=`+args.add(l.Notes)+`,collection_id=`+args.add(l.CollectionID)+`,tags=`+args.add(string(tags))+
+		`,favorite=`+args.add(l.Favorite)+`,read=`+args.add(l.Read)+`,updated_at=`+args.add(time.Now().UTC().Format(time.RFC3339Nano))+`,
+ status=CASE WHEN url<>`+u+` THEN 'pending' ELSE status END,error=CASE WHEN url<>`+u+` THEN '' ELSE error END,
+ content=CASE WHEN url<>`+u+` THEN '' ELSE content END,archive=CASE WHEN url<>`+u+` THEN NULL ELSE archive END,
+ reader_archive=CASE WHEN url<>`+u+` THEN NULL ELSE reader_archive END,url=`+u+` WHERE id=`+args.add(id), args...)
 	return affected(r, err)
 }
 func affected(r sql.Result, err error) error {
@@ -404,13 +410,12 @@ func (s *Store) Finish(ctx context.Context, l Link, captured capture.Result, fet
 		return e
 	}
 	defer tx.Rollback()
-	result, e := tx.ExecContext(ctx, `UPDATE links SET status='ready',error='',
-ai_public_excerpt=left($3,1024),ai_private_title=ai_private_title AND NOT(title=url AND $1<>''),
-ai_private_description=ai_private_description AND description<>'',
-title=CASE WHEN title=url AND $1<>'' THEN $1 ELSE title END,
-description=CASE WHEN description='' THEN $2 ELSE description END,
-content=$3,archive=$4,reader_archive=NULL WHERE id=$5 AND url=$6 AND status='processing' AND capture_attempt=$7`,
-		captured.Title, captured.Description, captured.Content, captured.HTML, l.ID, l.URL, l.captureAttempt)
+	var args sqlArgs
+	content := args.add(captured.Content)
+	set := metadataWrite{source: sourceCapture, title: captured.Title, description: captured.Description, excerpt: content}.assignments(&args)
+	result, e := tx.ExecContext(ctx, `UPDATE links SET status='ready',error='',`+set+`,
+content=`+content+`,archive=`+args.add(captured.HTML)+`,reader_archive=NULL WHERE id=`+args.add(l.ID)+` AND url=`+args.add(l.URL)+
+		` AND status='processing' AND capture_attempt=`+args.add(l.captureAttempt), args...)
 	if e != nil {
 		return e
 	}
