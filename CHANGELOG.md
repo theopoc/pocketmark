@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.1.0](https://github.com/theopoc/pocketmark/compare/v2.0.0...v2.1.0) (2026-11-27)
+
+
+### Features
+
+* **dev:** isolate the dev stack per git worktree ([#228](https://github.com/theopoc/pocketmark/issues/228)) ([c49064e](https://github.com/theopoc/pocketmark/commit/c49064e97efa90f1cab525e38b317b5a41c89d4a))
+* **observability:** expose queue backlog and worker heartbeats ([#240](https://github.com/theopoc/pocketmark/issues/240)) ([1aa857c](https://github.com/theopoc/pocketmark/commit/1aa857cea0de00b2c6411c2455a6f7143d875211))
+* **observability:** readable log messages and severity levels ([#236](https://github.com/theopoc/pocketmark/issues/236)) ([c103808](https://github.com/theopoc/pocketmark/commit/c103808f97e39263a815ac758a06779e15b9da61))
+* **observability:** recover and log panics in background workers ([#239](https://github.com/theopoc/pocketmark/issues/239)) ([6189a23](https://github.com/theopoc/pocketmark/commit/6189a23f73daf911fd22fe605c30bb4fa77af6a5))
+
+
+### Bug Fixes
+
+* **backup:** finish runs whose backup window has ended ([#233](https://github.com/theopoc/pocketmark/issues/233)) ([174133e](https://github.com/theopoc/pocketmark/commit/174133efaf3d3720bc95c078b2c07f52c0fa56d4))
+* **metrics:** keep serving /metrics when PostgreSQL is slow or down ([#238](https://github.com/theopoc/pocketmark/issues/238)) ([070a806](https://github.com/theopoc/pocketmark/commit/070a806f355c194c30c6d680e4ad66ed18cbba2e))
+* **release:** let reusable CI read pull requests ([#242](https://github.com/theopoc/pocketmark/issues/242)) ([c2a1f9c](https://github.com/theopoc/pocketmark/commit/c2a1f9c851605007bb8e2f899e72940b377d15b0))
+* **ui:** keep toast host attached when a React dialog unmounts ([#224](https://github.com/theopoc/pocketmark/issues/224)) ([41a229c](https://github.com/theopoc/pocketmark/commit/41a229c65f571904b3b041682428ef5f8179769b))
+
 ## [2.0.0](https://github.com/theopoc/pocketmark/compare/v1.3.4...v2.0.0) (2026-11-23)
 
 
