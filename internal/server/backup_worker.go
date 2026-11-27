@@ -19,11 +19,14 @@ func (a *Server) BackupWorker(ctx context.Context) {
 		defer workers.Done()
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
+		a.observer.Beat(worker)
 		for ctx.Err() == nil {
 			// A panic is logged by Recover; the loop waits for the next tick.
 			err := a.observer.Recover(ctx, worker, work)
 			if err != nil && ctx.Err() == nil && !errors.Is(err, observability.ErrWorkerPanic) {
 				observability.Error(ctx, event, err)
+			} else if err == nil {
+				a.observer.Beat(worker)
 			}
 			select {
 			case <-ctx.Done():

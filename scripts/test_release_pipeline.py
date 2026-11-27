@@ -120,12 +120,30 @@ class PipelineTests(unittest.TestCase):
 
     def test_ci_gate_rejects_failed_cancelled_and_skipped_validations(self):
         ci = (ROOT / '.github/workflows/ci.yml').read_text()
-        command = job('gate', ci).split('        run: ', 1)[1].strip()
-        for status in ('success', 'failure', 'cancelled', 'skipped'):
-            with self.subTest(status=status):
-                result = self.execute(command, RESULTS=json.dumps({
-                    'quality': {'result': 'success'}, 'test': {'result': status}}))
-                self.assertEqual(result.returncode == 0, status == 'success')
+        command = script('gate', '- name: Require every validation job to succeed', ci)
+        heavy = ('quality', 'security', 'sast', 'test', 'extension')
+
+        def run(code='true', event='pull_request', **results):
+            needs = {name: {'result': 'success'} for name in ('changes', 'title') + heavy}
+            for name, status in results.items():
+                needs[name] = {'result': status}
+            return self.execute(command, RESULTS=json.dumps(needs), CODE=code, EVENT=event).returncode == 0
+
+        self.assertTrue(run())
+        for name in ('changes', 'title') + heavy:
+            for status in ('failure', 'cancelled', 'skipped'):
+                with self.subTest(job=name, status=status):
+                    self.assertFalse(run(**{name: status}))
+        # Any failed heavy job fails the gate, whichever job it is.
+        for name in heavy:
+            with self.subTest(job=name, status='failure on a Markdown-only PR'):
+                self.assertFalse(run(code='false', **{name: 'failure'}))
+        # Markdown-only PRs skip every heavy job but still need the title check.
+        self.assertTrue(run(code='false', **{name: 'skipped' for name in heavy}))
+        self.assertFalse(run(code='false', title='failure', **{name: 'skipped' for name in heavy}))
+        # The title job only runs on pull requests.
+        self.assertTrue(run(event='schedule', title='skipped'))
+        self.assertFalse(run(event='pull_request', title='skipped'))
 
     def test_tag_sha_must_match_the_tested_revision_before_any_build(self):
         self.tool('git', '''

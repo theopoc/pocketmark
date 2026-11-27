@@ -21,6 +21,7 @@ func (s *Store) CreateFile(ctx context.Context, l Link, a Asset, src io.Reader) 
 		return 0, a, e
 	}
 	defer tx.Rollback()
+	l.metadata = sourceOwner
 	id, e := Insert(ctx, tx, l)
 	if e != nil {
 		return 0, a, e

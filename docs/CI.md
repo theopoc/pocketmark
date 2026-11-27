@@ -109,14 +109,22 @@ any tag or distribution build is created.
 
 | Validation | Checks |
 | --- | --- |
-| Quality | PR title, formatting/vet, checksums/tidy, syntax, actionlint and GoReleaser configuration. |
+| PR title | Commitlint on the squash commit title; runs on every PR, including Markdown-only ones. |
+| Quality | Formatting/vet, checksums/tidy, syntax, actionlint and GoReleaser configuration. |
 | Security | Redacted Gitleaks, reachable Go vulnerabilities, npm audits, Swagger vendor equality and Retire.js. |
 | SAST | Parallel full CodeQL analysis for Go and JavaScript; findings or incomplete results block. |
 | Tests | Native Go race tests on AMD64 and ARM64; Python and expression regressions run once on AMD64. |
 | Web and extension | JavaScript tests, production frontend with a disposable server, Chromium selectors and extension ZIP validation, once on AMD64. |
 
-The final **CI** job depends on every validation job and rejects failed, cancelled
-or skipped results. Configure the **Protect main** ruleset to require this stable
+A `Changes` job lists the PR's files through the API. When every changed file (including
+rename sources) is Markdown under `docs/`, the repository root, `.github/` or `.claude/`,
+Quality, Security, SAST, Tests and Web and extension are skipped; the PR title check still runs.
+Markdown under `internal/webui/` (embedded) and `extension/` (packaged) counts as code. Schedule,
+dispatch and `workflow_call` runs always validate everything. The workflow itself must keep
+running (no `paths-ignore`), otherwise the required `CI` check would stay pending and block merging.
+
+The final **CI** job depends on every validation job and rejects failed or cancelled
+results; it accepts skipped results only for the five heavy jobs on a Markdown-only PR. Configure the **Protect main** ruleset to require this stable
 `CI` check from GitHub Actions with strict branch updates. Migrating an existing
 ruleset requires replacing the previous nine check names, including the removed
 `Build (amd64)`, `Build (arm64)` and `Extension` checks. Workflow YAML does not
@@ -237,7 +245,7 @@ SQLite. Commitlint's other conventional defaults apply, including a 100-characte
 header limit. Only the title is checked because it becomes the squash commit;
 intermediate commits are not checked. Dispatch, push and scheduled runs validate
 source rather than PR metadata. Metadata edits rerun the full suite and title
-validation together. For a future busy repository, consider an independent
+validation together (title validation alone for Markdown-only PRs). For a future busy repository, consider an independent
 required metadata check and `merge_group` support before enabling a merge queue.
 
 ## Reproduce locally
@@ -262,6 +270,14 @@ python3 scripts/smoke_docker.py --image pocketmark:ci --browser
 ```
 
 The browser dependency is pinned and locked under `e2e/`; it is test tooling only and is not copied into the application image. The browser runs on the CI runner, outside the server's 128 MiB container limit. Selector checks cover the web UI and extension at desktop and narrow viewport sizes in both themes; the separate container browser journey exercises the running server. The Web and extension job runs the complete browser journey against a compiled temporary server before release tagging. `python3 scripts/smoke_frontend.py --binary bin/pocketmark` reproduces that journey with disposable data. These Chromium checks do not qualify Firefox, Safari, native mobile clients or full accessibility.
+
+### S3 storage for backup tests
+
+Backup tests use three S3 targets:
+
+- **httptest fixture** (`testS3` in `internal/server/backup_worker_test.go`): always runs, in CI too. It covers signing, retention and refusals, with uploads capped at 2 MiB.
+- **Garage from the dev stack**: `make up` starts a single-node Garage (`dev-garage`) that bootstraps its own layout, access key and `pocketmark-dev` bucket. Its S3 API is published on the second port of the worktree's block (`s3:` line of `make up`). Data lives in tmpfs and `make up` recreates the container, so each stack starts with an empty bucket. The access key, secret and RPC secret are generated once per worktree in `.env.worktree` and removed by `make down`. The dev app receives this destination through `POCKETMARK_BACKUP_S3_*` (schedule left paused). `make test` exports the file's `POCKETMARK_TEST_S3_*` values, which enables the `TestGarage*` tests: real round trip, connection test, error diagnoses, retention deletion and multipart upload. Without a stack these tests skip; with `.env.worktree` present but the stack stopped they fail. Garage does not run in CI.
+- **In-memory S3 (`tools/go/fakes3`, gofakes3)**: `scripts/smoke_frontend.py` builds and starts it for the browser journey. The journey configures the destination through the real form, checks a failed and a successful connection test, then backs up a custom library and checks the stored object. It accepts one generated access key ID and does not verify signatures. The Docker smoke has no such server and skips that journey.
 
 Frontend and extension regressions run once in the Web and extension job on every validation run. Selector Chromium checks run in ordinary source CI; the container journey runs during release, and ordinary source CI does not build containers.
 

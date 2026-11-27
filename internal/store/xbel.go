@@ -319,9 +319,8 @@ func replaceXBELTree(ctx context.Context, tx *sql.Tx, root *xbelNode) error {
 			} else {
 				links++
 				l := Link{URL: child.URL, Title: child.Title, Description: child.Description, CollectionID: parent}
-				l.aiPrivate = privateAIFields("")
 				if child.PublicAIFields != nil {
-					l.aiPrivate = privateAIFields(*child.PublicAIFields)
+					l.metadata = markedSource(*child.PublicAIFields)
 				}
 				if links > 10000 {
 					return fault.Invalid("XBEL supports at most 10000 links")
@@ -360,11 +359,13 @@ func replaceXBELTree(ctx context.Context, tx *sql.Tx, root *xbelNode) error {
 				if e == sql.ErrNoRows {
 					lid, e = Insert(ctx, tx, l)
 				} else if e == nil {
-					_, e = tx.ExecContext(ctx, `UPDATE links SET ai_private_title=CASE WHEN title=$1 THEN ai_private_title OR ($12 AND $14) ELSE $12 END,
-ai_private_description=CASE WHEN NOT $2 THEN ai_private_description WHEN description=$3 THEN ai_private_description OR ($13 AND $14) ELSE $13 END,title=$1,description=CASE WHEN $2 THEN $3 ELSE description END,collection_id=$4,updated_at=$5,
-status=CASE WHEN url<>$6 THEN 'pending' ELSE status END,error=CASE WHEN url<>$7 THEN '' ELSE error END,
-content=CASE WHEN url<>$8 THEN '' ELSE content END,archive=CASE WHEN url<>$9 THEN NULL ELSE archive END,
-reader_archive=CASE WHEN url<>$9 THEN NULL ELSE reader_archive END,url=$10 WHERE id=$11`, l.Title, child.HasDescription, l.Description, parent, now, l.URL, l.URL, l.URL, l.URL, l.URL, lid, l.aiPrivate.title, l.aiPrivate.description, child.PublicAIFields != nil)
+					var args sqlArgs
+					set := metadataWrite{source: l.metadata, title: l.Title, description: l.Description, keepDescription: !child.HasDescription}.assignments(&args)
+					u := args.add(l.URL)
+					_, e = tx.ExecContext(ctx, `UPDATE links SET `+set+`,collection_id=`+args.add(parent)+`,updated_at=`+args.add(now)+`,
+status=CASE WHEN url<>`+u+` THEN 'pending' ELSE status END,error=CASE WHEN url<>`+u+` THEN '' ELSE error END,
+content=CASE WHEN url<>`+u+` THEN '' ELSE content END,archive=CASE WHEN url<>`+u+` THEN NULL ELSE archive END,
+reader_archive=CASE WHEN url<>`+u+` THEN NULL ELSE reader_archive END,url=`+u+` WHERE id=`+args.add(lid), args...)
 				}
 				if e != nil {
 					return e

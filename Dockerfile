@@ -1,6 +1,6 @@
 ARG BINARY_SOURCE=build
 
-FROM node:24.14.0-alpine@sha256:7fddd9ddeae8196abf4a3ef2de34e11f7b1a722119f91f28ddf1e99dcafdf114 AS frontend
+FROM node:26.13.1-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS frontend
 WORKDIR /src
 COPY frontend/package.json frontend/package-lock.json ./frontend/
 RUN --mount=type=cache,target=/root/.npm npm ci --prefix frontend --ignore-scripts --no-audit --no-fund
