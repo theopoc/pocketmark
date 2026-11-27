@@ -106,6 +106,10 @@ jobs:
   checks:
     name: Validate source
     needs: source
+    # A called workflow cannot exceed these; ci.yml's Changes job lists PR files.
+    permissions:
+      contents: read
+      pull-requests: read
     uses: ./.github/workflows/ci.yml
     with:
       revision: ${{ needs.source.outputs.revision }}
