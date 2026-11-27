@@ -164,6 +164,54 @@ export async function backupOverviewJourney(page) {
   }
 }
 
+// Configure a real destination through the form and back up to the in-memory
+// S3 server started by scripts/smoke_frontend.py (tools/go/fakes3). Runs that
+// start the server elsewhere (Docker image smoke) have no endpoint and skip it.
+export async function backupRemoteJourney(page) {
+  const endpoint = process.env.E2E_S3_ENDPOINT;
+  if (!endpoint) return;
+  const bucket = process.env.E2E_S3_BUCKET, accessKey = process.env.E2E_S3_ACCESS_KEY;
+  // Start from the server's state, not the panel left by the mocked journey.
+  await selectSettings(page, 'backup');
+  await page.reload();
+  await page.locator('[data-settings-panel="backup"]').waitFor({ state: 'visible' });
+  const panel = page.locator('#scheduled-backups');
+  await panel.getByText('No remote backups yet.').waitFor();
+  await panel.getByRole('button', { name: 'Configure' }).click();
+  const configure = page.getByRole('dialog', { name: 'Configure remote backups' });
+  const contents = configure.getByRole('combobox', { name: 'Backup contents' });
+  await contents.press('Enter');
+  await contents.press('End');
+  await contents.press('Enter');
+  await configure.getByText('Include with bookmark metadata').waitFor();
+  await configure.getByRole('button', { name: 'Storage', exact: true }).click();
+  await configure.getByLabel('S3 API endpoint').fill(endpoint);
+  await configure.getByLabel('Bucket', { exact: true }).fill(bucket);
+  await configure.getByLabel('Signing region').fill('us-east-1');
+  await configure.getByLabel('Object prefix').fill('e2e');
+  await configure.getByLabel('Access key ID').fill('E2EUNKNOWNKEY');
+  await configure.getByLabel('Secret access key').fill('e2e-secret');
+  await configure.getByLabel('Allow HTTP for a private endpoint').check();
+  await configure.getByRole('button', { name: 'Test connection' }).click();
+  const failure = configure.getByRole('alert').filter({ hasText: 'S3 connection test failed at PutObject (InvalidAccessKeyId).' });
+  await failure.waitFor();
+  assert.equal((await failure.innerText()).includes('e2e-secret'), false, 'connection error shows the secret');
+  await configure.getByLabel('Access key ID').fill(accessKey);
+  await configure.getByRole('button', { name: 'Test connection' }).click();
+  await configure.getByRole('status').filter({ hasText: 'Connection verified.' }).waitFor();
+  await configure.getByRole('button', { name: 'Save settings' }).click();
+  await configure.waitFor({ state: 'detached' });
+  await panel.getByText(bucket, { exact: true }).waitFor();
+  await panel.getByRole('button', { name: 'Back up now' }).click();
+  // The worker polls every 2 s and the panel every 5 s.
+  await panel.getByRole('row').filter({ hasText: 'Custom library' }).filter({ hasText: 'Succeeded' })
+    .first().waitFor({ timeout: 60_000 });
+  const listing = await (await fetch(`${endpoint}/${bucket}?list-type=2&prefix=e2e/`)).text();
+  const keys = [...listing.matchAll(/<Key>([^<]+)<\/Key>/g)].map(m => m[1]);
+  assert.equal(keys.filter(key => !key.startsWith('e2e/.probe/')).length, 1, listing);
+  assert.equal(keys.some(key => key.startsWith('e2e/.probe/')), false, 'connection probe left behind');
+}
+
 export async function settingsNavigationJourney(page) {
   const original = new URL(page.url());
   original.searchParams.delete('settings');
@@ -280,6 +328,7 @@ export async function settingsNavigationJourney(page) {
   await aiTaggingJourney(page);
   await claudeTaggingJourney(page);
   await backupOverviewJourney(page);
+  await backupRemoteJourney(page);
   await page.reload();
   await page.locator('[data-settings-panel="backup"]').waitFor({ state: 'visible' });
   await selectSettings(page, '2fa');
