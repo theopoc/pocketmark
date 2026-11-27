@@ -309,6 +309,13 @@ func (s *Store) WorkBackup(ctx context.Context, work func(BackupJob) error) erro
 	j.conn = conn
 	return work(j)
 }
+
+// Job describes the claimed attempt; the BackupJob itself is its journal.
+func (j BackupJob) Job() backup.Job {
+	return backup.Job{ID: j.ID, Trigger: j.Trigger, Stage: j.Stage, Instance: j.Instance, Attempt: j.Attempt,
+		Deadline: j.Deadline, VerifiedAt: j.VerifiedAt, Total: j.Total, Config: j.Config, Credentials: j.Secret}
+}
+
 func (j BackupJob) Cancelled(ctx context.Context) (bool, error) {
 	var v bool
 	e := j.conn.QueryRowContext(ctx, "SELECT cancel FROM backup_runs WHERE id=$1 AND attempt=$2 AND finished IS NULL", j.ID, j.Attempt).Scan(&v)
@@ -472,13 +479,16 @@ func (j BackupJob) RecordObject(ctx context.Context, key, version string) error 
 	}
 	return tx.Commit()
 }
-func (j BackupJob) ExpiredObject(ctx context.Context) (id, key, version string, err error) {
+func (j BackupJob) ExpiredObject(ctx context.Context) (id, key, version string, found bool, err error) {
 	err = j.conn.QueryRowContext(ctx, `SELECT id::text,object_key,version_id FROM backup_objects
 		WHERE instance=$1 AND destination=$2 AND mode=$3 AND id<>$5
 		  AND verified < now() - $4 * interval '24 hours'
 		UNION ALL SELECT '',object_key,'' FROM backup_pending WHERE instance=$1 AND destination=$2 AND mode=$3
 		LIMIT 1`, j.Instance, j.Config.Binding(), j.Config.Mode, j.Config.RetentionDays, j.ID).Scan(&id, &key, &version)
-	return
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", "", false, nil
+	}
+	return id, key, version, err == nil, err
 }
 func (j BackupJob) ForgetObject(ctx context.Context, id, key string) error {
 	if id == "" {

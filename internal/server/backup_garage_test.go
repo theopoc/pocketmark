@@ -8,12 +8,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"net/url"
 	"os"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"pocketmark/internal/backup"
 )
 
@@ -33,23 +35,19 @@ func garageS3(t *testing.T) (backup.Config, backup.Credentials) {
 		c.Region = region
 	}
 	c.Bucket = os.Getenv("POCKETMARK_TEST_S3_BUCKET")
-	credentials := backup.Credentials{AccessKey: os.Getenv("POCKETMARK_TEST_S3_KEY"), SecretKey: os.Getenv("POCKETMARK_TEST_S3_SECRET")}
 	// Each test writes under its own prefix and removes it afterwards, so
 	// tests never see each other's objects in the shared bucket.
 	var seed [8]byte
 	rand.Read(seed[:])
 	c.Prefix = "tests/" + hex.EncodeToString(seed[:])
-	remote, err := backup.NewRemote(c, credentials)
-	if err != nil {
-		t.Fatal(err)
-	}
+	k := backup.Credentials{AccessKey: os.Getenv("POCKETMARK_TEST_S3_KEY"), SecretKey: os.Getenv("POCKETMARK_TEST_S3_SECRET")}
+	client := garageClient(t, c, k)
 	t.Cleanup(func() {
-		defer remote.Close()
 		// t.Context is already cancelled when cleanups run.
 		ctx := context.Background()
-		for object := range remote.Client.ListObjects(ctx, c.Bucket, minio.ListObjectsOptions{Prefix: c.Prefix + "/", Recursive: true}) {
+		for object := range client.ListObjects(ctx, c.Bucket, minio.ListObjectsOptions{Prefix: c.Prefix + "/", Recursive: true}) {
 			if object.Err == nil {
-				object.Err = remote.Client.RemoveObject(ctx, c.Bucket, object.Key, minio.RemoveObjectOptions{})
+				object.Err = client.RemoveObject(ctx, c.Bucket, object.Key, minio.RemoveObjectOptions{})
 			}
 			// Keep going: drain the listing and try every object.
 			if object.Err != nil {
@@ -57,13 +55,27 @@ func garageS3(t *testing.T) (backup.Config, backup.Credentials) {
 			}
 		}
 	})
-	return c, credentials
+	return c, k
 }
 
-func garageObjects(t *testing.T, remote *backup.Remote, prefix string) []string {
+// garageClient inspects the bucket directly, beside the backup.Remote under test.
+func garageClient(t *testing.T, c backup.Config, k backup.Credentials) *minio.Client {
+	t.Helper()
+	u, err := url.Parse(c.Endpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := minio.New(u.Host, &minio.Options{Creds: credentials.NewStaticV4(k.AccessKey, k.SecretKey, ""), Secure: u.Scheme == "https", Region: c.Region, BucketLookup: minio.BucketLookupPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return client
+}
+
+func garageObjects(t *testing.T, c backup.Config, k backup.Credentials, prefix string) []string {
 	t.Helper()
 	var keys []string
-	for object := range remote.Client.ListObjects(t.Context(), remote.Config.Bucket, minio.ListObjectsOptions{Prefix: prefix, Recursive: true}) {
+	for object := range garageClient(t, c, k).ListObjects(t.Context(), c.Bucket, minio.ListObjectsOptions{Prefix: prefix, Recursive: true}) {
 		if object.Err != nil {
 			t.Fatal(object.Err)
 		}
@@ -94,12 +106,7 @@ func TestGarageConnectionTest(t *testing.T) {
 	if status, body := probe(credentials); status != 200 {
 		t.Fatalf("connection test failed: %d %s", status, body)
 	}
-	remote, err := backup.NewRemote(c, credentials)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer remote.Close()
-	if left := garageObjects(t, remote, c.Prefix+"/.probe/"); len(left) != 0 {
+	if left := garageObjects(t, c, credentials, c.Prefix+"/.probe/"); len(left) != 0 {
 		t.Fatal("probe objects left behind", left)
 	}
 
@@ -166,15 +173,11 @@ func TestGarageRetentionDeletesExpiredCopy(t *testing.T) {
 	if recent.Status != "succeeded" {
 		t.Fatalf("second run: %s %v", recent.Status, recent.Diagnostic)
 	}
-	remote, err := backup.NewRemote(c, credentials)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer remote.Close()
-	if _, err := remote.Client.StatObject(t.Context(), c.Bucket, old.ObjectKey, minio.StatObjectOptions{}); minio.ToErrorResponse(err).Code != "NoSuchKey" {
+	client := garageClient(t, c, credentials)
+	if _, err := client.StatObject(t.Context(), c.Bucket, old.ObjectKey, minio.StatObjectOptions{}); minio.ToErrorResponse(err).Code != "NoSuchKey" {
 		t.Fatal("expired object still present", err)
 	}
-	if _, err := remote.Client.StatObject(t.Context(), c.Bucket, recent.ObjectKey, minio.StatObjectOptions{}); err != nil {
+	if _, err := client.StatObject(t.Context(), c.Bucket, recent.ObjectKey, minio.StatObjectOptions{}); err != nil {
 		t.Fatal("recent object removed", err)
 	}
 	metrics, err := a.Store.BackupMetrics(t.Context())
@@ -192,22 +195,23 @@ func TestGarageMultipartUpload(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer remote.Close()
+	client := garageClient(t, c, credentials)
 	data := make([]byte, 17<<20+123)
 	rand.Read(data)
 	key := c.Prefix + "/multipart.bin"
 	// Listing cleanup only sees completed objects; abort parts of a failed upload.
-	t.Cleanup(func() { remote.Client.RemoveIncompleteUpload(context.Background(), c.Bucket, key) })
+	t.Cleanup(func() { client.RemoveIncompleteUpload(context.Background(), c.Bucket, key) })
 	if _, err := remote.Put(t.Context(), key, bytes.NewReader(data), int64(len(data))); err != nil {
 		t.Fatal(err)
 	}
-	info, err := remote.Client.StatObject(t.Context(), c.Bucket, key, minio.StatObjectOptions{})
+	info, err := client.StatObject(t.Context(), c.Bucket, key, minio.StatObjectOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if info.Size != int64(len(data)) || !strings.HasSuffix(info.ETag, "-3") {
 		t.Fatalf("size=%d etag=%s: expected a three-part upload", info.Size, info.ETag)
 	}
-	f, err := remote.Client.GetObject(t.Context(), c.Bucket, key, minio.GetObjectOptions{})
+	f, err := client.GetObject(t.Context(), c.Bucket, key, minio.GetObjectOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

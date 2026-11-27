@@ -78,6 +78,48 @@ func (s *Store) libraryTx(ctx context.Context, opts pgx.TxOptions, fn func(pgx.T
 	defer c.Close()
 	return c.Raw(func(driver any) error { return pgx.BeginTxFunc(ctx, driver.(*stdlib.Conn).Conn(), opts, fn) })
 }
+
+// OpenBackupContents prepares the restore point for c.Mode. A full backup
+// takes its database snapshot now; a library backup reads during Write.
+func (s *Store) OpenBackupContents(ctx context.Context, c backup.Config) (backup.Contents, error) {
+	if c.Mode != "full" {
+		return libraryContents{s, c}, nil
+	}
+	dump, e := s.BackupSnapshot(ctx)
+	if e != nil {
+		return nil, e
+	}
+	return fullContents{dump}, nil
+}
+
+type libraryContents struct {
+	s *Store
+	c backup.Config
+}
+
+func (l libraryContents) Write(ctx context.Context, z *zip.Writer) error {
+	return l.s.LibraryBackup(ctx, z, l.c)
+}
+func (libraryContents) Close() error { return nil }
+
+type fullContents struct{ dump *os.File }
+
+func (f fullContents) Write(_ context.Context, z *zip.Writer) error {
+	entry, e := z.CreateHeader(&zip.FileHeader{Name: "pocketmark.sql", Method: zip.Store})
+	if e != nil {
+		return e
+	}
+	if _, e = io.Copy(entry, f.dump); e != nil {
+		return e
+	}
+	if entry, e = z.Create("RESTORE.txt"); e != nil {
+		return e
+	}
+	_, e = io.WriteString(entry, "Stop all Pocketmark replicas. Restore pocketmark.sql into an empty database with psql -X --single-transaction -v ON_ERROR_STOP=1. Restore your original server-secret separately, sign in and regenerate recovery codes. Reconfigure scheduled backups.\n")
+	return e
+}
+func (f fullContents) Close() error { return f.dump.Close() }
+
 func (s *Store) LibraryBackup(ctx context.Context, z *zip.Writer, c backup.Config) error {
 	m := Manifest{"pocketmark-library", 2, "library", c.Text, c.Archives, c.Files}
 	if c.Archives {

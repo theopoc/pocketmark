@@ -504,8 +504,8 @@ func TestBackupRetentionFailureKeepsVerifiedCopyAndAlert(t *testing.T) {
 		if err != nil || !ok || size != 456 || j.Stage != "retention" || j.Attempt != 2 {
 			t.Fatal("lost verification", size, err)
 		}
-		expires, key, _, err := j.ExpiredObject(ctx)
-		if err != nil || expires == "" || key != "expired" {
+		expires, key, _, found, err := j.ExpiredObject(ctx)
+		if err != nil || !found || expires == "" || key != "expired" {
 			t.Fatal("retention candidate", key, err)
 		}
 		_, err = j.Finish(ctx, "failed", 0, map[string]any{"error_code": "AccessDenied", "stage": "retention"})
@@ -537,15 +537,15 @@ func TestBackupRetentionFailureKeepsVerifiedCopyAndAlert(t *testing.T) {
 		if err := j.RecordObject(ctx, "newer", ""); err != nil {
 			return err
 		}
-		old, key, _, err := j.ExpiredObject(ctx)
-		if err != nil || key != "expired" {
+		old, key, _, found, err := j.ExpiredObject(ctx)
+		if err != nil || !found || key != "expired" {
 			t.Fatal("lost deletion for next verified run", key, err)
 		}
 		if err = j.ForgetObject(ctx, old, key); err != nil {
 			return err
 		}
-		_, _, _, err = j.ExpiredObject(ctx)
-		if !errors.Is(err, sql.ErrNoRows) {
+		_, _, _, found, err = j.ExpiredObject(ctx)
+		if err != nil || found {
 			t.Fatal("retention crossed scope", err)
 		}
 		_, err = j.Finish(ctx, "succeeded", 0, nil)

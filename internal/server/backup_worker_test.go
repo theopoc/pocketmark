@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/minio/minio-go/v7"
 	"pocketmark/internal/backup"
 	"pocketmark/internal/pgtest"
 	"pocketmark/internal/store"
@@ -155,7 +154,7 @@ func TestRetentionRefusalPreservesVerifiedCopyAndAlertsOnce(t *testing.T) {
 	}
 	defer remote.Close()
 	for _, key := range []string{old.ObjectKey, recent.ObjectKey, failed.ObjectKey} {
-		if _, err := remote.Client.StatObject(t.Context(), c.Bucket, key, minio.StatObjectOptions{}); err != nil {
+		if _, found, err := remote.Version(t.Context(), key); err != nil || !found {
 			t.Fatal("missing remote copy after refusal", err)
 		}
 	}
@@ -196,7 +195,7 @@ func TestRetentionRefusalPreservesVerifiedCopyAndAlertsOnce(t *testing.T) {
 	if err != nil || metrics["deleted_total"] != 1 || metrics["succeeded_total"] != 3 {
 		t.Fatal(metrics, err)
 	}
-	if _, err = remote.Client.StatObject(t.Context(), c.Bucket, old.ObjectKey, minio.StatObjectOptions{}); minio.ToErrorResponse(err).StatusCode != 404 {
+	if _, found, err := remote.Version(t.Context(), old.ObjectKey); err != nil || found {
 		t.Fatal("expired object still present", err)
 	}
 	var status, notification string
@@ -232,7 +231,7 @@ func testBackupRecovery(t *testing.T, c backup.Config, credentials backup.Creden
 	}
 	read := func(r store.BackupRun) *zip.Reader {
 		t.Helper()
-		f, e := remote.Client.GetObject(ctx, c.Bucket, r.ObjectKey, minio.GetObjectOptions{})
+		f, e := remote.Open(ctx, r.ObjectKey, "")
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -294,7 +293,7 @@ func testBackupRecovery(t *testing.T, c backup.Config, credentials backup.Creden
 	if e = db.QueryRow("SELECT EXISTS(SELECT FROM links WHERE title='Roundtrip') AND NOT EXISTS(SELECT FROM backup_settings) AND NOT EXISTS(SELECT FROM backup_runs) AND NOT EXISTS(SELECT FROM sessions)").Scan(&restored); e != nil || !restored {
 		t.Fatal("unexpected full restore state", e)
 	}
-	if _, e = remote.Client.StatObject(ctx, c.Bucket, first.ObjectKey, minio.StatObjectOptions{}); e != nil {
+	if _, found, e := remote.Version(ctx, first.ObjectKey); e != nil || !found {
 		t.Fatal("full run removed a library copy", e)
 	}
 	metrics, e := a.Store.BackupMetrics(ctx)
