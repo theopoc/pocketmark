@@ -33,7 +33,7 @@ jobs:
   prepare:
     name: Prepare release PR
     if: github.event_name == 'push'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: write
@@ -59,7 +59,7 @@ jobs:
 
   source:
     name: Select immutable source
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     if: >-
       github.event_name == 'workflow_dispatch' ||
@@ -117,7 +117,7 @@ jobs:
   tag:
     name: Tag tested release with Release Please
     needs: [source, checks]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: write
@@ -250,7 +250,7 @@ jobs:
   github:
     name: Package and publish GitHub release
     needs: [source, tag, build]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     permissions:
       contents: write
@@ -438,7 +438,7 @@ jobs:
   index:
     name: Publish tested GHCR index
     needs: [source, images, github]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: read
